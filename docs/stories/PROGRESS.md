@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 15 | 0 | 0 | 0 | 18 |
+| E03 AI Conversation Experience | 33 | 16 | 0 | 0 | 0 | 17 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 35 | 0 | 0 | 0 | 140 |
+| **合計** | **175** | 36 | 0 | 0 | 0 | 139 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -80,7 +80,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S013 | approved | story/E03-S013-citation-badge-rendering | [E03-S013.md](E03-S013.md) | 獨立審核 APPROVE(2 次 force 全量重跑皆 234 unit+66 E2E 全過,scope/AC 對照/fakery 掃描皆通過;獨立覆核 stop-generation.spec.ts 修正的技術主張,判定非 scope creep) |
 | E03-S014 | approved | story/E03-S014-citation-preview-drawer | [E03-S014.md](E03-S014.md) | 獨立審核 APPROVE(2 次 force 全量重跑皆 251 unit+68 E2E 全過;獨立覆核 S013 迴歸風險為零、NOT_FOUND 設計與 noUncheckedIndexedAccess 修正皆對照原始碼屬實) |
 | E03-S015 | approved | story/E03-S015-citation-open-source | [E03-S015.md](E03-S015.md) | 獨立審核 APPROVE(2 次 force 全量重跑皆 259 unit+69 E2E 全過;獨立追溯 page.goto/mock session 消失的技術主張至原始碼並用既有測試實證,判定推理成立) |
-| E03-S016 | todo | | | |
+| E03-S016 | approved | story/E03-S016-citation-permission-error | [E03-S016.md](E03-S016.md) | 獨立審核 APPROVE(2 次 force 全量重跑皆 267 unit+69 E2E 全過;獨立深入核對 BLOCKED-vs-mock 判斷——確認 FORBIDDEN 機制與 role/session/user 完全無耦合,非影子授權實作,與 S13-S15 既有先例一致) |
 | E03-S017 | todo | | | |
 | E03-S018 | todo | | | |
 | E03-S019 | todo | | | |

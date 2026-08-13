@@ -32,3 +32,23 @@ describe("getCitationSource (E03-S014)", () => {
     expect(result.error.code).toBe("NOT_FOUND");
   });
 });
+
+describe("getCitationSource permission-denied handling (E03-S016)", () => {
+  it("fails closed with FORBIDDEN for a citation id the mock treats as permission-denied", async () => {
+    const result = await getCitationSource("3");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("FORBIDDEN");
+  });
+
+  it("never leaks File/Page/Snippet content on a FORBIDDEN result — the Result carries no CitationSource at all", async () => {
+    const result = await getCitationSource("3");
+
+    expect(result.ok).toBe(false);
+    // Deny-wins at the type level: an `ok: false` Result structurally
+    // has no `value` field, so there is no CitationSource for a caller
+    // to accidentally read even by mistake — not just an empty one.
+    expect((result as { value?: unknown }).value).toBeUndefined();
+  });
+});

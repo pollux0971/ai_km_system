@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
-import { getCitationSource, type CitationSource } from "@/lib/citations";
+import { CITATION_ERROR_MESSAGES, getCitationSource, type CitationSource } from "@/lib/citations";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:citation-preview-drawer");
@@ -49,6 +49,16 @@ const logger = createLogger("web:citation-preview-drawer");
  * /citations/[id] (see citation-source-view.tsx) naturally unmounts
  * this drawer along with the rest of the page; no explicit close-on-
  * navigate handling is needed.
+ *
+ * E03-S016 adds `FORBIDDEN` as a second citation-specific code (see
+ * lib/citations.ts for the full reasoning) — `CITATION_ERROR_MESSAGES`
+ * now supplies the override text for both NOT_FOUND and FORBIDDEN from
+ * one shared place, so this drawer and citation-source-view.tsx never
+ * drift into different wording for the same code. Deny-wins is
+ * structural here, not just a message choice: the `kind === "error"`
+ * branch and the `kind === "loaded"` branch (the only place File/Page/
+ * Snippet ever render) are mutually exclusive by construction — a
+ * FORBIDDEN result can never reach the `<dl>`.
  */
 type LoadState = { kind: "loading" } | { kind: "error"; code: string } | { kind: "loaded"; source: CitationSource };
 
@@ -95,9 +105,7 @@ export function CitationPreviewDrawer({ citationId, onClose }: { citationId: str
         </button>
       </div>
       {state.kind === "loading" && <LoadingIndicator />}
-      {state.kind === "error" && (
-        <ErrorMessage code={state.code} message={state.code === "NOT_FOUND" ? "找不到這個引用來源。" : undefined} />
-      )}
+      {state.kind === "error" && <ErrorMessage code={state.code} message={CITATION_ERROR_MESSAGES[state.code]} />}
       {state.kind === "loaded" && (
         <>
           <dl>

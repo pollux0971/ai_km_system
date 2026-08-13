@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
-import { getCitationSource, type CitationSource } from "@/lib/citations";
+import { CITATION_ERROR_MESSAGES, getCitationSource, type CitationSource } from "@/lib/citations";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:citation-source-view");
@@ -53,6 +53,16 @@ const logger = createLogger("web:citation-source-view");
  * sidebar, "查看全部對話", etc.) is same-tab; opening a new tab would be
  * an unrequested, untested-precedent complication for a detail this
  * story's grounding never mentions.
+ *
+ * E03-S016 adds `FORBIDDEN` as a second citation-specific error code
+ * (see lib/citations.ts) — `CITATION_ERROR_MESSAGES` supplies its
+ * override text from the same shared map citation-preview-drawer.tsx
+ * uses, so both surfaces show identical wording for the same code
+ * rather than two independently-drifting copies. Deny-wins is
+ * structural here too: the `status === "error"` branch fully replaces
+ * this page's content (a separate `return`, not a conditional fragment
+ * alongside the File/Page/Snippet markup) — a FORBIDDEN result can
+ * never reach the code path that renders source content.
  */
 type State = { status: "loading" } | { status: "error"; code: string } | { status: "loaded"; source: CitationSource };
 
@@ -99,7 +109,7 @@ export function CitationSourceView({ id }: { id: string }) {
   if (state.status === "error") {
     return (
       <main style={{ padding: 32 }}>
-        <ErrorMessage code={state.code} message={state.code === "NOT_FOUND" ? "找不到這個引用來源。" : undefined} />
+        <ErrorMessage code={state.code} message={CITATION_ERROR_MESSAGES[state.code]} />
       </main>
     );
   }

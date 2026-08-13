@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getConversation, type ConversationSummary } from "@/lib/conversations";
+import { KnowledgeSelector } from "./knowledge-selector";
 import { ModeSwitch } from "./mode-switch";
 
 const logger = createLogger("web:conversation-detail");
@@ -15,13 +16,14 @@ type State =
   | { status: "loaded"; conversation: ConversationSummary };
 
 /**
- * E03-S002: the conversation detail shell — established here since this
- * is the first E03 story (per SOURCE_BASELINE.md's E03 outline: S02
- * Conversation Mode, S03 Knowledge Selector, S04 Multi Knowledge
+ * E03-S002/S003: the conversation detail shell — established here since
+ * this is the first E03 story (per SOURCE_BASELINE.md's E03 outline:
+ * S02 Conversation Mode, S03 Knowledge Selector, S04 Multi Knowledge
  * Selection, S05 Model Selector, S06 Message Composer, ...) that needs
  * somewhere to render its own piece of one incrementally-assembled chat
- * interface. Deliberately minimal: title + mode switch only — no
- * message thread/composer yet, that's later stories' job.
+ * interface. Deliberately minimal: title + mode switch + knowledge
+ * selector only — no message thread/composer yet, that's later
+ * stories' job.
  *
  * "not found" (a valid route, id just doesn't resolve to data) is
  * modeled as its own state, distinct from both the generic error state
@@ -89,6 +91,9 @@ export default function ConversationDetail({ id }: { id: string }) {
     <main style={{ padding: 32 }}>
       <h1>{state.conversation.title}</h1>
       <ModeSwitch conversationId={state.conversation.id} initialMode={state.conversation.mode} />
+      <div style={{ marginTop: 16 }}>
+        <KnowledgeSelector conversationId={state.conversation.id} initialScope={state.conversation.knowledgeScope} />
+      </div>
     </main>
   );
 }

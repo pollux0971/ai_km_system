@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { listConversations, type ConversationSummary } from "@/lib/conversations";
@@ -14,11 +15,10 @@ type State =
 
 /**
  * E03-S001: the full conversation list — distinct from the Home
- * Dashboard's Recent Conversations widget (E01-S008, top 3 only). Items
- * aren't linked to a detail view — /conversations/[id] doesn't exist yet
- * (that's a later E03 story's job, once the chat interface itself is
- * built); inventing a link to a route that isn't there yet would just
- * be a dead link.
+ * Dashboard's Recent Conversations widget (E01-S008, top 3 only).
+ * Items link to /conversations/[id] (E03-S002) — deferred at E03-S001
+ * ("inventing a link to a route that isn't there yet would just be a
+ * dead link"), now fulfilled since that route exists.
  */
 export default function ConversationList() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -63,7 +63,9 @@ export default function ConversationList() {
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.items.map((item) => (
         <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
-          <strong>{item.title}</strong>
+          <Link href={`/conversations/${item.id}`}>
+            <strong>{item.title}</strong>
+          </Link>
           <br />
           <span>{item.lastMessagePreview}</span>
           <br />

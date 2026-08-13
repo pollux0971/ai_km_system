@@ -51,6 +51,7 @@ describe("RecentConversations", () => {
           title: "測試對話標題",
           lastMessageAt: "2026-08-12T09:15:00.000Z",
           lastMessagePreview: "測試預覽內容",
+          mode: "normal",
         },
       ],
     });

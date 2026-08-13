@@ -22,6 +22,36 @@ describe("createMockAuthClient", () => {
     }
   });
 
+  it("populates profile fields (E01-S010) for a successful login", async () => {
+    const client = createMockAuthClient();
+
+    const result = await client.login({ username: MOCK_VALID_USERNAME, password: MOCK_VALID_PASSWORD });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.name).toBeTruthy();
+      expect(result.value.email).toContain("@");
+      expect(result.value.department).toBeTruthy();
+      expect(result.value.group).toBeTruthy();
+    }
+  });
+
+  it("gives each mock account distinct profile fields, not shared/copy-pasted values", async () => {
+    const client = createMockAuthClient();
+    const general = await client.login({ username: MOCK_VALID_USERNAME, password: MOCK_VALID_PASSWORD });
+    await client.logout();
+    const maintenance = await client.login({
+      username: MOCK_MAINTENANCE_USERNAME,
+      password: MOCK_VALID_PASSWORD,
+    });
+
+    expect(general.ok && maintenance.ok).toBe(true);
+    if (general.ok && maintenance.ok) {
+      expect(general.value.name).not.toBe(maintenance.value.name);
+      expect(general.value.department).not.toBe(maintenance.value.department);
+    }
+  });
+
   it("succeeds for the demo-maintenance account with the maintenance_engineer role", async () => {
     const client = createMockAuthClient();
 

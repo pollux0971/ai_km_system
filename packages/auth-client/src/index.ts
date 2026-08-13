@@ -12,6 +12,17 @@ export interface AuthSession {
   userId: string;
   roles: string[];
   expiresAt: string;
+  /**
+   * Profile display fields (E01-S010). Optional — additive per the
+   * API/Contract Boundary ("新增 optional field 不得改變既有 consumer
+   * 的預設語意"), so every session-shaped value already in use
+   * (fixtures, other stories' tests) stays valid without modification.
+   * A real E02-backed session may not populate all of these.
+   */
+  name?: string;
+  email?: string;
+  department?: string;
+  group?: string;
 }
 
 export interface AuthClient {

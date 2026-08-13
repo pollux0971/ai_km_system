@@ -35,10 +35,40 @@ function authError(code: AuthErrorCode, message: string): ApiError {
   return { code, message };
 }
 
-const ACCOUNTS: Record<string, { userId: string; roles: string[] }> = {
-  [MOCK_VALID_USERNAME]: { userId: MOCK_VALID_USER_ID, roles: ["general_user"] },
-  [MOCK_MAINTENANCE_USERNAME]: { userId: MOCK_MAINTENANCE_USER_ID, roles: ["maintenance_engineer"] },
-  [MOCK_SALES_USERNAME]: { userId: MOCK_SALES_USER_ID, roles: ["sales_purchasing"] },
+interface MockAccount {
+  userId: string;
+  roles: string[];
+  name: string;
+  email: string;
+  department: string;
+  group: string;
+}
+
+const ACCOUNTS: Record<string, MockAccount> = {
+  [MOCK_VALID_USERNAME]: {
+    userId: MOCK_VALID_USER_ID,
+    roles: ["general_user"],
+    name: "示範使用者",
+    email: "demo-user@example.com",
+    department: "資訊部",
+    group: "一般使用者群組",
+  },
+  [MOCK_MAINTENANCE_USERNAME]: {
+    userId: MOCK_MAINTENANCE_USER_ID,
+    roles: ["maintenance_engineer"],
+    name: "示範維修工程師",
+    email: "demo-maintenance@example.com",
+    department: "維修部",
+    group: "維修工程師群組",
+  },
+  [MOCK_SALES_USERNAME]: {
+    userId: MOCK_SALES_USER_ID,
+    roles: ["sales_purchasing"],
+    name: "示範業務",
+    email: "demo-sales@example.com",
+    department: "業務部",
+    group: "業務群組",
+  },
 };
 
 export function createMockAuthClient(): AuthClient {
@@ -61,6 +91,10 @@ export function createMockAuthClient(): AuthClient {
           userId: account.userId,
           roles: account.roles,
           expiresAt: new Date(Date.UTC(2099, 0, 1)).toISOString(),
+          name: account.name,
+          email: account.email,
+          department: account.department,
+          group: account.group,
         };
         return { ok: true, value: currentSession };
       }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createConversation, getConversation, getRecentConversations, listConversations, setConversationMode } from "./conversations";
+import {
+  createConversation,
+  getConversation,
+  getRecentConversations,
+  listConversations,
+  setConversationKnowledgeScope,
+  setConversationMode,
+} from "./conversations";
 
 describe("getRecentConversations", () => {
   it("resolves with a non-empty list of conversation summaries", async () => {
@@ -95,6 +102,14 @@ describe("createConversation (E03-S001)", () => {
       expect(created.value.mode).toBe("normal");
     }
   });
+
+  it("E03-S003: defaults every new conversation to no knowledge scope selected", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (created.ok) {
+      expect(created.value.knowledgeScope).toBeNull();
+    }
+  });
 });
 
 describe("getConversation (E03-S002)", () => {
@@ -161,6 +176,62 @@ describe("setConversationMode (E03-S002)", () => {
       expect(switched.value.title).toBe(created.value.title);
       expect(switched.value.lastMessageAt).toBe(created.value.lastMessageAt);
       expect(switched.value.lastMessagePreview).toBe(created.value.lastMessagePreview);
+    }
+  });
+});
+
+describe("setConversationKnowledgeScope (E03-S003)", () => {
+  it("switches an existing conversation's knowledge scope and persists it", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.knowledgeScope).toBeNull();
+
+    const switched = await setConversationKnowledgeScope(created.value.id, "department");
+    expect(switched.ok).toBe(true);
+    if (switched.ok) {
+      expect(switched.value.knowledgeScope).toBe("department");
+    }
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.knowledgeScope).toBe("department");
+    }
+  });
+
+  it("can switch back to null (unselecting)", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await setConversationKnowledgeScope(created.value.id, "company");
+    const unselected = await setConversationKnowledgeScope(created.value.id, null);
+
+    expect(unselected.ok).toBe(true);
+    if (unselected.ok) {
+      expect(unselected.value.knowledgeScope).toBeNull();
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
+    const result = await setConversationKnowledgeScope("does-not-exist", "company");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("does not affect a conversation's mode", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const switched = await setConversationKnowledgeScope(created.value.id, "private");
+    expect(switched.ok).toBe(true);
+    if (switched.ok) {
+      expect(switched.value.mode).toBe(created.value.mode);
     }
   });
 });

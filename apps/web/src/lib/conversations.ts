@@ -1,4 +1,5 @@
 import type { ApiError, Result } from "@ai-km/types";
+import type { KnowledgeScope } from "./knowledge-scopes";
 
 export type ConversationMode = "normal" | "advanced";
 
@@ -14,6 +15,15 @@ export interface ConversationSummary {
    * the moment it's created.
    */
   mode: ConversationMode;
+  /**
+   * E03-S003. `null` — not defaulted to any scope — is the deliberate
+   * fail-closed choice: SOURCE_BASELINE.md mentions "Select /
+   * Auto-select Knowledge" but never defines what auto-select defaults
+   * to, and Deny-Wins means presuming a broad default (e.g. "company")
+   * risks implying access the user never actually chose. Selection is
+   * always an explicit user action.
+   */
+  knowledgeScope: KnowledgeScope | null;
 }
 
 /**
@@ -32,6 +42,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessageAt: "2026-08-12T09:15:00.000Z",
     lastMessagePreview: "保固期從出貨日起算 12 個月，涵蓋原廠零件更換。",
     mode: "normal",
+    knowledgeScope: "company",
   },
   {
     id: "sample-2",
@@ -39,6 +50,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessageAt: "2026-08-11T14:30:00.000Z",
     lastMessagePreview: "請確認感測器接線是否鬆脫，並重新校正歸零。",
     mode: "normal",
+    knowledgeScope: null,
   },
   {
     id: "sample-3",
@@ -46,6 +58,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessageAt: "2026-08-10T02:00:00.000Z",
     lastMessagePreview: "本季華北區成長 12%，主要來自新客戶導入。",
     mode: "advanced",
+    knowledgeScope: null,
   },
 ];
 
@@ -118,20 +131,22 @@ export async function createConversation(): Promise<Result<ConversationSummary, 
     lastMessageAt: new Date().toISOString(),
     lastMessagePreview: "尚無訊息。",
     mode: "normal",
+    knowledgeScope: null,
   };
   writeStore([conversation, ...readStore()]);
   return { ok: true, value: conversation };
 }
 
 /**
- * E03-S002: switches a conversation's mode. NOT_FOUND (rather than
- * silently no-op-ing) if the id doesn't match anything, so a caller
- * can't mistake "nothing happened because the id was stale" for "the
- * switch succeeded".
+ * Shared by setConversationMode/setConversationKnowledgeScope (and any
+ * future per-conversation field this detail page grows). NOT_FOUND
+ * (rather than silently no-op-ing) if the id doesn't match anything, so
+ * a caller can't mistake "nothing happened because the id was stale"
+ * for "the update succeeded".
  */
-export async function setConversationMode(
+async function updateConversation(
   id: string,
-  mode: ConversationMode,
+  patch: Partial<Omit<ConversationSummary, "id">>,
 ): Promise<Result<ConversationSummary, ApiError>> {
   const store = readStore();
   const existing = store.find((item) => item.id === id);
@@ -139,7 +154,23 @@ export async function setConversationMode(
     return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } };
   }
 
-  const updated: ConversationSummary = { ...existing, mode };
+  const updated: ConversationSummary = { ...existing, ...patch };
   writeStore(store.map((item) => (item.id === id ? updated : item)));
   return { ok: true, value: updated };
+}
+
+/** E03-S002: switches a conversation's mode. */
+export async function setConversationMode(
+  id: string,
+  mode: ConversationMode,
+): Promise<Result<ConversationSummary, ApiError>> {
+  return updateConversation(id, { mode });
+}
+
+/** E03-S003: switches a conversation's knowledge scope. */
+export async function setConversationKnowledgeScope(
+  id: string,
+  knowledgeScope: KnowledgeScope | null,
+): Promise<Result<ConversationSummary, ApiError>> {
+  return updateConversation(id, { knowledgeScope });
 }

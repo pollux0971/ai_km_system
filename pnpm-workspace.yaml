@@ -4,5 +4,9 @@ packages:
   - "services/*"
   - "tests/*"
 allowBuilds:
+  # esbuild's install script only downloads the platform-specific binary
+  # (needed transitively by vitest/vite, added in E01-S001) — no arbitrary
+  # code execution beyond that, so it's safe to allow like the deps below.
+  esbuild: true
   sharp: true
   unrs-resolver: true

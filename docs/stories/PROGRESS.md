@@ -26,7 +26,7 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 5 | 0 | 0 | 0 | 28 |
+| E03 AI Conversation Experience | 33 | 5 | 0 | 1 | 0 | 27 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
@@ -70,7 +70,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S003 | approved | story/E03-S003-knowledge-selector-single-select | [E03-S003.md](E03-S003.md) | 獨立審核 APPROVE(fresh gate 全綠,E2E 連跑 2 輪無 flaky,scope 未逾界) |
 | E03-S004 | approved | story/E03-S004-knowledge-selector-multi-select | [E03-S004.md](E03-S004.md) | 獨立審核 APPROVE(fresh gate 全綠,E2E 連跑 2 輪無 flaky,scope 未逾界) |
 | E03-S005 | approved | story/E03-S005-advanced-model-selector | [E03-S005.md](E03-S005.md) | 獨立審核 APPROVE(fresh gate 全綠,E2E 隔離+全量各跑一輪無 flaky,scope 未逾界) |
-| E03-S006 | todo | | | |
+| E03-S006 | in-progress | story/E03-S006-message-composer-baseline | | |
 | E03-S007 | todo | | | |
 | E03-S008 | todo | | | |
 | E03-S009 | todo | | | |

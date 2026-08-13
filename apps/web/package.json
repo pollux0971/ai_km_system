@@ -16,6 +16,7 @@
     "@ai-km/api-client": "workspace:*",
     "@ai-km/auth-client": "workspace:*",
     "@ai-km/logger": "workspace:*",
+    "@ai-km/permissions": "workspace:*",
     "@ai-km/validation": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",

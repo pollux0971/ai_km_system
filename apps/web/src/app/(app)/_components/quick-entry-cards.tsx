@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { EmptyState } from "@ai-km/ui";
 import { useCurrentUser } from "@/lib/session-context";
 import { visibleEntryCards } from "@/lib/nav-items";
 
@@ -15,7 +16,7 @@ export default function QuickEntryCards() {
   const cards = visibleEntryCards(user.roles);
 
   if (cards.length === 0) {
-    return <p>目前沒有可用的快速入口。</p>;
+    return <EmptyState message="目前沒有可用的快速入口。" />;
   }
 
   return (

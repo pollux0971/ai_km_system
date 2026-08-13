@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
-import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getRecentConversations, type ConversationSummary } from "@/lib/conversations";
 
 const logger = createLogger("web:recent-conversations");
@@ -54,7 +54,7 @@ export default function RecentConversations() {
   }
 
   if (state.items.length === 0) {
-    return <p>尚無最近對話。</p>;
+    return <EmptyState message="尚無最近對話。" />;
   }
 
   return (

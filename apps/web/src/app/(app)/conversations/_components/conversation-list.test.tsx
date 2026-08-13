@@ -28,7 +28,7 @@ describe("ConversationList (E03-S001)", () => {
           lastMessageAt: "2026-08-12T09:15:00.000Z",
           lastMessagePreview: "測試預覽",
           mode: "normal",
-          knowledgeScope: null,
+          knowledgeScopes: [],
         },
       ],
     });
@@ -49,7 +49,7 @@ describe("ConversationList (E03-S001)", () => {
           lastMessageAt: "2026-08-12T09:15:00.000Z",
           lastMessagePreview: "測試預覽",
           mode: "normal",
-          knowledgeScope: null,
+          knowledgeScopes: [],
         },
       ],
     });

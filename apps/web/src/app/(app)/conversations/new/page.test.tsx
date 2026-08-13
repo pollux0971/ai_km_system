@@ -33,7 +33,7 @@ const sampleConversation = {
   lastMessageAt: "2026-08-14T00:00:00.000Z",
   lastMessagePreview: "尚無訊息。",
   mode: "normal" as const,
-  knowledgeScope: null,
+  knowledgeScopes: [],
 };
 
 beforeEach(() => {

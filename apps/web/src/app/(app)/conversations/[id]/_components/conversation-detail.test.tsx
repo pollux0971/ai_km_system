@@ -23,7 +23,7 @@ function renderDetailAs(id: string, roles: string[] = ["general_user"]) {
   );
 }
 
-describe("ConversationDetail (E03-S002/S003)", () => {
+describe("ConversationDetail (E03-S002/S003/S004)", () => {
   it("shows a loading state before the conversation resolves", () => {
     mockedGetConversation.mockReturnValue(new Promise(() => {}));
 
@@ -41,7 +41,7 @@ describe("ConversationDetail (E03-S002/S003)", () => {
         lastMessageAt: "2026-08-12T09:15:00.000Z",
         lastMessagePreview: "測試預覽",
         mode: "advanced",
-        knowledgeScope: "qna",
+        knowledgeScopes: ["qna", "company"],
       },
     });
 
@@ -50,7 +50,10 @@ describe("ConversationDetail (E03-S002/S003)", () => {
     expect(await screen.findByRole("heading", { name: "測試對話", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "對話模式" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "進階模式" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("combobox", { name: "知識來源" })).toHaveValue("qna");
+    expect(screen.getByRole("group", { name: "知識來源" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "問答庫" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "公司知識庫" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "部門知識庫" })).not.toBeChecked();
   });
 
   it("shows a distinct error state when loading fails", async () => {

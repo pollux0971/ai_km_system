@@ -16,14 +16,19 @@ export interface ConversationSummary {
    */
   mode: ConversationMode;
   /**
-   * E03-S003. `null` — not defaulted to any scope — is the deliberate
-   * fail-closed choice: SOURCE_BASELINE.md mentions "Select /
+   * E03-S003 introduced this as single-select (`KnowledgeScope | null`);
+   * E03-S004 upgrades it to multi-select — an array, not a second
+   * parallel field, since the epic's own titles ("Knowledge selector
+   * single-select" then "...multi-select") frame this as the same
+   * capability's next stage, not two independent ones. `[]` (nothing
+   * selected) is the deliberate fail-closed default carried over
+   * unchanged from S003 — SOURCE_BASELINE.md mentions "Select /
    * Auto-select Knowledge" but never defines what auto-select defaults
-   * to, and Deny-Wins means presuming a broad default (e.g. "company")
-   * risks implying access the user never actually chose. Selection is
-   * always an explicit user action.
+   * to, and Deny-Wins means presuming a default risks implying access
+   * the user never actually chose. Selection is always an explicit
+   * user action.
    */
-  knowledgeScope: KnowledgeScope | null;
+  knowledgeScopes: KnowledgeScope[];
 }
 
 /**
@@ -42,7 +47,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessageAt: "2026-08-12T09:15:00.000Z",
     lastMessagePreview: "保固期從出貨日起算 12 個月，涵蓋原廠零件更換。",
     mode: "normal",
-    knowledgeScope: "company",
+    knowledgeScopes: ["company", "qna"],
   },
   {
     id: "sample-2",
@@ -50,7 +55,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessageAt: "2026-08-11T14:30:00.000Z",
     lastMessagePreview: "請確認感測器接線是否鬆脫，並重新校正歸零。",
     mode: "normal",
-    knowledgeScope: null,
+    knowledgeScopes: [],
   },
   {
     id: "sample-3",
@@ -58,7 +63,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessageAt: "2026-08-10T02:00:00.000Z",
     lastMessagePreview: "本季華北區成長 12%，主要來自新客戶導入。",
     mode: "advanced",
-    knowledgeScope: null,
+    knowledgeScopes: [],
   },
 ];
 
@@ -131,7 +136,7 @@ export async function createConversation(): Promise<Result<ConversationSummary, 
     lastMessageAt: new Date().toISOString(),
     lastMessagePreview: "尚無訊息。",
     mode: "normal",
-    knowledgeScope: null,
+    knowledgeScopes: [],
   };
   writeStore([conversation, ...readStore()]);
   return { ok: true, value: conversation };
@@ -167,10 +172,16 @@ export async function setConversationMode(
   return updateConversation(id, { mode });
 }
 
-/** E03-S003: switches a conversation's knowledge scope. */
-export async function setConversationKnowledgeScope(
+/**
+ * E03-S004: replaces a conversation's full knowledge scope selection.
+ * Takes the complete new set (not one add/remove at a time) — matches
+ * how a checkbox group naturally reports "here's what's checked now"
+ * on every change, so the caller never needs to diff against the
+ * previous selection itself.
+ */
+export async function setConversationKnowledgeScopes(
   id: string,
-  knowledgeScope: KnowledgeScope | null,
+  knowledgeScopes: KnowledgeScope[],
 ): Promise<Result<ConversationSummary, ApiError>> {
-  return updateConversation(id, { knowledgeScope });
+  return updateConversation(id, { knowledgeScopes });
 }

@@ -92,7 +92,7 @@ export default function ConversationDetail({ id }: { id: string }) {
       <h1>{state.conversation.title}</h1>
       <ModeSwitch conversationId={state.conversation.id} initialMode={state.conversation.mode} />
       <div style={{ marginTop: 16 }}>
-        <KnowledgeSelector conversationId={state.conversation.id} initialScope={state.conversation.knowledgeScope} />
+        <KnowledgeSelector conversationId={state.conversation.id} initialScopes={state.conversation.knowledgeScopes} />
       </div>
     </main>
   );

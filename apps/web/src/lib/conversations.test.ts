@@ -4,7 +4,7 @@ import {
   getConversation,
   getRecentConversations,
   listConversations,
-  setConversationKnowledgeScope,
+  setConversationKnowledgeScopes,
   setConversationMode,
 } from "./conversations";
 
@@ -103,11 +103,11 @@ describe("createConversation (E03-S001)", () => {
     }
   });
 
-  it("E03-S003: defaults every new conversation to no knowledge scope selected", async () => {
+  it("E03-S003/S004: defaults every new conversation to no knowledge scopes selected", async () => {
     const created = await createConversation();
     expect(created.ok).toBe(true);
     if (created.ok) {
-      expect(created.value.knowledgeScope).toBeNull();
+      expect(created.value.knowledgeScopes).toEqual([]);
     }
   });
 });
@@ -180,42 +180,56 @@ describe("setConversationMode (E03-S002)", () => {
   });
 });
 
-describe("setConversationKnowledgeScope (E03-S003)", () => {
-  it("switches an existing conversation's knowledge scope and persists it", async () => {
+describe("setConversationKnowledgeScopes (E03-S004)", () => {
+  it("replaces an existing conversation's knowledge scopes and persists them", async () => {
     const created = await createConversation();
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    expect(created.value.knowledgeScope).toBeNull();
+    expect(created.value.knowledgeScopes).toEqual([]);
 
-    const switched = await setConversationKnowledgeScope(created.value.id, "department");
+    const switched = await setConversationKnowledgeScopes(created.value.id, ["department", "qna"]);
     expect(switched.ok).toBe(true);
     if (switched.ok) {
-      expect(switched.value.knowledgeScope).toBe("department");
+      expect(switched.value.knowledgeScopes).toEqual(["department", "qna"]);
     }
 
     const reloaded = await getConversation(created.value.id);
     expect(reloaded.ok).toBe(true);
     if (reloaded.ok) {
-      expect(reloaded.value?.knowledgeScope).toBe("department");
+      expect(reloaded.value?.knowledgeScopes).toEqual(["department", "qna"]);
     }
   });
 
-  it("can switch back to null (unselecting)", async () => {
+  it("can switch back to an empty selection (unselecting everything)", async () => {
     const created = await createConversation();
     expect(created.ok).toBe(true);
     if (!created.ok) return;
 
-    await setConversationKnowledgeScope(created.value.id, "company");
-    const unselected = await setConversationKnowledgeScope(created.value.id, null);
+    await setConversationKnowledgeScopes(created.value.id, ["company"]);
+    const unselected = await setConversationKnowledgeScopes(created.value.id, []);
 
     expect(unselected.ok).toBe(true);
     if (unselected.ok) {
-      expect(unselected.value.knowledgeScope).toBeNull();
+      expect(unselected.value.knowledgeScopes).toEqual([]);
+    }
+  });
+
+  it("replaces the full selection each call, rather than merging with the previous one", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await setConversationKnowledgeScopes(created.value.id, ["company", "department"]);
+    const replaced = await setConversationKnowledgeScopes(created.value.id, ["qna"]);
+
+    expect(replaced.ok).toBe(true);
+    if (replaced.ok) {
+      expect(replaced.value.knowledgeScopes).toEqual(["qna"]);
     }
   });
 
   it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
-    const result = await setConversationKnowledgeScope("does-not-exist", "company");
+    const result = await setConversationKnowledgeScopes("does-not-exist", ["company"]);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -228,7 +242,7 @@ describe("setConversationKnowledgeScope (E03-S003)", () => {
     expect(created.ok).toBe(true);
     if (!created.ok) return;
 
-    const switched = await setConversationKnowledgeScope(created.value.id, "private");
+    const switched = await setConversationKnowledgeScopes(created.value.id, ["private"]);
     expect(switched.ok).toBe(true);
     if (switched.ok) {
       expect(switched.value.mode).toBe(created.value.mode);

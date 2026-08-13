@@ -7,6 +7,7 @@ import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } fr
 import { listMessages, receiveAssistantReply, sendMessage, type Message } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
+import { CitationPreviewDrawer } from "./citation-preview-drawer";
 import { MessageComposer } from "./message-composer";
 import { MessageContent } from "./message-content";
 
@@ -41,10 +42,12 @@ const logger = createLogger("web:message-thread");
  * automatically once a user's own message finishes sending — see
  * startStream(). S13 renders citation badges within assistant content
  * via MessageContent (see message-content.tsx for why this is a plain
- * regex-parsed marker, not structured data). S14 (citation preview —
- * showing File/Page/Snippet detail on interaction) remains a separate,
- * still-unbuilt story, deliberately not touched here. S21 "Answer State"
- * (ANSWERED/PARTIAL/NO_EVIDENCE/PERMISSION_DENIED/SOURCE_UNAVAILABLE/
+ * regex-parsed marker, not structured data). S14 adds the interaction:
+ * clicking a badge sets `previewCitationId`, which drives a single
+ * shared `CitationPreviewDrawer` rendered once at the bottom of this
+ * component (not one drawer per message — there's only ever one
+ * citation being previewed at a time for the whole thread). S21 "Answer
+ * State" (ANSWERED/PARTIAL/NO_EVIDENCE/PERMISSION_DENIED/SOURCE_UNAVAILABLE/
  * ERROR) is a semantic
  * answer-quality classification that needs real RAG/permission
  * infrastructure to be meaningful — this story's own sent/streaming/
@@ -85,6 +88,7 @@ type LoadState = "loading" | "error" | "loaded";
 export function MessageThread({ conversationId }: { conversationId: string }) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
+  const [previewCitationId, setPreviewCitationId] = useState<string | null>(null);
   const stoppedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -239,6 +243,14 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     stoppedRef.current.add(localId);
   }
 
+  function handleCitationClick(citationId: string) {
+    setPreviewCitationId(citationId);
+  }
+
+  function handleClosePreview() {
+    setPreviewCitationId(null);
+  }
+
   if (loadState === "loading") {
     return (
       <div style={{ marginTop: 16 }}>
@@ -284,7 +296,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
               <li key={key}>
                 <span>{roleLabel}</span>
                 <span>
-                  <MessageContent content={content} withCitations={role === "assistant"} />
+                  <MessageContent content={content} withCitations={role === "assistant"} onCitationClick={handleCitationClick} />
                 </span>
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
                 {entry.kind === "pending" && <span role="status">傳送中…</span>}
@@ -309,6 +321,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
           })}
         </ul>
       )}
+      <CitationPreviewDrawer citationId={previewCitationId} onClose={handleClosePreview} />
       <MessageComposer conversationId={conversationId} onSubmit={handleComposerSubmit} />
     </div>
   );

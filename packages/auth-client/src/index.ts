@@ -19,3 +19,16 @@ export interface AuthClient {
   logout(): Promise<Result<void, ApiError>>;
   getSession(): Promise<Result<AuthSession | null, ApiError>>;
 }
+
+/**
+ * Stable machine-readable error codes for AuthClient failures (see
+ * ATOMIC_STORY_BOUNDARIES.md API/Contract Boundary — consumers must be
+ * able to branch on `code`, never on exception/message text).
+ */
+export type AuthErrorCode =
+  | "VALIDATION_ERROR"
+  | "INVALID_CREDENTIALS"
+  | "ACCOUNT_DISABLED"
+  | "SERVICE_UNAVAILABLE";
+
+export * from "./mock";

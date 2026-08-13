@@ -2,6 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import LoginForm from "./login-form";
 import { authClient } from "@/lib/auth";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+
+// Default true so every existing SSO-visible test below keeps working
+// without having to know about the flag; E01-S015's own describe block
+// overrides it per-test to prove the "disabled -> hidden" direction too.
+vi.mock("@/lib/feature-flags", () => ({
+  isFeatureEnabled: vi.fn(() => true),
+}));
+
+const mockedIsFeatureEnabled = vi.mocked(isFeatureEnabled);
 
 const { mockPush, mockSearchParamsGet } = vi.hoisted(() => ({
   mockPush: vi.fn(),
@@ -127,6 +137,24 @@ describe("LoginForm", () => {
       screen.getByText("SSO 尚未設定，請聯絡 IT 管理員或使用本機帳號登入。"),
     ).toBeInTheDocument();
     expect(mockedLogin).not.toHaveBeenCalled();
+  });
+
+  describe("E01-S015: feature-flag guard", () => {
+    it("shows the SSO section when the sso flag is enabled (the default)", () => {
+      render(<LoginForm />);
+
+      expect(screen.getByRole("button", { name: "使用 SSO 登入" })).toBeInTheDocument();
+    });
+
+    it("hides the SSO section entirely when the sso flag is disabled", () => {
+      mockedIsFeatureEnabled.mockReturnValueOnce(false);
+
+      render(<LoginForm />);
+
+      expect(screen.queryByRole("button", { name: "使用 SSO 登入" })).not.toBeInTheDocument();
+      // Local login itself must be unaffected by the SSO flag.
+      expect(screen.getByRole("button", { name: "登入" })).toBeInTheDocument();
+    });
   });
 
   describe("E01-S003: return-url redirect", () => {

@@ -6,6 +6,7 @@ import { createLogger } from "@ai-km/logger";
 import { ErrorMessage } from "@ai-km/ui";
 import { sanitizeReturnUrl } from "@ai-km/validation";
 import { authClient } from "@/lib/auth";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 const logger = createLogger("web:login");
 
@@ -43,7 +44,10 @@ function describeError(code: string): string {
  * redirect). Local login is wired to a mock AuthClient (see
  * apps/web/src/lib/auth.ts) until the E02 contract exists. Establishing
  * the app session is E01-S004's job — this only navigates client-side
- * after a successful mock login.
+ * after a successful mock login. E01-S015 puts the SSO section behind
+ * the "sso" feature flag (see apps/web/src/lib/feature-flags.ts) —
+ * defaults to the same visible-by-default behavior E01-S002 already
+ * established, just configurable now.
  *
  * Split out from page.tsx because useSearchParams() requires a Suspense
  * boundary above it (see page.tsx).
@@ -60,6 +64,7 @@ export default function LoginForm() {
   const [ssoNotice, setSsoNotice] = useState(false);
 
   const submitting = state.status === "submitting";
+  const ssoEnabled = isFeatureEnabled("sso");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -154,15 +159,19 @@ export default function LoginForm() {
         </div>
       )}
 
-      <hr style={{ margin: "24px 0" }} />
+      {ssoEnabled && (
+        <>
+          <hr style={{ margin: "24px 0" }} />
 
-      <button type="button" onClick={() => setSsoNotice(true)}>
-        使用 SSO 登入
-      </button>
-      {ssoNotice && (
-        <p role="status" style={{ marginTop: 8 }}>
-          SSO 尚未設定，請聯絡 IT 管理員或使用本機帳號登入。
-        </p>
+          <button type="button" onClick={() => setSsoNotice(true)}>
+            使用 SSO 登入
+          </button>
+          {ssoNotice && (
+            <p role="status" style={{ marginTop: 8 }}>
+              SSO 尚未設定，請聯絡 IT 管理員或使用本機帳號登入。
+            </p>
+          )}
+        </>
       )}
     </main>
   );

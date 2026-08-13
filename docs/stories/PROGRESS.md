@@ -25,14 +25,14 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 14 | 0 | 0 | 0 | 6 |
+| E01 Application Shell & User Workspace | 20 | 14 | 1 | 0 | 0 | 5 |
 | E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 14 | 0 | 0 | 0 | 161 |
+| **合計** | **175** | 14 | 1 | 0 | 0 | 160 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -54,7 +54,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S012 | approved | story/E01-S012-unified-error-presentation | [E01-S012.md](E01-S012.md) | 獨立審核 APPROVE(retrofit 未改變既有測試斷言,gate 全綠) |
 | E01-S013 | approved | story/E01-S013-unified-empty-state-pattern | [E01-S013.md](E01-S013.md) | 獨立審核 APPROVE(retrofit 未改變既有測試斷言,gate 全綠) |
 | E01-S014 | approved | story/E01-S014-notification-center-thin-slice | [E01-S014.md](E01-S014.md) | 獨立審核 APPROVE(既有測試修改僅新增斷言,gate 全綠) |
-| E01-S015 | todo | | | |
+| E01-S015 | done | story/E01-S015-feature-flag-visibility-guard | [E01-S015.md](E01-S015.md) | 待 /story-review |
 | E01-S016 | todo | | | |
 | E01-S017 | todo | | | |
 | E01-S018 | todo | | | |

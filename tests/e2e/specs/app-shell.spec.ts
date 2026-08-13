@@ -1,9 +1,15 @@
 import { test, expect } from "@playwright/test";
-import { MOCK_VALID_PASSWORD, MOCK_VALID_USER_ID, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
+import {
+  MOCK_MAINTENANCE_USERNAME,
+  MOCK_SALES_USERNAME,
+  MOCK_VALID_PASSWORD,
+  MOCK_VALID_USER_ID,
+  MOCK_VALID_USERNAME,
+} from "@ai-km/auth-client";
 
-async function login(page: import("@playwright/test").Page) {
+async function login(page: import("@playwright/test").Page, username = MOCK_VALID_USERNAME) {
   await page.goto("/login");
-  await page.getByLabel("帳號").fill(MOCK_VALID_USERNAME);
+  await page.getByLabel("帳號").fill(username);
   await page.getByLabel("密碼").fill(MOCK_VALID_PASSWORD);
   await page.getByRole("button", { name: "登入", exact: true }).click();
   await page.waitForURL((url) => url.pathname === "/");
@@ -35,4 +41,29 @@ test("logging out via the user-menu clears the session and returns to /login", a
   await page.goto("/");
   await page.waitForURL((url) => url.pathname === "/login");
   await expect(page.getByRole("heading", { name: "登入" })).toBeVisible();
+});
+
+/**
+ * E01-S006 critical flow: nav visibility actually differs by role through
+ * a real login, not just in isolated component tests.
+ */
+test("a general_user does not see the Maintenance or ERP nav items", async ({ page }) => {
+  await login(page, MOCK_VALID_USERNAME);
+
+  await expect(page.getByRole("link", { name: "維修助手" })).not.toBeVisible();
+  await expect(page.getByRole("link", { name: "ERP 助手" })).not.toBeVisible();
+});
+
+test("a maintenance_engineer sees the Maintenance nav item but not ERP", async ({ page }) => {
+  await login(page, MOCK_MAINTENANCE_USERNAME);
+
+  await expect(page.getByRole("link", { name: "維修助手" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "ERP 助手" })).not.toBeVisible();
+});
+
+test("a sales_purchasing user sees the ERP nav item but not Maintenance", async ({ page }) => {
+  await login(page, MOCK_SALES_USERNAME);
+
+  await expect(page.getByRole("link", { name: "ERP 助手" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "維修助手" })).not.toBeVisible();
 });

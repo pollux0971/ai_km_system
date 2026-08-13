@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createMockAuthClient, MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "./mock";
+import {
+  createMockAuthClient,
+  MOCK_MAINTENANCE_USER_ID,
+  MOCK_MAINTENANCE_USERNAME,
+  MOCK_SALES_USER_ID,
+  MOCK_SALES_USERNAME,
+  MOCK_VALID_PASSWORD,
+  MOCK_VALID_USERNAME,
+} from "./mock";
 
 describe("createMockAuthClient", () => {
   it("succeeds for the documented valid credentials", async () => {
@@ -11,6 +19,30 @@ describe("createMockAuthClient", () => {
     if (result.ok) {
       expect(result.value.userId).toBeTruthy();
       expect(result.value.roles).toContain("general_user");
+    }
+  });
+
+  it("succeeds for the demo-maintenance account with the maintenance_engineer role", async () => {
+    const client = createMockAuthClient();
+
+    const result = await client.login({ username: MOCK_MAINTENANCE_USERNAME, password: MOCK_VALID_PASSWORD });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.userId).toBe(MOCK_MAINTENANCE_USER_ID);
+      expect(result.value.roles).toEqual(["maintenance_engineer"]);
+    }
+  });
+
+  it("succeeds for the demo-sales account with the sales_purchasing role", async () => {
+    const client = createMockAuthClient();
+
+    const result = await client.login({ username: MOCK_SALES_USERNAME, password: MOCK_VALID_PASSWORD });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.userId).toBe(MOCK_SALES_USER_ID);
+      expect(result.value.roles).toEqual(["sales_purchasing"]);
     }
   });
 

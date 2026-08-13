@@ -30,7 +30,7 @@ beforeEach(() => {
 });
 
 describe("AppShellLayout", () => {
-  it("wires SessionGate around children — they render once a session resolves (gating detail lives in session-gate.test.tsx)", async () => {
+  it("wires SessionGate around AppShell(children) — chrome + page content render once a session resolves (gating detail lives in session-gate.test.tsx, chrome detail in _components/*.test.tsx)", async () => {
     mockedGetSession.mockResolvedValue({
       ok: true,
       value: { userId: "u1", roles: ["general_user"], expiresAt: "2099-01-01T00:00:00.000Z" },
@@ -43,5 +43,7 @@ describe("AppShellLayout", () => {
     );
 
     expect(await screen.findByText("child content")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "主導覽" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "u1" })).toBeInTheDocument();
   });
 });

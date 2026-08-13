@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { visibleEntryCards, visibleNavItems } from "./nav-items";
+import { rolesRequiredFor, visibleEntryCards, visibleNavItems } from "./nav-items";
 
 describe("visibleNavItems", () => {
   it("shows only the all-roles items to a general_user", () => {
@@ -83,5 +83,21 @@ describe("visibleEntryCards", () => {
     for (const card of cards) {
       expect(card.entryCardDescription).toBeTruthy();
     }
+  });
+});
+
+describe("rolesRequiredFor (E01-S017)", () => {
+  it("returns the exact allow-list for a role-restricted route", () => {
+    expect(rolesRequiredFor("/maintenance")).toEqual(["maintenance_engineer", "super_administrator"]);
+    expect(rolesRequiredFor("/erp")).toEqual(["sales_purchasing", "super_administrator"]);
+  });
+
+  it("returns 'all' for a route open to every authenticated role", () => {
+    expect(rolesRequiredFor("/")).toBe("all");
+    expect(rolesRequiredFor("/knowledge")).toBe("all");
+  });
+
+  it("returns undefined for a path not listed in NAV_ITEMS (e.g. /profile) — open by design, not an oversight", () => {
+    expect(rolesRequiredFor("/profile")).toBeUndefined();
   });
 });

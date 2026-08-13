@@ -22,7 +22,7 @@ const session = {
 };
 
 describe("AppShell", () => {
-  it("renders the sidebar, header, and page content together", () => {
+  it("renders the sidebar, header, and page content together", async () => {
     render(
       <CurrentUserProvider value={session}>
         <AppShell>
@@ -34,5 +34,8 @@ describe("AppShell", () => {
     expect(screen.getByRole("navigation", { name: "主導覽" })).toBeInTheDocument();
     expect(screen.getByText("AI KM")).toBeInTheDocument();
     expect(screen.getByText("page content")).toBeInTheDocument();
+    // Waits out NotificationCenter's own independent async load so it
+    // can't log a state-update-after-test warning once this returns.
+    expect(await screen.findByRole("button", { name: /^通知/ })).toBeInTheDocument();
   });
 });

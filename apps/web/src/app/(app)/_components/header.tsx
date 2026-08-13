@@ -1,6 +1,7 @@
+import NotificationCenter from "./notification-center";
 import UserMenu from "./user-menu";
 
-/** E01-S005: header bar — branding + user-menu. */
+/** E01-S005: header bar — branding + user-menu. E01-S014 adds the notification center. */
 export default function Header() {
   return (
     <header
@@ -13,7 +14,10 @@ export default function Header() {
       }}
     >
       <span style={{ fontWeight: 600 }}>AI KM</span>
-      <UserMenu />
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <NotificationCenter />
+        <UserMenu />
+      </div>
     </header>
   );
 }

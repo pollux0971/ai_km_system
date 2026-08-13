@@ -8,13 +8,13 @@ export interface ConversationSummary {
 }
 
 /**
- * Placeholder data source for the Home Dashboard's Recent Conversations
- * widget (E01-S008) — NOT the real conversation contract. Conversation
- * entities belong to E04 (Team B, RAG & Conversation Intelligence),
- * which doesn't exist yet; the real conversation list route is
- * E03-S001's job, and E03 hasn't started (E01 completes first per the
- * vertical-slice ordering). This is local, throwaway sample data for
- * this one widget only — not a shape any other story should depend on.
+ * Placeholder data source — NOT the real conversation contract.
+ * Conversation entities belong to E04 (Team B, RAG & Conversation
+ * Intelligence), which doesn't exist yet; contracts/openapi/core.yaml
+ * has no paths for it. Until E04's contract exists, this is a local mock
+ * serving both the Home Dashboard's Recent Conversations widget
+ * (E01-S008) and E03-S001's conversation list/new route — one shared
+ * shape, not two divergent ones.
  */
 const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
   {
@@ -37,6 +37,65 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
   },
 ];
 
+const STORAGE_KEY = "ai-km:mock-conversations";
+
+/**
+ * Persisted via sessionStorage, not a plain module-level variable.
+ * Next.js's App Router route-based code-splitting can give independently
+ * loaded pages their own separate evaluation of a module that's only
+ * imported from page-level (non-shared-layout) components — unlike
+ * apps/web/src/lib/auth.ts's authClient, which survives navigation
+ * because it's imported from (app)/session-gate.tsx, part of the shared
+ * layout that loads once. This module is imported from three separate
+ * leaf pages (Home's RecentConversations widget, /conversations,
+ * /conversations/new), so a plain in-memory array doesn't reliably
+ * survive navigating between them. sessionStorage is genuinely shared
+ * across the whole browser tab regardless of which JS chunk happens to
+ * be currently loaded, and — like the in-memory array it replaces —
+ * still doesn't survive a full page reload/new tab, which remains an
+ * accepted limitation of a frontend-only mock, not a bug to fix here.
+ */
+function readStore(): ConversationSummary[] {
+  if (typeof window === "undefined") return SAMPLE_CONVERSATIONS;
+  const raw = window.sessionStorage.getItem(STORAGE_KEY);
+  if (!raw) return SAMPLE_CONVERSATIONS;
+  try {
+    return JSON.parse(raw) as ConversationSummary[];
+  } catch {
+    return SAMPLE_CONVERSATIONS;
+  }
+}
+
+function writeStore(items: ConversationSummary[]): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
+/** Home Dashboard's Recent Conversations widget (E01-S008): top 3 only. */
 export async function getRecentConversations(): Promise<Result<ConversationSummary[], ApiError>> {
-  return { ok: true, value: SAMPLE_CONVERSATIONS };
+  return { ok: true, value: readStore().slice(0, 3) };
+}
+
+/** E03-S001: the full conversation list route's data source. */
+export async function listConversations(): Promise<Result<ConversationSummary[], ApiError>> {
+  return { ok: true, value: readStore() };
+}
+
+/**
+ * E03-S001: creates a new conversation and prepends it to the list (so
+ * it immediately shows up in both listConversations() and
+ * getRecentConversations()). The actual chat interface — composing and
+ * sending the first message — is out of scope here; that's E03-S002's
+ * "Normal/Advanced mode switch" and beyond. This only proves the
+ * "start a new conversation" entity-creation action itself works.
+ */
+export async function createConversation(): Promise<Result<ConversationSummary, ApiError>> {
+  const conversation: ConversationSummary = {
+    id: crypto.randomUUID(),
+    title: "新對話",
+    lastMessageAt: new Date().toISOString(),
+    lastMessagePreview: "尚無訊息。",
+  };
+  writeStore([conversation, ...readStore()]);
+  return { ok: true, value: conversation };
 }

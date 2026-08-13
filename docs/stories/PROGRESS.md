@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
+| E03 AI Conversation Experience | 33 | 1 | 0 | 0 | 0 | 32 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 20 | 0 | 0 | 0 | 155 |
+| **合計** | **175** | 21 | 0 | 0 | 0 | 154 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -65,7 +65,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E03-S001 | todo | | | |
+| E03-S001 | approved | story/E03-S001-conversation-list-new-route | [E03-S001.md](E03-S001.md) | 獨立審核 APPROVE(fresh gate 全綠,E2E 連跑 3 輪確認無 flaky,scope 未逾界) |
 | E03-S002 | todo | | | |
 | E03-S003 | todo | | | |
 | E03-S004 | todo | | | |

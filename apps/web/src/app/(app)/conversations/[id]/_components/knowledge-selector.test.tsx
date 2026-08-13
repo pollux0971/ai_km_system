@@ -1,55 +1,61 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { KnowledgeSelector } from "./knowledge-selector";
-import { setConversationKnowledgeScope } from "@/lib/conversations";
+import { setConversationKnowledgeScopes } from "@/lib/conversations";
 import { CurrentUserProvider } from "@/lib/session-context";
+import type { KnowledgeScope } from "@/lib/knowledge-scopes";
 
 vi.mock("@/lib/conversations", () => ({
-  setConversationKnowledgeScope: vi.fn(),
+  setConversationKnowledgeScopes: vi.fn(),
 }));
 
 vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
 
-const mockedSetConversationKnowledgeScope = vi.mocked(setConversationKnowledgeScope);
+const mockedSetConversationKnowledgeScopes = vi.mocked(setConversationKnowledgeScopes);
 
-function renderSelectorAs(roles: string[], initialScope: "company" | "department" | "project" | "private" | "qna" | null) {
+function renderSelectorAs(roles: string[], initialScopes: KnowledgeScope[]) {
   const session = { userId: "u1", roles, expiresAt: "2099-01-01T00:00:00.000Z" };
   return render(
     <CurrentUserProvider value={session}>
-      <KnowledgeSelector conversationId="c1" initialScope={initialScope} />
+      <KnowledgeSelector conversationId="c1" initialScopes={initialScopes} />
     </CurrentUserProvider>,
   );
 }
 
 beforeEach(() => {
-  mockedSetConversationKnowledgeScope.mockReset();
+  mockedSetConversationKnowledgeScopes.mockReset();
 });
 
-describe("KnowledgeSelector (E03-S003)", () => {
-  it("shows '尚未選擇' selected when the conversation has no scope yet", () => {
-    renderSelectorAs(["general_user"], null);
+describe("KnowledgeSelector (E03-S003/S004)", () => {
+  it("shows nothing checked when the conversation has no scopes yet", () => {
+    renderSelectorAs(["general_user"], []);
 
-    expect(screen.getByRole("combobox", { name: "知識來源" })).toHaveValue("");
+    for (const label of ["公司知識庫", "部門知識庫", "專案知識庫", "個人知識庫", "問答庫"]) {
+      expect(screen.getByRole("checkbox", { name: label })).not.toBeChecked();
+    }
   });
 
-  it("shows the initial scope selected when one is already set", () => {
-    renderSelectorAs(["general_user"], "department");
+  it("shows the initial scopes checked when several are already set", () => {
+    renderSelectorAs(["general_user"], ["company", "qna"]);
 
-    expect(screen.getByRole("combobox", { name: "知識來源" })).toHaveValue("department");
+    expect(screen.getByRole("checkbox", { name: "公司知識庫" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "問答庫" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "部門知識庫" })).not.toBeChecked();
   });
 
   it("offers all five scopes to a general_user — none are currently role-restricted", () => {
-    renderSelectorAs(["general_user"], null);
+    renderSelectorAs(["general_user"], []);
 
-    const select = screen.getByRole("combobox", { name: "知識來源" });
-    const optionLabels = Array.from(select.querySelectorAll("option")).map((option) => option.textContent);
-    expect(optionLabels).toEqual(["尚未選擇", "公司知識庫", "部門知識庫", "專案知識庫", "個人知識庫", "問答庫"]);
+    expect(screen.getByRole("group", { name: "知識來源" })).toBeInTheDocument();
+    for (const label of ["公司知識庫", "部門知識庫", "專案知識庫", "個人知識庫", "問答庫"]) {
+      expect(screen.getByRole("checkbox", { name: label })).toBeInTheDocument();
+    }
   });
 
-  it("switches to the selected scope once the update succeeds", async () => {
-    mockedSetConversationKnowledgeScope.mockResolvedValue({
+  it("checking a box adds that scope to the selection once the update succeeds", async () => {
+    mockedSetConversationKnowledgeScopes.mockResolvedValue({
       ok: true,
       value: {
         id: "c1",
@@ -57,19 +63,19 @@ describe("KnowledgeSelector (E03-S003)", () => {
         lastMessageAt: "2026-08-14T00:00:00.000Z",
         lastMessagePreview: "p",
         mode: "normal",
-        knowledgeScope: "qna",
+        knowledgeScopes: ["company"],
       },
     });
 
-    renderSelectorAs(["general_user"], null);
-    fireEvent.change(screen.getByRole("combobox", { name: "知識來源" }), { target: { value: "qna" } });
+    renderSelectorAs(["general_user"], []);
+    fireEvent.click(screen.getByRole("checkbox", { name: "公司知識庫" }));
 
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "知識來源" })).toHaveValue("qna"));
-    expect(mockedSetConversationKnowledgeScope).toHaveBeenCalledWith("c1", "qna");
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "公司知識庫" })).toBeChecked());
+    expect(mockedSetConversationKnowledgeScopes).toHaveBeenCalledWith("c1", ["company"]);
   });
 
-  it("can switch back to '尚未選擇' (unselecting), sending null", async () => {
-    mockedSetConversationKnowledgeScope.mockResolvedValue({
+  it("unchecking a box removes that scope, sending the rest of the selection unchanged", async () => {
+    mockedSetConversationKnowledgeScopes.mockResolvedValue({
       ok: true,
       value: {
         id: "c1",
@@ -77,35 +83,40 @@ describe("KnowledgeSelector (E03-S003)", () => {
         lastMessageAt: "2026-08-14T00:00:00.000Z",
         lastMessagePreview: "p",
         mode: "normal",
-        knowledgeScope: null,
+        knowledgeScopes: ["qna"],
       },
     });
 
-    renderSelectorAs(["general_user"], "company");
-    fireEvent.change(screen.getByRole("combobox", { name: "知識來源" }), { target: { value: "" } });
+    renderSelectorAs(["general_user"], ["company", "qna"]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "公司知識庫" }));
 
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "知識來源" })).toHaveValue(""));
-    expect(mockedSetConversationKnowledgeScope).toHaveBeenCalledWith("c1", null);
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "公司知識庫" })).not.toBeChecked());
+    expect(mockedSetConversationKnowledgeScopes).toHaveBeenCalledWith("c1", ["qna"]);
+    expect(screen.getByRole("checkbox", { name: "問答庫" })).toBeChecked();
   });
 
-  it("shows a distinct error state and keeps the previous scope when the switch fails", async () => {
-    mockedSetConversationKnowledgeScope.mockResolvedValue({
+  it("shows a distinct error state and keeps the previous selection when the switch fails", async () => {
+    mockedSetConversationKnowledgeScopes.mockResolvedValue({
       ok: false,
       error: { code: "NOT_FOUND", message: "找不到這個對話。" },
     });
 
-    renderSelectorAs(["general_user"], "company");
-    fireEvent.change(screen.getByRole("combobox", { name: "知識來源" }), { target: { value: "qna" } });
+    renderSelectorAs(["general_user"], ["company"]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "問答庫" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("切換知識來源失敗，請稍後再試。");
-    expect(screen.getByRole("combobox", { name: "知識來源" })).toHaveValue("company");
+    expect(screen.getByRole("checkbox", { name: "公司知識庫" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "問答庫" })).not.toBeChecked();
   });
 
-  it("does not call setConversationKnowledgeScope when re-selecting the already-active scope", () => {
-    renderSelectorAs(["general_user"], "company");
+  it("disables every checkbox while a switch is in flight, preventing a second toggle from racing the first", async () => {
+    mockedSetConversationKnowledgeScopes.mockReturnValue(new Promise(() => {}));
 
-    fireEvent.change(screen.getByRole("combobox", { name: "知識來源" }), { target: { value: "company" } });
+    renderSelectorAs(["general_user"], []);
+    fireEvent.click(screen.getByRole("checkbox", { name: "公司知識庫" }));
 
-    expect(mockedSetConversationKnowledgeScope).not.toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent("切換中…");
+    expect(screen.getByRole("checkbox", { name: "公司知識庫" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "問答庫" })).toBeDisabled();
   });
 });

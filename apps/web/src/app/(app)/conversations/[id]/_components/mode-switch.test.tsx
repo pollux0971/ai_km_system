@@ -34,7 +34,7 @@ describe("ModeSwitch (E03-S002)", () => {
         lastMessageAt: "2026-08-14T00:00:00.000Z",
         lastMessagePreview: "p",
         mode: "advanced",
-        knowledgeScope: null,
+        knowledgeScopes: [],
       },
     });
 

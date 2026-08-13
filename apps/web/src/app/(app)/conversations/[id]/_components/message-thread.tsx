@@ -8,6 +8,7 @@ import { listMessages, receiveAssistantReply, sendMessage, type Message } from "
 import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { MessageComposer } from "./message-composer";
+import { MessageContent } from "./message-content";
 
 const logger = createLogger("web:message-thread");
 
@@ -38,10 +39,13 @@ const logger = createLogger("web:message-thread");
  *
  * S10 adds the streaming pair (`streaming`/`stream-failed`), triggered
  * automatically once a user's own message finishes sending — see
- * startStream(). S13/S14 (citation badges/preview — the mock reply is
- * plain text, nothing to cite) remain separate, still-unbuilt stories,
- * deliberately not touched here. S21 "Answer State" (ANSWERED/PARTIAL/
- * NO_EVIDENCE/PERMISSION_DENIED/SOURCE_UNAVAILABLE/ERROR) is a semantic
+ * startStream(). S13 renders citation badges within assistant content
+ * via MessageContent (see message-content.tsx for why this is a plain
+ * regex-parsed marker, not structured data). S14 (citation preview —
+ * showing File/Page/Snippet detail on interaction) remains a separate,
+ * still-unbuilt story, deliberately not touched here. S21 "Answer State"
+ * (ANSWERED/PARTIAL/NO_EVIDENCE/PERMISSION_DENIED/SOURCE_UNAVAILABLE/
+ * ERROR) is a semantic
  * answer-quality classification that needs real RAG/permission
  * infrastructure to be meaningful — this story's own sent/streaming/
  * stream-failed states are a much simpler mechanical transport-layer
@@ -279,7 +283,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
             return (
               <li key={key}>
                 <span>{roleLabel}</span>
-                <span>{content}</span>
+                <span>
+                  <MessageContent content={content} withCitations={role === "assistant"} />
+                </span>
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
                 {entry.kind === "pending" && <span role="status">傳送中…</span>}
                 {entry.kind === "streaming" && (

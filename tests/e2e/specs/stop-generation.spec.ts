@@ -59,8 +59,24 @@ test("E03-S012: stopping after some reply text has streamed in keeps that partia
   // replacing the phase label) is what actually confirms we're past
   // it, not just waiting for the stop button to exist (which appears
   // immediately, well before any phase or real text shows).
+  //
+  // Click as soon as that text appears — no extra fixed sleep. message-
+  // thread.tsx sets `phase: null` (which is what makes "AI 回覆中…"
+  // render) in the SAME state update as the first streamed chunk's
+  // content snapshot, so that visibility already guarantees at least
+  // one real character has accumulated; a trailing waitForTimeout(100)
+  // bought nothing but exposure to still-ongoing streaming re-renders.
+  // Discovered as a genuine (pre-existing, unrelated to E03-S013) flake
+  // under heavy concurrent load (`pnpm test` running vitest across
+  // every package alongside this Playwright/Chromium session): the
+  // fixed 100ms sleep could lose its race against the mock reply
+  // finishing and reconciling to "sent" (removing the button entirely)
+  // while a slowed-down click was still retrying, surfacing as
+  // Playwright's "element was detached from the DOM" after 30s.
+  // Reproduced deterministically via `git stash` back to pre-S013 code
+  // plus `pnpm turbo run test --force`, confirming this file — not
+  // S013's changes — was the root cause.
   await expect(page.getByText("AI 回覆中…")).toBeVisible({ timeout: 5000 });
-  await page.waitForTimeout(100);
   await page.getByRole("button", { name: "停止生成" }).click();
 
   await expect(page.getByRole("button", { name: "停止生成" })).not.toBeVisible();

@@ -587,3 +587,73 @@ describe("MessageThread stop generation (E03-S012)", () => {
     expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument();
   });
 });
+
+describe("MessageThread citation badges (E03-S013)", () => {
+  it("renders a citation badge once a streamed assistant reply containing a [N] marker settles", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "本季成長 12%[1]";
+    });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "a1",
+        conversationId: "c1",
+        role: "assistant",
+        content: "本季成長 12%[1]",
+        attachmentNames: [],
+        createdAt: "2026-08-14T00:00:01.000Z",
+      },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(screen.queryByText("AI 回覆中…")).not.toBeInTheDocument());
+    expect(screen.getByText("本季成長 12%")).toBeInTheDocument();
+    expect(screen.getByRole("superscript")).toHaveTextContent("[1]");
+  });
+
+  it("shows citation badges on previously-sent assistant messages that contain [N] markers", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "已完成的回覆[1]",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    expect(await screen.findByRole("superscript")).toHaveTextContent("[1]");
+  });
+
+  it("does not render a citation badge for the user's own message, even if it contains a [N]-shaped substring", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "m1",
+          conversationId: "c1",
+          role: "user",
+          content: "請看附錄 [1] 的說明",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:00.000Z",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("請看附錄 [1] 的說明");
+    expect(screen.queryByRole("superscript")).not.toBeInTheDocument();
+  });
+});

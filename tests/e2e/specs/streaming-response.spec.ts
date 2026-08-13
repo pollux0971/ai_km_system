@@ -11,6 +11,19 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * generated wording. Navigation after login always uses in-app link
  * clicks, never page.goto() — see conversations.spec.ts's file doc
  * comment for why.
+ *
+ * Waits for the settled state via the absence of any `role="status"`
+ * element in the thread (`toHaveCount(0, ...)`) — not via the message
+ * list's item count (an optimistic "streaming" placeholder is already
+ * its own list item well before the reply is actually persisted, so
+ * waiting for count alone doesn't prove settlement) and not by waiting
+ * for "AI 回覆中…" specifically to disappear (E03-S011 added a
+ * Searching/Reading/Generating phase sequence before that text ever
+ * appears, so waiting for it to *not* be visible would resolve almost
+ * immediately — trivially true before it ever appears — rather than
+ * actually waiting for completion). Every in-progress state (pending/
+ * streaming/each generation phase) renders its own `role="status"`;
+ * only a fully "sent" entry renders none.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -35,6 +48,10 @@ function messageItems(page: import("@playwright/test").Page) {
   return page.getByRole("main").getByRole("listitem");
 }
 
+async function waitForThreadToSettle(page: import("@playwright/test").Page) {
+  await expect(page.getByRole("main").getByRole("status")).toHaveCount(0, { timeout: 20000 });
+}
+
 async function openConversation(page: import("@playwright/test").Page) {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
@@ -48,9 +65,7 @@ test("E03-S010: sending a message triggers a streaming assistant reply that sett
 
   await page.getByLabel("訊息").fill("保固期限是多久？");
   await page.getByRole("button", { name: "送出" }).click();
-
-  await expect(page.getByText("AI 回覆中…")).toBeVisible();
-  await expect(page.getByText("AI 回覆中…")).not.toBeVisible({ timeout: 15000 });
+  await waitForThreadToSettle(page);
 
   const items = messageItems(page);
   await expect(items).toHaveCount(2);
@@ -62,7 +77,7 @@ test("E03-S010: the assistant reply persists across leaving and returning to the
 
   await page.getByLabel("訊息").fill("保固期限是多久？");
   await page.getByRole("button", { name: "送出" }).click();
-  await expect(page.getByText("AI 回覆中…")).not.toBeVisible({ timeout: 15000 });
+  await waitForThreadToSettle(page);
   const conversationUrl = page.url();
 
   await sidebarNav(page).getByRole("link", { name: "首頁" }).click();

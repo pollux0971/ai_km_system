@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
+import { runGenerationPhases } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, sendMessage } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
 
@@ -14,6 +15,20 @@ vi.mock("@/lib/streaming", () => ({
   streamAssistantReply: vi.fn(),
 }));
 
+// message-thread.tsx only reads GENERATION_PHASE_LABELS (for rendering)
+// and runGenerationPhases (to call) from this module — not
+// GENERATION_PHASES — so the mock only needs to provide those two.
+// Values duplicated (not vi.importActual'd) to keep this a plain
+// synchronous factory, matching the other two mocks in this file.
+vi.mock("@/lib/generation-status", () => ({
+  GENERATION_PHASE_LABELS: {
+    searching: "搜尋中…",
+    reading: "讀取中…",
+    generating: "生成中…",
+  },
+  runGenerationPhases: vi.fn(),
+}));
+
 vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
@@ -22,6 +37,7 @@ const mockedListMessages = vi.mocked(listMessages);
 const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
+const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
 
 const DEFAULT_ASSISTANT_MESSAGE = {
   id: "assistant-default",
@@ -37,11 +53,16 @@ beforeEach(() => {
   mockedSendMessage.mockReset();
   mockedReceiveAssistantReply.mockReset();
   mockedStreamAssistantReply.mockReset();
+  mockedRunGenerationPhases.mockReset();
 
-  // Sensible defaults so tests focused purely on the S09 send flow don't
-  // also need to know about S10's streaming step — a successful send
-  // always triggers it, so every mockedSendMessage-succeeds test would
-  // otherwise crash on an unmocked/unconfigured streaming call.
+  // Sensible defaults so tests focused purely on the S09/S10 send/stream
+  // flow don't also need to know about S11's phase step — a successful
+  // send always triggers streaming, which always runs the phase sequence
+  // first, so every mockedSendMessage-succeeds test would otherwise
+  // crash on an unmocked/unconfigured phase generator.
+  mockedRunGenerationPhases.mockImplementation(async function* () {
+    return;
+  });
   mockedStreamAssistantReply.mockImplementation(async function* () {
     return;
   });
@@ -355,5 +376,94 @@ describe("MessageThread streaming assistant reply (E03-S010)", () => {
     const items = await screen.findAllByRole("listitem");
     expect(items[0]).toHaveTextContent("你");
     expect(items[1]).toHaveTextContent("AI");
+  });
+});
+
+describe("MessageThread generation status phases (E03-S011)", () => {
+  it("shows each phase label in order (searching, then reading, then generating) before any reply text exists", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+
+    let releaseSearching!: () => void;
+    let releaseReading!: () => void;
+    const searchingGate = new Promise<void>((resolve) => {
+      releaseSearching = resolve;
+    });
+    const readingGate = new Promise<void>((resolve) => {
+      releaseReading = resolve;
+    });
+    mockedRunGenerationPhases.mockImplementation(async function* () {
+      yield "searching";
+      await searchingGate;
+      yield "reading";
+      await readingGate;
+      yield "generating";
+    });
+    // Left permanently pending — this test only cares about observing
+    // the three phases in order, not what happens after. Without this,
+    // once the phase generator exhausts, runStream immediately falls
+    // through to the default (instantly-resolving) beforeEach mocks for
+    // streamAssistantReply/receiveAssistantReply, and the whole flow
+    // races to "sent" before waitFor can reliably catch the brief
+    // "generating" window.
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      await new Promise<void>(() => {});
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("搜尋中…"));
+
+    releaseSearching();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("讀取中…"));
+
+    releaseReading();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("生成中…"));
+  });
+
+  it("falls back to the generic streaming status once the phase sequence completes and real text starts arriving", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedRunGenerationPhases.mockImplementation(async function* () {
+      yield "searching";
+      yield "reading";
+      yield "generating";
+    });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "回覆內容";
+    });
+    // Left permanently pending — this test checks the "actively
+    // streaming text" state specifically. receiveAssistantReply's
+    // default (beforeEach) mock resolves near-instantly with unrelated
+    // content, which would otherwise race the reconciliation-to-"sent"
+    // transition against the synchronous assertions below.
+    mockedReceiveAssistantReply.mockImplementation(() => new Promise(() => {}));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(screen.getByText("回覆內容")).toBeInTheDocument());
+    expect(screen.getByRole("status")).toHaveTextContent("AI 回覆中…");
+    expect(screen.queryByText("生成中…")).not.toBeInTheDocument();
+  });
+
+  it("runs the phase sequence again on retry after a stream failure", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+    await screen.findByText("AI 回覆失敗");
+
+    expect(mockedRunGenerationPhases).toHaveBeenCalledTimes(1);
+    mockedReceiveAssistantReply.mockResolvedValueOnce({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
+    fireEvent.click(screen.getByRole("button", { name: "重新產生回覆" }));
+
+    await waitFor(() => expect(mockedRunGenerationPhases).toHaveBeenCalledTimes(2));
   });
 });

@@ -9,13 +9,12 @@ import { Fragment } from "react";
  *   [1]
  *
  * — nothing else: no data shape for what a citation references, no
- * click/hover interaction. That's deliberately out of scope here:
- * E03-S14 "Citation Preview" is the separate, still-unbuilt story that
- * owns showing File/Page/Snippet detail for a citation (per its own
- * SOURCE_BASELINE entry immediately following S13's). A citation badge
- * here is therefore rendered as an inert, non-interactive marker — not
- * a button — so this story doesn't reach into S14's territory by
- * inventing a click handler with nowhere real to send it.
+ * click/hover interaction. S13 itself therefore rendered the badge as
+ * an inert, non-interactive marker; E03-S14 "Citation Preview" (see
+ * citation-preview-drawer.tsx) is the story that adds the interaction —
+ * a nested `<button>` inside the `<sup>` calling `onCitationClick`,
+ * added once S14 actually had somewhere real to send that click (the
+ * preview drawer), not invented speculatively back in S13.
  *
  * There is no real RAG/citation backend (E04 doesn't exist), so
  * lib/streaming.ts's mock reply is the only source of citation markers
@@ -48,10 +47,27 @@ import { Fragment } from "react";
  * on that native semantic instead of fighting the tooling for a role it
  * won't reliably expose. `aria-label` still gives assistive tech the
  * fuller "引用來源 N" description regardless of which role wins.
+ *
+ * E03-S14 nests a `<button>` inside the `<sup>` rather than replacing
+ * it — the `<sup>` keeps its S13 `aria-label` ("引用來源 N", describing
+ * what the marker IS) completely unchanged, so every existing S13
+ * assertion still holds; the new inner `<button>` carries its own,
+ * differently-worded label ("檢視引用來源 N", describing the ACTION of
+ * clicking it) and is the actual click target. Nesting an interactive
+ * element inside `<sup>` is valid standard HTML (`<sup>` accepts any
+ * phrasing content) and doesn't change `<sup>`'s own role computation.
  */
 const CITATION_PATTERN = /(\[\d+\])/g;
 
-export function MessageContent({ content, withCitations }: { content: string; withCitations: boolean }) {
+export function MessageContent({
+  content,
+  withCitations,
+  onCitationClick,
+}: {
+  content: string;
+  withCitations: boolean;
+  onCitationClick: (citationId: string) => void;
+}) {
   if (!withCitations) {
     return <>{content}</>;
   }
@@ -61,13 +77,21 @@ export function MessageContent({ content, withCitations }: { content: string; wi
   return (
     <>
       {parts.map((part, index) => {
-        const match = /^\[(\d+)\]$/.exec(part);
-        if (!match) {
+        if (!/^\[\d+\]$/.test(part)) {
           return <Fragment key={index}>{part}</Fragment>;
         }
+        // Slicing off the surrounding brackets (not the capture group
+        // from a .exec() match) keeps this a plain `string`, not
+        // `string | undefined` — this repo's tsconfig has
+        // noUncheckedIndexedAccess on, which types every regex capture
+        // group access as possibly-undefined even though the .test()
+        // above already guarantees `part` is exactly `[<digits>]`.
+        const citationId = part.slice(1, -1);
         return (
-          <sup key={index} aria-label={`引用來源 ${match[1]}`}>
-            {part}
+          <sup key={index} aria-label={`引用來源 ${citationId}`}>
+            <button type="button" aria-label={`檢視引用來源 ${citationId}`} onClick={() => onCitationClick(citationId)}>
+              {part}
+            </button>
           </sup>
         );
       })}

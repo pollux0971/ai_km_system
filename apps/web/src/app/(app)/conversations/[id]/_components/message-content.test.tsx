@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MessageContent } from "./message-content";
+
+const noop = () => {};
 
 // Badges are queried via role "superscript" (the <sup> element's own
 // correct implicit ARIA role — see message-content.tsx's doc comment
@@ -10,14 +12,14 @@ import { MessageContent } from "./message-content";
 // this component's citation-badge.spec.ts).
 describe("MessageContent (E03-S013)", () => {
   it("renders plain content unchanged when withCitations is false", () => {
-    render(<MessageContent content="這是一般文字 [1] 不應該被當成引用。" withCitations={false} />);
+    render(<MessageContent content="這是一般文字 [1] 不應該被當成引用。" withCitations={false} onCitationClick={noop} />);
 
     expect(screen.getByText("這是一般文字 [1] 不應該被當成引用。")).toBeInTheDocument();
     expect(screen.queryByRole("superscript")).not.toBeInTheDocument();
   });
 
   it("renders a [N] marker as a distinct citation badge when withCitations is true", () => {
-    render(<MessageContent content="本季華北區成長 12%[1]，主要來自新客戶導入。" withCitations={true} />);
+    render(<MessageContent content="本季華北區成長 12%[1]，主要來自新客戶導入。" withCitations={true} onCitationClick={noop} />);
 
     const badge = screen.getByRole("superscript");
     expect(badge).toHaveTextContent("[1]");
@@ -26,7 +28,7 @@ describe("MessageContent (E03-S013)", () => {
   });
 
   it("renders multiple distinct citation badges in one message", () => {
-    render(<MessageContent content="第一個來源[1]，第二個來源[2]。" withCitations={true} />);
+    render(<MessageContent content="第一個來源[1]，第二個來源[2]。" withCitations={true} onCitationClick={noop} />);
 
     const badges = screen.getAllByRole("superscript");
     expect(badges).toHaveLength(2);
@@ -35,23 +37,50 @@ describe("MessageContent (E03-S013)", () => {
   });
 
   it("renders content with no citation markers as plain text, even with withCitations true", () => {
-    render(<MessageContent content="這則回覆完全沒有引用標記。" withCitations={true} />);
+    render(<MessageContent content="這則回覆完全沒有引用標記。" withCitations={true} onCitationClick={noop} />);
 
     expect(screen.getByText("這則回覆完全沒有引用標記。")).toBeInTheDocument();
     expect(screen.queryByRole("superscript")).not.toBeInTheDocument();
   });
 
   it("does not treat a non-numeric bracketed segment as a citation", () => {
-    render(<MessageContent content="請參考附錄 [A] 的說明。" withCitations={true} />);
+    render(<MessageContent content="請參考附錄 [A] 的說明。" withCitations={true} onCitationClick={noop} />);
 
     expect(screen.queryByRole("superscript")).not.toBeInTheDocument();
     expect(screen.getByText(/請參考附錄 \[A\] 的說明/)).toBeInTheDocument();
   });
 
   it("gives each citation badge a distinct accessible label matching its number", () => {
-    render(<MessageContent content="第一個來源[1]，第二個來源[2]。" withCitations={true} />);
+    render(<MessageContent content="第一個來源[1]，第二個來源[2]。" withCitations={true} onCitationClick={noop} />);
 
     expect(screen.getByRole("superscript", { name: "引用來源 1" })).toBeInTheDocument();
     expect(screen.getByRole("superscript", { name: "引用來源 2" })).toBeInTheDocument();
+  });
+});
+
+describe("MessageContent citation click interaction (E03-S014)", () => {
+  it("renders a clickable button inside each citation badge with an action-worded label", () => {
+    render(<MessageContent content="第一個來源[1]，第二個來源[2]。" withCitations={true} onCitationClick={noop} />);
+
+    expect(screen.getByRole("button", { name: "檢視引用來源 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "檢視引用來源 2" })).toBeInTheDocument();
+  });
+
+  it("calls onCitationClick with the clicked badge's citation id", () => {
+    const onCitationClick = vi.fn();
+    render(<MessageContent content="第一個來源[1]，第二個來源[2]。" withCitations={true} onCitationClick={onCitationClick} />);
+
+    screen.getByRole("button", { name: "檢視引用來源 2" }).click();
+
+    expect(onCitationClick).toHaveBeenCalledTimes(1);
+    expect(onCitationClick).toHaveBeenCalledWith("2");
+  });
+
+  it("never renders a citation button when withCitations is false, even if the text contains a [N] substring", () => {
+    const onCitationClick = vi.fn();
+    render(<MessageContent content="這是一般文字 [1] 不應該被當成引用。" withCitations={false} onCitationClick={onCitationClick} />);
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(onCitationClick).not.toHaveBeenCalled();
   });
 });

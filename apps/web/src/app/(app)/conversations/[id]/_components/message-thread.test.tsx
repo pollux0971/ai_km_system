@@ -657,3 +657,52 @@ describe("MessageThread citation badges (E03-S013)", () => {
     expect(screen.queryByRole("superscript")).not.toBeInTheDocument();
   });
 });
+
+// Uses the REAL lib/citations.ts (not mocked) — proving the actual
+// wiring end to end (click → state → CitationPreviewDrawer → real
+// getCitationSource → real mock data → rendered), consistent with how
+// this file already asserts on lib/streaming.ts's real MOCK_REPLY
+// elsewhere rather than mocking every layer.
+describe("MessageThread citation preview (E03-S014)", () => {
+  function assistantMessageWithCitation() {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "已完成的回覆[1]",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+  }
+
+  it("clicking a citation badge opens the preview drawer showing that citation's source", async () => {
+    assistantMessageWithCitation();
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByRole("button", { name: "檢視引用來源 1" });
+
+    expect(screen.queryByRole("region", { name: "引用來源預覽" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "檢視引用來源 1" }));
+
+    expect(await screen.findByRole("region", { name: "引用來源預覽" })).toBeInTheDocument();
+    expect(await screen.findByText("（模擬來源文件 1，尚未串接真正的知識庫）")).toBeInTheDocument();
+  });
+
+  it("closing the preview drawer removes it from the page", async () => {
+    assistantMessageWithCitation();
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByRole("button", { name: "檢視引用來源 1" });
+    fireEvent.click(screen.getByRole("button", { name: "檢視引用來源 1" }));
+    await screen.findByRole("region", { name: "引用來源預覽" });
+
+    fireEvent.click(screen.getByRole("button", { name: "關閉" }));
+
+    await waitFor(() => expect(screen.queryByRole("region", { name: "引用來源預覽" })).not.toBeInTheDocument());
+  });
+});

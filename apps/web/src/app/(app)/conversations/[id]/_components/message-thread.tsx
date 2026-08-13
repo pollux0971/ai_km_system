@@ -3,44 +3,59 @@
 import { useEffect, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
-import { listMessages, sendMessage, type Message } from "@/lib/messages";
+import { listMessages, receiveAssistantReply, sendMessage, type Message } from "@/lib/messages";
+import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { MessageComposer } from "./message-composer";
 
 const logger = createLogger("web:message-thread");
 
 /**
- * E03-S009: send-message optimistic state. Owns the message list +
- * renders MessageComposer at the bottom, since submitting from the
- * composer needs to immediately affect what's displayed here — the
- * defining behavior the story's title names ("optimistic"): a sent
- * message appears at once as "pending" rather than waiting on the mock
- * round-trip, then reconciles to "sent" or "failed" once it resolves.
- * This is a deliberate contrast with S03-S05's selectors (ModeSwitch/
+ * E03-S009/S010: message thread. Owns the message list + renders
+ * MessageComposer at the bottom, since submitting from the composer
+ * needs to immediately affect what's displayed here — the defining
+ * behavior S09's title names ("optimistic"): a sent message appears at
+ * once as "pending" rather than waiting on the mock round-trip, then
+ * reconciles to "sent" or "failed" once it resolves. This is a
+ * deliberate contrast with S03-S05's selectors (ModeSwitch/
  * KnowledgeSelector/ModelSelector), which stay non-optimistic (disabled
  * while pending, UI only updates on confirmed success) — those are
  * infrequent settings changes where a brief pending state costs
  * nothing; a chat composer needs to feel instant on every message.
  *
- * A "failed" entry stays visible with a retry action rather than
- * vanishing — the Frontend/UX Boundary's "Optimistic UI 若涉及
- * mutation，失敗時必須 rollback 或明確 reconcile" is satisfied by
+ * A "failed"/"stream-failed" entry stays visible with a retry action
+ * rather than vanishing — the Frontend/UX Boundary's "Optimistic UI 若
+ * 涉及 mutation，失敗時必須 rollback 或明確 reconcile" is satisfied by
  * reconciling (the UI now accurately shows this message did NOT go
  * through) rather than a silent rollback that would leave the user
  * wondering whether their message ever existed.
  *
- * DisplayMessage is a local-only type: "pending"/"failed" never touch
- * lib/messages.ts's persisted store (see that file's own doc comment)
- * — only "sent" entries (backed by a real persisted Message) survive a
- * remount/reload; a pending or failed send that's still in flight when
- * the user navigates away is intentionally not preserved, same
- * accepted-limitation class as every other sessionStorage-backed mock
- * in this codebase.
+ * DisplayMessage is a local-only type: only "sent" entries have a real
+ * persisted Message; every other kind is transient UI state that
+ * doesn't survive a remount/reload — same accepted-limitation class as
+ * every other sessionStorage-backed mock in this codebase.
+ *
+ * S10 adds the streaming pair (`streaming`/`stream-failed`), triggered
+ * automatically once a user's own message finishes sending — see
+ * startStream(). Deliberately excludes what three separate, still-
+ * unbuilt stories explicitly own instead: S11 "Generation Status" owns
+ * a Searching/Reading/Generating phase indicator (this only shows a
+ * generic "AI 回覆中…" — it doesn't invent S11's specific phase
+ * vocabulary); S12 "Stop Generation" owns a cancel control (none here);
+ * S13/S14 own citation badges/preview (the mock reply is plain text,
+ * nothing to cite). S21 "Answer State" (ANSWERED/PARTIAL/NO_EVIDENCE/
+ * PERMISSION_DENIED/SOURCE_UNAVAILABLE/ERROR) is a semantic
+ * answer-quality classification that needs real RAG/permission
+ * infrastructure to be meaningful — this story's own sent/streaming/
+ * stream-failed states are a much simpler mechanical transport-layer
+ * status, deliberately not reusing or partially implementing that enum.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
   | { kind: "pending"; localId: string; content: string; attachmentNames: string[] }
-  | { kind: "failed"; localId: string; content: string; attachmentNames: string[] };
+  | { kind: "failed"; localId: string; content: string; attachmentNames: string[] }
+  | { kind: "streaming"; localId: string; content: string }
+  | { kind: "stream-failed"; localId: string };
 
 type LoadState = "loading" | "error" | "loaded";
 
@@ -83,7 +98,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       logger.error("failed to send message", { correlationId, conversationId, code: result.error.code });
       trackEvent("conversation_message_send_failure", { correlationId, properties: { code: result.error.code } });
       setDisplayMessages((previous) =>
-        previous.map((entry) => (entry.kind !== "sent" && entry.localId === localId ? { ...entry, kind: "failed" } : entry)),
+        previous.map((entry) => (entry.kind === "pending" && entry.localId === localId ? { ...entry, kind: "failed" } : entry)),
       );
       return;
     }
@@ -91,8 +106,10 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     logger.info("message sent", { correlationId, conversationId, messageId: result.value.id });
     trackEvent("conversation_message_send_success", { correlationId, properties: { messageId: result.value.id } });
     setDisplayMessages((previous) =>
-      previous.map((entry) => (entry.kind !== "sent" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
+      previous.map((entry) => (entry.kind === "pending" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
     );
+
+    startStream();
   }
 
   function handleComposerSubmit(content: string, attachmentNames: string[]) {
@@ -103,9 +120,63 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
   function handleRetry(localId: string, content: string, attachmentNames: string[]) {
     setDisplayMessages((previous) =>
-      previous.map((entry) => (entry.kind !== "sent" && entry.localId === localId ? { kind: "pending", localId, content, attachmentNames } : entry)),
+      previous.map((entry) => (entry.kind === "failed" && entry.localId === localId ? { kind: "pending", localId, content, attachmentNames } : entry)),
     );
     void attemptSend(localId, content, attachmentNames);
+  }
+
+  /**
+   * E03-S010. streamAssistantReply() takes no "prompt" argument — the
+   * mock always yields the same fixed placeholder text (see
+   * lib/streaming.ts), so threading the user's message content through
+   * here would be a dead parameter nothing reads yet. A real
+   * implementation extending this later is exactly the kind of change
+   * that belongs to whichever story actually wires up a real Model
+   * Gateway call, not something to speculatively half-build now.
+   */
+  async function runStream(localId: string) {
+    const correlationId = crypto.randomUUID();
+    logger.info("streaming assistant reply", { correlationId, conversationId });
+    trackEvent("conversation_message_stream_attempt", { correlationId, properties: { conversationId } });
+
+    let accumulated = "";
+    for await (const chunk of streamAssistantReply()) {
+      accumulated += chunk;
+      const snapshot = accumulated;
+      setDisplayMessages((previous) =>
+        previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot } : entry)),
+      );
+    }
+
+    const result = await receiveAssistantReply(conversationId, accumulated);
+
+    if (!result.ok) {
+      logger.error("failed to persist assistant reply", { correlationId, conversationId, code: result.error.code });
+      trackEvent("conversation_message_stream_failure", { correlationId, properties: { code: result.error.code } });
+      setDisplayMessages((previous) =>
+        previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { kind: "stream-failed", localId } : entry)),
+      );
+      return;
+    }
+
+    logger.info("assistant reply received", { correlationId, conversationId, messageId: result.value.id });
+    trackEvent("conversation_message_stream_success", { correlationId, properties: { messageId: result.value.id } });
+    setDisplayMessages((previous) =>
+      previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
+    );
+  }
+
+  function startStream() {
+    const localId = crypto.randomUUID();
+    setDisplayMessages((previous) => [...previous, { kind: "streaming", localId, content: "" }]);
+    void runStream(localId);
+  }
+
+  function handleRetryStream(localId: string) {
+    setDisplayMessages((previous) =>
+      previous.map((entry) => (entry.kind === "stream-failed" && entry.localId === localId ? { kind: "streaming", localId, content: "" } : entry)),
+    );
+    void runStream(localId);
   }
 
   if (loadState === "loading") {
@@ -131,14 +202,31 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       ) : (
         <ul>
           {displayMessages.map((entry) => {
+            if (entry.kind === "stream-failed") {
+              return (
+                <li key={entry.localId}>
+                  <span>AI</span>
+                  <span role="alert">AI 回覆失敗</span>
+                  <button type="button" onClick={() => handleRetryStream(entry.localId)}>
+                    重新產生回覆
+                  </button>
+                </li>
+              );
+            }
+
             const key = entry.kind === "sent" ? entry.message.id : entry.localId;
+            const role = entry.kind === "sent" ? entry.message.role : entry.kind === "streaming" ? "assistant" : "user";
+            const roleLabel = role === "assistant" ? "AI" : "你";
             const content = entry.kind === "sent" ? entry.message.content : entry.content;
-            const attachmentNames = entry.kind === "sent" ? entry.message.attachmentNames : entry.attachmentNames;
+            const attachmentNames = entry.kind === "sent" ? entry.message.attachmentNames : entry.kind === "streaming" ? [] : entry.attachmentNames;
+
             return (
               <li key={key}>
-                {content}
+                <span>{roleLabel}</span>
+                <span>{content}</span>
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
                 {entry.kind === "pending" && <span role="status">傳送中…</span>}
+                {entry.kind === "streaming" && <span role="status">AI 回覆中…</span>}
                 {entry.kind === "failed" && (
                   <span>
                     <span role="alert">傳送失敗</span>

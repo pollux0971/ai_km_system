@@ -13,28 +13,28 @@ import { getConversation, touchConversationLastMessage } from "./conversations";
  * since Message is conceptually its own collection keyed by
  * conversationId, not a field on ConversationSummary.
  *
- * `role` is `"user"` only — S10 (Streaming Response), S11 (Generation
- * Status), S12 (Stop Generation) are separate, still-unbuilt stories
- * that would own any assistant-reply concept; nothing in the baseline
- * states S09 must produce one, so this story only proves the user's own
- * message gets sent and reflected with correct pending/sent/failed
- * state. Adding an "assistant" role now with nothing that ever produces
- * one would be speculative, unused code.
+ * `role` was `"user"` only through E03-S009 — S10 (Streaming Response)
+ * is the first story with anything that produces an assistant reply,
+ * so `"assistant"` is added now, not preemptively back in S009 when
+ * nothing would have used it.
  *
  * A persisted Message has no `status` field — every message that made
- * it into the store is definitionally sent. "pending"/"failed" are
- * transient, UI-only states that exist only in message-thread.tsx's
- * local optimistic-entry wrapper, never written here.
+ * it into the store is definitionally sent/received in full. Any
+ * in-progress state (S09's "pending"/"failed", S10's "streaming") is
+ * transient and UI-only, living only in message-thread.tsx's local
+ * DisplayMessage wrapper, never written here.
  *
  * `attachmentNames` stores names only, not File content — File objects
  * aren't JSON-serializable for sessionStorage, and there's nowhere real
  * to persist file content anyway (E03-S008: Frontend/BFF may never
- * connect directly to Object Storage).
+ * connect directly to Object Storage). Assistant replies never have
+ * attachments — nothing in the spec suggests a generated reply carries
+ * one, and lib/streaming.ts's mock reply is plain text only.
  */
 export interface Message {
   id: string;
   conversationId: string;
-  role: "user";
+  role: "user" | "assistant";
   content: string;
   attachmentNames: string[];
   createdAt: string;
@@ -99,6 +99,39 @@ export async function sendMessage(
 
   const preview = content.length > 0 ? content : `已傳送 ${attachmentNames.length} 個附件`;
   await touchConversationLastMessage(conversationId, preview, message.createdAt);
+
+  return { ok: true, value: message };
+}
+
+/**
+ * E03-S010: persists a completed assistant reply once
+ * lib/streaming.ts's mock stream finishes. A separate function from
+ * sendMessage rather than a `role` parameter on it — "send" is a
+ * user-initiated action; a reply "arrives"/is "received", a distinct
+ * enough concept (no attachments, different actor) to warrant its own
+ * name rather than overloading sendMessage's signature. Same
+ * NOT_FOUND fail-closed check as sendMessage, reused rather than
+ * duplicated logic — and the same deterministic (not simulated-random)
+ * failure trigger message-thread.tsx's streaming→failed→retry path
+ * exercises.
+ */
+export async function receiveAssistantReply(conversationId: string, content: string): Promise<Result<Message, ApiError>> {
+  const conversation = await getConversation(conversationId);
+  if (!conversation.ok) return conversation;
+  if (!conversation.value) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } };
+  }
+
+  const message: Message = {
+    id: crypto.randomUUID(),
+    conversationId,
+    role: "assistant",
+    content,
+    attachmentNames: [],
+    createdAt: new Date().toISOString(),
+  };
+  writeStore([...readStore(), message]);
+  await touchConversationLastMessage(conversationId, content, message.createdAt);
 
   return { ok: true, value: message };
 }

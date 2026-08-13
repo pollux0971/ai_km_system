@@ -17,3 +17,5 @@ export function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {
     />
   );
 }
+
+export * from "./loading";

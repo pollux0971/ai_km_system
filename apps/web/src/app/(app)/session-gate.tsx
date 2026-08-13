@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { createLogger } from "@ai-km/logger";
+import { LoadingIndicator } from "@ai-km/ui";
 import type { AuthSession } from "@ai-km/auth-client";
 import { authClient } from "@/lib/auth";
 import { CurrentUserProvider } from "@/lib/session-context";
@@ -61,8 +62,8 @@ export default function SessionGate({ children }: { children: ReactNode }) {
 
   if (state.status === "loading" || state.status === "redirecting") {
     return (
-      <div role="status" style={{ padding: 32 }}>
-        載入中…
+      <div style={{ padding: 32 }}>
+        <LoadingIndicator />
       </div>
     );
   }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
+import { LoadingIndicator } from "@ai-km/ui";
 import { getRecentConversations, type ConversationSummary } from "@/lib/conversations";
 
 const logger = createLogger("web:recent-conversations");
@@ -45,7 +46,7 @@ export default function RecentConversations() {
   }, []);
 
   if (state.status === "loading") {
-    return <p role="status">載入中…</p>;
+    return <LoadingIndicator />;
   }
 
   if (state.status === "error") {

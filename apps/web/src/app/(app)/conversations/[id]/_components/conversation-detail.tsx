@@ -5,7 +5,7 @@ import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getConversation, type ConversationMode, type ConversationSummary } from "@/lib/conversations";
 import { KnowledgeSelector } from "./knowledge-selector";
-import { MessageComposer } from "./message-composer";
+import { MessageThread } from "./message-thread";
 import { ModelSelector } from "./model-selector";
 import { ModeSwitch } from "./mode-switch";
 
@@ -18,14 +18,14 @@ type State =
   | { status: "loaded"; conversation: ConversationSummary };
 
 /**
- * E03-S002/S003/S005/S006: the conversation detail shell — established
- * here since this is the first E03 story (per SOURCE_BASELINE.md's E03
- * outline: S02 Conversation Mode, S03 Knowledge Selector, S04 Multi
- * Knowledge Selection, S05 Model Selector, S06 Message Composer, ...)
- * that needs somewhere to render its own piece of one incrementally-
- * assembled chat interface. Deliberately minimal: title + mode switch +
- * knowledge selector + (Advanced-mode-only) model selector + message
- * composer — no message thread/history yet, that's S09's job.
+ * E03-S002/S003/S005/S006/S009: the conversation detail shell —
+ * established here since this is the first E03 story (per
+ * SOURCE_BASELINE.md's E03 outline: S02 Conversation Mode, S03
+ * Knowledge Selector, S04 Multi Knowledge Selection, S05 Model
+ * Selector, S06 Message Composer, ...) that needs somewhere to render
+ * its own piece of one incrementally-assembled chat interface: title +
+ * mode switch + knowledge selector + (Advanced-mode-only) model
+ * selector + message thread (list + composer, S09).
  *
  * "not found" (a valid route, id just doesn't resolve to data) is
  * modeled as its own state, distinct from both the generic error state
@@ -113,7 +113,7 @@ export default function ConversationDetail({ id }: { id: string }) {
           <ModelSelector conversationId={state.conversation.id} initialModel={state.conversation.model} />
         </div>
       )}
-      <MessageComposer conversationId={state.conversation.id} />
+      <MessageThread conversationId={state.conversation.id} />
     </main>
   );
 }

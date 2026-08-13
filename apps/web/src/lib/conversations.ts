@@ -220,3 +220,19 @@ export async function setConversationModel(
   }
   return updateConversation(id, { model });
 }
+
+/**
+ * E03-S009: called by lib/messages.ts once a message is actually sent,
+ * so the conversation list/dashboard preview reflects the latest
+ * message instead of staying frozen at whatever createConversation()
+ * set — completing the intent `lastMessageAt`/`lastMessagePreview` were
+ * already declared for back in E03-S001, which had no way to update
+ * them yet since no message could ever be sent until now.
+ */
+export async function touchConversationLastMessage(
+  id: string,
+  lastMessagePreview: string,
+  lastMessageAt: string,
+): Promise<Result<ConversationSummary, ApiError>> {
+  return updateConversation(id, { lastMessagePreview, lastMessageAt });
+}

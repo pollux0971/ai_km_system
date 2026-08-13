@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 7 | 0 | 1 | 0 | 25 |
+| E03 AI Conversation Experience | 33 | 7 | 1 | 0 | 0 | 25 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 27 | 0 | 1 | 0 | 147 |
+| **合計** | **175** | 27 | 1 | 0 | 0 | 147 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -72,7 +72,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S005 | approved | story/E03-S005-advanced-model-selector | [E03-S005.md](E03-S005.md) | 獨立審核 APPROVE(fresh gate 全綠,E2E 隔離+全量各跑一輪無 flaky,scope 未逾界) |
 | E03-S006 | approved | story/E03-S006-message-composer-baseline | [E03-S006.md](E03-S006.md) | 獨立審核 APPROVE(fresh gate 全綠,build/test 分開跑,scope 未逾界;1 個 MINOR 測試命名精確度建議,不阻擋) |
 | E03-S007 | approved | story/E03-S007-multiline-keyboard-behavior | [E03-S007.md](E03-S007.md) | 獨立審核 APPROVE(fresh gate 全綠,build/test 分開跑,scope 未逾界;獨立覆核原生換行行為推理無誤) |
-| E03-S008 | in-progress | story/E03-S008-file-attachment-picker | | |
+| E03-S008 | done | story/E03-S008-file-attachment-picker | [E03-S008.md](E03-S008.md) | VERIFY 正式 gate 序列一次全過;隔離預檢時抓到並修正 1 個測試選擇器範圍問題(非實作問題);等待獨立審核 |
 | E03-S009 | todo | | | |
 | E03-S010 | todo | | | |
 | E03-S011 | todo | | | |

@@ -13,7 +13,13 @@ beforeEach(() => {
   mockedTrackEvent.mockReset();
 });
 
-describe("MessageComposer (E03-S006/S007)", () => {
+function makeFile(name: string, sizeBytes: number): File {
+  const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name);
+  Object.defineProperty(file, "size", { value: sizeBytes });
+  return file;
+}
+
+describe("MessageComposer (E03-S006/S007/S008)", () => {
   it("starts empty with the submit button disabled", () => {
     render(<MessageComposer conversationId="c1" />);
 
@@ -47,7 +53,7 @@ describe("MessageComposer (E03-S006/S007)", () => {
     expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
     expect(mockedTrackEvent).toHaveBeenCalledWith(
       "conversation_message_compose_submit",
-      expect.objectContaining({ properties: { conversationId: "c1", length: 2 } }),
+      expect.objectContaining({ properties: { conversationId: "c1", length: 2, attachmentCount: 0 } }),
     );
     const [, payload] = mockedTrackEvent.mock.calls[0] as [string, { properties?: Record<string, unknown> }];
     expect(JSON.stringify(payload)).not.toContain("你好");
@@ -74,7 +80,7 @@ describe("MessageComposer (E03-S006/S007)", () => {
     expect(screen.getByLabelText("訊息")).toHaveValue("");
     expect(mockedTrackEvent).toHaveBeenCalledWith(
       "conversation_message_compose_submit",
-      expect.objectContaining({ properties: { conversationId: "c1", length: 2 } }),
+      expect.objectContaining({ properties: { conversationId: "c1", length: 2, attachmentCount: 0 } }),
     );
   });
 
@@ -104,5 +110,61 @@ describe("MessageComposer (E03-S006/S007)", () => {
 
     expect(mockedTrackEvent).not.toHaveBeenCalled();
     expect(screen.getByLabelText("訊息")).toHaveValue("   ");
+  });
+
+  it("E03-S008: enables submit once a file is attached, even with no text", () => {
+    render(<MessageComposer conversationId="c1" />);
+
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("a.txt", 10)] } });
+
+    expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
+  });
+
+  it("E03-S008: lists the attached file", () => {
+    render(<MessageComposer conversationId="c1" />);
+
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("報表.pdf", 10)] } });
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("報表.pdf");
+  });
+
+  it("E03-S008: submitting an attachment-only draft clears the attachment and reports attachmentCount, without any filename", () => {
+    render(<MessageComposer conversationId="c1" />);
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("機密文件.docx", 10)] } });
+
+    fireEvent.click(screen.getByRole("button", { name: "送出" }));
+
+    expect(screen.queryByText(/機密文件\.docx/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+    expect(mockedTrackEvent).toHaveBeenCalledWith(
+      "conversation_message_compose_submit",
+      expect.objectContaining({ properties: { conversationId: "c1", length: 0, attachmentCount: 1 } }),
+    );
+    const [, payload] = mockedTrackEvent.mock.calls[0] as [string, { properties?: Record<string, unknown> }];
+    expect(JSON.stringify(payload)).not.toContain("機密文件");
+  });
+
+  it("E03-S008: submitting with both text and an attachment reports both in one event", () => {
+    render(<MessageComposer conversationId="c1" />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "你好" } });
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("a.txt", 10), makeFile("b.txt", 10)] } });
+
+    fireEvent.click(screen.getByRole("button", { name: "送出" }));
+
+    expect(mockedTrackEvent).toHaveBeenCalledWith(
+      "conversation_message_compose_submit",
+      expect.objectContaining({ properties: { conversationId: "c1", length: 2, attachmentCount: 2 } }),
+    );
+  });
+
+  it("E03-S008: removing the only attachment (with no text) disables submit again", () => {
+    render(<MessageComposer conversationId="c1" />);
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("a.txt", 10)] } });
+    expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "移除 a.txt" }));
+
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+    expect(screen.queryByText(/a\.txt/)).not.toBeInTheDocument();
   });
 });

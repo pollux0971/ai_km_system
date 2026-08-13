@@ -1,9 +1,24 @@
 import type { ReactNode } from "react";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "AI KM",
   description: "Enterprise AI Knowledge Management & Work Assistant Platform",
+};
+
+/**
+ * E01-S016 desktop responsive baseline. Per SOURCE_BASELINE's older
+ * E01-S12 baseline ("支援主要 Desktop Resolution" / GA: "Tablet/Mobile
+ * optimization"), this MVP story scopes to desktop only — tablet/mobile
+ * layout is explicitly out of scope, deferred to GA. This viewport
+ * export is still the correct baseline regardless of target device
+ * (avoids incorrect browser zoom/DPI handling); it does not by itself
+ * commit to mobile support.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 /**

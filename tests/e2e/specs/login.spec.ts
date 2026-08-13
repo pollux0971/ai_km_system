@@ -21,7 +21,7 @@ test("local login succeeds and lands on / when no returnUrl is given", async ({ 
   await page.getByRole("button", { name: "登入", exact: true }).click();
 
   await page.waitForURL((url) => url.pathname === "/");
-  await expect(page.getByRole("heading", { name: "AI KM — apps/web" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "歡迎回來" })).toBeVisible();
 });
 
 test("local login shows an invalid-credential error and never reports success", async ({ page }) => {
@@ -61,5 +61,5 @@ test("E01-S003: falls back to / for an absolute external returnUrl (open-redirec
 
   await page.waitForURL((url) => url.pathname === "/");
   expect(page.url()).not.toContain("evil.example");
-  await expect(page.getByRole("heading", { name: "AI KM — apps/web" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "歡迎回來" })).toBeVisible();
 });

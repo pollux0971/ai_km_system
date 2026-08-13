@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConversation, getConversation } from "./conversations";
-import { listMessages, sendMessage } from "./messages";
+import { listMessages, receiveAssistantReply, sendMessage } from "./messages";
 
 describe("listMessages (E03-S009)", () => {
   it("resolves with an empty list for a conversation with no messages", async () => {
@@ -122,6 +122,71 @@ describe("sendMessage (E03-S009)", () => {
     expect(a.ok && b.ok).toBe(true);
     if (a.ok && b.ok) {
       expect(a.value.id).not.toBe(b.value.id);
+    }
+  });
+});
+
+describe("receiveAssistantReply (E03-S010)", () => {
+  it("creates a message with role 'assistant' and no attachments, and persists it", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const result = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.role).toBe("assistant");
+      expect(result.value.content).toBe("這是模擬回覆內容。");
+      expect(result.value.attachmentNames).toEqual([]);
+      expect(result.value.conversationId).toBe(conversation.value.id);
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok && result.ok) {
+      expect(list.value).toContainEqual(result.value);
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist", async () => {
+    const result = await receiveAssistantReply("does-not-exist", "這是模擬回覆內容。");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("updates the conversation's lastMessageAt/lastMessagePreview to reflect the reply", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const received = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(received.ok).toBe(true);
+    if (!received.ok) return;
+
+    const reloaded = await getConversation(conversation.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.lastMessagePreview).toBe("這是模擬回覆內容。");
+      expect(reloaded.value?.lastMessageAt).toBe(received.value.createdAt);
+    }
+  });
+
+  it("a user message and an assistant reply for the same conversation both appear in listMessages, in order", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    await sendMessage(conversation.value.id, "保固期限是多久？", []);
+    await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.map((m) => m.role)).toEqual(["user", "assistant"]);
     }
   });
 });

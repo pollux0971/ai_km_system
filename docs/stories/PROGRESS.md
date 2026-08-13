@@ -25,14 +25,14 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 11 | 0 | 0 | 0 | 9 |
+| E01 Application Shell & User Workspace | 20 | 11 | 1 | 0 | 0 | 8 |
 | E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 11 | 0 | 0 | 0 | 164 |
+| **合計** | **175** | 11 | 1 | 0 | 0 | 163 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -51,7 +51,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S009 | approved | story/E01-S009-quick-entry-cards | [E01-S009.md](E01-S009.md) | 獨立審核 APPROVE(gate 全綠;既有測試的 FIX 已核對未放寬斷言) |
 | E01-S010 | approved | story/E01-S010-user-profile-view | [E01-S010.md](E01-S010.md) | 獨立審核 APPROVE(force 重跑全 repo typecheck 驗證 AuthSession 擴充零破壞) |
 | E01-S011 | approved | story/E01-S011-unified-loading-skeleton-pattern | [E01-S011.md](E01-S011.md) | 獨立審核 APPROVE(retrofit 未改變既有測試斷言,gate 全綠) |
-| E01-S012 | todo | | | |
+| E01-S012 | done | story/E01-S012-unified-error-presentation | [E01-S012.md](E01-S012.md) | 待 /story-review |
 | E01-S013 | todo | | | |
 | E01-S014 | todo | | | |
 | E01-S015 | todo | | | |

@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { createLogger } from "@ai-km/logger";
-import { LoadingIndicator } from "@ai-km/ui";
+import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import type { AuthSession } from "@ai-km/auth-client";
 import { authClient } from "@/lib/auth";
 import { CurrentUserProvider } from "@/lib/session-context";
@@ -70,8 +70,8 @@ export default function SessionGate({ children }: { children: ReactNode }) {
 
   if (state.status === "error") {
     return (
-      <div role="alert" style={{ padding: 32 }}>
-        無法載入使用者資訊，請重新整理頁面。
+      <div style={{ padding: 32 }}>
+        <ErrorMessage message="無法載入使用者資訊，請重新整理頁面。" />
       </div>
     );
   }

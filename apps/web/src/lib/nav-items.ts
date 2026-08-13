@@ -70,6 +70,12 @@ export function visibleEntryCards(userRoles: string[]): NavItem[] {
  * means the path isn't in NAV_ITEMS at all (e.g. /profile, reached via the
  * user-menu, not the sidebar) — those routes are open to any authenticated
  * user by design, not an oversight.
+ *
+ * Exact match only, deliberately — none of E05/E07/E09's routes have
+ * nested pages yet (e.g. /maintenance/<id>). When one of those epics adds
+ * a sub-route that needs the same restriction as its parent, add an
+ * explicit NAV_ITEMS entry (or extend this to prefix-match) at that time;
+ * don't presume the shape of a route tree that doesn't exist yet.
  */
 export function rolesRequiredFor(pathname: string): NavItem["roles"] | undefined {
   return NAV_ITEMS.find((item) => item.href === pathname)?.roles;

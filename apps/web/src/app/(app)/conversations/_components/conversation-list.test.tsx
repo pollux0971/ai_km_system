@@ -22,7 +22,13 @@ describe("ConversationList (E03-S001)", () => {
     mockedListConversations.mockResolvedValue({
       ok: true,
       value: [
-        { id: "c1", title: "測試對話", lastMessageAt: "2026-08-12T09:15:00.000Z", lastMessagePreview: "測試預覽" },
+        {
+          id: "c1",
+          title: "測試對話",
+          lastMessageAt: "2026-08-12T09:15:00.000Z",
+          lastMessagePreview: "測試預覽",
+          mode: "normal",
+        },
       ],
     });
 
@@ -30,6 +36,25 @@ describe("ConversationList (E03-S001)", () => {
 
     expect(await screen.findByText("測試對話")).toBeInTheDocument();
     expect(screen.getByText("測試預覽")).toBeInTheDocument();
+  });
+
+  it("E03-S002: links each conversation's title to its detail route", async () => {
+    mockedListConversations.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "c1",
+          title: "測試對話",
+          lastMessageAt: "2026-08-12T09:15:00.000Z",
+          lastMessagePreview: "測試預覽",
+          mode: "normal",
+        },
+      ],
+    });
+
+    render(<ConversationList />);
+
+    expect(await screen.findByRole("link", { name: "測試對話" })).toHaveAttribute("href", "/conversations/c1");
   });
 
   it("shows a distinct error state when loading fails", async () => {

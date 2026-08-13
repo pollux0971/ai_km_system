@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createConversation, getRecentConversations, listConversations } from "./conversations";
+import { createConversation, getConversation, getRecentConversations, listConversations, setConversationMode } from "./conversations";
 
 describe("getRecentConversations", () => {
   it("resolves with a non-empty list of conversation summaries", async () => {
@@ -85,6 +85,82 @@ describe("createConversation (E03-S001)", () => {
     expect(a.ok && b.ok).toBe(true);
     if (a.ok && b.ok) {
       expect(a.value.id).not.toBe(b.value.id);
+    }
+  });
+
+  it("E03-S002: defaults every new conversation to normal mode", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (created.ok) {
+      expect(created.value.mode).toBe("normal");
+    }
+  });
+});
+
+describe("getConversation (E03-S002)", () => {
+  it("resolves the conversation matching the given id", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await getConversation(created.value.id);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual(created.value);
+    }
+  });
+
+  it("resolves with null (not an error) for an id that doesn't exist", async () => {
+    const result = await getConversation("does-not-exist");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBeNull();
+    }
+  });
+});
+
+describe("setConversationMode (E03-S002)", () => {
+  it("switches an existing conversation's mode and persists it", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.mode).toBe("normal");
+
+    const switched = await setConversationMode(created.value.id, "advanced");
+    expect(switched.ok).toBe(true);
+    if (switched.ok) {
+      expect(switched.value.mode).toBe("advanced");
+    }
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.mode).toBe("advanced");
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
+    const result = await setConversationMode("does-not-exist", "advanced");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("only changes the mode field, leaving the rest of the conversation untouched", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const switched = await setConversationMode(created.value.id, "advanced");
+    expect(switched.ok).toBe(true);
+    if (switched.ok) {
+      expect(switched.value.id).toBe(created.value.id);
+      expect(switched.value.title).toBe(created.value.title);
+      expect(switched.value.lastMessageAt).toBe(created.value.lastMessageAt);
+      expect(switched.value.lastMessagePreview).toBe(created.value.lastMessagePreview);
     }
   });
 });

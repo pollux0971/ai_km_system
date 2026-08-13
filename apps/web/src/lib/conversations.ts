@@ -1,10 +1,19 @@
 import type { ApiError, Result } from "@ai-km/types";
 
+export type ConversationMode = "normal" | "advanced";
+
 export interface ConversationSummary {
   id: string;
   title: string;
   lastMessageAt: string;
   lastMessagePreview: string;
+  /**
+   * E03-S002. Per SOURCE_BASELINE.md's E03 outline, later stories key
+   * off this (e.g. E03-S05 Model Selector is "Advanced mode" only) —
+   * required, not optional, since every conversation has a mode from
+   * the moment it's created.
+   */
+  mode: ConversationMode;
 }
 
 /**
@@ -22,18 +31,21 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     title: "產品保固政策詢問",
     lastMessageAt: "2026-08-12T09:15:00.000Z",
     lastMessagePreview: "保固期從出貨日起算 12 個月，涵蓋原廠零件更換。",
+    mode: "normal",
   },
   {
     id: "sample-2",
     title: "設備 E-204 錯誤代碼排查",
     lastMessageAt: "2026-08-11T14:30:00.000Z",
     lastMessagePreview: "請確認感測器接線是否鬆脫，並重新校正歸零。",
+    mode: "normal",
   },
   {
     id: "sample-3",
     title: "Q3 銷售報表彙整",
     lastMessageAt: "2026-08-10T02:00:00.000Z",
     lastMessagePreview: "本季華北區成長 12%，主要來自新客戶導入。",
+    mode: "advanced",
   },
 ];
 
@@ -82,6 +94,16 @@ export async function listConversations(): Promise<Result<ConversationSummary[],
 }
 
 /**
+ * E03-S002: a single conversation for the detail route. `value: null`
+ * (not an error) when the id doesn't match anything — "not found" is an
+ * expected outcome to render distinctly, not a dependency failure —
+ * same modeling as AuthClient.getSession()'s Result<Session | null, _>.
+ */
+export async function getConversation(id: string): Promise<Result<ConversationSummary | null, ApiError>> {
+  return { ok: true, value: readStore().find((item) => item.id === id) ?? null };
+}
+
+/**
  * E03-S001: creates a new conversation and prepends it to the list (so
  * it immediately shows up in both listConversations() and
  * getRecentConversations()). The actual chat interface — composing and
@@ -95,7 +117,29 @@ export async function createConversation(): Promise<Result<ConversationSummary, 
     title: "新對話",
     lastMessageAt: new Date().toISOString(),
     lastMessagePreview: "尚無訊息。",
+    mode: "normal",
   };
   writeStore([conversation, ...readStore()]);
   return { ok: true, value: conversation };
+}
+
+/**
+ * E03-S002: switches a conversation's mode. NOT_FOUND (rather than
+ * silently no-op-ing) if the id doesn't match anything, so a caller
+ * can't mistake "nothing happened because the id was stale" for "the
+ * switch succeeded".
+ */
+export async function setConversationMode(
+  id: string,
+  mode: ConversationMode,
+): Promise<Result<ConversationSummary, ApiError>> {
+  const store = readStore();
+  const existing = store.find((item) => item.id === id);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } };
+  }
+
+  const updated: ConversationSummary = { ...existing, mode };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
 }

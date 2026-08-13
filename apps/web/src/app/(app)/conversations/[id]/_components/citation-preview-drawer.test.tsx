@@ -4,8 +4,18 @@ import { CitationPreviewDrawer } from "./citation-preview-drawer";
 import { getCitationSource } from "@/lib/citations";
 import { trackEvent } from "@/lib/telemetry";
 
+// citation-preview-drawer.tsx reads CITATION_ERROR_MESSAGES (a plain
+// object, not a function) directly from this module — the mock factory
+// has to provide it too, or rendering an "error" state crashes with
+// "No CITATION_ERROR_MESSAGES export is defined on the mock". Values
+// duplicated (not vi.importActual'd) to keep this a plain synchronous
+// factory, matching this file's existing @/lib/telemetry mock.
 vi.mock("@/lib/citations", () => ({
   getCitationSource: vi.fn(),
+  CITATION_ERROR_MESSAGES: {
+    NOT_FOUND: "找不到這個引用來源。",
+    FORBIDDEN: "您沒有權限檢視這個引用來源。",
+  },
 }));
 
 vi.mock("@/lib/telemetry", () => ({
@@ -142,5 +152,44 @@ describe("CitationPreviewDrawer open-source link (E03-S015)", () => {
     rerender(<CitationPreviewDrawer citationId="missing" onClose={() => {}} />);
     await screen.findByRole("alert");
     expect(screen.queryByRole("link", { name: "開啟原始來源" })).not.toBeInTheDocument();
+  });
+});
+
+describe("CitationPreviewDrawer permission-denied handling (E03-S016)", () => {
+  it("shows a specific permission-denied message for a FORBIDDEN citation", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: false, error: { code: "FORBIDDEN", message: "forbidden" } });
+
+    render(<CitationPreviewDrawer citationId="3" onClose={() => {}} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("您沒有權限檢視這個引用來源。");
+  });
+
+  // Security-negative (deny-wins): the AC this proves is "unauthorized
+  // source content must never enter the UI" — not just "an error message
+  // is shown alongside hidden content", but that File/Page/Snippet never
+  // render into the DOM at all for a FORBIDDEN result.
+  it("never renders File/Page/Snippet content for a FORBIDDEN citation", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: false, error: { code: "FORBIDDEN", message: "forbidden" } });
+
+    render(<CitationPreviewDrawer citationId="3" onClose={() => {}} />);
+    await screen.findByRole("alert");
+
+    expect(screen.queryByText("檔案", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("頁碼", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("片段", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "開啟原始來源" })).not.toBeInTheDocument();
+  });
+
+  it("fires failure telemetry with code FORBIDDEN (not success) when the citation is permission-denied", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: false, error: { code: "FORBIDDEN", message: "forbidden" } });
+
+    render(<CitationPreviewDrawer citationId="3" onClose={() => {}} />);
+    await screen.findByRole("alert");
+
+    expect(mockedTrackEvent).toHaveBeenCalledWith(
+      "conversation_citation_preview_failure",
+      expect.objectContaining({ properties: expect.objectContaining({ citationId: "3", code: "FORBIDDEN" }) }),
+    );
+    expect(mockedTrackEvent).not.toHaveBeenCalledWith("conversation_citation_preview_success", expect.anything());
   });
 });

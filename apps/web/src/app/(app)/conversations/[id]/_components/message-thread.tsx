@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, sendMessage, type Message } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
@@ -37,24 +38,28 @@ const logger = createLogger("web:message-thread");
  *
  * S10 adds the streaming pair (`streaming`/`stream-failed`), triggered
  * automatically once a user's own message finishes sending — see
- * startStream(). Deliberately excludes what three separate, still-
- * unbuilt stories explicitly own instead: S11 "Generation Status" owns
- * a Searching/Reading/Generating phase indicator (this only shows a
- * generic "AI 回覆中…" — it doesn't invent S11's specific phase
- * vocabulary); S12 "Stop Generation" owns a cancel control (none here);
- * S13/S14 own citation badges/preview (the mock reply is plain text,
- * nothing to cite). S21 "Answer State" (ANSWERED/PARTIAL/NO_EVIDENCE/
+ * startStream(). S12 "Stop Generation" (a cancel control) and S13/S14
+ * (citation badges/preview — the mock reply is plain text, nothing to
+ * cite) remain separate, still-unbuilt stories, deliberately not
+ * touched here. S21 "Answer State" (ANSWERED/PARTIAL/NO_EVIDENCE/
  * PERMISSION_DENIED/SOURCE_UNAVAILABLE/ERROR) is a semantic
  * answer-quality classification that needs real RAG/permission
  * infrastructure to be meaningful — this story's own sent/streaming/
  * stream-failed states are a much simpler mechanical transport-layer
  * status, deliberately not reusing or partially implementing that enum.
+ *
+ * S11 "Generation Status" adds `phase` to the `streaming` entry — the
+ * three lib/generation-status.ts phases (searching/reading/generating)
+ * shown briefly before any reply text exists. Once real content starts
+ * arriving from lib/streaming.ts, `phase` is cleared back to `null` —
+ * the growing text itself is then the live indicator that generation
+ * is still happening, so there's no dedicated post-"generating" phase.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
   | { kind: "pending"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "failed"; localId: string; content: string; attachmentNames: string[] }
-  | { kind: "streaming"; localId: string; content: string }
+  | { kind: "streaming"; localId: string; content: string; phase: GenerationPhase | null }
   | { kind: "stream-failed"; localId: string };
 
 type LoadState = "loading" | "error" | "loaded";
@@ -139,12 +144,24 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     logger.info("streaming assistant reply", { correlationId, conversationId });
     trackEvent("conversation_message_stream_attempt", { correlationId, properties: { conversationId } });
 
+    for await (const phase of runGenerationPhases()) {
+      setDisplayMessages((previous) =>
+        previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, phase } : entry)),
+      );
+    }
+    // `phase` stays at its last value ("generating") here — NOT cleared
+    // yet. Clearing it the instant the phase sequence exhausts (rather
+    // than once real content actually arrives) would leave "generating"
+    // visible for at most one render tick, regardless of how long the
+    // gap before the first real chunk turns out to be — effectively
+    // never SHOWING it despite that being this story's whole point.
+
     let accumulated = "";
     for await (const chunk of streamAssistantReply()) {
       accumulated += chunk;
       const snapshot = accumulated;
       setDisplayMessages((previous) =>
-        previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot } : entry)),
+        previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
       );
     }
 
@@ -168,13 +185,15 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
   function startStream() {
     const localId = crypto.randomUUID();
-    setDisplayMessages((previous) => [...previous, { kind: "streaming", localId, content: "" }]);
+    setDisplayMessages((previous) => [...previous, { kind: "streaming", localId, content: "", phase: null }]);
     void runStream(localId);
   }
 
   function handleRetryStream(localId: string) {
     setDisplayMessages((previous) =>
-      previous.map((entry) => (entry.kind === "stream-failed" && entry.localId === localId ? { kind: "streaming", localId, content: "" } : entry)),
+      previous.map((entry) =>
+        entry.kind === "stream-failed" && entry.localId === localId ? { kind: "streaming", localId, content: "", phase: null } : entry,
+      ),
     );
     void runStream(localId);
   }
@@ -226,7 +245,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                 <span>{content}</span>
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
                 {entry.kind === "pending" && <span role="status">傳送中…</span>}
-                {entry.kind === "streaming" && <span role="status">AI 回覆中…</span>}
+                {entry.kind === "streaming" && (
+                  <span role="status">{entry.phase ? GENERATION_PHASE_LABELS[entry.phase] : "AI 回覆中…"}</span>
+                )}
                 {entry.kind === "failed" && (
                   <span>
                     <span role="alert">傳送失敗</span>

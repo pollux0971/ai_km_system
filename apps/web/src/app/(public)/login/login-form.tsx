@@ -3,6 +3,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createLogger } from "@ai-km/logger";
+import { ErrorMessage } from "@ai-km/ui";
 import { sanitizeReturnUrl } from "@ai-km/validation";
 import { authClient } from "@/lib/auth";
 
@@ -16,6 +17,14 @@ type SubmitState =
   | { status: "success" }
   | { status: "error"; code: string; message: string };
 
+/**
+ * E01-S012 kept this local rather than switching to @ai-km/ui's
+ * errorMessageForCode() — the SERVICE_UNAVAILABLE wording here
+ * ("登入服務暫時無法使用…") is deliberately more specific than that
+ * helper's generic default ("服務暫時無法使用…"). The *presentation*
+ * (role=alert + danger color) is still unified via <ErrorMessage
+ * message={...} /> below; only this context-specific wording isn't.
+ */
 function describeError(code: string): string {
   switch (code) {
     case "INVALID_CREDENTIALS":
@@ -140,9 +149,9 @@ export default function LoginForm() {
         </p>
       )}
       {state.status === "error" && (
-        <p role="alert" style={{ marginTop: 16 }}>
-          {state.message}
-        </p>
+        <div style={{ marginTop: 16 }}>
+          <ErrorMessage message={state.message} />
+        </div>
       )}
 
       <hr style={{ margin: "24px 0" }} />

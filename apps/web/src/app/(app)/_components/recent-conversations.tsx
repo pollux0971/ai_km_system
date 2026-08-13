@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
-import { LoadingIndicator } from "@ai-km/ui";
+import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getRecentConversations, type ConversationSummary } from "@/lib/conversations";
 
 const logger = createLogger("web:recent-conversations");
@@ -50,7 +50,7 @@ export default function RecentConversations() {
   }
 
   if (state.status === "error") {
-    return <p role="alert">無法載入最近對話。</p>;
+    return <ErrorMessage message="無法載入最近對話。" />;
   }
 
   if (state.items.length === 0) {

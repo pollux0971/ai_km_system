@@ -2,11 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ConversationDetail from "./conversation-detail";
 import { getConversation, setConversationMode } from "@/lib/conversations";
+import { listMessages } from "@/lib/messages";
 import { CurrentUserProvider } from "@/lib/session-context";
 
 vi.mock("@/lib/conversations", () => ({
   getConversation: vi.fn(),
   setConversationMode: vi.fn(),
+}));
+
+vi.mock("@/lib/messages", () => ({
+  listMessages: vi.fn(),
+  sendMessage: vi.fn(),
 }));
 
 vi.mock("@/lib/telemetry", () => ({
@@ -15,9 +21,12 @@ vi.mock("@/lib/telemetry", () => ({
 
 const mockedGetConversation = vi.mocked(getConversation);
 const mockedSetConversationMode = vi.mocked(setConversationMode);
+const mockedListMessages = vi.mocked(listMessages);
 
 beforeEach(() => {
   mockedSetConversationMode.mockReset();
+  mockedListMessages.mockReset();
+  mockedListMessages.mockResolvedValue({ ok: true, value: [] });
 });
 
 function renderDetailAs(id: string, roles: string[] = ["general_user"]) {
@@ -61,7 +70,7 @@ describe("ConversationDetail (E03-S002/S003/S004/S005/S006)", () => {
     expect(screen.getByRole("checkbox", { name: "問答庫" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "公司知識庫" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "部門知識庫" })).not.toBeChecked();
-    expect(screen.getByLabelText("訊息")).toBeInTheDocument();
+    expect(await screen.findByLabelText("訊息")).toBeInTheDocument();
   });
 
   it("E03-S006: shows the message composer regardless of conversation mode", async () => {

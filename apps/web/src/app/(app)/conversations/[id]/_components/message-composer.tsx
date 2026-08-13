@@ -47,8 +47,24 @@ const logger = createLogger("web:message-composer");
  * A draft is now valid if it has text OR at least one attachment (a
  * photo-only message with no caption is a normal, expected case, same
  * as most chat apps) — mirrors S06/S07's isValid, just widened.
+ *
+ * S09 adds the optional `onSubmit` prop, called after this component's
+ * own validation/telemetry/clear succeeds — MessageComposer keeps
+ * owning its existing `conversation_message_compose_submit` UI-level
+ * event (did the user interact with the compose control) unchanged;
+ * `onSubmit` lets a parent (message-thread.tsx) layer the actual
+ * domain-level send (optimistic add, sendMessage() call, pending/sent/
+ * failed reconciliation) on top without MessageComposer needing to know
+ * any of that exists. Optional and additive — every S06-S08 test that
+ * doesn't pass it keeps passing unchanged.
  */
-export function MessageComposer({ conversationId }: { conversationId: string }) {
+export function MessageComposer({
+  conversationId,
+  onSubmit,
+}: {
+  conversationId: string;
+  onSubmit?: (content: string, attachmentNames: string[]) => void;
+}) {
   const inputId = useId();
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -71,6 +87,11 @@ export function MessageComposer({ conversationId }: { conversationId: string }) 
       correlationId,
       properties: { conversationId, length: draft.trim().length, attachmentCount: attachments.length },
     });
+
+    onSubmit?.(
+      draft.trim(),
+      attachments.map((file) => file.name),
+    );
 
     setDraft("");
     setAttachments([]);

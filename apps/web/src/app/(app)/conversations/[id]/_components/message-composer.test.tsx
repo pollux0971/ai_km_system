@@ -19,7 +19,7 @@ function makeFile(name: string, sizeBytes: number): File {
   return file;
 }
 
-describe("MessageComposer (E03-S006/S007/S008)", () => {
+describe("MessageComposer (E03-S006/S007/S008/S009)", () => {
   it("starts empty with the submit button disabled", () => {
     render(<MessageComposer conversationId="c1" />);
 
@@ -166,5 +166,34 @@ describe("MessageComposer (E03-S006/S007/S008)", () => {
 
     expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
     expect(screen.queryByText(/a\.txt/)).not.toBeInTheDocument();
+  });
+
+  it("E03-S009: calls onSubmit with the trimmed content and attachment names once a valid draft is submitted", () => {
+    const onSubmit = vi.fn();
+    render(<MessageComposer conversationId="c1" onSubmit={onSubmit} />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "  你好  " } });
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("a.txt", 10)] } });
+
+    fireEvent.click(screen.getByRole("button", { name: "送出" }));
+
+    expect(onSubmit).toHaveBeenCalledWith("你好", ["a.txt"]);
+  });
+
+  it("E03-S009: does not call onSubmit when bypassing the disabled button to submit an invalid draft", () => {
+    const onSubmit = vi.fn();
+    render(<MessageComposer conversationId="c1" onSubmit={onSubmit} />);
+
+    const form = screen.getByRole("button", { name: "送出" }).closest("form");
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("E03-S009: still works without an onSubmit prop (optional, backward compatible with S06-S08)", () => {
+    render(<MessageComposer conversationId="c1" />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "你好" } });
+
+    expect(() => fireEvent.click(screen.getByRole("button", { name: "送出" }))).not.toThrow();
+    expect(screen.getByLabelText("訊息")).toHaveValue("");
   });
 });

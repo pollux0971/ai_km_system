@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { CrashFallback } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
+import "./globals.css";
 
 const logger = createLogger("web:global-error-boundary");
 

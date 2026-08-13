@@ -69,17 +69,30 @@ test("E01-S020: golden path — anonymous visit, login, dashboard, profile, noti
   await expect(page.getByRole("heading", { name: "最近對話", level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "快速入口", level: 2 })).toBeVisible();
 
-  // 4. The notification center opens and shows content (E01-S014).
-  await page.getByRole("button", { name: "通知（2）" }).click();
+  // 4. The notification center opens and shows content (E01-S014), then
+  //    close it again via its own toggle trigger — it has no Escape/
+  //    outside-click handler, and Header (so NotificationCenter/UserMenu)
+  //    persists across (app) client-side navigation, so leaving it open
+  //    here would still be open (and visually overlapping) several steps
+  //    later.
+  const notificationTrigger = page.getByRole("button", { name: "通知（2）" });
+  await notificationTrigger.click();
   await expect(page.getByRole("dialog", { name: "通知中心" })).toBeVisible();
-  await page.keyboard.press("Escape");
+  await notificationTrigger.click();
+  await expect(page.getByRole("dialog", { name: "通知中心" })).not.toBeVisible();
 
   // 5. The user-menu reaches the profile view with real account fields
   //    (E01-S010).
-  await page.getByRole("button", { name: MOCK_VALID_USER_ID }).click();
+  const userMenuTrigger = page.getByRole("button", { name: MOCK_VALID_USER_ID });
+  await userMenuTrigger.click();
   await page.getByRole("menuitem", { name: "個人資料" }).click();
   await page.waitForURL((url) => url.pathname === "/profile");
   await expect(page.getByRole("heading", { name: "個人資料", level: 1 })).toBeVisible();
+  // Same persistence note as the notification center above: the menu is
+  // still open (its state lives in Header, which didn't unmount), so
+  // close it now via the same toggle trigger rather than leaving it open
+  // across the navigation back to the dashboard below.
+  await userMenuTrigger.click();
 
   // 6. Navigating back to the dashboard via the sidebar still works
   //    (the shell survives leaving and returning to the home route).
@@ -88,7 +101,7 @@ test("E01-S020: golden path — anonymous visit, login, dashboard, profile, noti
   await expect(page.getByRole("heading", { name: "歡迎回來", level: 1 })).toBeVisible();
 
   // 7. Logout clears the session and returns to login (E01-S005).
-  await page.getByRole("button", { name: MOCK_VALID_USER_ID }).click();
+  await userMenuTrigger.click();
   await page.getByRole("menuitem", { name: "登出" }).click();
   await page.waitForURL((url) => url.pathname === "/login");
 

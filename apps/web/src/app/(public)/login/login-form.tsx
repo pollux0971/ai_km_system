@@ -7,6 +7,8 @@ import { ErrorMessage } from "@ai-km/ui";
 import { sanitizeReturnUrl } from "@ai-km/validation";
 import { authClient } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { trackEvent } from "@/lib/telemetry";
+import { usePageViewTelemetry } from "@/lib/use-page-view-telemetry";
 
 const logger = createLogger("web:login");
 
@@ -63,6 +65,8 @@ export default function LoginForm() {
   const [state, setState] = useState<SubmitState>({ status: "idle" });
   const [ssoNotice, setSsoNotice] = useState(false);
 
+  usePageViewTelemetry();
+
   const submitting = state.status === "submitting";
   const ssoEnabled = isFeatureEnabled("sso");
 
@@ -81,11 +85,17 @@ export default function LoginForm() {
     const correlationId = crypto.randomUUID();
     setState({ status: "submitting" });
     logger.info("login attempt", { correlationId, username });
+    // Telemetry deliberately omits `username` — unlike the operational
+    // log above, this event is modeled as heading toward E14's broader
+    // analytics/audit pipeline once that exists, so it stays conservative
+    // about anything PII-shaped even though a username isn't a secret.
+    trackEvent("login_attempt", { correlationId });
 
     const result = await authClient.login({ username, password });
 
     if (result.ok) {
       logger.info("login succeeded", { correlationId, username });
+      trackEvent("login_success", { correlationId });
       setState({ status: "success" });
       const destination = sanitizeReturnUrl(searchParams.get("returnUrl"));
       router.push(destination);
@@ -93,6 +103,7 @@ export default function LoginForm() {
     }
 
     logger.warn("login failed", { correlationId, username, code: result.error.code });
+    trackEvent("login_failure", { correlationId, properties: { code: result.error.code } });
     setState({ status: "error", code: result.error.code, message: describeError(result.error.code) });
   }
 

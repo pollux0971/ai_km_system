@@ -25,7 +25,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 18 | 0 | 1 | 0 | 1 |
+| E01 Application Shell & User Workspace | 20 | 18 | 1 | 0 | 0 | 1 |
 | E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
@@ -58,7 +58,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S016 | approved | story/E01-S016-desktop-responsive-baseline | [E01-S016.md](E01-S016.md) | 獨立審核 APPROVE(fresh gate 全綠,無 lockfile drift,scope 未逾界) |
 | E01-S017 | approved | story/E01-S017-route-level-guards | [E01-S017.md](E01-S017.md) | 獨立審核 APPROVE(fresh gate 全綠,無 lockfile drift,scope 未逾界) |
 | E01-S018 | approved | story/E01-S018-app-level-error-boundary | [E01-S018.md](E01-S018.md) | 獨立審核 APPROVE(2 輪 FIX 後 fresh gate 全綠,補上 global-error.tsx 的 CSS import) |
-| E01-S019 | in-progress | story/E01-S019-frontend-telemetry-hooks | | |
+| E01-S019 | done | story/E01-S019-frontend-telemetry-hooks | [E01-S019.md](E01-S019.md) | VERIFY 一次全過(typecheck 型別錯誤在進 gate 前就地修正);待獨立審核 |
 | E01-S020 | todo | | | |
 
 ## E03 AI Conversation Experience(33)

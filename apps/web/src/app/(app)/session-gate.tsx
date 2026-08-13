@@ -7,6 +7,7 @@ import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import type { AuthSession } from "@ai-km/auth-client";
 import { authClient } from "@/lib/auth";
 import { CurrentUserProvider } from "@/lib/session-context";
+import { usePageViewTelemetry } from "@/lib/use-page-view-telemetry";
 
 const logger = createLogger("web:session-gate");
 
@@ -30,6 +31,11 @@ export default function SessionGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [state, setState] = useState<GateState>({ status: "loading" });
+
+  // E01-S019: wired here (not per-page) so every current and future page
+  // under (app) gets page-view telemetry with no extra work — same
+  // "wire once at the entry point" pattern as E01-S017's RoleGuard.
+  usePageViewTelemetry();
 
   useEffect(() => {
     let cancelled = false;

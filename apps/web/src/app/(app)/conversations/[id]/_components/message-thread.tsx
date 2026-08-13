@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
@@ -38,11 +38,10 @@ const logger = createLogger("web:message-thread");
  *
  * S10 adds the streaming pair (`streaming`/`stream-failed`), triggered
  * automatically once a user's own message finishes sending — see
- * startStream(). S12 "Stop Generation" (a cancel control) and S13/S14
- * (citation badges/preview — the mock reply is plain text, nothing to
- * cite) remain separate, still-unbuilt stories, deliberately not
- * touched here. S21 "Answer State" (ANSWERED/PARTIAL/NO_EVIDENCE/
- * PERMISSION_DENIED/SOURCE_UNAVAILABLE/ERROR) is a semantic
+ * startStream(). S13/S14 (citation badges/preview — the mock reply is
+ * plain text, nothing to cite) remain separate, still-unbuilt stories,
+ * deliberately not touched here. S21 "Answer State" (ANSWERED/PARTIAL/
+ * NO_EVIDENCE/PERMISSION_DENIED/SOURCE_UNAVAILABLE/ERROR) is a semantic
  * answer-quality classification that needs real RAG/permission
  * infrastructure to be meaningful — this story's own sent/streaming/
  * stream-failed states are a much simpler mechanical transport-layer
@@ -54,6 +53,21 @@ const logger = createLogger("web:message-thread");
  * arriving from lib/streaming.ts, `phase` is cleared back to `null` —
  * the growing text itself is then the live indicator that generation
  * is still happening, so there's no dedicated post-"generating" phase.
+ *
+ * S12 "Stop Generation" adds a cancel control, live while `kind ===
+ * "streaming"`. `stoppedRef` (a plain mutable Set, not state — stopping
+ * doesn't itself need to trigger a render; the loops below notice it on
+ * their own next iteration) tracks which in-flight localIds the user
+ * asked to stop. runStream() checks it after every phase/chunk and
+ * breaks out early. What happens next depends on whether any real text
+ * had arrived yet: with content, the partial text is persisted through
+ * the exact same receiveAssistantReply → reconcile-to-"sent" path a
+ * natural completion uses (real chat products keep whatever was
+ * generated so far rather than discarding it — stopping is "I have
+ * enough," not "throw this away"); with no content yet (stopped during
+ * the phase sequence, before any chunk arrived), there is nothing
+ * meaningful to keep, so the entry is removed outright rather than
+ * persisting an empty-content message.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -67,6 +81,7 @@ type LoadState = "loading" | "error" | "loaded";
 export function MessageThread({ conversationId }: { conversationId: string }) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
+  const stoppedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -145,6 +160,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     trackEvent("conversation_message_stream_attempt", { correlationId, properties: { conversationId } });
 
     for await (const phase of runGenerationPhases()) {
+      if (stoppedRef.current.has(localId)) break;
       setDisplayMessages((previous) =>
         previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, phase } : entry)),
       );
@@ -157,12 +173,29 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     // never SHOWING it despite that being this story's whole point.
 
     let accumulated = "";
-    for await (const chunk of streamAssistantReply()) {
-      accumulated += chunk;
-      const snapshot = accumulated;
-      setDisplayMessages((previous) =>
-        previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
-      );
+    if (!stoppedRef.current.has(localId)) {
+      for await (const chunk of streamAssistantReply()) {
+        if (stoppedRef.current.has(localId)) break;
+        accumulated += chunk;
+        const snapshot = accumulated;
+        setDisplayMessages((previous) =>
+          previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
+        );
+      }
+    }
+
+    const wasStopped = stoppedRef.current.delete(localId);
+
+    if (wasStopped && accumulated.length === 0) {
+      logger.info("generation stopped before any content arrived", { correlationId, conversationId });
+      trackEvent("conversation_message_stream_stopped", { correlationId, properties: { conversationId, hadContent: false } });
+      setDisplayMessages((previous) => previous.filter((entry) => !(entry.kind === "streaming" && entry.localId === localId)));
+      return;
+    }
+
+    if (wasStopped) {
+      logger.info("generation stopped, persisting partial content", { correlationId, conversationId, length: accumulated.length });
+      trackEvent("conversation_message_stream_stopped", { correlationId, properties: { conversationId, hadContent: true } });
     }
 
     const result = await receiveAssistantReply(conversationId, accumulated);
@@ -196,6 +229,10 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       ),
     );
     void runStream(localId);
+  }
+
+  function handleStop(localId: string) {
+    stoppedRef.current.add(localId);
   }
 
   if (loadState === "loading") {
@@ -246,7 +283,12 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
                 {entry.kind === "pending" && <span role="status">傳送中…</span>}
                 {entry.kind === "streaming" && (
-                  <span role="status">{entry.phase ? GENERATION_PHASE_LABELS[entry.phase] : "AI 回覆中…"}</span>
+                  <span>
+                    <span role="status">{entry.phase ? GENERATION_PHASE_LABELS[entry.phase] : "AI 回覆中…"}</span>
+                    <button type="button" onClick={() => handleStop(entry.localId)}>
+                      停止生成
+                    </button>
+                  </span>
                 )}
                 {entry.kind === "failed" && (
                   <span>

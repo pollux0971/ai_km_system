@@ -4,6 +4,7 @@ import { MessageThread } from "./message-thread";
 import { runGenerationPhases } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, sendMessage } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
+import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/messages", () => ({
   listMessages: vi.fn(),
@@ -38,6 +39,7 @@ const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
+const mockedTrackEvent = vi.mocked(trackEvent);
 
 const DEFAULT_ASSISTANT_MESSAGE = {
   id: "assistant-default",
@@ -54,6 +56,7 @@ beforeEach(() => {
   mockedReceiveAssistantReply.mockReset();
   mockedStreamAssistantReply.mockReset();
   mockedRunGenerationPhases.mockReset();
+  mockedTrackEvent.mockReset();
 
   // Sensible defaults so tests focused purely on the S09/S10 send/stream
   // flow don't also need to know about S11's phase step — a successful
@@ -465,5 +468,122 @@ describe("MessageThread generation status phases (E03-S011)", () => {
     fireEvent.click(screen.getByRole("button", { name: "重新產生回覆" }));
 
     await waitFor(() => expect(mockedRunGenerationPhases).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("MessageThread stop generation (E03-S012)", () => {
+  it("shows a stop button while a phase is showing", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedRunGenerationPhases.mockImplementation(async function* () {
+      yield "searching";
+      await new Promise<void>(() => {});
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "停止生成" })).toBeInTheDocument());
+  });
+
+  it("stopping during the phase sequence (before any real content arrives) removes the entry and does not persist anything", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    // Gated (not eternally pending) — the loop only notices the stop
+    // request once its currently in-flight `.next()` resolves, same as
+    // the real generator (which is always waiting on a short timer, not
+    // stuck forever). An eternally-pending mock would make the loop
+    // unable to ever check the flag at all, which doesn't reflect how
+    // stopping actually behaves in production.
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    mockedRunGenerationPhases.mockImplementation(async function* () {
+      yield "searching";
+      await gate;
+      yield "reading";
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+    await screen.findByText("搜尋中…");
+
+    fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
+    releaseGate();
+
+    await waitFor(() => expect(screen.queryByText("搜尋中…")).not.toBeInTheDocument());
+    expect(screen.queryByText("讀取中…")).not.toBeInTheDocument();
+    expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
+    expect(mockedTrackEvent).toHaveBeenCalledWith(
+      "conversation_message_stream_stopped",
+      expect.objectContaining({ properties: expect.objectContaining({ hadContent: false }) }),
+    );
+  });
+
+  it("stopping after some content has streamed in persists exactly that partial content and reconciles to sent", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "第";
+      yield "一";
+      await gate;
+      yield "段";
+    });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "a1",
+        conversationId: "c1",
+        role: "assistant",
+        content: "第一",
+        attachmentNames: [],
+        createdAt: "2026-08-14T00:00:01.000Z",
+      },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+    await waitFor(() => expect(screen.getByText("第一")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
+    releaseGate();
+
+    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一"));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument());
+    expect(screen.getByText("第一")).toBeInTheDocument();
+    expect(mockedTrackEvent).toHaveBeenCalledWith(
+      "conversation_message_stream_stopped",
+      expect.objectContaining({ properties: expect.objectContaining({ hadContent: true }) }),
+    );
+  });
+
+  it("does not show a stop button once a message has settled (sent, failed, or stream-failed)", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "已完成的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("已完成的回覆");
+    expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument();
   });
 });

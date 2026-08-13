@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 11 | 0 | 1 | 0 | 21 |
+| E03 AI Conversation Experience | 33 | 11 | 1 | 0 | 0 | 21 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 31 | 0 | 1 | 0 | 143 |
+| **合計** | **175** | 31 | 1 | 0 | 0 | 143 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -76,7 +76,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S009 | approved | story/E03-S009-send-message-optimistic-state | [E03-S009.md](E03-S009.md) | 獨立審核 APPROVE(fresh gate 全綠,scope 未逾界;獨立覆核樂觀收斂競態、重試防護、correlationId 獨立性皆正確) |
 | E03-S010 | approved | story/E03-S010-sse-websocket-streaming-renderer | [E03-S010.md](E03-S010.md) | 獨立審核 APPROVE(fresh gate 全綠,scope 未逾界含對 S11-S14/S21 不越界的獨立核對;獨立追蹤並行串流/型別窄化修正無誤;1 個 MINOR UX 觀察不阻擋) |
 | E03-S011 | approved | story/E03-S011-generation-status-ui | [E03-S011.md](E03-S011.md) | 獨立審核 APPROVE(從正確 root 重跑 gate 全綠,scope 未逾界;直接重讀程式碼獨立覆核兩個關鍵設計修正真實落實,非紙上聲稱) |
-| E03-S012 | in-progress | story/E03-S012-stop-generation-interaction | | |
+| E03-S012 | done | story/E03-S012-stop-generation-interaction | [E03-S012.md](E03-S012.md) | VERIFY 全綠(過程含 2 輪除錯:測試 mock 卡死、E2E 時序誤判,皆已定位根因修正);等待獨立審核 |
 | E03-S013 | todo | | | |
 | E03-S014 | todo | | | |
 | E03-S015 | todo | | | |

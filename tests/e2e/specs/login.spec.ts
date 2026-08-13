@@ -63,3 +63,18 @@ test("E01-S003: falls back to / for an absolute external returnUrl (open-redirec
   expect(page.url()).not.toContain("evil.example");
   await expect(page.getByRole("heading", { name: "歡迎回來" })).toBeVisible();
 });
+
+/**
+ * E01-S015: the "sso" feature flag defaults to enabled, so the SSO
+ * section stays visible through a real build — matching E01-S002's
+ * original behavior. The disabled path can't be exercised here:
+ * NEXT_PUBLIC_* env vars are inlined into the client bundle at build
+ * time, not toggleable per-request against the shared dev server this
+ * suite runs against — that direction is covered by
+ * login-form.test.tsx's "hides the SSO section entirely..." test.
+ */
+test("E01-S015: SSO section is visible by default (sso flag defaults to enabled)", async ({ page }) => {
+  await page.goto("/login");
+
+  await expect(page.getByRole("button", { name: "使用 SSO 登入" })).toBeVisible();
+});

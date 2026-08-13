@@ -25,14 +25,14 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 8 | 1 | 0 | 0 | 11 |
+| E01 Application Shell & User Workspace | 20 | 9 | 0 | 0 | 0 | 11 |
 | E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 8 | 1 | 0 | 0 | 166 |
+| **合計** | **175** | 9 | 0 | 0 | 0 | 166 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -48,7 +48,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S006 | approved | story/E01-S006-permission-aware-navigation | [E01-S006.md](E01-S006.md) | 獨立審核 APPROVE(gate 全綠;角色對應直接引自 SOURCE_BASELINE §7,UX-only 限制已誠實記錄) |
 | E01-S007 | approved | story/E01-S007-home-dashboard-thin-slice | [E01-S007.md](E01-S007.md) | 獨立審核 APPROVE(gate 全綠;含明確 --frozen-lockfile 複驗) |
 | E01-S008 | approved | story/E01-S008-recent-conversations-widget | [E01-S008.md](E01-S008.md) | 獨立審核 APPROVE(gate 全綠,含 --frozen-lockfile 複驗) |
-| E01-S009 | done | story/E01-S009-quick-entry-cards | [E01-S009.md](E01-S009.md) | 待 /story-review |
+| E01-S009 | approved | story/E01-S009-quick-entry-cards | [E01-S009.md](E01-S009.md) | 獨立審核 APPROVE(gate 全綠;既有測試的 FIX 已核對未放寬斷言) |
 | E01-S010 | todo | | | |
 | E01-S011 | todo | | | |
 | E01-S012 | todo | | | |

@@ -25,14 +25,14 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 4 | 0 | 0 | 0 | 16 |
+| E01 Application Shell & User Workspace | 20 | 5 | 0 | 0 | 0 | 15 |
 | E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 4 | 0 | 0 | 0 | 171 |
+| **合計** | **175** | 5 | 0 | 0 | 0 | 170 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -44,7 +44,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S002 | approved | story/E01-S002-login-page-local-sso | [E01-S002.md](E01-S002.md) | 獨立審核 APPROVE(gate 全綠、範圍未逾界、無造假跡象;mock 邊界內限制已誠實記錄) |
 | E01-S003 | approved | story/E01-S003-login-return-url-redirect | [E01-S003.md](E01-S003.md) | 獨立審核 APPROVE(gate 一次全綠、無 FIX 循環;open-redirect 防護 16 個 adversarial 測試複驗通過) |
 | E01-S004 | approved | story/E01-S004-session-bootstrap-current-user | [E01-S004.md](E01-S004.md) | 獨立審核 APPROVE(gate 全綠;含完整 protected-route→login→returnUrl round-trip E2E) |
-| E01-S005 | todo | | | |
+| E01-S005 | approved | story/E01-S005-sidebar-header-main-usermenu | [E01-S005.md](E01-S005.md) | 獨立審核 APPROVE(gate 全綠;E2E 驗證登出真的清除 session,非只是換頁) |
 | E01-S006 | todo | | | |
 | E01-S007 | todo | | | |
 | E01-S008 | todo | | | |

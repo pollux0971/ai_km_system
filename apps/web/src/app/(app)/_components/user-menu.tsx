@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { authClient } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/session-context";
@@ -11,7 +12,8 @@ const logger = createLogger("web:user-menu");
 /**
  * E01-S005: user-menu trigger + logout. No dedicated "logout" story
  * exists in this epic — it belongs here, on the user-menu that owns
- * presenting/acting on the current user's identity.
+ * presenting/acting on the current user's identity. E01-S010 adds the
+ * link to the Profile view for the same reason.
  */
 export default function UserMenu() {
   const user = useCurrentUser();
@@ -50,6 +52,9 @@ export default function UserMenu() {
             padding: 4,
           }}
         >
+          <Link href="/profile" role="menuitem">
+            個人資料
+          </Link>
           <button type="button" role="menuitem" onClick={handleLogout} disabled={loggingOut}>
             {loggingOut ? "登出中…" : "登出"}
           </button>

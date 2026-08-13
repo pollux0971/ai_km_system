@@ -49,7 +49,7 @@ describe("UserMenu", () => {
     expect(screen.getByRole("button", { name: "u1" })).toBeInTheDocument();
   });
 
-  it("opens the menu (revealing 登出) when the trigger is clicked", () => {
+  it("opens the menu (revealing 登出 and 個人資料) when the trigger is clicked", () => {
     renderUserMenu();
 
     expect(screen.queryByRole("menuitem", { name: "登出" })).not.toBeInTheDocument();
@@ -57,6 +57,7 @@ describe("UserMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "u1" }));
 
     expect(screen.getByRole("menuitem", { name: "登出" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "個人資料" })).toHaveAttribute("href", "/profile");
   });
 
   it("logs out and redirects to /login when 登出 is clicked", async () => {

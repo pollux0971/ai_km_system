@@ -25,14 +25,14 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 6 | 1 | 0 | 0 | 13 |
+| E01 Application Shell & User Workspace | 20 | 7 | 0 | 0 | 0 | 13 |
 | E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 6 | 1 | 0 | 0 | 168 |
+| **合計** | **175** | 7 | 0 | 0 | 0 | 168 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -46,7 +46,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S004 | approved | story/E01-S004-session-bootstrap-current-user | [E01-S004.md](E01-S004.md) | 獨立審核 APPROVE(gate 全綠;含完整 protected-route→login→returnUrl round-trip E2E) |
 | E01-S005 | approved | story/E01-S005-sidebar-header-main-usermenu | [E01-S005.md](E01-S005.md) | 獨立審核 APPROVE(gate 全綠;E2E 驗證登出真的清除 session,非只是換頁) |
 | E01-S006 | approved | story/E01-S006-permission-aware-navigation | [E01-S006.md](E01-S006.md) | 獨立審核 APPROVE(gate 全綠;角色對應直接引自 SOURCE_BASELINE §7,UX-only 限制已誠實記錄) |
-| E01-S007 | done | story/E01-S007-home-dashboard-thin-slice | [E01-S007.md](E01-S007.md) | 待 /story-review |
+| E01-S007 | approved | story/E01-S007-home-dashboard-thin-slice | [E01-S007.md](E01-S007.md) | 獨立審核 APPROVE(gate 全綠;含明確 --frozen-lockfile 複驗) |
 | E01-S008 | todo | | | |
 | E01-S009 | todo | | | |
 | E01-S010 | todo | | | |

@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     "@ai-km/api-client",
     "@ai-km/auth-client",
     "@ai-km/logger",
+    "@ai-km/validation",
   ],
 };
 

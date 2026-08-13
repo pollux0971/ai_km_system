@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import LoginPage from "./page";
+import LoginForm from "./login-form";
 import { authClient } from "@/lib/auth";
+
+const { mockPush, mockSearchParamsGet } = vi.hoisted(() => ({
+  mockPush: vi.fn(),
+  mockSearchParamsGet: vi.fn(),
+}));
 
 vi.mock("@/lib/auth", () => ({
   authClient: {
@@ -9,6 +14,11 @@ vi.mock("@/lib/auth", () => ({
     logout: vi.fn(),
     getSession: vi.fn(),
   },
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => ({ get: mockSearchParamsGet }),
 }));
 
 const mockedLogin = vi.mocked(authClient.login);
@@ -21,6 +31,9 @@ const validSession = {
 
 beforeEach(() => {
   mockedLogin.mockReset();
+  mockPush.mockReset();
+  mockSearchParamsGet.mockReset();
+  mockSearchParamsGet.mockReturnValue(null);
 });
 
 function fillAndSubmit(username: string, password: string) {
@@ -29,9 +42,9 @@ function fillAndSubmit(username: string, password: string) {
   fireEvent.click(screen.getByRole("button", { name: "登入" }));
 }
 
-describe("LoginPage", () => {
+describe("LoginForm", () => {
   it("validates required fields without calling authClient.login (fail-closed)", () => {
-    render(<LoginPage />);
+    render(<LoginForm />);
 
     fireEvent.click(screen.getByRole("button", { name: "登入" }));
 
@@ -47,7 +60,7 @@ describe("LoginPage", () => {
         resolveLogin = resolve;
       }),
     );
-    render(<LoginPage />);
+    render(<LoginForm />);
 
     fillAndSubmit("demo-user", "demo-pass-123");
 
@@ -60,7 +73,7 @@ describe("LoginPage", () => {
 
   it("shows a success message when login succeeds", async () => {
     mockedLogin.mockResolvedValue({ ok: true, value: validSession });
-    render(<LoginPage />);
+    render(<LoginForm />);
 
     fillAndSubmit("demo-user", "demo-pass-123");
 
@@ -72,7 +85,7 @@ describe("LoginPage", () => {
       ok: false,
       error: { code: "INVALID_CREDENTIALS", message: "帳號或密碼錯誤。" },
     });
-    render(<LoginPage />);
+    render(<LoginForm />);
 
     fillAndSubmit("nope", "nope");
 
@@ -85,7 +98,7 @@ describe("LoginPage", () => {
       ok: false,
       error: { code: "ACCOUNT_DISABLED", message: "此帳號已停用，請聯絡管理員。" },
     });
-    render(<LoginPage />);
+    render(<LoginForm />);
 
     fillAndSubmit("disabled", "irrelevant");
 
@@ -97,7 +110,7 @@ describe("LoginPage", () => {
       ok: false,
       error: { code: "SERVICE_UNAVAILABLE", message: "登入服務暫時無法使用，請稍後再試。" },
     });
-    render(<LoginPage />);
+    render(<LoginForm />);
 
     fillAndSubmit("service-error", "irrelevant");
 
@@ -106,7 +119,7 @@ describe("LoginPage", () => {
   });
 
   it("SSO button shows a not-yet-configured notice without calling authClient.login", () => {
-    render(<LoginPage />);
+    render(<LoginForm />);
 
     fireEvent.click(screen.getByRole("button", { name: "使用 SSO 登入" }));
 
@@ -114,5 +127,50 @@ describe("LoginPage", () => {
       screen.getByText("SSO 尚未設定，請聯絡 IT 管理員或使用本機帳號登入。"),
     ).toBeInTheDocument();
     expect(mockedLogin).not.toHaveBeenCalled();
+  });
+
+  describe("E01-S003: return-url redirect", () => {
+    it("redirects to the returnUrl from the query string after a successful login", async () => {
+      mockSearchParamsGet.mockReturnValue("/dashboard");
+      mockedLogin.mockResolvedValue({ ok: true, value: validSession });
+      render(<LoginForm />);
+
+      fillAndSubmit("demo-user", "demo-pass-123");
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/dashboard"));
+    });
+
+    it("defaults to / after a successful login when no returnUrl is present", async () => {
+      mockedLogin.mockResolvedValue({ ok: true, value: validSession });
+      render(<LoginForm />);
+
+      fillAndSubmit("demo-user", "demo-pass-123");
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/"));
+    });
+
+    it("falls back to / for an absolute external returnUrl (open-redirect defense)", async () => {
+      mockSearchParamsGet.mockReturnValue("https://evil.example/phish");
+      mockedLogin.mockResolvedValue({ ok: true, value: validSession });
+      render(<LoginForm />);
+
+      fillAndSubmit("demo-user", "demo-pass-123");
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/"));
+    });
+
+    it("does not navigate anywhere when the login attempt fails", async () => {
+      mockSearchParamsGet.mockReturnValue("/dashboard");
+      mockedLogin.mockResolvedValue({
+        ok: false,
+        error: { code: "INVALID_CREDENTIALS", message: "帳號或密碼錯誤。" },
+      });
+      render(<LoginForm />);
+
+      fillAndSubmit("nope", "nope");
+
+      await screen.findByText("帳號或密碼錯誤。");
+      expect(mockPush).not.toHaveBeenCalled();
+    });
   });
 });

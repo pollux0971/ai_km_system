@@ -29,7 +29,7 @@ function renderDetailAs(id: string, roles: string[] = ["general_user"]) {
   );
 }
 
-describe("ConversationDetail (E03-S002/S003/S004)", () => {
+describe("ConversationDetail (E03-S002/S003/S004/S005/S006)", () => {
   it("shows a loading state before the conversation resolves", () => {
     mockedGetConversation.mockReturnValue(new Promise(() => {}));
 
@@ -61,6 +61,27 @@ describe("ConversationDetail (E03-S002/S003/S004)", () => {
     expect(screen.getByRole("checkbox", { name: "問答庫" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "公司知識庫" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "部門知識庫" })).not.toBeChecked();
+    expect(screen.getByLabelText("訊息")).toBeInTheDocument();
+  });
+
+  it("E03-S006: shows the message composer regardless of conversation mode", async () => {
+    mockedGetConversation.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "c1",
+        title: "測試對話",
+        lastMessageAt: "2026-08-12T09:15:00.000Z",
+        lastMessagePreview: "測試預覽",
+        mode: "normal",
+        knowledgeScopes: [],
+        model: "standard",
+      },
+    });
+
+    renderDetailAs("c1");
+
+    expect(await screen.findByLabelText("訊息")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
   });
 
   it("E03-S005: does not show the model selector when the conversation is in normal mode", async () => {

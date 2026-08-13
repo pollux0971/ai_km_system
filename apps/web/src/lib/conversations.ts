@@ -1,4 +1,5 @@
 import type { ApiError, Result } from "@ai-km/types";
+import { AI_MODELS, DEFAULT_AI_MODEL, type AiModel } from "./ai-models";
 import type { KnowledgeScope } from "./knowledge-scopes";
 
 export type ConversationMode = "normal" | "advanced";
@@ -29,6 +30,16 @@ export interface ConversationSummary {
    * user action.
    */
   knowledgeScopes: KnowledgeScope[];
+  /**
+   * E03-S005. Required, not nullable — unlike knowledgeScopes (which
+   * can legitimately be "nothing selected, base LLM knowledge only"),
+   * a conversation always needs some model to generate any response at
+   * all, even in Normal mode where the Advanced-mode-only selector
+   * (this story) isn't shown to change it. Defaults to
+   * DEFAULT_AI_MODEL — see lib/ai-models.ts for why no real vendor
+   * name is used and why "standard" specifically is the default.
+   */
+  model: AiModel;
 }
 
 /**
@@ -48,6 +59,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessagePreview: "保固期從出貨日起算 12 個月，涵蓋原廠零件更換。",
     mode: "normal",
     knowledgeScopes: ["company", "qna"],
+    model: "standard",
   },
   {
     id: "sample-2",
@@ -56,6 +68,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessagePreview: "請確認感測器接線是否鬆脫，並重新校正歸零。",
     mode: "normal",
     knowledgeScopes: [],
+    model: "standard",
   },
   {
     id: "sample-3",
@@ -64,6 +77,7 @@ const SAMPLE_CONVERSATIONS: ConversationSummary[] = [
     lastMessagePreview: "本季華北區成長 12%，主要來自新客戶導入。",
     mode: "advanced",
     knowledgeScopes: [],
+    model: "advanced-local",
   },
 ];
 
@@ -137,6 +151,7 @@ export async function createConversation(): Promise<Result<ConversationSummary, 
     lastMessagePreview: "尚無訊息。",
     mode: "normal",
     knowledgeScopes: [],
+    model: DEFAULT_AI_MODEL,
   };
   writeStore([conversation, ...readStore()]);
   return { ok: true, value: conversation };
@@ -184,4 +199,24 @@ export async function setConversationKnowledgeScopes(
   knowledgeScopes: KnowledgeScope[],
 ): Promise<Result<ConversationSummary, ApiError>> {
   return updateConversation(id, { knowledgeScopes });
+}
+
+/**
+ * E03-S005: switches a conversation's model. Rejects a disabled model
+ * (e.g. "cloud", per SOURCE_BASELINE decision #29) server-side too —
+ * not just relying on the UI's disabled <option>, which a buggy or
+ * bypassed client could ignore. AI/RAG Boundary: "Model/provider
+ * fallback 不得把資料送往未允許的 external provider" — this is that
+ * same guarantee applied to an explicit user selection, not just an
+ * automatic fallback.
+ */
+export async function setConversationModel(
+  id: string,
+  model: AiModel,
+): Promise<Result<ConversationSummary, ApiError>> {
+  const option = AI_MODELS.find((candidate) => candidate.id === model);
+  if (!option || option.disabled) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "這個模型目前無法使用。" } };
+  }
+  return updateConversation(id, { model });
 }

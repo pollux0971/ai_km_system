@@ -29,6 +29,7 @@ describe("ConversationList (E03-S001)", () => {
           lastMessagePreview: "測試預覽",
           mode: "normal",
           knowledgeScopes: [],
+          model: "standard",
         },
       ],
     });
@@ -50,6 +51,7 @@ describe("ConversationList (E03-S001)", () => {
           lastMessagePreview: "測試預覽",
           mode: "normal",
           knowledgeScopes: [],
+          model: "standard",
         },
       ],
     });

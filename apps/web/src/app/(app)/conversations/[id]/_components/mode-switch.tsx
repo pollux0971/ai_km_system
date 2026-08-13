@@ -17,10 +17,10 @@ const MODE_OPTIONS: ConversationMode[] = ["normal", "advanced"];
 
 /**
  * E03-S002: toggles a conversation between Normal and Advanced mode.
- * Per SOURCE_BASELINE.md's E03 outline, later stories (e.g. E03-S05
- * Model Selector, which the baseline says is Advanced-mode-only) will
- * gate their own UI on ConversationSummary.mode — this story only
- * establishes the switch and its persistence, not anything it gates yet.
+ * Per SOURCE_BASELINE.md's E03 outline, E03-S05's Model Selector is
+ * Advanced-mode-only — conversation-detail.tsx passes onModeChange
+ * (added by S005) to know the live mode without lifting all of this
+ * component's state, so it can conditionally render ModelSelector.
  *
  * Deliberately not optimistic: the mock resolves near-instantly (no
  * real network latency to hide), so `mode` only updates on confirmed
@@ -31,9 +31,11 @@ const MODE_OPTIONS: ConversationMode[] = ["normal", "advanced"];
 export function ModeSwitch({
   conversationId,
   initialMode,
+  onModeChange,
 }: {
   conversationId: string;
   initialMode: ConversationMode;
+  onModeChange?: (mode: ConversationMode) => void;
 }) {
   const [mode, setMode] = useState<ConversationMode>(initialMode);
   const [pending, setPending] = useState(false);
@@ -61,6 +63,7 @@ export function ModeSwitch({
     logger.info("conversation mode switched", { correlationId, mode: result.value.mode });
     trackEvent("conversation_mode_switch_success", { correlationId, properties: { mode: result.value.mode } });
     setMode(result.value.mode);
+    onModeChange?.(result.value.mode);
   }
 
   return (

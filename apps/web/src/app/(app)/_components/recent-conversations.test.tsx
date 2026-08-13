@@ -53,6 +53,7 @@ describe("RecentConversations", () => {
           lastMessagePreview: "測試預覽內容",
           mode: "normal",
           knowledgeScopes: [],
+          model: "standard",
         },
       ],
     });

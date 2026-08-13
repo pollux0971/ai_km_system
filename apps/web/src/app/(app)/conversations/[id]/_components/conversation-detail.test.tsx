@@ -1,11 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ConversationDetail from "./conversation-detail";
-import { getConversation } from "@/lib/conversations";
+import { getConversation, setConversationMode } from "@/lib/conversations";
 import { CurrentUserProvider } from "@/lib/session-context";
 
 vi.mock("@/lib/conversations", () => ({
   getConversation: vi.fn(),
+  setConversationMode: vi.fn(),
 }));
 
 vi.mock("@/lib/telemetry", () => ({
@@ -13,6 +14,11 @@ vi.mock("@/lib/telemetry", () => ({
 }));
 
 const mockedGetConversation = vi.mocked(getConversation);
+const mockedSetConversationMode = vi.mocked(setConversationMode);
+
+beforeEach(() => {
+  mockedSetConversationMode.mockReset();
+});
 
 function renderDetailAs(id: string, roles: string[] = ["general_user"]) {
   const session = { userId: "u1", roles, expiresAt: "2099-01-01T00:00:00.000Z" };
@@ -42,6 +48,7 @@ describe("ConversationDetail (E03-S002/S003/S004)", () => {
         lastMessagePreview: "測試預覽",
         mode: "advanced",
         knowledgeScopes: ["qna", "company"],
+        model: "standard",
       },
     });
 
@@ -54,6 +61,81 @@ describe("ConversationDetail (E03-S002/S003/S004)", () => {
     expect(screen.getByRole("checkbox", { name: "問答庫" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "公司知識庫" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "部門知識庫" })).not.toBeChecked();
+  });
+
+  it("E03-S005: does not show the model selector when the conversation is in normal mode", async () => {
+    mockedGetConversation.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "c1",
+        title: "測試對話",
+        lastMessageAt: "2026-08-12T09:15:00.000Z",
+        lastMessagePreview: "測試預覽",
+        mode: "normal",
+        knowledgeScopes: [],
+        model: "standard",
+      },
+    });
+
+    renderDetailAs("c1");
+
+    await screen.findByRole("heading", { name: "測試對話", level: 1 });
+    expect(screen.queryByRole("combobox", { name: "AI 模型" })).not.toBeInTheDocument();
+  });
+
+  it("E03-S005: shows the model selector with the current model when the conversation is in advanced mode", async () => {
+    mockedGetConversation.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "c1",
+        title: "測試對話",
+        lastMessageAt: "2026-08-12T09:15:00.000Z",
+        lastMessagePreview: "測試預覽",
+        mode: "advanced",
+        knowledgeScopes: [],
+        model: "advanced-local",
+      },
+    });
+
+    renderDetailAs("c1");
+
+    expect(await screen.findByRole("combobox", { name: "AI 模型" })).toHaveValue("advanced-local");
+  });
+
+  it("E03-S005: shows the model selector after switching from normal to advanced mode", async () => {
+    mockedGetConversation.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "c1",
+        title: "測試對話",
+        lastMessageAt: "2026-08-12T09:15:00.000Z",
+        lastMessagePreview: "測試預覽",
+        mode: "normal",
+        knowledgeScopes: [],
+        model: "standard",
+      },
+    });
+    mockedSetConversationMode.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "c1",
+        title: "測試對話",
+        lastMessageAt: "2026-08-12T09:15:00.000Z",
+        lastMessagePreview: "測試預覽",
+        mode: "advanced",
+        knowledgeScopes: [],
+        model: "standard",
+      },
+    });
+
+    renderDetailAs("c1");
+
+    await screen.findByRole("heading", { name: "測試對話", level: 1 });
+    expect(screen.queryByRole("combobox", { name: "AI 模型" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "進階模式" }));
+
+    expect(await screen.findByRole("combobox", { name: "AI 模型" })).toHaveValue("standard");
   });
 
   it("shows a distinct error state when loading fails", async () => {

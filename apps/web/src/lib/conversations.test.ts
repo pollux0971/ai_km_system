@@ -6,6 +6,7 @@ import {
   listConversations,
   setConversationKnowledgeScopes,
   setConversationMode,
+  setConversationModel,
 } from "./conversations";
 
 describe("getRecentConversations", () => {
@@ -108,6 +109,14 @@ describe("createConversation (E03-S001)", () => {
     expect(created.ok).toBe(true);
     if (created.ok) {
       expect(created.value.knowledgeScopes).toEqual([]);
+    }
+  });
+
+  it("E03-S005: defaults every new conversation to the standard model", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (created.ok) {
+      expect(created.value.model).toBe("standard");
     }
   });
 });
@@ -246,6 +255,68 @@ describe("setConversationKnowledgeScopes (E03-S004)", () => {
     expect(switched.ok).toBe(true);
     if (switched.ok) {
       expect(switched.value.mode).toBe(created.value.mode);
+    }
+  });
+});
+
+describe("setConversationModel (E03-S005)", () => {
+  it("switches an existing conversation's model and persists it", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.model).toBe("standard");
+
+    const switched = await setConversationModel(created.value.id, "advanced-local");
+    expect(switched.ok).toBe(true);
+    if (switched.ok) {
+      expect(switched.value.model).toBe("advanced-local");
+    }
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.model).toBe("advanced-local");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR for the disabled 'cloud' model, not just relying on the UI's disabled <option> — SOURCE_BASELINE decision #29 (外部 Cloud LLM 預設關閉)", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await setConversationModel(created.value.id, "cloud");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.model).toBe("standard");
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
+    const result = await setConversationModel("does-not-exist", "advanced-local");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("does not affect a conversation's mode or knowledge scopes", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const switched = await setConversationModel(created.value.id, "advanced-local");
+    expect(switched.ok).toBe(true);
+    if (switched.ok) {
+      expect(switched.value.mode).toBe(created.value.mode);
+      expect(switched.value.knowledgeScopes).toEqual(created.value.knowledgeScopes);
     }
   });
 });

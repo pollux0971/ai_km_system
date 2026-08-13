@@ -35,6 +35,7 @@ describe("ModeSwitch (E03-S002)", () => {
         lastMessagePreview: "p",
         mode: "advanced",
         knowledgeScopes: [],
+        model: "standard",
       },
     });
 
@@ -78,5 +79,40 @@ describe("ModeSwitch (E03-S002)", () => {
     fireEvent.click(screen.getByRole("button", { name: "一般模式" }));
 
     expect(mockedSetConversationMode).not.toHaveBeenCalled();
+  });
+
+  it("E03-S005: calls onModeChange with the new mode once the switch succeeds", async () => {
+    mockedSetConversationMode.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "c1",
+        title: "t",
+        lastMessageAt: "2026-08-14T00:00:00.000Z",
+        lastMessagePreview: "p",
+        mode: "advanced",
+        knowledgeScopes: [],
+        model: "standard",
+      },
+    });
+    const onModeChange = vi.fn();
+
+    render(<ModeSwitch conversationId="c1" initialMode="normal" onModeChange={onModeChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "進階模式" }));
+
+    await waitFor(() => expect(onModeChange).toHaveBeenCalledWith("advanced"));
+  });
+
+  it("E03-S005: does not call onModeChange when the switch fails", async () => {
+    mockedSetConversationMode.mockResolvedValue({
+      ok: false,
+      error: { code: "NOT_FOUND", message: "找不到這個對話。" },
+    });
+    const onModeChange = vi.fn();
+
+    render(<ModeSwitch conversationId="c1" initialMode="normal" onModeChange={onModeChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "進階模式" }));
+
+    await screen.findByRole("alert");
+    expect(onModeChange).not.toHaveBeenCalled();
   });
 });

@@ -34,6 +34,7 @@ const sampleConversation = {
   lastMessagePreview: "尚無訊息。",
   mode: "normal" as const,
   knowledgeScopes: [],
+  model: "standard" as const,
 };
 
 beforeEach(() => {

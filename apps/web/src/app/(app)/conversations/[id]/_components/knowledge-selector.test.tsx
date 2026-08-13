@@ -64,6 +64,7 @@ describe("KnowledgeSelector (E03-S003/S004)", () => {
         lastMessagePreview: "p",
         mode: "normal",
         knowledgeScopes: ["company"],
+        model: "standard",
       },
     });
 
@@ -84,6 +85,7 @@ describe("KnowledgeSelector (E03-S003/S004)", () => {
         lastMessagePreview: "p",
         mode: "normal",
         knowledgeScopes: ["qna"],
+        model: "standard",
       },
     });
 

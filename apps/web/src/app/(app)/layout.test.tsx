@@ -45,5 +45,8 @@ describe("AppShellLayout", () => {
     expect(await screen.findByText("child content")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "主導覽" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "u1" })).toBeInTheDocument();
+    // Waits out NotificationCenter's own independent async load so it
+    // can't log a state-update-after-test warning once this returns.
+    expect(await screen.findByRole("button", { name: /^通知/ })).toBeInTheDocument();
   });
 });

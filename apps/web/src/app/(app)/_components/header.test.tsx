@@ -22,7 +22,7 @@ const session = {
 };
 
 describe("Header", () => {
-  it("renders the app name and the user-menu trigger", () => {
+  it("renders the app name, notification center, and user-menu trigger (waits for NotificationCenter's own async load to settle — state detail lives in notification-center.test.tsx)", async () => {
     render(
       <CurrentUserProvider value={session}>
         <Header />
@@ -31,5 +31,6 @@ describe("Header", () => {
 
     expect(screen.getByText("AI KM")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "u1" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^通知/ })).toBeInTheDocument();
   });
 });

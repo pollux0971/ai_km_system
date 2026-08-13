@@ -17,6 +17,7 @@ import type { AuthClient, AuthErrorCode, AuthSession } from "./index";
  */
 export const MOCK_VALID_USERNAME = "demo-user";
 export const MOCK_VALID_PASSWORD = "demo-pass-123";
+export const MOCK_VALID_USER_ID = "mock-user-1";
 
 function authError(code: AuthErrorCode, message: string): ApiError {
   return { code, message };
@@ -38,7 +39,7 @@ export function createMockAuthClient(): AuthClient {
       }
       if (username === MOCK_VALID_USERNAME && password === MOCK_VALID_PASSWORD) {
         currentSession = {
-          userId: "mock-user-1",
+          userId: MOCK_VALID_USER_ID,
           roles: ["general_user"],
           expiresAt: new Date(Date.UTC(2099, 0, 1)).toISOString(),
         };

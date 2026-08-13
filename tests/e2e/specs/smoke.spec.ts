@@ -5,10 +5,17 @@ import { test, expect } from "@playwright/test";
  * Playwright run) resolves end-to-end. Real critical-flow E2E specs get
  * added alongside their story per the Definition of Done, starting with the
  * suggested vertical slice (login -> chat streaming/citation).
+ *
+ * Since E01-S004, "/" sits behind SessionGate, so an unauthenticated visit
+ * no longer renders the scaffold heading directly — it redirects to
+ * /login first. The authenticated-home-renders case (login, then land on
+ * "/") is covered by specs/session-gate.spec.ts; this still proves the
+ * pipeline boots end-to-end via the redirect outcome.
  */
-test("apps/web scaffold page renders", async ({ page }) => {
+test("apps/web scaffold page redirects an unauthenticated visitor to /login", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "AI KM — apps/web" })).toBeVisible();
+  await page.waitForURL((url) => url.pathname === "/login");
+  await expect(page.getByRole("heading", { name: "登入" })).toBeVisible();
 });
 
 /**

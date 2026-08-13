@@ -90,6 +90,9 @@ importers:
       '@ai-km/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@ai-km/permissions':
+        specifier: workspace:*
+        version: link:../../packages/permissions
       '@ai-km/types':
         specifier: workspace:*
         version: link:../../packages/types

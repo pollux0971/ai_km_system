@@ -10,6 +10,14 @@
 
 - `/story <ID>` — 自主開發循環(INIT→PLAN→IMPLEMENT→VERIFY⇄FIX→SELF-REVIEW→EVIDENCE)
 - `/story-review <ID>` — 獨立審核(只讀 + 重跑 gate,不改碼)
+- `/keep-working-till-end [N]` — 自主連續開發(story→review→merge 循環),
+  直到剩餘工作全部需要 Team B 或達 N 個 story
+- `/advisor <問題>` — 不確定時的最優解分析(先查規格權威,必要時才問使用者)
+- `/progress` — 唯讀進度回報
+
+**進度追蹤**:`docs/stories/PROGRESS.md` 是進度唯一真相來源。任何 story 狀態
+轉換都必須即時更新該檔;session 開始接手開發工作時先讀它還原進度,不憑記憶。
+待使用者批示的問題累積在 `docs/stories/PENDING_DECISIONS.md`。
 
 非 story 的雜項修改(修 CI、調 scaffold)不需走完整狀態機,但仍受下方鐵律約束。
 

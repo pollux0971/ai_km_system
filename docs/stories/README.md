@@ -1,8 +1,13 @@
-# docs/stories — Story 完成證據(Evidence)
+# docs/stories — Story 完成證據(Evidence)與進度
 
-每個 atomic story 完成(或 BLOCKED)時,依
-`.claude/rules/STORY_WORKFLOW.md` Phase 6 在此目錄建立 `EXX-SYYY.md`。
-沒有 EVIDENCE 檔的 story 一律不得視為 DONE。
+此目錄有三種檔案:
+
+- **`PROGRESS.md`** — 進度唯一真相來源(175 個 Team A story 的狀態表),
+  每次狀態轉換必須即時更新並隨 commit 提交。
+- **`PENDING_DECISIONS.md`** — 自主模式下累積的待使用者批示問題。
+- **`EXX-SYYY.md`** — 每個 story 的完成證據,依
+  `.claude/rules/STORY_WORKFLOW.md` Phase 6 建立。
+  沒有 EVIDENCE 檔的 story 一律不得視為 DONE。
 
 ## 模板
 

@@ -5,6 +5,8 @@ export const colors = {
   foreground: "#0a0a0a",
   primary: "#2563eb",
   danger: "#dc2626",
+  /** E01-S011: skeleton/disabled-surface placeholder color. */
+  muted: "#e5e5e5",
 } as const;
 
 export const spacing = {

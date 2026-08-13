@@ -25,14 +25,14 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 19 | 0 | 0 | 0 | 1 |
+| E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 19 | 0 | 0 | 0 | 156 |
+| **合計** | **175** | 20 | 0 | 0 | 0 | 155 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -59,7 +59,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S017 | approved | story/E01-S017-route-level-guards | [E01-S017.md](E01-S017.md) | 獨立審核 APPROVE(fresh gate 全綠,無 lockfile drift,scope 未逾界) |
 | E01-S018 | approved | story/E01-S018-app-level-error-boundary | [E01-S018.md](E01-S018.md) | 獨立審核 APPROVE(2 輪 FIX 後 fresh gate 全綠,補上 global-error.tsx 的 CSS import) |
 | E01-S019 | approved | story/E01-S019-frontend-telemetry-hooks | [E01-S019.md](E01-S019.md) | 獨立審核 APPROVE(fresh gate 全綠,無 lockfile drift,scope 未逾界) |
-| E01-S020 | todo | | | |
+| E01-S020 | approved | story/E01-S020-e01-e2e-smoke-flow | [E01-S020.md](E01-S020.md) | 獨立審核 APPROVE(fresh gate 連兩輪全綠,無 flaky,scope 未逾界)——**E01 epic 全數 20/20 approved** |
 
 ## E03 AI Conversation Experience(33)
 

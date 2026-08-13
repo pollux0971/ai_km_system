@@ -25,7 +25,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 16 | 0 | 0 | 0 | 4 |
+| E01 Application Shell & User Workspace | 20 | 16 | 0 | 1 | 0 | 3 |
 | E03 AI Conversation Experience | 33 | 0 | 0 | 0 | 0 | 33 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
@@ -56,7 +56,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S014 | approved | story/E01-S014-notification-center-thin-slice | [E01-S014.md](E01-S014.md) | 獨立審核 APPROVE(既有測試修改僅新增斷言,gate 全綠) |
 | E01-S015 | approved | story/E01-S015-feature-flag-visibility-guard | [E01-S015.md](E01-S015.md) | 獨立審核 APPROVE(SSO 區塊內容位元級不變,只是加上條件包裝) |
 | E01-S016 | approved | story/E01-S016-desktop-responsive-baseline | [E01-S016.md](E01-S016.md) | 獨立審核 APPROVE(fresh gate 全綠,無 lockfile drift,scope 未逾界) |
-| E01-S017 | todo | | | |
+| E01-S017 | in-progress | story/E01-S017-route-level-guards | | |
 | E01-S018 | todo | | | |
 | E01-S019 | todo | | | |
 | E01-S020 | todo | | | |

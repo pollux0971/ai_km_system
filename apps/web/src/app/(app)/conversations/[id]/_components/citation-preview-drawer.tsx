@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getCitationSource, type CitationSource } from "@/lib/citations";
@@ -40,6 +41,14 @@ const logger = createLogger("web:citation-preview-drawer");
  * describes for login); any other/future error code falls back to the
  * shared component's own generic mapping rather than this component
  * inventing new copy for a case it doesn't know about.
+ *
+ * E03-S015 adds the "開啟原始來源" link, only once a source has actually
+ * loaded (`kind === "loaded"`) — offering to open something that's
+ * still loading, or that just failed/wasn't found, would be pointless.
+ * Same-tab `<Link>` navigating away from this conversation page to
+ * /citations/[id] (see citation-source-view.tsx) naturally unmounts
+ * this drawer along with the rest of the page; no explicit close-on-
+ * navigate handling is needed.
  */
 type LoadState = { kind: "loading" } | { kind: "error"; code: string } | { kind: "loaded"; source: CitationSource };
 
@@ -90,14 +99,17 @@ export function CitationPreviewDrawer({ citationId, onClose }: { citationId: str
         <ErrorMessage code={state.code} message={state.code === "NOT_FOUND" ? "找不到這個引用來源。" : undefined} />
       )}
       {state.kind === "loaded" && (
-        <dl>
-          <dt>檔案</dt>
-          <dd>{state.source.file}</dd>
-          <dt>頁碼</dt>
-          <dd>{state.source.page}</dd>
-          <dt>片段</dt>
-          <dd>{state.source.snippet}</dd>
-        </dl>
+        <>
+          <dl>
+            <dt>檔案</dt>
+            <dd>{state.source.file}</dd>
+            <dt>頁碼</dt>
+            <dd>{state.source.page}</dd>
+            <dt>片段</dt>
+            <dd>{state.source.snippet}</dd>
+          </dl>
+          <Link href={`/citations/${state.source.id}`}>開啟原始來源</Link>
+        </>
       )}
     </div>
   );

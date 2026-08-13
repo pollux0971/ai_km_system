@@ -122,3 +122,25 @@ describe("CitationPreviewDrawer (E03-S014)", () => {
     expect(mockedTrackEvent).not.toHaveBeenCalledWith("conversation_citation_preview_success", expect.anything());
   });
 });
+
+describe("CitationPreviewDrawer open-source link (E03-S015)", () => {
+  it("shows an 'open source' link pointing at /citations/{id} once loaded", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} />);
+    await screen.findByText("來源檔案 1");
+
+    expect(screen.getByRole("link", { name: "開啟原始來源" })).toHaveAttribute("href", "/citations/1");
+  });
+
+  it("does not show the open-source link while loading or on error", async () => {
+    mockedGetCitationSource.mockReturnValue(new Promise(() => {}));
+    const { rerender } = render(<CitationPreviewDrawer citationId="1" onClose={() => {}} />);
+    expect(screen.queryByRole("link", { name: "開啟原始來源" })).not.toBeInTheDocument();
+
+    mockedGetCitationSource.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "not found" } });
+    rerender(<CitationPreviewDrawer citationId="missing" onClose={() => {}} />);
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("link", { name: "開啟原始來源" })).not.toBeInTheDocument();
+  });
+});

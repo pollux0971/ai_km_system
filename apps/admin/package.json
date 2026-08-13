@@ -1,0 +1,31 @@
+{
+  "name": "@ai-km/admin",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-km/ui": "workspace:*",
+    "@ai-km/types": "workspace:*",
+    "@ai-km/api-client": "workspace:*",
+    "@ai-km/auth-client": "workspace:*",
+    "@ai-km/permissions": "workspace:*",
+    "@ai-km/logger": "workspace:*",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^15.1.0"
+  }
+}

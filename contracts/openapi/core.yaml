@@ -1,0 +1,38 @@
+openapi: 3.1.0
+info:
+  title: AI KM Core Contracts
+  version: 0.0.0
+  description: >
+    Scaffold-only starter spec proving the Contract-First pipeline
+    (contracts/openapi -> @ai-km/api-client codegen) resolves end-to-end.
+    Real endpoints must be negotiated with Team B before being added here —
+    per policies/ATOMIC_STORY_BOUNDARIES.md, never invent an endpoint/schema
+    that hasn't been agreed with the owning domain.
+paths: {}
+components:
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    Pagination:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 200
+        total:
+          type: integer
+          minimum: 0

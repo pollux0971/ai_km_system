@@ -26,10 +26,17 @@
  * not a fabricated "helpful AI answer" that could be mistaken for a
  * real generated response. Same honesty bar as E03-S005's "雲端模型
  * （尚未啟用)" labeling: visibly present, clearly marked as not real.
+ *
+ * The trailing `[1]` is E03-S013's citation marker — see
+ * message-content.tsx for why this stays a plain substring rather than
+ * structured data. It's appended here (not fabricated inline as if some
+ * specific claim were sourced) so the badge is genuinely visible/
+ * demonstrable end-to-end without implying any particular sentence
+ * above was verified against a real document.
  */
 const MOCK_REPLY =
   "（模擬回覆）這是前端展示用的固定文字，尚未串接真正的 AI 生成服務。" +
-  "真正的回答生成依賴 Model Gateway 與 RAG 平台（E04、E12，Team B），目前都還不存在。";
+  "真正的回答生成依賴 Model Gateway 與 RAG 平台（E04、E12，Team B），目前都還不存在。[1]";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

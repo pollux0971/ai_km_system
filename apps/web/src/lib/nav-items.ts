@@ -62,3 +62,15 @@ export function visibleNavItems(userRoles: string[]): NavItem[] {
 export function visibleEntryCards(userRoles: string[]): NavItem[] {
   return visibleNavItems(userRoles).filter((item) => item.entryCardDescription !== undefined);
 }
+
+/**
+ * E01-S017: the role requirement for a route, read off this same table so
+ * a route's 403 guard (_components/role-guard.tsx) can never drift from
+ * what the sidebar/entry-cards already promise to show or hide. `undefined`
+ * means the path isn't in NAV_ITEMS at all (e.g. /profile, reached via the
+ * user-menu, not the sidebar) — those routes are open to any authenticated
+ * user by design, not an oversight.
+ */
+export function rolesRequiredFor(pathname: string): NavItem["roles"] | undefined {
+  return NAV_ITEMS.find((item) => item.href === pathname)?.roles;
+}

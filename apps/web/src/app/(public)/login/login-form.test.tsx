@@ -29,6 +29,8 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
   useSearchParams: () => ({ get: mockSearchParamsGet }),
+  // E01-S019: usePageViewTelemetry() (wired into LoginForm) calls this.
+  usePathname: () => "/login",
 }));
 
 const mockedLogin = vi.mocked(authClient.login);

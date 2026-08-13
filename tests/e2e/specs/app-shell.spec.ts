@@ -16,6 +16,16 @@ async function login(page: import("@playwright/test").Page, username = MOCK_VALI
 }
 
 /**
+ * Scoped to the sidebar landmark — since E01-S009, the Home Dashboard's
+ * entry cards (specs/home-dashboard.spec.ts) reuse the same labels
+ * ("維修助手" / "ERP 助手"), so an unscoped page-wide locator matches
+ * both and trips Playwright's strict mode.
+ */
+function sidebarNav(page: import("@playwright/test").Page) {
+  return page.getByRole("navigation", { name: "主導覽" });
+}
+
+/**
  * E01-S005 critical flow: the authenticated shell's chrome and its one
  * piece of real interactivity — logout via the user-menu.
  */
@@ -50,20 +60,20 @@ test("logging out via the user-menu clears the session and returns to /login", a
 test("a general_user does not see the Maintenance or ERP nav items", async ({ page }) => {
   await login(page, MOCK_VALID_USERNAME);
 
-  await expect(page.getByRole("link", { name: "維修助手" })).not.toBeVisible();
-  await expect(page.getByRole("link", { name: "ERP 助手" })).not.toBeVisible();
+  await expect(sidebarNav(page).getByRole("link", { name: "維修助手" })).not.toBeVisible();
+  await expect(sidebarNav(page).getByRole("link", { name: "ERP 助手" })).not.toBeVisible();
 });
 
 test("a maintenance_engineer sees the Maintenance nav item but not ERP", async ({ page }) => {
   await login(page, MOCK_MAINTENANCE_USERNAME);
 
-  await expect(page.getByRole("link", { name: "維修助手" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "ERP 助手" })).not.toBeVisible();
+  await expect(sidebarNav(page).getByRole("link", { name: "維修助手" })).toBeVisible();
+  await expect(sidebarNav(page).getByRole("link", { name: "ERP 助手" })).not.toBeVisible();
 });
 
 test("a sales_purchasing user sees the ERP nav item but not Maintenance", async ({ page }) => {
   await login(page, MOCK_SALES_USERNAME);
 
-  await expect(page.getByRole("link", { name: "ERP 助手" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "維修助手" })).not.toBeVisible();
+  await expect(sidebarNav(page).getByRole("link", { name: "ERP 助手" })).toBeVisible();
+  await expect(sidebarNav(page).getByRole("link", { name: "維修助手" })).not.toBeVisible();
 });

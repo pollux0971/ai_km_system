@@ -21,16 +21,6 @@ describe("HomePage", () => {
     expect(screen.getByText("u1，這是你的工作台首頁。")).toBeInTheDocument();
   });
 
-  it("has a 快速入口 section — still E01-S009's placeholder", () => {
-    render(
-      <CurrentUserProvider value={session}>
-        <HomePage />
-      </CurrentUserProvider>,
-    );
-
-    expect(screen.getByRole("heading", { name: "快速入口", level: 2 })).toBeInTheDocument();
-  });
-
   it("wires the real RecentConversations widget into 最近對話 (state detail lives in recent-conversations.test.tsx)", async () => {
     render(
       <CurrentUserProvider value={session}>
@@ -40,5 +30,16 @@ describe("HomePage", () => {
 
     expect(screen.getByRole("heading", { name: "最近對話", level: 2 })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "查看全部對話" })).toBeInTheDocument();
+  });
+
+  it("wires the real QuickEntryCards widget into 快速入口 (state detail lives in quick-entry-cards.test.tsx)", () => {
+    render(
+      <CurrentUserProvider value={session}>
+        <HomePage />
+      </CurrentUserProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "快速入口", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /知識庫/ })).toHaveAttribute("href", "/knowledge");
   });
 });

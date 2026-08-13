@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { visibleNavItems } from "./nav-items";
+import { visibleEntryCards, visibleNavItems } from "./nav-items";
 
 describe("visibleNavItems", () => {
   it("shows only the all-roles items to a general_user", () => {
@@ -47,5 +47,41 @@ describe("visibleNavItems", () => {
     const items = visibleNavItems(["maintenance_engineer", "sales_purchasing"]);
 
     expect(items.map((item) => item.href)).toEqual(["/", "/conversations", "/knowledge", "/maintenance", "/erp"]);
+  });
+});
+
+describe("visibleEntryCards", () => {
+  it("excludes Home and Conversations even though they're visible nav items", () => {
+    const cards = visibleEntryCards(["super_administrator"]);
+
+    expect(cards.map((card) => card.href)).not.toContain("/");
+    expect(cards.map((card) => card.href)).not.toContain("/conversations");
+  });
+
+  it("shows only the Knowledge card to a general_user", () => {
+    const cards = visibleEntryCards(["general_user"]);
+
+    expect(cards.map((card) => card.href)).toEqual(["/knowledge"]);
+  });
+
+  it("shows Knowledge + Maintenance to a maintenance_engineer, but not ERP", () => {
+    const cards = visibleEntryCards(["maintenance_engineer"]);
+
+    expect(cards.map((card) => card.href)).toEqual(["/knowledge", "/maintenance"]);
+  });
+
+  it("shows Knowledge + ERP to a sales_purchasing user, but not Maintenance", () => {
+    const cards = visibleEntryCards(["sales_purchasing"]);
+
+    expect(cards.map((card) => card.href)).toEqual(["/knowledge", "/erp"]);
+  });
+
+  it("shows all three cards to a super_administrator, each with a description", () => {
+    const cards = visibleEntryCards(["super_administrator"]);
+
+    expect(cards.map((card) => card.href)).toEqual(["/knowledge", "/maintenance", "/erp"]);
+    for (const card of cards) {
+      expect(card.entryCardDescription).toBeTruthy();
+    }
   });
 });

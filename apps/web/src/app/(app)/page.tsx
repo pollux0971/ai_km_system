@@ -2,13 +2,13 @@
 
 import { useCurrentUser } from "@/lib/session-context";
 import RecentConversations from "./_components/recent-conversations";
+import QuickEntryCards from "./_components/quick-entry-cards";
 
 /**
  * E01-S007 home dashboard thin slice: the page frame + a greeting.
- * "最近對話" (Recent Conversations) is filled in by E01-S008's own
- * widget. "快速入口" (Knowledge/Maintenance/ERP entry cards) is
- * E01-S009's — still a placeholder here, same skeleton-then-fill
- * pattern E01-S001→S002 and E01-S005→S006 used.
+ * "最近對話" is E01-S008's widget; "快速入口" is E01-S009's — both now
+ * filled in, completing the skeleton E01-S001→S002/E01-S005→S006
+ * established this pattern with.
  */
 export default function HomePage() {
   const user = useCurrentUser();
@@ -25,7 +25,7 @@ export default function HomePage() {
 
       <section aria-labelledby="quick-entry-heading" style={{ marginTop: 32 }}>
         <h2 id="quick-entry-heading">快速入口</h2>
-        <p>入口卡片即將推出。</p>
+        <QuickEntryCards />
       </section>
     </main>
   );

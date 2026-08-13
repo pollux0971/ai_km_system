@@ -8,6 +8,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "playwright test"
   },
+  "dependencies": {
+    "@ai-km/auth-client": "workspace:*"
+  },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "typescript": "^5.7.0"

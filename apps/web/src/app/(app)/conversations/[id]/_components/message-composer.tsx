@@ -1,25 +1,22 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createLogger } from "@ai-km/logger";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:message-composer");
 
 /**
- * E03-S006: message composer baseline. SOURCE_BASELINE.md's E03 outline
- * gives this story only its title ("E03-S06 Message Composer") — no
- * message/entity field shape, no send semantics, no character limit is
- * defined anywhere in AI_KM_BMAD_High_Granularity/. The epic file's own
- * expanded titles for the stories immediately after this one make the
- * boundary explicit: S07 "Multi-line keyboard behavior" (upgrading this
- * single-line `<input>` to a `<textarea>` with Enter/Shift+Enter
- * handling — same single→multi-stage upgrade pattern as S03→S04's
- * Knowledge Selector), S08 "File attachment picker", and S09
+ * E03-S006/S007: message composer. SOURCE_BASELINE.md's E03 outline
+ * gives these stories only their titles ("E03-S06 Message Composer",
+ * "E03-S07 Multi-line Input") — no message/entity field shape, no send
+ * semantics, no character limit is defined anywhere in
+ * AI_KM_BMAD_High_Granularity/. The epic file's own expanded titles make
+ * the remaining boundary explicit: S08 "File attachment picker" and S09
  * "Send-message optimistic state" (actually persisting a message and
  * showing pending/sent/failed — the Message entity itself is E04-S02,
- * Team B, and doesn't exist yet). This story is deliberately scoped to
- * only the composer's own input/validation/reset lifecycle — it does
+ * Team B, and doesn't exist yet). This component is deliberately scoped
+ * to only the composer's own input/validation/reset lifecycle — it does
  * NOT persist anything or append to any message list, since no message
  * list/history feature exists yet. Submitting a valid draft only proves
  * the composer clears itself and is ready for the next message;
@@ -27,14 +24,26 @@ const logger = createLogger("web:message-composer");
  *
  * Fully self-contained (no lib/conversations.ts changes needed) — a
  * signal this is a properly-scoped, genuinely independent atomic slice.
+ *
+ * S07 upgrades S06's single-line `<input>` to a multi-line `<textarea>`
+ * — same single→multi-stage upgrade pattern as S03→S04's Knowledge
+ * Selector. Enter submits (mirroring S06's `<input>`, which natively
+ * submitted its form on Enter); Shift+Enter inserts a newline instead —
+ * that half needs no handler at all, since a plain `<textarea>` already
+ * inserts a newline on any Enter unless JS calls preventDefault(), so
+ * leaving Shift+Enter untouched is what makes it "just work". Enter is
+ * only intercepted (preventDefault + submit) when there's a valid draft
+ * to submit; on an empty/whitespace-only draft, plain Enter is left to
+ * behave natively too — blocking it there would silently swallow the
+ * keystroke instead of submitting OR inserting anything, which would
+ * feel broken rather than fail-closed.
  */
 export function MessageComposer({ conversationId }: { conversationId: string }) {
   const inputId = useId();
   const [draft, setDraft] = useState("");
   const isValid = draft.trim().length > 0;
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  function submitDraft() {
     if (!isValid) return;
 
     const correlationId = crypto.randomUUID();
@@ -50,17 +59,31 @@ export function MessageComposer({ conversationId }: { conversationId: string }) 
     setDraft("");
   }
 
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    submitDraft();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey && isValid) {
+      event.preventDefault();
+      submitDraft();
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
       <label htmlFor={inputId}>訊息</label>
       <br />
-      <input
+      <textarea
         id={inputId}
-        type="text"
+        rows={3}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        placeholder="輸入訊息…"
+        onKeyDown={handleKeyDown}
+        placeholder="輸入訊息…（Enter 送出，Shift+Enter 換行）"
       />
+      <br />
       <button type="submit" disabled={!isValid}>
         送出
       </button>

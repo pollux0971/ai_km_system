@@ -29,7 +29,7 @@ test("full round trip: protected route -> login redirect -> back on the protecte
   await page.getByRole("button", { name: "登入", exact: true }).click();
 
   await page.waitForURL((url) => url.pathname === "/");
-  await expect(page.getByRole("heading", { name: "AI KM — apps/web" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "歡迎回來" })).toBeVisible();
   // E01-S005's header/user-menu is the permanent proof the session reached
   // the page tree — supersedes the "Signed in as" text E01-S004 used.
   await expect(page.getByRole("button", { name: MOCK_VALID_USER_ID })).toBeVisible();

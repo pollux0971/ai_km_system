@@ -7,7 +7,7 @@ import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState
 import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, type Message } from "@/lib/messages";
-import { streamAssistantReply } from "@/lib/streaming";
+import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
 import { ConversationContextIndicator } from "./conversation-context-indicator";
@@ -267,6 +267,41 @@ const logger = createLogger("web:message-thread");
  * this file's visible processing phase — see that module's own doc
  * comment for why a second, separate status UI there would be scope
  * creep this story never asked for.
+ *
+ * S31 "Stream disconnect/reconnect UX" — the story lib/streaming.ts's
+ * own doc comment already flagged as unbuilt back at S10. A NEW
+ * terminal kind, `stream-disconnected`, distinct from the existing
+ * `stream-failed` — same "don't reuse one label for two different
+ * causes" precedent as `attachment-failed` above: `stream-failed` is a
+ * POST-stream persistence failure (the reply fully generated, then
+ * receiveAssistantReply/reviseMessage failed to save it);
+ * `stream-disconnected` is a MID-stream failure (the connection itself
+ * dropped partway through generating). Confusing the two would mislead
+ * about what actually happened and what retrying even means. Unlike
+ * every other terminal kind in this file, this one carries the PARTIAL
+ * content already received before the drop — S12 "Stop Generation"
+ * already established the precedent that partial content a user was
+ * mid-way through receiving should be preserved, not discarded, and a
+ * disconnect is the same situation (the user already SAW that partial
+ * text arrive) instead of a clean "never started" case. Also carries
+ * the `answerState` it was streaming under (ANSWERED or PARTIAL — the
+ * only two states that ever reach the real streaming loop at all;
+ * every OTHER state's fixed fallback content is set synchronously
+ * without ever calling streamAssistantReply, so disconnect structurally
+ * cannot occur for them) so reconnecting can finalize with the SAME
+ * classification, not silently default back to ANSWERED.
+ *
+ * Deliberately NOT wired into handleRegenerate — that handler only
+ * ever receives the already-SETTLED assistant Message being
+ * regenerated, never the original user question the disconnect trigger
+ * needs to check against; inventing a way to thread that through would
+ * be new plumbing nothing asked for, matching how handleRegenerate
+ * already reuses the stored `state` rather than reclassifying from
+ * content for the exact same reason (see this file's S21 section
+ * above). Disconnect simulation therefore only applies to a genuinely
+ * new turn (attemptSend -> startStream), which is also the only place
+ * SOURCE_BASELINE-adjacent precedent (S21's classifyAnswerState, S29's
+ * classifyFileProcessing) ever checks a fresh user question at all.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -274,7 +309,8 @@ type DisplayMessage =
   | { kind: "failed"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "attachment-failed"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "streaming"; localId: string; content: string; phase: GenerationPhase | null }
-  | { kind: "stream-failed"; localId: string };
+  | { kind: "stream-failed"; localId: string }
+  | { kind: "stream-disconnected"; localId: string; content: string; answerState: AnswerState };
 
 type LoadState = "loading" | "error" | "loaded";
 
@@ -363,7 +399,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       previous.map((entry) => (entry.kind === "pending" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
     );
 
-    startStream(classifyAnswerState(content));
+    startStream(classifyAnswerState(content), shouldSimulateStreamDisconnect(content));
   }
 
   function handleComposerSubmit(content: string, attachmentNames: string[]) {
@@ -402,8 +438,17 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
    * by the caller — runStream itself has no classification logic, only
    * the two behaviors that follow FROM a classification (skip streaming
    * in favor of fixed fallback content; persist the state).
+   *
+   * `simulateDisconnect` (E03-S031): pre-computed by the caller, same
+   * shape as `answerState` — passed straight through to
+   * streamAssistantReply(), which is the only thing that can actually
+   * throw partway through. Defaults false so every pre-S031 caller
+   * (there's exactly one direct call site missing this arg,
+   * handleRetryStream below, which retries a `stream-failed` — a
+   * DIFFERENT, post-stream failure that never went through disconnect
+   * logic in the first place) keeps its exact prior behavior.
    */
-  async function runStream(localId: string, reviseTarget?: Message, answerState: AnswerState = "ANSWERED") {
+  async function runStream(localId: string, reviseTarget?: Message, answerState: AnswerState = "ANSWERED", simulateDisconnect = false) {
     const correlationId = crypto.randomUUID();
     logger.info("streaming assistant reply", { correlationId, conversationId });
     trackEvent("conversation_message_stream_attempt", { correlationId, properties: { conversationId } });
@@ -430,13 +475,32 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
           previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: accumulated, phase: null } : entry)),
         );
       } else {
-        for await (const chunk of streamAssistantReply()) {
-          if (stoppedRef.current.has(localId)) break;
-          accumulated += chunk;
-          const snapshot = accumulated;
+        try {
+          for await (const chunk of streamAssistantReply(undefined, simulateDisconnect)) {
+            if (stoppedRef.current.has(localId)) break;
+            accumulated += chunk;
+            const snapshot = accumulated;
+            setDisplayMessages((previous) =>
+              previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
+            );
+          }
+        } catch {
+          // E03-S031: streamAssistantReply is the only thing that can
+          // throw inside this loop — see its own doc comment for why
+          // that makes any caught error here unambiguously "the stream
+          // disconnected," no distinguished error type needed. Partial
+          // content already accumulated is preserved (S12's "keep what
+          // was generated so far" precedent), not discarded.
+          logger.error("stream disconnected", { correlationId, conversationId, length: accumulated.length });
+          trackEvent("conversation_message_stream_disconnected", { correlationId, properties: { conversationId } });
           setDisplayMessages((previous) =>
-            previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
+            previous.map((entry) =>
+              entry.kind === "streaming" && entry.localId === localId
+                ? { kind: "stream-disconnected", localId, content: accumulated, answerState }
+                : entry,
+            ),
           );
+          return;
         }
       }
     }
@@ -479,10 +543,10 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     );
   }
 
-  function startStream(answerState: AnswerState) {
+  function startStream(answerState: AnswerState, simulateDisconnect = false) {
     const localId = crypto.randomUUID();
     setDisplayMessages((previous) => [...previous, { kind: "streaming", localId, content: "", phase: null }]);
-    void runStream(localId, undefined, answerState);
+    void runStream(localId, undefined, answerState, simulateDisconnect);
   }
 
   function handleRetryStream(localId: string) {
@@ -492,6 +556,30 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       ),
     );
     void runStream(localId);
+  }
+
+  /**
+   * E03-S031. Reconnecting restarts the stream from scratch — no real
+   * transport exists to resume mid-stream from a partial position (see
+   * lib/streaming.ts's own doc comment), and inventing a fake resume
+   * capability would misrepresent what a real implementation could
+   * honestly promise. Reuses the SAME answerState the original attempt
+   * was streaming under (passed straight through, not reclassified) so
+   * a reconnect finalizes consistently with what was originally
+   * requested. Deterministic like every other mock trigger in this
+   * codebase (S21/S29/S30) — reconnecting with the same underlying
+   * trigger still present disconnects again, which is correct, not a
+   * bug; `simulateDisconnect: true` is passed unconditionally because
+   * reaching `stream-disconnected` at all is only possible when it was
+   * already true.
+   */
+  function handleReconnect(localId: string, answerState: AnswerState) {
+    setDisplayMessages((previous) =>
+      previous.map((entry) =>
+        entry.kind === "stream-disconnected" && entry.localId === localId ? { kind: "streaming", localId, content: "", phase: null } : entry,
+      ),
+    );
+    void runStream(localId, undefined, answerState, true);
   }
 
   function handleStop(localId: string) {
@@ -590,10 +678,12 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
             }
 
             const key = entry.kind === "sent" ? entry.message.id : entry.localId;
-            const role = entry.kind === "sent" ? entry.message.role : entry.kind === "streaming" ? "assistant" : "user";
+            const role =
+              entry.kind === "sent" ? entry.message.role : entry.kind === "streaming" || entry.kind === "stream-disconnected" ? "assistant" : "user";
             const roleLabel = role === "assistant" ? "AI" : "你";
             const content = entry.kind === "sent" ? entry.message.content : entry.content;
-            const attachmentNames = entry.kind === "sent" ? entry.message.attachmentNames : entry.kind === "streaming" ? [] : entry.attachmentNames;
+            const attachmentNames =
+              entry.kind === "sent" ? entry.message.attachmentNames : entry.kind === "streaming" || entry.kind === "stream-disconnected" ? [] : entry.attachmentNames;
             const revisions = entry.kind === "sent" ? (entry.message.revisions ?? []) : [];
             const answerState: AnswerState = entry.kind === "sent" ? (entry.message.state ?? "ANSWERED") : "ANSWERED";
 
@@ -654,6 +744,14 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                     <span role="status">{entry.phase ? GENERATION_PHASE_LABELS[entry.phase] : "AI 回覆中…"}</span>
                     <button type="button" onClick={() => handleStop(entry.localId)}>
                       停止生成
+                    </button>
+                  </span>
+                )}
+                {entry.kind === "stream-disconnected" && (
+                  <span>
+                    <span role="alert">連線中斷</span>
+                    <button type="button" onClick={() => handleReconnect(entry.localId, entry.answerState)}>
+                      重新連線
                     </button>
                   </span>
                 )}

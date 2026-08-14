@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { streamAssistantReply } from "./streaming";
+import { MOCK_STREAM_DISCONNECT_TRIGGER, shouldSimulateStreamDisconnect, streamAssistantReply } from "./streaming";
 
 describe("streamAssistantReply (E03-S010)", () => {
   it("yields more than one chunk (genuinely progressive, not one giant chunk)", async () => {
@@ -54,5 +54,60 @@ describe("streamAssistantReply default pacing (E03-S010)", () => {
     // CI timing jitter while still ruling out an effectively-instant
     // default.
     expect(elapsed).toBeGreaterThanOrEqual(40);
+  });
+});
+
+describe("shouldSimulateStreamDisconnect (E03-S031)", () => {
+  it("returns false for ordinary question text", () => {
+    expect(shouldSimulateStreamDisconnect("保固期限是多久？")).toBe(false);
+  });
+
+  it("returns true when the mock trigger is present anywhere in the text", () => {
+    expect(shouldSimulateStreamDisconnect(`保固期限是多久？ ${MOCK_STREAM_DISCONNECT_TRIGGER}`)).toBe(true);
+    expect(shouldSimulateStreamDisconnect(MOCK_STREAM_DISCONNECT_TRIGGER)).toBe(true);
+  });
+});
+
+describe("streamAssistantReply simulateDisconnect (E03-S031)", () => {
+  it("defaults to false — omitting the argument behaves exactly as before this story, completing the full reply", async () => {
+    const chunks: string[] = [];
+    for await (const chunk of streamAssistantReply(0)) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.join("")).toContain("模擬回覆");
+  });
+
+  it("throws roughly halfway through when true, after yielding some real content first (not zero, not the full reply)", async () => {
+    const chunks: string[] = [];
+
+    await expect(async () => {
+      for await (const chunk of streamAssistantReply(0, true)) {
+        chunks.push(chunk);
+      }
+    }).rejects.toThrow();
+
+    expect(chunks.length).toBeGreaterThan(0);
+
+    const fullLength = await collectFull();
+    expect(chunks.length).toBeLessThan(fullLength.length);
+  });
+
+  it("is deterministic — throws at the same point every time for the same input", async () => {
+    async function collectUntilThrow(): Promise<number> {
+      let count = 0;
+      try {
+        for await (const _chunk of streamAssistantReply(0, true)) {
+          count += 1;
+        }
+      } catch {
+        // expected
+      }
+      return count;
+    }
+
+    const first = await collectUntilThrow();
+    const second = await collectUntilThrow();
+    expect(first).toBe(second);
   });
 });

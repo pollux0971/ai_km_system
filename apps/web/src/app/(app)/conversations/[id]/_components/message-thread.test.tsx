@@ -5,7 +5,7 @@ import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK
 import { MOCK_FILE_PROCESSING_FAILURE_TRIGGER, simulateFileProcessing } from "@/lib/file-processing";
 import { runGenerationPhases } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "@/lib/messages";
-import { streamAssistantReply } from "@/lib/streaming";
+import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/messages", () => ({
@@ -17,6 +17,14 @@ vi.mock("@/lib/messages", () => ({
 
 vi.mock("@/lib/streaming", () => ({
   streamAssistantReply: vi.fn(),
+  // E03-S031: real implementation is `userQuestion.includes(...)` — a
+  // pure, deterministic, harmless function, but mocked anyway (not
+  // vi.importActual'd) to match this file's established convention of
+  // never importing real implementations into its mocks. Every
+  // pre-S031 test sends plain trigger-free content, so a default of
+  // "never disconnect" keeps them all passing unchanged; the new S031
+  // tests below override it explicitly.
+  shouldSimulateStreamDisconnect: vi.fn().mockReturnValue(false),
 }));
 
 // Same reasoning as the generation-status mock above: a plain
@@ -51,6 +59,7 @@ const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
 const mockedReviseMessage = vi.mocked(reviseMessage);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
+const mockedShouldSimulateStreamDisconnect = vi.mocked(shouldSimulateStreamDisconnect);
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
 const mockedTrackEvent = vi.mocked(trackEvent);
 const mockedSimulateFileProcessing = vi.mocked(simulateFileProcessing);
@@ -73,6 +82,8 @@ beforeEach(() => {
   mockedRunGenerationPhases.mockReset();
   mockedTrackEvent.mockReset();
   mockedSimulateFileProcessing.mockReset();
+  mockedShouldSimulateStreamDisconnect.mockReset();
+  mockedShouldSimulateStreamDisconnect.mockReturnValue(false);
 
   // Only reached when a submitted message actually has attachments —
   // every pre-S29 test uses submitViaComposer, which never attaches
@@ -1936,5 +1947,127 @@ describe("MessageThread no-evidence/abstention UX (E03-S030)", () => {
 
     await waitFor(() => expect(mockedWriteText).toHaveBeenCalledWith(ANSWER_STATE_FALLBACK_CONTENT.NO_EVIDENCE));
     expect(await screen.findByRole("button", { name: "已複製" })).toBeInTheDocument();
+  });
+});
+
+describe("MessageThread stream disconnect/reconnect UX (E03-S031)", () => {
+  it("shows 連線中斷 and preserves the partial content already received when the stream disconnects mid-way", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "第一段";
+      throw new Error("模擬串流中斷");
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    expect(await screen.findByText("第一段")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("連線中斷");
+    expect(screen.getByRole("button", { name: "重新連線" })).toBeInTheDocument();
+    expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
+  });
+
+  it("calls streamAssistantReply with the disconnect flag correctly wired: true when shouldSimulateStreamDisconnect says so, false otherwise", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      return;
+    });
+
+    mockedShouldSimulateStreamDisconnect.mockReturnValue(false);
+    const { unmount } = render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+    await waitFor(() => expect(mockedStreamAssistantReply).toHaveBeenCalledWith(undefined, false));
+    unmount();
+
+    mockedStreamAssistantReply.mockReset();
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      throw new Error("模擬串流中斷");
+    });
+    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    // Content is arbitrary here — shouldSimulateStreamDisconnect is
+    // mocked above to unconditionally return true, so the real trigger
+    // string's presence/absence doesn't matter for this test's wiring
+    // check (streaming.test.ts covers the real classification itself).
+    submitViaComposer("你好");
+    await waitFor(() => expect(mockedStreamAssistantReply).toHaveBeenCalledWith(undefined, true));
+  });
+
+  it("clicking 重新連線 restarts the stream from scratch and, once it succeeds, finalizes with the ORIGINAL answerState rather than defaulting to ANSWERED", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
+    mockedStreamAssistantReply.mockImplementationOnce(async function* () {
+      yield "第一段";
+      throw new Error("模擬串流中斷");
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    // "PARTIAL" trigger (E03-S021) so this test also confirms reconnect
+    // finalizes with the SAME non-default state, not silently ANSWERED.
+    submitViaComposer(`你好 ${MOCK_ANSWER_STATE_TRIGGERS.PARTIAL}`);
+    await screen.findByRole("alert");
+
+    mockedStreamAssistantReply.mockImplementationOnce(async function* () {
+      yield "重新連線後的完整回覆";
+    });
+    mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "重新連線後的完整回覆", state: "PARTIAL" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "重新連線" }));
+
+    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "重新連線後的完整回覆", "PARTIAL"));
+    expect(await screen.findByText("重新連線後的完整回覆")).toBeInTheDocument();
+  });
+
+  it("reconnecting with the same persistent trigger deterministically disconnects again, not silently succeeding or getting stuck", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "第一段";
+      throw new Error("模擬串流中斷");
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: "重新連線" }));
+
+    await waitFor(() => expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("alert")).toHaveTextContent("連線中斷");
+    expect(screen.getByRole("button", { name: "重新連線" })).toBeInTheDocument();
+  });
+
+  it("emits attempt and disconnected telemetry sharing one correlation id", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      throw new Error("模擬串流中斷");
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+    await screen.findByRole("alert");
+
+    const attemptCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "conversation_message_stream_attempt");
+    const disconnectedCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "conversation_message_stream_disconnected");
+    expect(attemptCall).toBeDefined();
+    expect(disconnectedCall).toBeDefined();
+    const attemptId = (attemptCall as [string, { correlationId: string }])[1].correlationId;
+    const disconnectedId = (disconnectedCall as [string, { correlationId: string }])[1].correlationId;
+    expect(attemptId).toBe(disconnectedId);
   });
 });

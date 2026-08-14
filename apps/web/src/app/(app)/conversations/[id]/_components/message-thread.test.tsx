@@ -1833,3 +1833,108 @@ describe("MessageThread file processing status (E03-S029)", () => {
     // describe blocks' own telemetry tests.
   });
 });
+
+describe("MessageThread no-evidence/abstention UX (E03-S030)", () => {
+  // SOURCE_BASELINE.md's own line for this story (line 1251, inside «»
+  // — this document's reserved verbatim-quotation marker) gives
+  // NO_EVIDENCE's exact required display sentence, missed during
+  // E03-S021 (which first introduced ANSWER_STATE_FALLBACK_CONTENT)
+  // and corrected here after independent review caught the gap — see
+  // lib/answer-state.ts's own doc comment for the full account. Beyond
+  // that correction, E03-S021 already delivers this story's named
+  // capability end-to-end (classification, fallback content, badge,
+  // dedicated E2E coverage). Per
+  // AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md's
+  // Scope Freeze section's explicit, unconditional prohibition on
+  // "Developer 自己腦補需求 → 擴大 scope" (the AI Agent Rule's "不知道
+  // 產品行為 → BLOCKED/ASSUMPTION" is related but actually permits a
+  // self-adopted ASSUMPTION path — Scope Freeze is the decisive,
+  // unconditional citation here), inventing new visible UI content
+  // beyond what SOURCE_BASELINE actually specifies (a "try rephrasing"
+  // suggestion, a link to a Knowledge Base page that doesn't exist yet
+  // — E05 is 0/31 approved) would be exactly the self-invented product
+  // behavior that section forbids. This
+  // story's remaining increment is verifying two real interactions
+  // between S21's abstention states and LATER features that didn't
+  // exist yet when S21 shipped and were never cross-tested: citation
+  // rendering (S13, predates S21) and Copy Answer (S27, postdates
+  // S21). Full reasoning recorded via /advisor in docs/stories/E03-S030.md.
+  const mockedWriteText = vi.fn();
+  let originalClipboardDescriptor: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    mockedWriteText.mockReset();
+    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: mockedWriteText },
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(navigator, "clipboard", originalClipboardDescriptor);
+    } else {
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
+  });
+
+  it.each(ANSWER_STATES.filter((state) => ANSWER_STATE_FALLBACK_CONTENT[state] !== undefined))(
+    "%s's fallback content never renders a citation badge, even though a normal ANSWERED reply's content always would",
+    async (state) => {
+      mockedListMessages.mockResolvedValue({
+        ok: true,
+        value: [
+          SENT_USER_MESSAGE,
+          {
+            id: "a1",
+            conversationId: "c1",
+            role: "assistant",
+            content: ANSWER_STATE_FALLBACK_CONTENT[state]!,
+            attachmentNames: [],
+            createdAt: "2026-08-14T00:00:01.000Z",
+            state,
+          },
+        ],
+      });
+
+      render(<MessageThread conversationId="c1" />);
+
+      await screen.findByText(ANSWER_STATE_LABELS[state]);
+      // The fallback text itself never contains a literal `[N]`
+      // substring (see answer-state.ts's own ANSWER_STATE_FALLBACK_CONTENT
+      // doc comment) — asserting no <sup> citation marker rendered
+      // proves message-content.tsx's regex-based parser genuinely finds
+      // nothing to badge, not just that nobody happened to click one.
+      expect(screen.queryByRole("superscript")).not.toBeInTheDocument();
+    },
+  );
+
+  it("clicking 複製 on a NO_EVIDENCE reply copies its honest fallback text, not a fabricated real answer", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: ANSWER_STATE_FALLBACK_CONTENT.NO_EVIDENCE!,
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          state: "NO_EVIDENCE",
+        },
+      ],
+    });
+    mockedWriteText.mockResolvedValue(undefined);
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("查無依據");
+
+    fireEvent.click(screen.getByRole("button", { name: "複製" }));
+
+    await waitFor(() => expect(mockedWriteText).toHaveBeenCalledWith(ANSWER_STATE_FALLBACK_CONTENT.NO_EVIDENCE));
+    expect(await screen.findByRole("button", { name: "已複製" })).toBeInTheDocument();
+  });
+});

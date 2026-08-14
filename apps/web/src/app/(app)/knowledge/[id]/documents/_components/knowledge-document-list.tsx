@@ -57,7 +57,6 @@ type State =
  * KnowledgeBaseDocument) — the size line only renders when the value
  * is present, rather than showing a misleading "0 B".
  *
-
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
  * an unconditional filter, same as listMessages/listKnowledgeBases), so

@@ -2,12 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import KnowledgeDetail from "./knowledge-detail";
 import { getKnowledgeBase } from "@/lib/knowledge-bases";
+import { listKnowledgeBaseDocuments } from "@/lib/knowledge-documents";
 
 vi.mock("@/lib/knowledge-bases", () => ({
   getKnowledgeBase: vi.fn(),
 }));
 
+vi.mock("@/lib/knowledge-documents", () => ({
+  listKnowledgeBaseDocuments: vi.fn(),
+}));
+
 const mockedGetKnowledgeBase = vi.mocked(getKnowledgeBase);
+const mockedListKnowledgeBaseDocuments = vi.mocked(listKnowledgeBaseDocuments);
 
 const sampleKnowledgeBase = {
   id: "kb1",
@@ -18,6 +24,13 @@ const sampleKnowledgeBase = {
 
 beforeEach(() => {
   mockedGetKnowledgeBase.mockReset();
+  mockedListKnowledgeBaseDocuments.mockReset();
+  // Default: no documents. Every existing test that doesn't itself care
+  // about the E05-S010 document-count summary relies on this default
+  // rather than mocking listKnowledgeBaseDocuments individually — same
+  // "one shared default, only the tests that care override it" approach
+  // that keeps this file's earlier tests (S006-S009) unchanged by S010.
+  mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
 });
 
 describe("KnowledgeDetail (E05-S005)", () => {
@@ -173,6 +186,61 @@ describe("KnowledgeDetail (E05-S005)", () => {
 
     const summary = await screen.findByText("綁定模型:", { exact: false });
     expect(summary).toHaveTextContent("進階模型（地端）");
+  });
+
+  it("shows a 文件列表 link pointing at /knowledge/{id}/documents", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByRole("link", { name: "文件列表" })).toHaveAttribute("href", "/knowledge/kb1/documents");
+  });
+
+  it("shows 尚無文件 when the document count is zero", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("文件:", { exact: false });
+    expect(summary).toHaveTextContent("尚無文件");
+  });
+
+  it("shows the document count once documents exist", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "a.pdf", sizeBytes: 1000, uploadedAt: "2026-08-10T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "b.pdf", sizeBytes: 2000, uploadedAt: "2026-08-11T00:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("文件:", { exact: false });
+    expect(summary).toHaveTextContent("2 份文件");
+  });
+
+  it("degrades the document count to a － placeholder (not a full-page error) when only the document fetch fails", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByRole("heading", { name: "研發部門知識庫", level: 1 })).toBeInTheDocument();
+    const summary = await screen.findByText("文件:", { exact: false });
+    expect(summary).toHaveTextContent("－");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not call listKnowledgeBaseDocuments when the knowledge base itself is not found", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: null });
+
+    render(<KnowledgeDetail id="does-not-exist" />);
+    await screen.findByRole("alert");
+
+    expect(mockedListKnowledgeBaseDocuments).not.toHaveBeenCalled();
   });
 
   it("shows a distinct error state when loading fails", async () => {

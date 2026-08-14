@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getConversation, type ConversationMode, type ConversationSummary } from "@/lib/conversations";
+import { ArchiveConversation } from "./archive-conversation";
 import { DeleteConversation } from "./delete-conversation";
 import { KnowledgeSelector } from "./knowledge-selector";
 import { MessageThread } from "./message-thread";
@@ -56,6 +57,12 @@ type State =
  * navigates away entirely (back to /conversations) — there is no
  * "still on this page, showing the updated result" outcome, since the
  * page's own subject no longer exists.
+ *
+ * S26 "Archive/unarchive Conversation" adds <ArchiveConversation> in
+ * the same identity/existence group as Rename and Delete. Unlike
+ * delete, a successful archive/unarchive stays on this page — the
+ * conversation still exists, just with its archived flag flipped, so
+ * there's nothing to navigate away from.
  */
 export default function ConversationDetail({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -118,6 +125,7 @@ export default function ConversationDetail({ id }: { id: string }) {
   return (
     <main style={{ padding: 32 }}>
       <RenameConversation conversationId={state.conversation.id} initialTitle={state.conversation.title} />
+      <ArchiveConversation conversationId={state.conversation.id} initialArchived={state.conversation.archived ?? false} />
       <DeleteConversation conversationId={state.conversation.id} title={state.conversation.title} />
       <ModeSwitch
         conversationId={state.conversation.id}

@@ -72,7 +72,10 @@ test("E03-S021: NO_EVIDENCE trigger replaces the reply with fallback content and
   // No special role — this badge is informational, not an alert (that's
   // reserved for ERROR/PERMISSION_DENIED; see message-thread.tsx).
   await expect(page.getByRole("main").getByText("查無依據", { exact: true })).toBeVisible();
-  await expect(page.getByText("找不到足夠的依據可以回答這個問題", { exact: false })).toBeVisible();
+  // E03-S30 corrected this fallback sentence to match SOURCE_BASELINE.md's
+  // own quoted («»-marked) display text for this state (line 1251) —
+  // see lib/answer-state.ts's own doc comment for the full story.
+  await expect(page.getByText("找不到足夠企業資料支持此答案", { exact: false })).toBeVisible();
   // The normal fixed mock reply text must NOT appear — content was
   // replaced outright, not appended alongside it.
   await expect(page.getByText("模擬回覆）這是前端展示用的固定文字", { exact: false })).toHaveCount(0);

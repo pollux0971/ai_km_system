@@ -1835,21 +1835,23 @@ describe("MessageThread file processing status (E03-S029)", () => {
 });
 
 describe("MessageThread no-evidence/abstention UX (E03-S030)", () => {
-  // SOURCE_BASELINE.md gives this story only a bare title, "E03-S30 No
-  // Evidence UX"; the epic's expanded title ("No-evidence/abstention
-  // UX") names a capability that E03-S021 already delivers end-to-end
-  // (classification, fallback content, badge, dedicated E2E coverage)
-  // — see lib/answer-state.ts's own doc comment, which already cites
-  // the same SOURCE_BASELINE §5 pinned decision #11 ("無足夠資料時 AI
-  // 必須 Abstain") this story would otherwise cite. Per
+  // SOURCE_BASELINE.md's own line for this story (line 1251, inside «»
+  // — this document's reserved verbatim-quotation marker) gives
+  // NO_EVIDENCE's exact required display sentence, missed during
+  // E03-S021 (which first introduced ANSWER_STATE_FALLBACK_CONTENT)
+  // and corrected here after independent review caught the gap — see
+  // lib/answer-state.ts's own doc comment for the full account. Beyond
+  // that correction, E03-S021 already delivers this story's named
+  // capability end-to-end (classification, fallback content, badge,
+  // dedicated E2E coverage). Per
   // AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md's
   // AI Agent Rule ("不知道產品行為 → BLOCKED/ASSUMPTION") and its
   // explicit prohibition on "Developer 自己腦補需求 → 擴大 scope",
-  // inventing new visible UI content (a "try rephrasing" suggestion, a
-  // link to a Knowledge Base page that doesn't exist yet — E05 is 0/31
-  // approved) would be exactly the self-invented product behavior that
-  // policy forbids. This story's genuine, non-duplicative, policy-
-  // compliant increment is instead verifying two real interactions
+  // inventing new visible UI content beyond what SOURCE_BASELINE
+  // actually specifies (a "try rephrasing" suggestion, a link to a
+  // Knowledge Base page that doesn't exist yet — E05 is 0/31 approved)
+  // would be self-invented product behavior policy forbids. This
+  // story's remaining increment is verifying two real interactions
   // between S21's abstention states and LATER features that didn't
   // exist yet when S21 shipped and were never cross-tested: citation
   // rendering (S13, predates S21) and Copy Answer (S27, postdates

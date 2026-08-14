@@ -79,9 +79,23 @@ export const MOCK_ANSWER_STATE_TRIGGERS: Partial<Record<AnswerState, string>> = 
  * message-thread.tsx's runStream). Each message follows MOCK_REPLY's
  * own "(模擬回覆)" labeling convention — an honest placeholder, not a
  * fabricated real explanation of why the answer is missing.
+ *
+ * NO_EVIDENCE's core sentence — "找不到足夠企業資料支持此答案。" — is
+ * SOURCE_BASELINE.md's own line (line 1251) for E03-S30 "No Evidence
+ * UX", quoted there inside «» guillemets. That marker is this
+ * document's own reserved verbatim-quotation convention, used in only
+ * a handful of places across the entire baseline (the platform's own
+ * canonical name/description, a couple of pinned MVP-philosophy
+ * quotes, and this line) — a strong, deliberate signal that this exact
+ * wording is meant to be reproduced closely, not paraphrased. This
+ * value originally read differently (a longer, invented paraphrase)
+ * because E03-S021, which first introduced this constant, never
+ * located this specific SOURCE_BASELINE line — corrected here as part
+ * of E03-S30's own work (independent review caught the miss; see
+ * docs/stories/E03-S030.md).
  */
 export const ANSWER_STATE_FALLBACK_CONTENT: Partial<Record<AnswerState, string>> = {
-  NO_EVIDENCE: "（模擬回覆）在您有權限的知識範圍內，找不到足夠的依據可以回答這個問題。",
+  NO_EVIDENCE: "（模擬回覆）找不到足夠企業資料支持此答案。",
   ERROR: "（模擬回覆）生成回覆時發生錯誤，請稍後再試。",
   PERMISSION_DENIED: "（模擬回覆）您沒有權限查看這個問題所需的資料，因此無法提供回答。",
   SOURCE_UNAVAILABLE: "（模擬回覆）回答這個問題所需的來源目前無法取得，請稍後再試。",

@@ -2,21 +2,22 @@ import { test, expect } from "@playwright/test";
 import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
 
 /**
- * E03-S030 critical flow. SOURCE_BASELINE.md gives this story only a
- * bare title, "E03-S30 No Evidence UX"; the epic's expanded title
- * ("No-evidence/abstention UX") names a capability E03-S021 already
- * fully delivers (classification, fallback content, badge, its own
- * dedicated E2E coverage in answer-state.spec.ts). Per
- * AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md's
- * explicit prohibition on inventing unrequested product behavior, this
- * story's genuine increment is verifying two real interactions between
- * S21's abstention states and LATER features that never existed at the
- * same time before now: citation rendering (S13, predates S21 — a
- * negative check) and Copy Answer (S27, postdates S21 — never
- * exercised against a non-ANSWERED message before). Full /advisor
- * reasoning trail in docs/stories/E03-S030.md. Navigation after login
- * always uses in-app link clicks, never page.goto() — see
- * conversations.spec.ts's file doc comment for why.
+ * E03-S030 critical flow. SOURCE_BASELINE.md's own line for this story
+ * (line 1251, inside «» — this document's reserved verbatim-quotation
+ * marker) gives NO_EVIDENCE's exact required display sentence,
+ * "找不到足夠企業資料支持此答案。" — missed during E03-S021 (which first
+ * introduced this fallback content) and independent review caught the
+ * gap during this story; lib/answer-state.ts's own doc comment has the
+ * full account. Beyond correcting that text, this story's remaining
+ * increment (E03-S021 already delivers classification/badge/E2E
+ * coverage otherwise) is verifying two real interactions between S21's
+ * abstention states and LATER features that never existed at the same
+ * time before now: citation rendering (S13, predates S21 — a negative
+ * check) and Copy Answer (S27, postdates S21 — never exercised against
+ * a non-ANSWERED message before). Full /advisor reasoning trail in
+ * docs/stories/E03-S030.md. Navigation after login always uses in-app
+ * link clicks, never page.goto() — see conversations.spec.ts's file
+ * doc comment for why.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -43,7 +44,10 @@ async function openConversation(page: import("@playwright/test").Page) {
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
-const NO_EVIDENCE_FALLBACK = "（模擬回覆）在您有權限的知識範圍內，找不到足夠的依據可以回答這個問題。";
+// SOURCE_BASELINE.md line 1251's own «»-quoted display text for this
+// state, prefixed with the MOCK_REPLY-wide "(模擬回覆)" honest-mock
+// label — see lib/answer-state.ts's own doc comment.
+const NO_EVIDENCE_FALLBACK = "（模擬回覆）找不到足夠企業資料支持此答案。";
 
 test("E03-S030: a NO_EVIDENCE (abstained) reply never renders a citation badge", async ({ page }) => {
   await openConversation(page);

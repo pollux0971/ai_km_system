@@ -2,8 +2,11 @@
  * E03-S010: SSE/WebSocket streaming renderer. SOURCE_BASELINE.md and
  * the epic file give this story only its title — zero technical
  * content anywhere (no SSE-vs-WebSocket choice, no chunk/frame format,
- * no reconnection semantics; that last one is explicitly a separate,
- * still-unbuilt story, E03-S031 "stream disconnect/reconnect UX").
+ * no reconnection semantics — that last one was explicitly flagged
+ * back then as a separate, still-unbuilt story, E03-S031 "stream
+ * disconnect/reconnect UX"; S031 has since been implemented, see
+ * `shouldSimulateStreamDisconnect`/`MOCK_STREAM_DISCONNECT_TRIGGER`
+ * and `streamAssistantReply`'s own updated doc comment below).
  * There is no real Model Gateway, no LLM integration, and no SSE/
  * WebSocket endpoint contract anywhere — `contracts/openapi/core.yaml`
  * is an empty scaffold, and its own comment states real endpoints must
@@ -43,6 +46,22 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * E03-S031 "stream disconnect/reconnect UX". No real transport exists
+ * to genuinely disconnect (see this file's own top doc comment), so —
+ * same as E03-S021's `MOCK_ANSWER_STATE_TRIGGERS` and E03-S029's
+ * `MOCK_FILE_PROCESSING_FAILURE_TRIGGER` — a deterministic, honestly-
+ * labeled mock trigger is the only way to make the disconnect path
+ * genuinely reachable through the UI rather than permanently
+ * unreachable dead code. Same "[模擬:X]" bracketed-marker convention as
+ * those two.
+ */
+export const MOCK_STREAM_DISCONNECT_TRIGGER = "[模擬:STREAM_DISCONNECT]";
+
+export function shouldSimulateStreamDisconnect(userQuestion: string): boolean {
+  return userQuestion.includes(MOCK_STREAM_DISCONNECT_TRIGGER);
+}
+
+/**
  * Yields MOCK_REPLY one character at a time with a short delay,
  * simulating progressive arrival. Splitting by character rather than
  * by word (`.split(" ")`) is deliberate — Chinese text has no spaces
@@ -58,10 +77,29 @@ function delay(ms: number): Promise<void> {
  * in one microtask flush instead of ~1.5s of real wall-clock time per
  * consumption, without reaching for fake-timer plumbing around an
  * async generator.
+ *
+ * `simulateDisconnect` (E03-S031, default false — every pre-S031 call
+ * site keeps its exact prior behavior unchanged) throws partway
+ * through — roughly halfway, so the consumer genuinely has SOME
+ * partial content to preserve, matching how a real mid-stream network
+ * drop would leave a partial answer sitting in the UI rather than
+ * nothing at all. Deliberately a plain `throw`, not a distinguished
+ * error type or `AsyncGenerator.return()`/`.throw()` protocol dance —
+ * this generator is the ONLY thing that can throw inside the consumer's
+ * `for await` loop (message-thread.tsx's runStream), so any caught
+ * error there is unambiguously "the stream disconnected," with no
+ * other failure mode to disambiguate from.
  */
-export async function* streamAssistantReply(delayMs = 20): AsyncGenerator<string> {
-  for (const character of Array.from(MOCK_REPLY)) {
+export async function* streamAssistantReply(delayMs = 20, simulateDisconnect = false): AsyncGenerator<string> {
+  const characters = Array.from(MOCK_REPLY);
+  const disconnectAtIndex = Math.floor(characters.length / 2);
+  let index = 0;
+  for (const character of characters) {
+    if (simulateDisconnect && index === disconnectAtIndex) {
+      throw new Error("模擬串流中斷");
+    }
     if (delayMs > 0) await delay(delayMs);
     yield character;
+    index++;
   }
 }

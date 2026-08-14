@@ -6,6 +6,8 @@ import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getKnowledgeBase, type KnowledgeBaseSummary } from "@/lib/knowledge-bases";
 import { listKnowledgeBaseDocuments, type KnowledgeBaseDocument } from "@/lib/knowledge-documents";
+import KnowledgeDocumentUpload from "./knowledge-document-upload";
+import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
 
@@ -18,14 +20,24 @@ type State =
 /**
  * E05-S010 "KB document list". A dedicated route
  * (/knowledge/[id]/documents), same "separate route per KB concern"
- * precedent S04/S06/S07/S08/S09 already established. Read-only — no
- * upload entry point here, same "the link is added by the story that
- * builds the destination" precedent knowledge-detail.tsx's own 編輯/
- * 權限設定/成員設定/提示詞設定/模型設定 links each followed (S03/S06/
- * S07/S08/S09 each added their own link retroactively once their route
- * existed, rather than an earlier story stubbing a link to nothing);
- * E05-S011 "Single-file upload" is this story's own not-yet-built
- * destination, so no 上傳文件 entry point exists yet.
+ * precedent S04/S06/S07/S08/S09 already established.
+ *
+ * E05-S011 "Single-file upload" adds KnowledgeDocumentUpload directly
+ * on THIS page, not a separate `/knowledge/[id]/documents/upload`
+ * route — unlike the KB-level settings pages (permissions/members/
+ * prompt/model), each their own dedicated route off /knowledge/[id]/,
+ * "documents" is a growing CHILD COLLECTION, and "add an item" belongs
+ * on the same page as the list it adds to. Same relationship
+ * lib/messages.ts's Message has to ConversationSummary: sendMessage()
+ * is invoked from a composer embedded directly in
+ * conversation-detail.tsx (/conversations/[id]) — there's no separate
+ * `/conversations/[id]/messages/new` route — not the S03/S04-style
+ * "separate route, one link out to it" relationship this page itself
+ * has with knowledge-detail.tsx (a KB has exactly one edit form; a
+ * document list can gain many items, each via the same in-place
+ * action). refetchDocuments() re-fetches only the document list (not
+ * knowledgeBase) after a successful upload, passed to
+ * KnowledgeDocumentUpload as `onUploaded`.
  *
  * Two sequential fetches, not parallel: getKnowledgeBase(id) first, and
  * only once that resolves to a real knowledge base does it fetch
@@ -91,6 +103,26 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
     };
   }, [id]);
 
+  async function refetchDocuments() {
+    const correlationId = crypto.randomUUID();
+    logger.info("refreshing document list", { correlationId, id });
+    const documentsResult = await listKnowledgeBaseDocuments(id);
+
+    if (!documentsResult.ok) {
+      // Same "secondary fetch failure shouldn't discard an
+      // otherwise-successful page" reasoning as knowledge-detail.tsx's
+      // own documentCount fetch — the upload itself already succeeded
+      // and the page is already showing a valid (if now slightly
+      // stale) list; silently keep it rather than erroring the whole
+      // page over a refresh that failed after the real work was done.
+      logger.error("failed to refresh document list", { correlationId, id, code: documentsResult.error.code });
+      return;
+    }
+
+    logger.info("document list refreshed", { correlationId, id, count: documentsResult.value.length });
+    setState((prev) => (prev.status === "loaded" ? { ...prev, documents: documentsResult.value } : prev));
+  }
+
   if (state.status === "loading") {
     return (
       <main style={{ padding: 32 }}>
@@ -121,6 +153,8 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
     <main style={{ padding: 32 }}>
       <h1>{knowledgeBase.name} — 文件列表</h1>
 
+      <KnowledgeDocumentUpload knowledgeBaseId={id} onUploaded={refetchDocuments} />
+
       {documents.length === 0 && <EmptyState message="這個知識庫尚無文件。" />}
 
       {documents.length > 0 && (
@@ -142,20 +176,4 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
       </p>
     </main>
   );
-}
-
-/**
- * Duplicated from conversations/[id]/_components/file-attachment-picker.tsx
- * (E03-S008) rather than extracted into a shared module — that file
- * belongs to E03 (a different domain, outside this story's allowed
- * scope), and STORY_WORKFLOW's Domain Ownership Boundary forbids
- * reaching into another domain's file to refactor it even for a
- * genuinely identical 4-line helper. A real shared formatter would
- * belong in a package like `@ai-km/ui`, which is a decision bigger than
- * this one story should make unilaterally.
- */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

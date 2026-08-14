@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import KnowledgeDocumentList from "./knowledge-document-list";
 import { getKnowledgeBase } from "@/lib/knowledge-bases";
-import { listKnowledgeBaseDocuments } from "@/lib/knowledge-documents";
+import { addKnowledgeBaseDocument, listKnowledgeBaseDocuments } from "@/lib/knowledge-documents";
 
 vi.mock("@/lib/knowledge-bases", () => ({
   getKnowledgeBase: vi.fn(),
@@ -10,10 +10,16 @@ vi.mock("@/lib/knowledge-bases", () => ({
 
 vi.mock("@/lib/knowledge-documents", () => ({
   listKnowledgeBaseDocuments: vi.fn(),
+  addKnowledgeBaseDocument: vi.fn(),
+}));
+
+vi.mock("@/lib/telemetry", () => ({
+  trackEvent: vi.fn(),
 }));
 
 const mockedGetKnowledgeBase = vi.mocked(getKnowledgeBase);
 const mockedListKnowledgeBaseDocuments = vi.mocked(listKnowledgeBaseDocuments);
+const mockedAddKnowledgeBaseDocument = vi.mocked(addKnowledgeBaseDocument);
 
 const sampleKnowledgeBase = {
   id: "kb1",
@@ -25,6 +31,7 @@ const sampleKnowledgeBase = {
 beforeEach(() => {
   mockedGetKnowledgeBase.mockReset();
   mockedListKnowledgeBaseDocuments.mockReset();
+  mockedAddKnowledgeBaseDocument.mockReset();
 });
 
 describe("KnowledgeDocumentList (E05-S010)", () => {
@@ -159,5 +166,39 @@ describe("KnowledgeDocumentList (E05-S010)", () => {
     await screen.findByText("這個知識庫尚無文件。");
 
     expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledWith("kb-sample-2");
+  });
+
+  it("shows the E05-S011 upload widget once loaded", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    expect(await screen.findByLabelText("上傳文件")).toBeInTheDocument();
+  });
+
+  it("refreshes the document list after a successful upload — a document that appears only in the SECOND listKnowledgeBaseDocuments call shows up without a reload", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "新上傳的檔案.pdf", sizeBytes: 1000, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+      });
+    mockedAddKnowledgeBaseDocument.mockResolvedValue({
+      ok: true,
+      value: { id: "doc1", knowledgeBaseId: "kb1", name: "新上傳的檔案.pdf", sizeBytes: 1000, uploadedAt: "2026-08-15T00:00:00.000Z" },
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    const file = new File([new Uint8Array(1000)], "新上傳的檔案.pdf");
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(screen.getByText("新上傳的檔案.pdf")).toBeInTheDocument());
+    expect(screen.queryByText("這個知識庫尚無文件。")).not.toBeInTheDocument();
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(2);
   });
 });

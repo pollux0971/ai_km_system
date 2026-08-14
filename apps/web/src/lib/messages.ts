@@ -135,3 +135,28 @@ export async function receiveAssistantReply(conversationId: string, content: str
 
   return { ok: true, value: message };
 }
+
+/**
+ * E03-S019: "Regenerate answer action". message-thread.tsx calls this
+ * before starting a fresh stream to replace an already-settled
+ * assistant reply — without it, regenerating would leave the old
+ * message behind in the store while a new one gets added via
+ * receiveAssistantReply, so a reload would show BOTH the discarded and
+ * the regenerated reply instead of just the one the user actually
+ * wanted (a real duplicate-side-effect bug, not just a display quirk —
+ * directly the kind of thing Functional AC 5, "重複請求/重試不得造成
+ * 未定義重複 side effect", is about).
+ *
+ * Deliberately unconditional (no NOT_FOUND/conversation-existence
+ * check like sendMessage/receiveAssistantReply have) — unlike those,
+ * this is never called with an unverified id from outside; its only
+ * caller passes the id of a message message-thread.tsx is already
+ * rendering on screen, so the conversation it belongs to is
+ * definitionally loaded. Scoped by message id alone (ids are globally
+ * unique via crypto.randomUUID()), not conversationId, since there's
+ * nothing meaningful to additionally validate.
+ */
+export async function deleteMessage(messageId: string): Promise<Result<void, ApiError>> {
+  writeStore(readStore().filter((message) => message.id !== messageId));
+  return { ok: true, value: undefined };
+}

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
 import { runGenerationPhases } from "@/lib/generation-status";
-import { listMessages, receiveAssistantReply, sendMessage } from "@/lib/messages";
+import { deleteMessage, listMessages, receiveAssistantReply, sendMessage } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -10,6 +10,7 @@ vi.mock("@/lib/messages", () => ({
   listMessages: vi.fn(),
   sendMessage: vi.fn(),
   receiveAssistantReply: vi.fn(),
+  deleteMessage: vi.fn(),
 }));
 
 vi.mock("@/lib/streaming", () => ({
@@ -37,6 +38,7 @@ vi.mock("@/lib/telemetry", () => ({
 const mockedListMessages = vi.mocked(listMessages);
 const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
+const mockedDeleteMessage = vi.mocked(deleteMessage);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
 const mockedTrackEvent = vi.mocked(trackEvent);
@@ -54,6 +56,7 @@ beforeEach(() => {
   mockedListMessages.mockReset();
   mockedSendMessage.mockReset();
   mockedReceiveAssistantReply.mockReset();
+  mockedDeleteMessage.mockReset();
   mockedStreamAssistantReply.mockReset();
   mockedRunGenerationPhases.mockReset();
   mockedTrackEvent.mockReset();
@@ -70,6 +73,7 @@ beforeEach(() => {
     return;
   });
   mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
+  mockedDeleteMessage.mockResolvedValue({ ok: true, value: undefined });
 });
 
 function submitViaComposer(content: string) {
@@ -980,5 +984,197 @@ describe("MessageThread conversation context indicator (E03-S018)", () => {
 
     submitViaComposer("第二輪");
     await waitFor(() => expect(screen.getByText("上下文：包含 4 則先前訊息。")).toBeInTheDocument());
+  });
+});
+
+describe("MessageThread regenerate answer action (E03-S019)", () => {
+  it("shows a 重新產生 button on the last settled assistant reply, but not on the user's own message", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "已完成的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("已完成的回覆");
+    expect(screen.getAllByRole("button", { name: "重新產生" })).toHaveLength(1);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).not.toHaveTextContent("重新產生");
+    expect(items[1]).toHaveTextContent("重新產生");
+  });
+
+  it("does not show 重新產生 on an earlier assistant reply once a newer turn exists — only the last entry gets it", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "第一輪回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+        {
+          id: "m2",
+          conversationId: "c1",
+          role: "user",
+          content: "第二個問題",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:02.000Z",
+        },
+        {
+          id: "a2",
+          conversationId: "c1",
+          role: "assistant",
+          content: "第二輪回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:03.000Z",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("第二輪回覆");
+    expect(screen.getAllByRole("button", { name: "重新產生" })).toHaveLength(1);
+    const items = screen.getAllByRole("listitem");
+    expect(items[1]).not.toHaveTextContent("重新產生");
+    expect(items[3]).toHaveTextContent("重新產生");
+  });
+
+  it("clicking 重新產生 deletes the old message and starts a fresh stream that replaces it", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "新的回覆";
+    });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "a2",
+        conversationId: "c1",
+        role: "assistant",
+        content: "新的回覆",
+        attachmentNames: [],
+        createdAt: "2026-08-14T00:00:02.000Z",
+      },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("舊的回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
+
+    expect(mockedDeleteMessage).toHaveBeenCalledWith("a1");
+    await waitFor(() => expect(screen.getByText("新的回覆")).toBeInTheDocument());
+    expect(screen.queryByText("舊的回覆")).not.toBeInTheDocument();
+    // Exactly one user message + one (regenerated) assistant reply —
+    // the old reply is genuinely replaced, not left behind as a second
+    // entry (Functional AC 5: no undefined duplicate side effect).
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("locks the composer while a regeneration is in flight, same as any other turn", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+    mockedRunGenerationPhases.mockImplementation(async function* () {
+      yield "searching";
+      await new Promise<void>(() => {});
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("舊的回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
+
+    await waitFor(() => expect(screen.getByText("搜尋中…")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "不該送得出去" } });
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+  });
+
+  it("stopping a regeneration before any content arrives leaves that turn with no assistant reply at all", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+    // Gated with a controllable Promise (not the default empty-generator
+    // mock, and not an eternally-pending one either) — with the default,
+    // the whole phase+stream sequence completes so fast that "streaming"
+    // never reliably paints before settling; with an eternally-pending
+    // await, the loop can never regain control to check the stop flag
+    // at all. Both are the exact traps E03-S012's own evidence file
+    // documents. Click stop, THEN release the gate, so the loop's
+    // `.next()` finally resolves and notices the flag on its next check.
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    mockedRunGenerationPhases.mockImplementation(async function* () {
+      yield "searching";
+      await gate;
+      yield "reading";
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("舊的回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "停止生成" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
+    releaseGate();
+
+    // The old reply is already gone (deleteMessage already ran when
+    // regenerate was clicked) and nothing replaced it — an accepted,
+    // documented consequence of composing regenerate with S12's
+    // empty-stop-removes-the-entry behavior, not a new gap.
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(1));
+    expect(screen.queryByText("舊的回覆")).not.toBeInTheDocument();
+    expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
   });
 });

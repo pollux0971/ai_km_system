@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 26 | 0 | 0 | 0 | 7 |
+| E03 AI Conversation Experience | 33 | 26 | 0 | 1 | 0 | 6 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 46 | 0 | 0 | 0 | 129 |
+| **合計** | **175** | 46 | 0 | 1 | 0 | 128 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -91,7 +91,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S024 | approved | story/E03-S024-rename-conversation | [E03-S024.md](E03-S024.md) | 獨立審核 APPROVE(Rename Conversation:renameConversation 新增於 lib,trim 後為空 → VALIDATION_ERROR(UI 停用按鈕雙重防護,獨立驗證資料層繞過 UI 直呼仍正確擋下);RenameConversation 元件整個接管標題區塊(顯示/編輯雙態);0 次 FIX 循環;獨立重跑 typecheck/lint/build/366 unit/21 個目標 E2E 皆綠,逐項核對驗證邏輯、狀態機、wiring、scope 皆屬實)；3 個 MINOR 皆經審核明確判定不影響功能、無需修正,其中 1 個(測試未區分伺服器回傳值與本地回顯)仍主動加強測試以求嚴謹 |
 | E03-S025 | approved | story/E03-S025-delete-conversation-confirmation | [E03-S025.md](E03-S025.md) | 獨立審核 APPROVE(Delete Conversation Confirmation,epic 展開標題:deleteConversation 真正移除(非軟刪除,S26 Archive 另有其 story);role="alertdialog" 確認流程,唯一呼叫點在確認按鈕之後,單擊初始按鈕不會刪除;成功後串接 deleteMessagesForConversation(僅在刪除成功後才執行,失敗路徑結構性不可達)並導回列表;重複刪除同一 id 第二次正確 NOT_FOUND;0 次 FIX 循環;獨立重跑 typecheck/lint/build/383 unit/20 個目標 E2E 皆綠)；1 個 MINOR(alertdialog 的 aria-label 未帶入對話標題)已修正 |
 | E03-S026 | approved | story/E03-S026-archive-unarchive-conversation | [E03-S026.md](E03-S026.md) | 獨立審核 APPROVE(Archive/unarchive conversation,epic 展開標題確認雙向可逆;listConversations 新增 archived view-selector 第三參數,全repo grep 確認唯一生產呼叫端已同步、預設值向後相容;getRecentConversations 排除已封存對話,有專屬測試;archiveConversation/unarchiveConversation 皆 NOT_FOUND fail-closed 且不誤翻按鈕標籤;archiving 不 cascade 到 messages.ts,可逆性成立;UI 無確認步驟(對稱 S024/反 S025 理由);0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/407 unit/30+ 個目標 E2E 皆綠)；2 個 MINOR(缺重複封存冪等測試——已補上並複驗 force 全量三輪皆綠;PROGRESS 備註措辭可能誤讀為審核先於實際發生——不需動作)已處理 |
-| E03-S027 | todo | | | |
+| E03-S027 | in-progress | story/E03-S027-copy-answer-action | | |
 | E03-S028 | todo | | | |
 | E03-S029 | todo | | | |
 | E03-S030 | todo | | | |

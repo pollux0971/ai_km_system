@@ -122,3 +122,21 @@ describe("KnowledgeList edit link (E05-S004)", () => {
     expect(editLinks[1]).toHaveAttribute("href", "/knowledge/kb2/edit");
   });
 });
+
+describe("KnowledgeList detail link (E05-S005)", () => {
+  it("links each item's name to /knowledge/{id}", async () => {
+    mockedListKnowledgeBases.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "kb1", name: "測試知識庫一", description: "描述一", updatedAt: "2026-08-13T01:00:00.000Z" },
+        { id: "kb2", name: "測試知識庫二", description: "描述二", updatedAt: "2026-08-12T01:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeList />);
+    await screen.findByText("測試知識庫一");
+
+    expect(screen.getByRole("link", { name: "測試知識庫一" })).toHaveAttribute("href", "/knowledge/kb1");
+    expect(screen.getByRole("link", { name: "測試知識庫二" })).toHaveAttribute("href", "/knowledge/kb2");
+  });
+});

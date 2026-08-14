@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 16 | 0 | 1 | 0 | 16 |
+| E03 AI Conversation Experience | 33 | 16 | 1 | 0 | 0 | 16 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 36 | 0 | 1 | 0 | 138 |
+| **合計** | **175** | 36 | 1 | 0 | 0 | 138 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -81,7 +81,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S014 | approved | story/E03-S014-citation-preview-drawer | [E03-S014.md](E03-S014.md) | 獨立審核 APPROVE(2 次 force 全量重跑皆 251 unit+68 E2E 全過;獨立覆核 S013 迴歸風險為零、NOT_FOUND 設計與 noUncheckedIndexedAccess 修正皆對照原始碼屬實) |
 | E03-S015 | approved | story/E03-S015-citation-open-source | [E03-S015.md](E03-S015.md) | 獨立審核 APPROVE(2 次 force 全量重跑皆 259 unit+69 E2E 全過;獨立追溯 page.goto/mock session 消失的技術主張至原始碼並用既有測試實證,判定推理成立) |
 | E03-S016 | approved | story/E03-S016-citation-permission-error | [E03-S016.md](E03-S016.md) | 獨立審核 APPROVE(2 次 force 全量重跑皆 267 unit+69 E2E 全過;獨立深入核對 BLOCKED-vs-mock 判斷——確認 FORBIDDEN 機制與 role/session/user 完全無耦合,非影子授權實作,與 S13-S15 既有先例一致) |
-| E03-S017 | in-progress | story/E03-S017-multi-turn-conversation | | |
+| E03-S017 | done | story/E03-S017-multi-turn-conversation | [E03-S017.md](E03-S017.md) | 多輪對話 timeline;發現並補上真正的缺口(送出鎖定,防止輪次重疊),過程中自己的新測試踩到與 S012 相同類型的 gate 陷阱並修正,待獨立審核 |
 | E03-S018 | todo | | | |
 | E03-S019 | todo | | | |
 | E03-S020 | todo | | | |

@@ -75,6 +75,24 @@ const logger = createLogger("web:message-thread");
  * the phase sequence, before any chunk arrived), there is nothing
  * meaningful to keep, so the entry is removed outright rather than
  * persisting an empty-content message.
+ *
+ * S17 "Multi-turn Conversation" makes turns strictly sequential:
+ * `isTurnInFlight` (derived, not separate state — `pending`/`streaming`
+ * entries are already tracked in `displayMessages`) disables
+ * MessageComposer's submit while a previous turn hasn't settled yet,
+ * matching the same "real chat products" precedent already used for
+ * S12 (ChatGPT/Claude block sending a new message until the current
+ * reply finishes or is stopped, rather than allowing overlapping
+ * turns). Deliberately NOT extended to `failed`/`stream-failed` — those
+ * are settled-but-unsuccessful states a user can retry OR simply move
+ * past by sending something new, not an in-flight turn blocking
+ * anything; nothing before S17 ever prevented that, and this story
+ * doesn't add a new restriction there. Every message and its assistant
+ * reply were already architecturally independent (own localId, own
+ * stoppedRef entry, functional setDisplayMessages updates) before this
+ * story — S17's own job is proving that holds across a REAL multi-turn
+ * sequence (not just reasoning about it) and closing the one real gap
+ * that let turns overlap in the first place.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -251,6 +269,8 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     setPreviewCitationId(null);
   }
 
+  const isTurnInFlight = displayMessages.some((entry) => entry.kind === "pending" || entry.kind === "streaming");
+
   if (loadState === "loading") {
     return (
       <div style={{ marginTop: 16 }}>
@@ -322,7 +342,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
         </ul>
       )}
       <CitationPreviewDrawer citationId={previewCitationId} onClose={handleClosePreview} />
-      <MessageComposer conversationId={conversationId} onSubmit={handleComposerSubmit} />
+      <MessageComposer conversationId={conversationId} onSubmit={handleComposerSubmit} disabled={isTurnInFlight} />
     </div>
   );
 }

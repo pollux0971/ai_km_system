@@ -57,21 +57,35 @@ const logger = createLogger("web:message-composer");
  * failed reconciliation) on top without MessageComposer needing to know
  * any of that exists. Optional and additive — every S06-S08 test that
  * doesn't pass it keeps passing unchanged.
+ *
+ * E03-S017 adds the optional `disabled` prop — turns must happen
+ * sequentially (matching the near-universal chat-product convention of
+ * blocking a new send while the previous reply is still in flight,
+ * same "real chat products" precedent already used for S012's stop
+ * behavior), not overlapping. Composed with `isValid` into `canSubmit`
+ * rather than disabling the whole `<textarea>` — the user can still
+ * type/attach ahead while waiting, only actually SENDING is blocked,
+ * matching how ChatGPT/Claude's input stays live during generation and
+ * only the send action itself is gated. Defaults to `false` so every
+ * pre-S017 test that doesn't pass it keeps passing unchanged.
  */
 export function MessageComposer({
   conversationId,
   onSubmit,
+  disabled = false,
 }: {
   conversationId: string;
   onSubmit?: (content: string, attachmentNames: string[]) => void;
+  disabled?: boolean;
 }) {
   const inputId = useId();
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const isValid = draft.trim().length > 0 || attachments.length > 0;
+  const canSubmit = isValid && !disabled;
 
   function submitDraft() {
-    if (!isValid) return;
+    if (!canSubmit) return;
 
     const correlationId = crypto.randomUUID();
     logger.info("message draft submitted", {
@@ -103,7 +117,7 @@ export function MessageComposer({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey && isValid) {
+    if (event.key === "Enter" && !event.shiftKey && canSubmit) {
       event.preventDefault();
       submitDraft();
     }
@@ -131,7 +145,7 @@ export function MessageComposer({
       />
       <br />
       <FileAttachmentPicker files={attachments} onFilesSelected={handleFilesSelected} onRemove={handleRemoveAttachment} />
-      <button type="submit" disabled={!isValid}>
+      <button type="submit" disabled={!canSubmit}>
         送出
       </button>
     </form>

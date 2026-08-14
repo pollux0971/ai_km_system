@@ -196,4 +196,62 @@ describe("MessageComposer (E03-S006/S007/S008/S009)", () => {
     expect(() => fireEvent.click(screen.getByRole("button", { name: "送出" }))).not.toThrow();
     expect(screen.getByLabelText("訊息")).toHaveValue("");
   });
+
+  it("E03-S017: defaults disabled to false — pre-S017 behavior (submit enabled once valid) is unchanged", () => {
+    render(<MessageComposer conversationId="c1" />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "你好" } });
+
+    expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
+  });
+
+  it("E03-S017: disabled=true keeps submit disabled even with an otherwise-valid draft", () => {
+    render(<MessageComposer conversationId="c1" disabled={true} />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "你好" } });
+
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+  });
+
+  it("E03-S017: disabled=true still lets the user type and attach files ahead — only sending is blocked", () => {
+    render(<MessageComposer conversationId="c1" disabled={true} />);
+
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "你好" } });
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("a.txt", 10)] } });
+
+    expect(screen.getByLabelText("訊息")).toHaveValue("你好");
+    expect(screen.getByRole("listitem")).toHaveTextContent("a.txt");
+  });
+
+  it("E03-S017: pressing Enter does not submit while disabled=true, even with a valid draft", () => {
+    const onSubmit = vi.fn();
+    render(<MessageComposer conversationId="c1" onSubmit={onSubmit} disabled={true} />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "你好" } });
+
+    fireEvent.keyDown(screen.getByLabelText("訊息"), { key: "Enter", shiftKey: false });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("訊息")).toHaveValue("你好");
+  });
+
+  it("E03-S017: does not call onSubmit when bypassing the disabled button via direct form submit while disabled=true", () => {
+    const onSubmit = vi.fn();
+    render(<MessageComposer conversationId="c1" onSubmit={onSubmit} disabled={true} />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "你好" } });
+
+    const form = screen.getByRole("button", { name: "送出" }).closest("form");
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(mockedTrackEvent).not.toHaveBeenCalled();
+  });
+
+  it("E03-S017: re-enables submit once disabled flips back to false, without losing the draft", () => {
+    const { rerender } = render(<MessageComposer conversationId="c1" disabled={true} />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "你好" } });
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+
+    rerender(<MessageComposer conversationId="c1" disabled={false} />);
+
+    expect(screen.getByLabelText("訊息")).toHaveValue("你好");
+    expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
+  });
 });

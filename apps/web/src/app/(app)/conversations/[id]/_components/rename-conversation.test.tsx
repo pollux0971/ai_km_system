@@ -73,6 +73,23 @@ describe("RenameConversation (E03-S024)", () => {
     expect(screen.queryByLabelText("對話名稱")).not.toBeInTheDocument();
   });
 
+  it("displays the SERVER's returned title on success, not just an echo of the locally-typed draft", async () => {
+    // Independent review MINOR finding: the previous test's mock
+    // resolved value happened to equal the trimmed local input, so it
+    // couldn't distinguish "reads title from the response" from "just
+    // echoes what was typed". Using a deliberately DIFFERENT resolved
+    // title closes that gap for real.
+    mockedRenameConversation.mockResolvedValue({ ok: true, value: { ...DEFAULT_RENAMED, title: "伺服器調整後的標題" } });
+    render(<RenameConversation conversationId="c1" initialTitle="原始標題" />);
+    fireEvent.click(screen.getByRole("button", { name: "重新命名" }));
+
+    fireEvent.change(screen.getByLabelText("對話名稱"), { target: { value: "使用者輸入的標題" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存" }));
+
+    expect(await screen.findByRole("heading", { name: "伺服器調整後的標題", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByText("使用者輸入的標題")).not.toBeInTheDocument();
+  });
+
   it("取消 reverts to the original title without calling renameConversation", () => {
     render(<RenameConversation conversationId="c1" initialTitle="原始標題" />);
     fireEvent.click(screen.getByRole("button", { name: "重新命名" }));

@@ -189,6 +189,32 @@ describe("receiveAssistantReply (E03-S010)", () => {
       expect(list.value.map((m) => m.role)).toEqual(["user", "assistant"]);
     }
   });
+
+  it("E03-S021: defaults to state ANSWERED when not specified", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const result = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.state).toBe("ANSWERED");
+    }
+  });
+
+  it("E03-S021: persists an explicitly given state", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const result = await receiveAssistantReply(conversation.value.id, "查無依據的模擬回覆", "NO_EVIDENCE");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.state).toBe("NO_EVIDENCE");
+    }
+  });
 });
 
 describe("reviseMessage (E03-S020)", () => {
@@ -209,6 +235,40 @@ describe("reviseMessage (E03-S020)", () => {
       expect(revised.value.id).toBe(original.value.id);
       expect(revised.value.conversationId).toBe(original.value.conversationId);
       expect(revised.value.createdAt).toBe(original.value.createdAt);
+    }
+  });
+
+  it("E03-S021: defaults to state ANSWERED when not specified", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const original = await receiveAssistantReply(conversation.value.id, "舊的回覆", "ERROR");
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+
+    const revised = await reviseMessage(original.value.id, "新的回覆");
+
+    expect(revised.ok).toBe(true);
+    if (revised.ok) {
+      expect(revised.value.state).toBe("ANSWERED");
+    }
+  });
+
+  it("E03-S021: persists an explicitly given state, overwriting whatever state the message had before", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const original = await receiveAssistantReply(conversation.value.id, "舊的回覆", "ANSWERED");
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+
+    const revised = await reviseMessage(original.value.id, "新的回覆", "PERMISSION_DENIED");
+
+    expect(revised.ok).toBe(true);
+    if (revised.ok) {
+      expect(revised.value.state).toBe("PERMISSION_DENIED");
     }
   });
 

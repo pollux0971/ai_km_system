@@ -1,4 +1,5 @@
 import type { ApiError, Result } from "@ai-km/types";
+import type { AnswerState } from "./answer-state";
 import { getConversation, touchConversationLastMessage } from "./conversations";
 
 /**
@@ -42,6 +43,14 @@ import { getConversation, touchConversationLastMessage } from "./conversations";
  * doesn't need. Holds prior *content* strings, oldest first; not full
  * Message snapshots, since nothing else about a revised reply (id,
  * conversationId, attachmentNames, createdAt) ever changes.
+ *
+ * `state` (E03-S021, "Answer state rendering") is optional for the same
+ * reason as `revisions` — every pre-S021 fixture simply omits it, and
+ * message-thread.tsx treats an absent `state` as "ANSWERED" at render
+ * time (see lib/answer-state.ts for what the 6 possible values mean and
+ * how a mock classifies them). User messages never have a `state` — the
+ * enum classifies ANSWER quality, and only assistant replies are
+ * answers.
  */
 export interface Message {
   id: string;
@@ -51,6 +60,7 @@ export interface Message {
   attachmentNames: string[];
   createdAt: string;
   revisions?: string[];
+  state?: AnswerState;
 }
 
 const STORAGE_KEY = "ai-km:mock-messages";
@@ -127,8 +137,16 @@ export async function sendMessage(
  * duplicated logic — and the same deterministic (not simulated-random)
  * failure trigger message-thread.tsx's streaming→failed→retry path
  * exercises.
+ *
+ * `state` (E03-S021) defaults to "ANSWERED" — every call site that
+ * predates S021 omits the argument entirely and keeps working
+ * unchanged, matching exactly how they behaved before this story.
  */
-export async function receiveAssistantReply(conversationId: string, content: string): Promise<Result<Message, ApiError>> {
+export async function receiveAssistantReply(
+  conversationId: string,
+  content: string,
+  state: AnswerState = "ANSWERED",
+): Promise<Result<Message, ApiError>> {
   const conversation = await getConversation(conversationId);
   if (!conversation.ok) return conversation;
   if (!conversation.value) {
@@ -142,6 +160,7 @@ export async function receiveAssistantReply(conversationId: string, content: str
     content,
     attachmentNames: [],
     createdAt: new Date().toISOString(),
+    state,
   };
   writeStore([...readStore(), message]);
   await touchConversationLastMessage(conversationId, content, message.createdAt);
@@ -166,8 +185,16 @@ export async function receiveAssistantReply(conversationId: string, content: str
  * row's current `content`/`revisions` to build the update, so the
  * lookup isn't optional plumbing here, it's required by what the
  * function does.
+ *
+ * `state` (E03-S021) also defaults to "ANSWERED", same reasoning as
+ * receiveAssistantReply — but message-thread.tsx's only caller
+ * (handleRegenerate, via runStream) always passes the ORIGINAL
+ * message's own state explicitly rather than relying on this default,
+ * since a regeneration answers the same underlying question and the
+ * mock's classification of that question hasn't changed. The default
+ * here exists only for direct/test callers that don't care about state.
  */
-export async function reviseMessage(messageId: string, newContent: string): Promise<Result<Message, ApiError>> {
+export async function reviseMessage(messageId: string, newContent: string, state: AnswerState = "ANSWERED"): Promise<Result<Message, ApiError>> {
   const messages = readStore();
   const existing = messages.find((message) => message.id === messageId);
   if (!existing) {
@@ -178,6 +205,7 @@ export async function reviseMessage(messageId: string, newContent: string): Prom
     ...existing,
     content: newContent,
     revisions: [...(existing.revisions ?? []), existing.content],
+    state,
   };
   writeStore(messages.map((message) => (message.id === messageId ? revised : message)));
   await touchConversationLastMessage(existing.conversationId, newContent, new Date().toISOString());

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
+import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
 import { runGenerationPhases } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
@@ -278,8 +279,9 @@ describe("MessageThread streaming assistant reply (E03-S010)", () => {
     // completes — the locally-accumulated text ("第一段") is what gets
     // persisted, proven directly (not just via what's re-displayed,
     // which depends on the mocked receiveAssistantReply's return value,
-    // not on this component's own accumulation).
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一段"));
+    // not on this component's own accumulation). 3rd arg "ANSWERED"
+    // (E03-S021): "你好" contains no state trigger phrase.
+    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一段", "ANSWERED"));
     await waitFor(() => expect(screen.queryByText("AI 回覆中…")).not.toBeInTheDocument());
   });
 
@@ -309,7 +311,8 @@ describe("MessageThread streaming assistant reply (E03-S010)", () => {
 
     await waitFor(() => expect(screen.queryByText("AI 回覆中…")).not.toBeInTheDocument());
     expect(screen.getByText("第一段")).toBeInTheDocument();
-    expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一段");
+    // 3rd arg "ANSWERED" (E03-S021): "你好" contains no state trigger.
+    expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一段", "ANSWERED");
   });
 
   it("shows a distinct failed state with a retry action when persisting the reply fails", async () => {
@@ -560,7 +563,8 @@ describe("MessageThread stop generation (E03-S012)", () => {
     fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
     releaseGate();
 
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一"));
+    // 3rd arg "ANSWERED" (E03-S021): "你好" contains no state trigger.
+    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一", "ANSWERED"));
     await waitFor(() => expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument());
     expect(screen.getByText("第一")).toBeInTheDocument();
     expect(mockedTrackEvent).toHaveBeenCalledWith(
@@ -864,7 +868,9 @@ describe("MessageThread multi-turn conversation (E03-S017)", () => {
     // persists only ITS OWN accumulated content ("第二輪") as the second
     // receiveAssistantReply call, not turn 1's already-settled content.
     expect(screen.getByText("第一輪回覆")).toBeInTheDocument();
-    expect(mockedReceiveAssistantReply).toHaveBeenNthCalledWith(2, "c1", "第二輪");
+    // 3rd arg "ANSWERED" (E03-S021): neither "第一輪" nor "第二輪"
+    // contains a state trigger phrase.
+    expect(mockedReceiveAssistantReply).toHaveBeenNthCalledWith(2, "c1", "第二輪", "ANSWERED");
   });
 });
 
@@ -1094,7 +1100,11 @@ describe("MessageThread regenerate answer action (E03-S019)", () => {
     // id "a1"), not receiveAssistantReply (which would mint a new row) —
     // this is what makes retaining the old content as a revision
     // possible at all (see messages.ts's reviseMessage doc comment).
-    await waitFor(() => expect(mockedReviseMessage).toHaveBeenCalledWith("a1", "新的回覆"));
+    // E03-S021: the 3rd arg is "ANSWERED" — this fixture's "a1" has no
+    // explicit `state`, so handleRegenerate's `originalMessage.state ??
+    // "ANSWERED"` fallback applies (see the dedicated E03-S021 describe
+    // block below for the case where an original state IS reused).
+    await waitFor(() => expect(mockedReviseMessage).toHaveBeenCalledWith("a1", "新的回覆", "ANSWERED"));
     expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText("新的回覆")).toBeInTheDocument());
     // Exactly one user message + one (regenerated) assistant reply —
@@ -1280,4 +1290,181 @@ describe("MessageThread answer revision (E03-S020)", () => {
     if (!details) throw new Error("expected a <details> ancestor for the 先前版本 summary");
     expect(details).toHaveTextContent(/版本一[\s\S]*版本二/);
   });
+});
+
+describe("MessageThread answer state rendering (E03-S021)", () => {
+  it("shows no state badge for a normal reply with no explicit state (undefined defaults to ANSWERED)", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "已完成的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("已完成的回覆");
+    // Not even ANSWERED's own label ("已回答") should render — the
+    // common case looks exactly as it did before this story existed.
+    for (const state of ANSWER_STATES) {
+      expect(screen.queryByText(ANSWER_STATE_LABELS[state])).not.toBeInTheDocument();
+    }
+  });
+
+  it.each(ANSWER_STATES.filter((state) => state !== "ANSWERED"))("renders the %s badge with the correct label and role", async (state) => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "回覆內容",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          state,
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    const badge = await screen.findByText(ANSWER_STATE_LABELS[state]);
+    if (state === "ERROR" || state === "PERMISSION_DENIED") {
+      // Permanent, settled negative states use role="alert" — NOT
+      // "status", which every E2E spec's waitForThreadToSettle helper
+      // treats as "still busy" and would never see hit 0 again once a
+      // reply settles into one of these two states.
+      expect(badge).toHaveAttribute("role", "alert");
+    } else {
+      expect(badge).not.toHaveAttribute("role");
+    }
+  });
+
+  it("classifies a sent message from its trigger phrase and persists that state via receiveAssistantReply", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    const trigger = MOCK_ANSWER_STATE_TRIGGERS.NO_EVIDENCE;
+    expect(trigger).toBeDefined();
+    if (!trigger) return;
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+
+    submitViaComposer(`保固期限是多久？ ${trigger}`);
+
+    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalled());
+    expect(mockedReceiveAssistantReply.mock.calls[0]?.[2]).toBe("NO_EVIDENCE");
+  });
+
+  it("classifies a sent message with no trigger phrase as ANSWERED", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+
+    submitViaComposer("保固期限是多久？");
+
+    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalled());
+    expect(mockedReceiveAssistantReply.mock.calls[0]?.[2]).toBe("ANSWERED");
+  });
+
+  it("regenerating reuses the original message's own state instead of reclassifying", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          state: "PERMISSION_DENIED",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("舊的回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
+
+    await waitFor(() => expect(mockedReviseMessage).toHaveBeenCalled());
+    // The click itself carries no new question text to reclassify from
+    // — regenerating answers the same underlying question, so it keeps
+    // the same mock classification "a1" already had.
+    expect(mockedReviseMessage.mock.calls[0]?.[2]).toBe("PERMISSION_DENIED");
+  });
+
+  it("PARTIAL keeps the normal streamed reply content alongside its badge, unlike the other non-ANSWERED states", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    const trigger = MOCK_ANSWER_STATE_TRIGGERS.PARTIAL;
+    expect(trigger).toBeDefined();
+    if (!trigger) return;
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "這是真的串流內容";
+    });
+    // Echo back whatever content/state runStream actually finalizes
+    // with — same as the real function would — rather than the
+    // unrelated beforeEach default, so the FINAL settled render (not
+    // just the transient streaming moment) reflects what was persisted.
+    mockedReceiveAssistantReply.mockImplementation(async (_conversationId, content, state) => ({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content, state },
+    }));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+
+    submitViaComposer(trigger);
+
+    await waitFor(() => expect(screen.getByText("這是真的串流內容")).toBeInTheDocument());
+    expect(screen.getByText("部分回答")).toBeInTheDocument();
+    expect(mockedReceiveAssistantReply.mock.calls[0]?.[1]).toBe("這是真的串流內容");
+  });
+
+  it.each(ANSWER_STATES.filter((state) => state !== "ANSWERED" && state !== "PARTIAL"))(
+    "%s replaces content with fixed fallback text without ever calling streamAssistantReply",
+    async (state) => {
+      mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+      mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+      const trigger = MOCK_ANSWER_STATE_TRIGGERS[state];
+      expect(trigger).toBeDefined();
+      if (!trigger) return;
+      const fallbackContent = ANSWER_STATE_FALLBACK_CONTENT[state];
+      expect(fallbackContent).toBeDefined();
+      if (!fallbackContent) return;
+      // Echo back whatever content/state runStream actually finalizes
+      // with, same as the real function would — see the PARTIAL test
+      // above for why the unrelated beforeEach default isn't enough
+      // once the FINAL settled render (not just the transient
+      // streaming moment) is what's being asserted on.
+      mockedReceiveAssistantReply.mockImplementation(async (_conversationId, content, resultState) => ({
+        ok: true,
+        value: { ...DEFAULT_ASSISTANT_MESSAGE, content, state: resultState },
+      }));
+
+      render(<MessageThread conversationId="c1" />);
+      await screen.findByText("尚無訊息，開始對話吧。");
+
+      submitViaComposer(trigger);
+
+      await waitFor(() => expect(screen.getByText(fallbackContent)).toBeInTheDocument());
+      expect(mockedStreamAssistantReply).not.toHaveBeenCalled();
+      expect(mockedReceiveAssistantReply.mock.calls[0]?.[1]).toBe(fallbackContent);
+    },
+  );
 });

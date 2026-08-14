@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
 
 /**
@@ -29,6 +32,16 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * once (setInputFiles with an array) — one critical flow confirming
  * every selected file lands in the final list and the detail page's
  * count reflects the whole batch, not just one of them.
+ *
+ * E05-S013 adds a second, folder-specific input (webkitdirectory) — a
+ * real-browser check that the attribute is genuinely applied (Playwright
+ * runs against real Chromium, unlike the jsdom-based unit tests) and
+ * that files selected through it flow through the exact same
+ * preview/upload/refresh pipeline. Playwright's setInputFiles can't
+ * drive an actual OS folder picker, so it can't produce a genuine
+ * webkitRelativePath here — that specific behavior (preserving the
+ * relative path as the document name) is unit-tested instead, where
+ * the property can be set directly on a File object.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -177,4 +190,52 @@ test("E05-S012: selecting multiple files at once previews all of them, allows re
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
   await expect(page.getByText("文件:", { exact: false })).toContainText("2 份文件");
+});
+
+test("E05-S013: selecting a real folder preserves each file's relative path, including one nested in a subfolder", async ({
+  page,
+}) => {
+  // Discovered mid-development: Playwright's setInputFiles refuses
+  // buffer-based File-like objects for a webkitdirectory input
+  // ("[webkitdirectory] input requires passing a path to a
+  // directory") — unlike a plain file input, it insists on a real
+  // directory path and reads it itself, which is actually MORE
+  // useful here: it drives a genuine folder selection in a real
+  // browser and produces genuine, non-empty webkitRelativePath
+  // values — something no unit test (jsdom can't do real filesystem
+  // traversal) or a buffer-based E2E approach could ever verify.
+  const dir = mkdtempSync(join(tmpdir(), "e05-s013-"));
+  const subDir = join(dir, "子資料夾");
+  try {
+    mkdirSync(subDir);
+    writeFileSync(join(dir, "根目錄檔案.pdf"), "root file content");
+    writeFileSync(join(subDir, "子檔案.pdf"), "nested file content");
+
+    await openKnowledgeDetail(page, "設備維修標準作業程序");
+    await page.getByRole("link", { name: "文件列表" }).click();
+    await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+    const folderInput = page.getByLabel("上傳資料夾");
+    await expect(folderInput).toHaveJSProperty("webkitdirectory", true);
+    await expect(page.getByLabel("上傳文件")).not.toHaveJSProperty("webkitdirectory", true);
+
+    await folderInput.setInputFiles(dir);
+    await expect(pendingUploadList(page).getByRole("listitem")).toHaveCount(2);
+    // Relative paths are prefixed with the selected folder's own name
+    // (Chromium behavior) — asserting via substring, not exact
+    // equality, since mkdtempSync appends a random suffix to `dir`.
+    await expect(pendingUploadList(page)).toContainText("根目錄檔案.pdf");
+    await expect(pendingUploadList(page)).toContainText("子資料夾/子檔案.pdf");
+
+    await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+    await expect(page.getByText("根目錄檔案.pdf", { exact: false })).toBeVisible();
+    await expect(page.getByText("子資料夾/子檔案.pdf", { exact: false })).toBeVisible();
+
+    await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+    await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+    await expect(page.getByText("文件:", { exact: false })).toContainText("3 份文件");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

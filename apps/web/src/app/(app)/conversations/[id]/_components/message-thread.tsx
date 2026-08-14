@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState, type AnswerState } from "@/lib/answer-state";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, type Message } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
@@ -168,6 +169,30 @@ const logger = createLogger("web:message-thread");
  * scoping (see streaming-response.spec.ts's file doc comment for the
  * general version of this trap), silently inflating the message count
  * the moment any message had revisions.
+ *
+ * S21 "Answer state rendering" attaches one of 6 SOURCE_BASELINE-defined
+ * states (ANSWERED/PARTIAL/NO_EVIDENCE/ERROR/PERMISSION_DENIED/
+ * SOURCE_UNAVAILABLE — see lib/answer-state.ts) to every assistant reply
+ * at the moment it's generated. `attemptSend` classifies the state from
+ * the just-sent question via classifyAnswerState() and threads it
+ * through startStream()→runStream() to the finalize call; regenerating
+ * (handleRegenerate) reuses the ORIGINAL message's own `state` rather
+ * than reclassifying — the underlying question hasn't changed, so the
+ * mock's classification of it shouldn't either. `runStream`'s content-
+ * accumulation step branches on whether ANSWER_STATE_FALLBACK_CONTENT
+ * has an entry for the classified state: ANSWERED and PARTIAL both keep
+ * the normal chunk-by-chunk streamAssistantReply() text (PARTIAL means
+ * SOME real answer was given, just incomplete — still worth showing);
+ * the other 4 states replace it outright with a fixed, honestly-labeled
+ * placeholder sentence explaining why there's no real answer to show,
+ * set in one synchronous step rather than streamed character-by-
+ * character (there's nothing progressive about "no evidence found").
+ * This keeps rendering trivial: content itself already IS whatever
+ * should be shown, so the only new render logic is a short state-label
+ * badge, shown whenever state isn't the default "ANSWERED" — the
+ * common, unremarkable case renders exactly as it did before this
+ * story, matching how real chat products only surface exceptional
+ * states rather than badging every normal reply.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -230,7 +255,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       previous.map((entry) => (entry.kind === "pending" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
     );
 
-    startStream();
+    startStream(classifyAnswerState(content));
   }
 
   function handleComposerSubmit(content: string, attachmentNames: string[]) {
@@ -259,8 +284,14 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
    * that specific already-settled message rather than answering a new
    * turn — see the file doc comment above for why that changes both the
    * empty-stop branch and the finalize call below.
+   *
+   * `answerState` (E03-S021): the mock classification (see
+   * lib/answer-state.ts) this reply should finalize with, pre-computed
+   * by the caller — runStream itself has no classification logic, only
+   * the two behaviors that follow FROM a classification (skip streaming
+   * in favor of fixed fallback content; persist the state).
    */
-  async function runStream(localId: string, reviseTarget?: Message) {
+  async function runStream(localId: string, reviseTarget?: Message, answerState: AnswerState = "ANSWERED") {
     const correlationId = crypto.randomUUID();
     logger.info("streaming assistant reply", { correlationId, conversationId });
     trackEvent("conversation_message_stream_attempt", { correlationId, properties: { conversationId } });
@@ -280,13 +311,21 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
     let accumulated = "";
     if (!stoppedRef.current.has(localId)) {
-      for await (const chunk of streamAssistantReply()) {
-        if (stoppedRef.current.has(localId)) break;
-        accumulated += chunk;
-        const snapshot = accumulated;
+      const fallbackContent = ANSWER_STATE_FALLBACK_CONTENT[answerState];
+      if (fallbackContent !== undefined) {
+        accumulated = fallbackContent;
         setDisplayMessages((previous) =>
-          previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
+          previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: accumulated, phase: null } : entry)),
         );
+      } else {
+        for await (const chunk of streamAssistantReply()) {
+          if (stoppedRef.current.has(localId)) break;
+          accumulated += chunk;
+          const snapshot = accumulated;
+          setDisplayMessages((previous) =>
+            previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
+          );
+        }
       }
     }
 
@@ -308,7 +347,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       trackEvent("conversation_message_stream_stopped", { correlationId, properties: { conversationId, hadContent: true } });
     }
 
-    const result = reviseTarget ? await reviseMessage(reviseTarget.id, accumulated) : await receiveAssistantReply(conversationId, accumulated);
+    const result = reviseTarget
+      ? await reviseMessage(reviseTarget.id, accumulated, answerState)
+      : await receiveAssistantReply(conversationId, accumulated, answerState);
 
     if (!result.ok) {
       logger.error("failed to persist assistant reply", { correlationId, conversationId, code: result.error.code });
@@ -326,10 +367,10 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     );
   }
 
-  function startStream() {
+  function startStream(answerState: AnswerState) {
     const localId = crypto.randomUUID();
     setDisplayMessages((previous) => [...previous, { kind: "streaming", localId, content: "", phase: null }]);
-    void runStream(localId);
+    void runStream(localId, undefined, answerState);
   }
 
   function handleRetryStream(localId: string) {
@@ -350,7 +391,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     setDisplayMessages((previous) =>
       previous.map((entry) => (entry.kind === "sent" && entry.message.id === originalMessage.id ? { kind: "streaming", localId, content: "", phase: null } : entry)),
     );
-    void runStream(localId, originalMessage);
+    void runStream(localId, originalMessage, originalMessage.state ?? "ANSWERED");
   }
 
   function handleCitationClick(citationId: string) {
@@ -407,6 +448,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
             const content = entry.kind === "sent" ? entry.message.content : entry.content;
             const attachmentNames = entry.kind === "sent" ? entry.message.attachmentNames : entry.kind === "streaming" ? [] : entry.attachmentNames;
             const revisions = entry.kind === "sent" ? (entry.message.revisions ?? []) : [];
+            const answerState: AnswerState = entry.kind === "sent" ? (entry.message.state ?? "ANSWERED") : "ANSWERED";
 
             return (
               <li key={key}>
@@ -414,6 +456,23 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                 <span>
                   <MessageContent content={content} withCitations={role === "assistant"} onCitationClick={handleCitationClick} />
                 </span>
+                {entry.kind === "sent" &&
+                  role === "assistant" &&
+                  (answerState === "ERROR" || answerState === "PERMISSION_DENIED" ? (
+                    // role="alert" (assertive), not "status" — this badge is
+                    // PERMANENT on a settled reply, not a transient in-flight
+                    // indicator. Every E2E spec's waitForThreadToSettle
+                    // helper treats any role="status" inside <main> as "still
+                    // busy" and waits for its count to hit 0 — reusing that
+                    // role here would make settling wait forever once a
+                    // reply lands in one of these two states. "alert" is
+                    // already how this exact file marks stream-failed (also
+                    // a permanent, settled negative state) without that
+                    // collision.
+                    <span role="alert">{ANSWER_STATE_LABELS[answerState]}</span>
+                  ) : (
+                    answerState !== "ANSWERED" && <span>{ANSWER_STATE_LABELS[answerState]}</span>
+                  ))}
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
                 {entry.kind === "sent" && role === "assistant" && isLastEntry && (
                   <button type="button" onClick={() => handleRegenerate(entry.message)}>

@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 3 | 1 | 0 | 0 | 27 |
+| E05 Knowledge Management Experience | 31 | 4 | 0 | 0 | 0 | 27 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 56 | 1 | 0 | 0 | 118 |
+| **合計** | **175** | 57 | 0 | 0 | 0 | 118 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -106,7 +106,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S001 | approved | story/E05-S001-knowledge-list-page | [E05-S001.md](E05-S001.md) | 獨立審核 APPROVE(Knowledge list page,E05 第一個 story;SOURCE_BASELINE 僅標題,但 nav-items.ts 早在 E01-S006 就明確預告「each is created by its owning epic's own first story」,審核者用 git log --follow 複驗屬實,不需 advisor;鏡射 E03-S001「當時」(非現在累積後)的原始形狀,審核者用 git show 逐項比對確認;SOURCE_BASELINE 把 List/Search/Create/Edit/Detail 拆成各自獨立 story,故本 story 只做列表;0 次 FIX 循環;typecheck/lint/build/460 unit/19 個目標 E2E 皆綠,force 全量兩輪(108 E2E)皆綠;1 個 MINOR(Scope 說明未明確記錄已讀過 epic 檔章節)已修正) |
 | E05-S002 | approved | story/E05-S002-knowledge-search-filter | [E05-S002.md](E05-S002.md) | 獨立審核 APPROVE(Knowledge search/filter;直接鏡射 E03-S023 conversation search 的既有設計,審核者用 git show 逐項比對確認;刻意不加分頁——SOURCE_BASELINE 的 E05 清單無對應 story,審核者直接複驗;0 次 FIX 循環;typecheck/lint/build/467 unit/22 個目標 E2E 皆綠,force 全量兩輪(111 E2E)皆綠;3 個 MINOR(行號引用錯誤、2 個測試標題宣稱過度)已修正) |
 | E05-S003 | approved | story/E05-S003-create-kb-form | [E05-S003.md](E05-S003.md) | 獨立審核 APPROVE(Create KB form;新增 `/knowledge/new` 表單路由與 `createKnowledgeBase`/`writeStore`,鏡射 `conversations/new`+`rename-conversation` 既有設計;0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/481 unit/3+25 個目標 E2E 皆綠,force 全量(build+test)三輪(DEV 兩輪+審核一輪)皆為 114 E2E 全過、無 flaky) |
-| E05-S004 | done | story/E05-S004-edit-kb-metadata | [E05-S004.md](E05-S004.md) | 1 次 FIX 循環(E2E not-found 測試根因診斷後移除,非同法重複);typecheck/lint/unit(500)/build/E2E 隔離(3+28)/E2E 全量 force 兩輪(117)皆綠 |
+| E05-S004 | approved | story/E05-S004-edit-kb-metadata | [E05-S004.md](E05-S004.md) | 獨立審核 APPROVE(Edit KB metadata;新增 `/knowledge/[id]/edit` 表單路由與 `getKnowledgeBase`/`updateKnowledgeBase`,鏡射 `ConversationDetail`+`/knowledge/new` 既有設計;0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環——E2E not-found 測試因 mock session 是純記憶體變數、`page.goto()` 會清空而無法測,審核者獨立重新追蹤 SessionGate/layout/not-found.tsx 原始碼四個環節確認根因屬實,移除決策誠實無造假;審核者獨立重跑 typecheck/lint/build/500 unit/3+28 個目標 E2E 皆綠,force 全量(build+test)三輪(DEV 兩輪+審核一輪)皆為 117 E2E 全過、無 flaky) |
 | E05-S005 | todo | | | |
 | E05-S006 | todo | | | |
 | E05-S007 | todo | | | |

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import KnowledgeList from "./_components/knowledge-list";
 
 /**
@@ -7,16 +8,17 @@ import KnowledgeList from "./_components/knowledge-list";
  * it, same as E03-S001 did for "/conversations"). Page frame only;
  * KnowledgeList owns the loading/error/empty/loaded states.
  *
- * No "create new knowledge base" link here — unlike E03-S001 (which
- * bundled list and create into one story), SOURCE_BASELINE.md's E05
- * outline gives "Create KB" its own separate story (E05-S03); adding an
- * entry point for a capability a later story owns would be reaching
- * ahead of this story's own scope.
+ * E05-S003 adds the "新增知識庫" entry link to /knowledge/new — the
+ * capability E05-S001 deliberately deferred to its own separate story,
+ * mirroring conversations/page.tsx's "開始新對話" link.
  */
 export default function KnowledgePage() {
   return (
     <main style={{ padding: 32 }}>
       <h1>知識庫</h1>
+      <p>
+        <Link href="/knowledge/new">新增知識庫</Link>
+      </p>
       <KnowledgeList />
     </main>
   );

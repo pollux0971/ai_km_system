@@ -53,6 +53,17 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * the list WITH a size shown this time (unlike URL import, the typed
  * content is real and its byte length is genuinely computed, not
  * omitted).
+ *
+ * E05-S017 adds a per-file progress counter to the SAME upload widget
+ * (KnowledgeDocumentUpload) — this is a genuine real-timer check (the
+ * only one in this file), deliberately NOT mocking
+ * lib/upload-progress.ts's delay the way the unit tests do, because the
+ * whole point of this assertion is proving the counter is actually
+ * visible for a real, non-negligible stretch of wall-clock time in a
+ * real browser, not just correct in principle. Two files at the
+ * default 500ms/file pacing keeps this comfortably under Playwright's
+ * default assertion timeout while still giving each intermediate count
+ * a solid, non-flaky window to be caught in.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -193,6 +204,11 @@ test("E05-S012: selecting multiple files at once previews all of them, allows re
 
   await page.getByRole("button", { name: "上傳", exact: true }).click();
 
+  // E05-S017: wait for the pending-preview list to empty out first —
+  // see the identical comment on the S013 test below for why a bare
+  // getByText(name) right after clicking 上傳 is ambiguous once the
+  // upload widget's per-file step takes real, visible time.
+  await expect(pendingUploadList(page).getByRole("listitem")).toHaveCount(0);
   await expect(page.getByText("第一份.pdf")).toBeVisible();
   await expect(page.getByText("第三份.pdf")).toBeVisible();
   await expect(page.getByText("第二份.pdf")).not.toBeVisible();
@@ -240,6 +256,16 @@ test("E05-S013: selecting a real folder preserves each file's relative path, inc
 
     await page.getByRole("button", { name: "上傳", exact: true }).click();
 
+    // E05-S017: the upload widget now takes real, visible time per
+    // file (see lib/upload-progress.ts) and keeps BOTH files' names
+    // showing in the still-mounted pending-preview list for that whole
+    // window — a bare getByText(name) would ambiguously match either
+    // that pending item or the eventual real document-list entry.
+    // Waiting for the pending list to empty out first (the same signal
+    // the "上傳中…" status going away represents) disambiguates: only
+    // the real, post-upload document list can satisfy these checks
+    // afterward.
+    await expect(pendingUploadList(page).getByRole("listitem")).toHaveCount(0);
     await expect(page.getByText("根目錄檔案.pdf", { exact: false })).toBeVisible();
     await expect(page.getByText("子資料夾/子檔案.pdf", { exact: false })).toBeVisible();
 
@@ -300,4 +326,35 @@ test("E05-S015: typing a title and content adds a text knowledge document with a
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
   await expect(page.getByText("文件:", { exact: false })).toContainText("1 份文件");
+});
+
+test("E05-S017: uploading multiple files shows a per-file progress count that advances as each one completes", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await page.getByLabel("上傳文件").setInputFiles([
+    { name: "第一份.pdf", mimeType: "application/pdf", buffer: Buffer.from("file one") },
+    { name: "第二份.pdf", mimeType: "application/pdf", buffer: Buffer.from("file two") },
+  ]);
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+  await expect(page.getByText(/上傳中.*第 1 \/ 2 筆/)).toBeVisible();
+  await expect(page.getByText(/上傳中.*第 2 \/ 2 筆/)).toBeVisible();
+
+  // Wait for 上傳中 to fully disappear BEFORE checking the file names —
+  // both names are also visible in the still-mounted pending-preview
+  // list for the whole in-flight window, so checking them first would
+  // ambiguously (and prematurely) match that instead of the real,
+  // post-upload document list. Same reasoning as the fix this story
+  // applied to the pre-existing S012/S013 tests above.
+  await expect(page.getByText(/上傳中/)).not.toBeVisible();
+  await expect(page.getByText("第一份.pdf")).toBeVisible();
+  await expect(page.getByText("第二份.pdf")).toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("2 份文件");
 });

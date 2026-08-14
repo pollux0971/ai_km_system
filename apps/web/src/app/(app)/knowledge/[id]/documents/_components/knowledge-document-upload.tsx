@@ -5,6 +5,7 @@ import { createLogger } from "@ai-km/logger";
 import { ErrorMessage } from "@ai-km/ui";
 import { addKnowledgeBaseDocument } from "@/lib/knowledge-documents";
 import { trackEvent } from "@/lib/telemetry";
+import { simulateUploadStep } from "@/lib/upload-progress";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-upload");
@@ -152,6 +153,22 @@ function displayName(file: File): string {
  * transmitted by this mock either, so there is nothing yet for a real
  * audit trail to meaningfully describe beyond what the structured
  * telemetry above already captures.
+ *
+ * E05-S017 "Upload progress" replaces the flat, unconditional "上傳
+ * 中…" status text with a per-file counter ("上傳中…（第 N / total
+ * 筆）") that advances as each file in the batch resolves — success or
+ * failure alike, since this is "how many files have been processed so
+ * far", not "how many succeeded" (that distinction stays owned by the
+ * existing failedCount/ErrorMessage reporting below, untouched by this
+ * story). `uploadProgress` is set at the START of each loop iteration
+ * (1-indexed — the very first render during upload already reads "第 1
+ * / N 筆", not "第 0 / N 筆"), and `simulateUploadStep()` (see that
+ * module's own doc comment) is awaited once per file so each count has
+ * genuine visible time on screen rather than flashing through a whole
+ * batch near-instantly. Deliberately NOT a new "processing failure
+ * state" — E05-S020 is its own dedicated later story for that; a
+ * failed file here still advances the counter and still lands in the
+ * pre-existing failedCount/ErrorMessage path exactly as before.
  */
 export default function KnowledgeDocumentUpload({
   knowledgeBaseId,
@@ -165,6 +182,7 @@ export default function KnowledgeDocumentUpload({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [failedCount, setFailedCount] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
   function handleFilesSelected(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -182,11 +200,13 @@ export default function KnowledgeDocumentUpload({
 
     setPending(true);
     setFailedCount(0);
+    const total = selectedFiles.length;
 
     const remaining: File[] = [];
     let anySucceeded = false;
 
-    for (const file of selectedFiles) {
+    for (const [index, file] of selectedFiles.entries()) {
+      setUploadProgress({ current: index + 1, total });
       const correlationId = crypto.randomUUID();
       logger.info("uploading document", { correlationId, knowledgeBaseId, sizeBytes: file.size });
       trackEvent("knowledge_base_document_upload_attempt", {
@@ -203,18 +223,20 @@ export default function KnowledgeDocumentUpload({
           properties: { knowledgeBaseId, code: result.error.code },
         });
         remaining.push(file);
-        continue;
+      } else {
+        logger.info("document uploaded", { correlationId, knowledgeBaseId, documentId: result.value.id });
+        trackEvent("knowledge_base_document_upload_success", {
+          correlationId,
+          properties: { knowledgeBaseId, sizeBytes: result.value.sizeBytes },
+        });
+        anySucceeded = true;
       }
 
-      logger.info("document uploaded", { correlationId, knowledgeBaseId, documentId: result.value.id });
-      trackEvent("knowledge_base_document_upload_success", {
-        correlationId,
-        properties: { knowledgeBaseId, sizeBytes: result.value.sizeBytes },
-      });
-      anySucceeded = true;
+      await simulateUploadStep();
     }
 
     setPending(false);
+    setUploadProgress(null);
     setSelectedFiles(remaining);
     setFailedCount(remaining.length);
     if (anySucceeded) onUploaded();
@@ -278,7 +300,7 @@ export default function KnowledgeDocumentUpload({
 
       {pending && (
         <p role="status" style={{ marginTop: 8 }}>
-          上傳中…
+          {uploadProgress ? `上傳中…（第 ${uploadProgress.current} / ${uploadProgress.total} 筆）` : "上傳中…"}
         </p>
       )}
       {failedCount > 0 && (

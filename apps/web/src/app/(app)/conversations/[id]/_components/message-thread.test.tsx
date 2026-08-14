@@ -706,3 +706,160 @@ describe("MessageThread citation preview (E03-S014)", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: "引用來源預覽" })).not.toBeInTheDocument());
   });
 });
+
+describe("MessageThread multi-turn conversation (E03-S017)", () => {
+  it("disables the composer's submit button while a message is pending (send in flight)", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockReturnValue(new Promise(() => {}));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("第一輪");
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("傳送中…"));
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "下一句" } });
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+  });
+
+  it("disables the composer's submit button while an assistant reply is streaming", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      await new Promise<void>(() => {});
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("第一輪");
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "停止生成" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "下一句" } });
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+  });
+
+  it("re-enables the composer's submit once the turn fully settles", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "回覆內容";
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("第一輪");
+
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "第二輪" } });
+    expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
+  });
+
+  it("sending a second full turn after the first settles shows all four messages in order", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { id: "u1", conversationId: "c1", role: "user", content: "第一輪", attachmentNames: [], createdAt: "2026-08-14T00:00:00.000Z" },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { id: "u2", conversationId: "c1", role: "user", content: "第二輪", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+      });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "回覆";
+    });
+    mockedReceiveAssistantReply
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { id: "a1", conversationId: "c1", role: "assistant", content: "回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { id: "a2", conversationId: "c1", role: "assistant", content: "回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
+      });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+
+    submitViaComposer("第一輪");
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+
+    submitViaComposer("第二輪");
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("第一輪");
+    expect(items[1]).toHaveTextContent("AI");
+    expect(items[2]).toHaveTextContent("第二輪");
+    expect(items[3]).toHaveTextContent("AI");
+    expect(mockedSendMessage).toHaveBeenCalledTimes(2);
+    expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(2);
+  });
+
+  it("a second turn's stop control only affects its own turn, leaving the first turn's already-settled reply untouched", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { id: "u1", conversationId: "c1", role: "user", content: "第一輪", attachmentNames: [], createdAt: "2026-08-14T00:00:00.000Z" },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { id: "u2", conversationId: "c1", role: "user", content: "第二輪", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+      });
+    // Gated (not eternally pending) — the loop only notices the stop
+    // request once its currently in-flight `.next()` resolves, same as
+    // established in the E03-S012 tests this mirrors. An eternally-
+    // pending mock would make the loop unable to ever check the flag at
+    // all, since the generator itself would never regain control to
+    // yield/return past the pending await.
+    let releaseTurn2Gate!: () => void;
+    const turn2Gate = new Promise<void>((resolve) => {
+      releaseTurn2Gate = resolve;
+    });
+    mockedStreamAssistantReply
+      .mockImplementationOnce(async function* () {
+        yield "第一輪回覆";
+      })
+      .mockImplementationOnce(async function* () {
+        yield "第二輪";
+        await turn2Gate;
+        yield "不應該被看到的內容";
+      });
+    mockedReceiveAssistantReply.mockResolvedValueOnce({
+      ok: true,
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+
+    submitViaComposer("第一輪");
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+
+    submitViaComposer("第二輪");
+    // Waits for "AI 回覆中…" rather than matching "第二輪" text directly,
+    // since the latter would ambiguously match both turn 2's own user
+    // message and the assistant's accumulating content. This is NOT
+    // relying on "AI 回覆中…" being gated on content arrival — `phase`
+    // starts `null` here too (the default empty runGenerationPhases
+    // mock from beforeEach), so the text is already showing from entry
+    // creation. It's reliable because this mock's first yield ("第二輪")
+    // has no `await` before it, so it resolves on the same microtask
+    // tick as the streaming entry's own creation — by the time this
+    // assertion's polling observes the DOM, both updates have already
+    // flushed, so accumulated content is genuinely "第二輪" by this point.
+    await waitFor(() => expect(screen.getByText("AI 回覆中…")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
+    releaseTurn2Gate();
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument());
+    expect(screen.queryByText("不應該被看到的內容")).not.toBeInTheDocument();
+    // Turn 1's own reply stays visible and unaffected — turn 2's stop
+    // persists only ITS OWN accumulated content ("第二輪") as the second
+    // receiveAssistantReply call, not turn 1's already-settled content.
+    expect(screen.getByText("第一輪回覆")).toBeInTheDocument();
+    expect(mockedReceiveAssistantReply).toHaveBeenNthCalledWith(2, "c1", "第二輪");
+  });
+});

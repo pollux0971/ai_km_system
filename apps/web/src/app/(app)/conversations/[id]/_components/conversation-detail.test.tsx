@@ -8,6 +8,7 @@ import { CurrentUserProvider } from "@/lib/session-context";
 vi.mock("@/lib/conversations", () => ({
   getConversation: vi.fn(),
   setConversationMode: vi.fn(),
+  renameConversation: vi.fn(),
 }));
 
 vi.mock("@/lib/messages", () => ({
@@ -64,6 +65,11 @@ describe("ConversationDetail (E03-S002/S003/S004/S005/S006)", () => {
     renderDetailAs("c1");
 
     expect(await screen.findByRole("heading", { name: "測試對話", level: 1 })).toBeInTheDocument();
+    // E03-S024: the heading comes from RenameConversation, wired in —
+    // deeper rename behavior (edit/save/cancel/error) is covered in
+    // rename-conversation.test.tsx's own dedicated describe block, not
+    // duplicated here.
+    expect(screen.getByRole("button", { name: "重新命名" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "對話模式" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "進階模式" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("group", { name: "知識來源" })).toBeInTheDocument();

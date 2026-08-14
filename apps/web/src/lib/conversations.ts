@@ -302,6 +302,26 @@ export async function setConversationModel(
 }
 
 /**
+ * E03-S024 "Rename conversation". SOURCE_BASELINE.md gives this story
+ * only its title, no body. Fails closed with VALIDATION_ERROR for an
+ * empty/whitespace-only title (trimmed before storing, so "  " isn't
+ * silently accepted as a real name either) — the one concrete
+ * Functional AC 2 requirement a rename naturally has: an untitled
+ * conversation would break every other view that displays `title`
+ * (the list, search results, the Home Dashboard widget). Same
+ * server-side-validates-too precedent as setConversationModel: the UI
+ * disables its own submit button for an empty draft, but this function
+ * doesn't rely on that being the only guard.
+ */
+export async function renameConversation(id: string, title: string): Promise<Result<ConversationSummary, ApiError>> {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "對話名稱不得為空。" } };
+  }
+  return updateConversation(id, { title: trimmed });
+}
+
+/**
  * E03-S009: called by lib/messages.ts once a message is actually sent,
  * so the conversation list/dashboard preview reflects the latest
  * message instead of staying frozen at whatever createConversation()

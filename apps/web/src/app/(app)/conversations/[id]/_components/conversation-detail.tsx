@@ -8,6 +8,7 @@ import { KnowledgeSelector } from "./knowledge-selector";
 import { MessageThread } from "./message-thread";
 import { ModelSelector } from "./model-selector";
 import { ModeSwitch } from "./mode-switch";
+import { RenameConversation } from "./rename-conversation";
 
 const logger = createLogger("web:conversation-detail");
 
@@ -38,6 +39,13 @@ type State =
  * without lifting ModeSwitch's other internal state (pending/error) —
  * initialized once the conversation loads, in the same effect that
  * sets `state`, since there's nothing to read `.mode` from before then.
+ *
+ * S24 "Rename Conversation" replaces this component's own static
+ * `<h1>{title}</h1>` with <RenameConversation>, which owns the title
+ * area (both the display heading AND the edit UI) outright rather than
+ * this component keeping the heading and only adding a button next to
+ * it — no other sibling here reads the live title the way currentMode
+ * is threaded to ModelSelector, so there's nothing to lift up.
  */
 export default function ConversationDetail({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -99,7 +107,7 @@ export default function ConversationDetail({ id }: { id: string }) {
 
   return (
     <main style={{ padding: 32 }}>
-      <h1>{state.conversation.title}</h1>
+      <RenameConversation conversationId={state.conversation.id} initialTitle={state.conversation.title} />
       <ModeSwitch
         conversationId={state.conversation.id}
         initialMode={state.conversation.mode}

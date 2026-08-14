@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 8 | 1 | 0 | 0 | 22 |
+| E05 Knowledge Management Experience | 31 | 9 | 0 | 1 | 0 | 21 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 61 | 1 | 0 | 0 | 113 |
+| **合計** | **175** | 62 | 0 | 1 | 0 | 112 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -112,7 +112,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S007 | approved | story/E05-S007-kb-member-editor | [E05-S007.md](E05-S007.md) | 獨立審核 APPROVE(KB member editor;延續 S006 的「純設定非強制執行」邊界,member 為不透明識別字串(無真正使用者目錄);審核者獨立讀原始碼確認正規化邏輯與「is a setting only」測試屬實,獨立重查 SOURCE_BASELINE 對 Member 的提及確認範圍判斷有據;0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/552 unit/2+34 個目標 E2E 皆綠,force 全量(build+test)三輪(DEV 兩輪+審核一輪)皆為 123 E2E 全過、無 flaky) |
 | E05-S008 | approved | story/E05-S008-kb-prompt-binding-ui | [E05-S008.md](E05-S008.md) | 獨立審核 APPROVE(KB prompt binding UI;提示詞直接存於 KB 自身,無真正 Prompt 實體(E11-S12/E12 皆尚未開工);Functional AC 7 判定不適用(內容/設定變更,非存取控制),telemetry 不外洩提示詞原文並有專屬測試驗證;0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環(新摘要與 S006 既有摘要撞名,橫跨 unit+E2E,已根因修正);審核者逐行覆核對 S006 既有 E2E spec 的 2 處必要修正,確認是精確化而非放寬;審核者獨立重跑 typecheck/lint/build/574 unit/2+36 個目標 E2E 皆綠,force 全量(build+test)三輪(DEV 兩輪+審核一輪)皆為 125 E2E 全過、無 flaky) |
 | E05-S009 | approved | story/E05-S009-kb-model-binding-ui | [E05-S009.md](E05-S009.md) | 獨立審核 APPROVE(KB model binding UI;`boundModel` 重用既有 `AiModel`/`AI_MODELS`(E03-S005),不新增獨立型別,選項清單/標籤/disabled 狀態與 `ModelSelector` 共用同一事實來源,審核者獨立讀 `conversations.ts` 原始碼確認「伺服器端拒絕 disabled 模型」與 `setConversationModel` 驗證順序完全一致的宣稱屬實,非編造;即時套用單選(鏡射 `ModelSelector`),多一個「未綁定,依對話設定」選項;telemetry 記錄實際 from/to/model 值(與 S008 排除提示詞原文相反,因模型是固定詞彙非自由格式內容);0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環;未修改任何既有測試檔案斷言(未重演 S008 的摘要文字撞名問題);審核者獨立重跑 typecheck/lint/build/599 unit/128 E2E 皆綠,force 全量(typecheck+lint/build/test)三輪皆 0 cache 全過,與 DEV 階段數字完全一致、無 flaky) |
-| E05-S010 | todo | | | |
+| E05-S010 | in-progress | story/E05-S010-kb-document-list | | |
 | E05-S011 | todo | | | |
 | E05-S012 | todo | | | |
 | E05-S013 | todo | | | |

@@ -7,6 +7,7 @@ import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getKnowledgeBase, type KnowledgeBaseSummary } from "@/lib/knowledge-bases";
 import { roleLabel } from "@/lib/role-labels";
 import { AI_MODELS } from "@/lib/ai-models";
+import { listKnowledgeBaseDocuments } from "@/lib/knowledge-documents";
 
 const logger = createLogger("web:knowledge-detail");
 
@@ -14,7 +15,7 @@ type State =
   | { status: "loading" }
   | { status: "error" }
   | { status: "not-found" }
-  | { status: "loaded"; knowledgeBase: KnowledgeBaseSummary };
+  | { status: "loaded"; knowledgeBase: KnowledgeBaseSummary; documentCount: number | null };
 
 /**
  * E05-S005 "KB detail page". KnowledgeList (E05-S001) deliberately left
@@ -59,11 +60,28 @@ type State =
  * absent) plus a "模型設定" link to /knowledge/[id]/model — same
  * shape as the roles/members/prompt summaries above.
  *
+ * E05-S010 "KB document list" adds a document COUNT summary (not the
+ * document list itself — that's the dedicated route's own job) plus a
+ * "文件列表" link to /knowledge/[id]/documents. A count, not a joined
+ * list of names the way roles/members are: unlike a handful of role
+ * labels or member identifiers, a knowledge base's document names could
+ * be numerous and individually long, unsuited to a one-line summary —
+ * same reasoning `boundPrompt`'s summary shows only "已設定"/"尚未設定"
+ * rather than the prompt text itself. Requires a SECOND sequential
+ * fetch (listKnowledgeBaseDocuments, after getKnowledgeBase resolves) —
+ * the first field on this page that isn't already part of
+ * KnowledgeBaseSummary itself. A failure of that second fetch
+ * specifically doesn't fail the whole page (unlike a getKnowledgeBase
+ * failure) — the page's primary content (the knowledge base itself)
+ * already loaded successfully, so `documentCount: null` degrades to a
+ * "－" placeholder instead of discarding an otherwise-successful page
+ * load over a secondary enrichment value.
+ *
  * Otherwise only shows the fields KnowledgeBaseSummary currently has
- * (name/description/updatedAt) — no document list or usage stats.
- * Those are each their own later, separate story (S10, S28); this
- * page's job is establishing the detail route itself with what data
- * exists today, not reaching ahead into their scope.
+ * (name/description/updatedAt) — no usage stats. That's its own later,
+ * separate story (S28); this page's job is establishing the detail
+ * route itself with what data exists today, not reaching ahead into
+ * its scope.
  */
 export default function KnowledgeDetail({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -73,7 +91,7 @@ export default function KnowledgeDetail({ id }: { id: string }) {
     const correlationId = crypto.randomUUID();
     logger.info("loading knowledge base detail", { correlationId, id });
 
-    getKnowledgeBase(id).then((result) => {
+    getKnowledgeBase(id).then(async (result) => {
       if (cancelled) return;
 
       if (!result.ok) {
@@ -88,8 +106,19 @@ export default function KnowledgeDetail({ id }: { id: string }) {
         return;
       }
 
-      logger.info("knowledge base detail loaded", { correlationId, id });
-      setState({ status: "loaded", knowledgeBase: result.value });
+      const knowledgeBase = result.value;
+      const documentsResult = await listKnowledgeBaseDocuments(id);
+      if (cancelled) return;
+
+      if (!documentsResult.ok) {
+        logger.error("failed to load document count", { correlationId, id, code: documentsResult.error.code });
+        logger.info("knowledge base detail loaded", { correlationId, id });
+        setState({ status: "loaded", knowledgeBase, documentCount: null });
+        return;
+      }
+
+      logger.info("knowledge base detail loaded", { correlationId, id, documentCount: documentsResult.value.length });
+      setState({ status: "loaded", knowledgeBase, documentCount: documentsResult.value.length });
     });
 
     return () => {
@@ -121,10 +150,11 @@ export default function KnowledgeDetail({ id }: { id: string }) {
     );
   }
 
-  const { knowledgeBase } = state;
+  const { knowledgeBase, documentCount } = state;
   const boundModelLabel = knowledgeBase.boundModel
     ? (AI_MODELS.find((option) => option.id === knowledgeBase.boundModel)?.label ?? knowledgeBase.boundModel)
     : "尚未綁定";
+  const documentCountLabel = documentCount === null ? "－" : documentCount === 0 ? "尚無文件" : `${documentCount} 份文件`;
 
   return (
     <main style={{ padding: 32 }}>
@@ -153,6 +183,9 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       <p>
         綁定模型:<span>{boundModelLabel}</span>
       </p>
+      <p>
+        文件:<span>{documentCountLabel}</span>
+      </p>
       <Link href={`/knowledge/${knowledgeBase.id}/edit`}>編輯</Link>
       {" · "}
       <Link href={`/knowledge/${knowledgeBase.id}/permissions`}>權限設定</Link>
@@ -162,6 +195,8 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       <Link href={`/knowledge/${knowledgeBase.id}/prompt`}>提示詞設定</Link>
       {" · "}
       <Link href={`/knowledge/${knowledgeBase.id}/model`}>模型設定</Link>
+      {" · "}
+      <Link href={`/knowledge/${knowledgeBase.id}/documents`}>文件列表</Link>
     </main>
   );
 }

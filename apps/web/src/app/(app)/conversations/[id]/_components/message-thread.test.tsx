@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
 import { runGenerationPhases } from "@/lib/generation-status";
@@ -1472,16 +1472,30 @@ describe("MessageThread answer state rendering (E03-S021)", () => {
 describe("MessageThread copy answer action (E03-S027)", () => {
   // navigator.clipboard doesn't exist in jsdom by default — stubbed
   // locally to this describe block since no other section of this file
-  // needs it.
+  // needs it. Restored in afterEach (independent review MINOR finding:
+  // an un-torn-down Object.defineProperty stub only happened to be safe
+  // by virtue of this being the LAST describe block in the file — a
+  // block added after this one would silently inherit a faked
+  // navigator.clipboard otherwise).
   const mockedWriteText = vi.fn();
+  let originalClipboardDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     mockedWriteText.mockReset();
+    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText: mockedWriteText },
       configurable: true,
       writable: true,
     });
+  });
+
+  afterEach(() => {
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(navigator, "clipboard", originalClipboardDescriptor);
+    } else {
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
   });
 
   it("shows a 複製 button on every settled assistant reply (not just the last one), but not on the user's own message", async () => {
@@ -1624,5 +1638,52 @@ describe("MessageThread copy answer action (E03-S027)", () => {
 
     resolveWrite();
     await waitFor(() => expect(screen.getByRole("button", { name: "已複製" })).not.toBeDisabled());
+  });
+
+  it("copying two different messages with out-of-order resolution shows each one's own correct final state (no cross-message race)", async () => {
+    // Independent review MAJOR finding: an earlier version of this
+    // story shared ONE feedback slot across every message, so message
+    // B's write resolving BEFORE message A's (no ordering guarantee
+    // exists for two independent async operations) let B's success
+    // silently overwrite A's already-shown confirmation, and orphaned
+    // per-click timeouts could clear an unrelated message's state.
+    // copyStatuses/copyResetTimeoutsRef are now keyed by messageId
+    // specifically to make that structurally impossible — this test
+    // reproduces the exact out-of-order scenario the review found.
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        { id: "a2", conversationId: "c1", role: "assistant", content: "第二輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
+      ],
+    });
+    let resolveA1!: () => void;
+    let resolveA2!: () => void;
+    mockedWriteText.mockImplementation((content: unknown) => {
+      if (content === "第一輪回覆") return new Promise<void>((resolve) => (resolveA1 = resolve));
+      return new Promise<void>((resolve) => (resolveA2 = resolve));
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第二輪回覆");
+
+    const items = screen.getAllByRole("listitem");
+    fireEvent.click(within(items[1]!).getByRole("button", { name: "複製" }));
+    fireEvent.click(within(items[3]!).getByRole("button", { name: "複製" }));
+
+    // a2 (clicked second) resolves FIRST.
+    resolveA2();
+    await waitFor(() => expect(within(items[3]!).getByRole("button", { name: "已複製" })).toBeInTheDocument());
+    // a1 must still show its OWN in-flight pending state — untouched by
+    // a2's unrelated success.
+    expect(within(items[1]!).getByRole("button", { name: "複製" })).toBeDisabled();
+
+    resolveA1();
+    // Both now correctly show 已複製 at the same time — independent
+    // slots, not one shared one that only ever reflects the latest click.
+    await waitFor(() => expect(within(items[1]!).getByRole("button", { name: "已複製" })).toBeInTheDocument());
+    expect(within(items[3]!).getByRole("button", { name: "已複製" })).toBeInTheDocument();
   });
 });

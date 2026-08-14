@@ -205,24 +205,39 @@ const logger = createLogger("web:message-thread");
  * messages — mirroring how S19's title already settled the
  * last-entry-only question for regenerate.
  *
- * `copyFeedback` tracks the single most-recently-clicked copy button's
- * transient state (not a Set/map keyed by every message — only one
- * button's feedback is ever visible at a time in practice, so a lone
- * `{ messageId, status }` is the simplest structure that covers it).
- * "已複製" auto-reverts to "複製" after a short delay via
- * `copyResetTimeoutRef` — this is a genuinely different shape from
- * S26's `archive-conversation.tsx` label-flip (which persists until
- * the user clicks again, because archived is a real persisted state);
- * copying isn't a persisted state at all, so leaving the button
- * permanently reading "已複製" after the fact would misrepresent it as
- * one. `navigator.clipboard.writeText()` can reject (insecure context,
- * permission denial) — a `status: "failed"` reading surfaces that
- * distinctly via `role="alert"`, the same role this file already uses
- * for every other permanent-until-superseded negative state (see the
- * ERROR/PERMISSION_DENIED badge and the stream-failed entry above) —
- * never `role="status"`, which this file's own doc comment already
- * established is reserved for "still busy" and is what every E2E
- * spec's waitForThreadToSettle helper polls to 0.
+ * `copyStatuses` tracks EVERY message's own independent copy state,
+ * keyed by messageId (a `Map`, not one shared `{ messageId, status }`
+ * slot) — an earlier version of this story used a single shared slot on
+ * the (wrong) assumption that only one button's feedback is ever
+ * visible at a time; an independent review demonstrated a real race:
+ * two clicks on two different messages resolve their
+ * `navigator.clipboard.writeText()` calls independently and in
+ * whatever order the browser/promise scheduler happens to settle them,
+ * so a single shared slot lets the LATER-RESOLVING call silently
+ * overwrite or clear the OTHER message's already-shown confirmation,
+ * and lets one message's revert timeout clear a completely different
+ * message's state. Keying by messageId makes that structurally
+ * impossible — each message's pending/copied/failed transition and its
+ * own revert timeout (`copyResetTimeoutsRef`, also a `Map`) can only
+ * ever touch its own entry, no matter what order concurrent writes
+ * resolve in; both can legitimately show "已複製" at the same time,
+ * which is also just correct — nothing about copying message A should
+ * make message B's independent confirmation disappear.
+ *
+ * "已複製" auto-reverts to "複製" after a short delay — this is a
+ * genuinely different shape from S26's `archive-conversation.tsx`
+ * label-flip (which persists until the user clicks again, because
+ * archived is a real persisted state); copying isn't a persisted state
+ * at all, so leaving the button permanently reading "已複製" after the
+ * fact would misrepresent it as one. `navigator.clipboard.writeText()`
+ * can reject (insecure context, permission denial) — a `"failed"`
+ * reading surfaces that distinctly via `role="alert"`, the same role
+ * this file already uses for every other permanent-until-superseded
+ * negative state (see the ERROR/PERMISSION_DENIED badge and the
+ * stream-failed entry above) — never `role="status"`, which this
+ * file's own doc comment already established is reserved for "still
+ * busy" and is what every E2E spec's waitForThreadToSettle helper
+ * polls to 0.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -237,13 +252,19 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
   const [previewCitationId, setPreviewCitationId] = useState<string | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<{ messageId: string; status: "pending" | "copied" | "failed" } | null>(null);
+  const [copyStatuses, setCopyStatuses] = useState<Map<string, "pending" | "copied" | "failed">>(new Map());
   const stoppedRef = useRef<Set<string>>(new Set());
-  const copyResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyResetTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
+    // Captured once here (not read as `copyResetTimeoutsRef.current`
+    // directly inside the cleanup) purely to satisfy
+    // react-hooks/exhaustive-deps — `.current` is never reassigned
+    // after mount (only mutated in place via .set()/.delete()), so this
+    // is the same Map object either way.
+    const timeouts = copyResetTimeoutsRef.current;
     return () => {
-      if (copyResetTimeoutRef.current) clearTimeout(copyResetTimeoutRef.current);
+      for (const timeout of timeouts.values()) clearTimeout(timeout);
     };
   }, []);
 
@@ -437,22 +458,33 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     logger.info("copying answer to clipboard", { correlationId, conversationId, messageId });
     trackEvent("conversation_answer_copy_attempt", { correlationId, properties: { conversationId, messageId } });
 
-    if (copyResetTimeoutRef.current) {
-      clearTimeout(copyResetTimeoutRef.current);
-      copyResetTimeoutRef.current = null;
+    const existingTimeout = copyResetTimeoutsRef.current.get(messageId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      copyResetTimeoutsRef.current.delete(messageId);
     }
-    setCopyFeedback({ messageId, status: "pending" });
+    setCopyStatuses((previous) => new Map(previous).set(messageId, "pending"));
 
     try {
       await navigator.clipboard.writeText(content);
       logger.info("copied answer to clipboard", { correlationId, conversationId, messageId });
       trackEvent("conversation_answer_copy_success", { correlationId, properties: { conversationId, messageId } });
-      setCopyFeedback({ messageId, status: "copied" });
-      copyResetTimeoutRef.current = setTimeout(() => setCopyFeedback(null), 2000);
-    } catch {
-      logger.error("failed to copy answer to clipboard", { correlationId, conversationId, messageId });
+      setCopyStatuses((previous) => new Map(previous).set(messageId, "copied"));
+      copyResetTimeoutsRef.current.set(
+        messageId,
+        setTimeout(() => {
+          setCopyStatuses((previous) => {
+            const next = new Map(previous);
+            next.delete(messageId);
+            return next;
+          });
+          copyResetTimeoutsRef.current.delete(messageId);
+        }, 2000),
+      );
+    } catch (error) {
+      logger.error("failed to copy answer to clipboard", { correlationId, conversationId, messageId, error });
       trackEvent("conversation_answer_copy_failure", { correlationId, properties: { conversationId, messageId } });
-      setCopyFeedback({ messageId, status: "failed" });
+      setCopyStatuses((previous) => new Map(previous).set(messageId, "failed"));
     }
   }
 
@@ -541,13 +573,11 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                     <button
                       type="button"
                       onClick={() => handleCopy(entry.message.id, content)}
-                      disabled={copyFeedback?.messageId === entry.message.id && copyFeedback.status === "pending"}
+                      disabled={copyStatuses.get(entry.message.id) === "pending"}
                     >
-                      {copyFeedback?.messageId === entry.message.id && copyFeedback.status === "copied" ? "已複製" : "複製"}
+                      {copyStatuses.get(entry.message.id) === "copied" ? "已複製" : "複製"}
                     </button>
-                    {copyFeedback?.messageId === entry.message.id && copyFeedback.status === "failed" && (
-                      <span role="alert">複製失敗，請手動選取複製。</span>
-                    )}
+                    {copyStatuses.get(entry.message.id) === "failed" && <span role="alert">複製失敗，請手動選取複製。</span>}
                   </>
                 )}
                 {entry.kind === "sent" && role === "assistant" && isLastEntry && (

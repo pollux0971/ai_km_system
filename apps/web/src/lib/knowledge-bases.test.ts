@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createKnowledgeBase, listKnowledgeBases } from "./knowledge-bases";
+import { createKnowledgeBase, getKnowledgeBase, listKnowledgeBases, updateKnowledgeBase } from "./knowledge-bases";
 
 describe("listKnowledgeBases (E05-S001)", () => {
   it("resolves with a non-empty list of knowledge base summaries", async () => {
@@ -135,5 +135,115 @@ describe("createKnowledgeBase (E05-S003)", () => {
     expect(first.ok && second.ok).toBe(true);
     if (!first.ok || !second.ok) return;
     expect(first.value.id).not.toBe(second.value.id);
+  });
+});
+
+describe("getKnowledgeBase (E05-S004)", () => {
+  it("resolves an existing knowledge base by id", async () => {
+    const result = await getKnowledgeBase("kb-sample-1");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value?.id).toBe("kb-sample-1");
+      expect(result.value?.name).toBe("產品保固政策");
+    }
+  });
+
+  it("resolves null (not an error) for an id that doesn't match anything", async () => {
+    const result = await getKnowledgeBase("this-id-does-not-exist");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBeNull();
+    }
+  });
+});
+
+describe("updateKnowledgeBase (E05-S004)", () => {
+  // Same shared-sessionStorage-store reasoning as the createKnowledgeBase
+  // block above — this block only ever updates knowledge bases it itself
+  // creates first, so it never depends on (or disturbs) the seed data or
+  // any other describe block's assertions.
+
+  it("updates the name and description, trimmed, and refreshes updatedAt", async () => {
+    const created = await createKnowledgeBase("客服知識庫（編輯前）", "編輯前的說明。");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBase(created.value.id, "  客服知識庫（編輯後）  ", "  編輯後的說明。  ");
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.id).toBe(created.value.id);
+      expect(updated.value.name).toBe("客服知識庫（編輯後）");
+      expect(updated.value.description).toBe("編輯後的說明。");
+      // >= rather than a strict "changed" comparison — two back-to-back
+      // new Date().toISOString() calls can legitimately land in the same
+      // millisecond, so this only asserts updatedAt is well-formed and
+      // never moves backwards, not that it strictly advanced.
+      expect(new Date(updated.value.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(created.value.updatedAt).getTime());
+    }
+  });
+
+  it("is reflected by a subsequent getKnowledgeBase() call", async () => {
+    const created = await createKnowledgeBase("業務知識庫（編輯前）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBase(created.value.id, "業務知識庫（編輯後）", "更新後的說明。");
+    const reloaded = await getKnowledgeBase(created.value.id);
+
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.name).toBe("業務知識庫（編輯後）");
+      expect(reloaded.value?.description).toBe("更新後的說明。");
+    }
+  });
+
+  it("fails with VALIDATION_ERROR for an empty or whitespace-only name, with no side effect", async () => {
+    const created = await createKnowledgeBase("財務知識庫（編輯前）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const emptyResult = await updateKnowledgeBase(created.value.id, "");
+    const whitespaceResult = await updateKnowledgeBase(created.value.id, "   ");
+
+    expect(emptyResult.ok).toBe(false);
+    if (!emptyResult.ok) expect(emptyResult.error.code).toBe("VALIDATION_ERROR");
+    expect(whitespaceResult.ok).toBe(false);
+    if (!whitespaceResult.ok) expect(whitespaceResult.error.code).toBe("VALIDATION_ERROR");
+
+    const unchanged = await getKnowledgeBase(created.value.id);
+    expect(unchanged.ok).toBe(true);
+    if (unchanged.ok) expect(unchanged.value).toEqual(created.value);
+  });
+
+  it("fails with NOT_FOUND for an id that doesn't match anything", async () => {
+    const result = await updateKnowledgeBase("this-id-does-not-exist", "新名稱");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("preserves the knowledge base's existing position in listKnowledgeBases() (no reordering on edit)", async () => {
+    const first = await createKnowledgeBase("行政知識庫（一）");
+    const second = await createKnowledgeBase("行政知識庫（二）");
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    // second was created after first, so it's prepended above first.
+    const before = await listKnowledgeBases();
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+    const firstIndexBefore = before.value.findIndex((item) => item.id === first.value.id);
+
+    await updateKnowledgeBase(first.value.id, "行政知識庫（一，已編輯）");
+
+    const after = await listKnowledgeBases();
+    expect(after.ok).toBe(true);
+    if (after.ok) {
+      const firstIndexAfter = after.value.findIndex((item) => item.id === first.value.id);
+      expect(firstIndexAfter).toBe(firstIndexBefore);
+    }
   });
 });

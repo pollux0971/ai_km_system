@@ -149,3 +149,59 @@ export async function createKnowledgeBase(
   writeStore([knowledgeBase, ...readStore()]);
   return { ok: true, value: knowledgeBase };
 }
+
+/**
+ * E05-S004 "Edit KB metadata". `value: null` (not an error) when the id
+ * doesn't match anything — "not found" is an expected outcome to render
+ * distinctly, not a dependency failure — same modeling as
+ * lib/conversations.ts's getConversation() and AuthClient.getSession().
+ */
+export async function getKnowledgeBase(id: string): Promise<Result<KnowledgeBaseSummary | null, ApiError>> {
+  return { ok: true, value: readStore().find((item) => item.id === id) ?? null };
+}
+
+/**
+ * E05-S004 "Edit KB metadata". Takes the full replacement name +
+ * description together as one action (not two separate
+ * setName()/setDescription() calls) — the epic's own title bundles both
+ * fields into a single "metadata" edit, unlike lib/conversations.ts's
+ * per-field exports (renameConversation, setConversationMode, ...), each
+ * independently triggered by its own distinct UI control. Same
+ * VALIDATION_ERROR-on-blank-name fail-closed rule as createKnowledgeBase
+ * — a knowledge base still needs a name after being edited, same reason
+ * it needed one to be created. NOT_FOUND (mirroring
+ * lib/conversations.ts's updateConversation helper) when the id doesn't
+ * match anything, so a caller can't mistake "already gone" for "just
+ * saved it". Refreshes `updatedAt` — an edit is itself a change to the
+ * record, consistent with that field's own established "recency signal"
+ * meaning (see SAMPLE_KNOWLEDGE_BASES's doc comment). Preserves the
+ * item's existing position in the store (via `.map()`, not
+ * remove-and-prepend) — listKnowledgeBases() has never sorted by
+ * `updatedAt`, and reordering the list as a side effect of an edit isn't
+ * anything this story's own AC asks for.
+ */
+export async function updateKnowledgeBase(
+  id: string,
+  name: string,
+  description?: string,
+): Promise<Result<KnowledgeBaseSummary, ApiError>> {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "知識庫名稱不得為空。" } };
+  }
+
+  const store = readStore();
+  const existing = store.find((item) => item.id === id);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const updated: KnowledgeBaseSummary = {
+    ...existing,
+    name: trimmedName,
+    description: description?.trim() ?? "",
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
+}

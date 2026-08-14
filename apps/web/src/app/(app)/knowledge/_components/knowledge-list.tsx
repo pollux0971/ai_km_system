@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { listKnowledgeBases, type KnowledgeBaseSummary } from "@/lib/knowledge-bases";
@@ -18,6 +19,11 @@ type State =
  * Detail"'s job) — inventing a link to a route that isn't there yet
  * would just be a dead link, same reasoning E03-S001's own
  * conversation-list.tsx originally used for /conversations/[id].
+ *
+ * E05-S004 "Edit KB metadata" adds a distinct, explicitly-labeled "編輯"
+ * link per item to /knowledge/{id}/edit — a different, real route this
+ * same story builds, not the whole-item-to-detail-view link the S001
+ * paragraph above still deliberately avoids.
  *
  * E05-S002 "Knowledge search/filter" adds `query`, searched on every
  * keystroke (no debounce — this mock's search is an instant in-memory
@@ -93,6 +99,8 @@ export default function KnowledgeList() {
               <span>{item.description}</span>
               <br />
               <time dateTime={item.updatedAt}>{new Date(item.updatedAt).toLocaleString("zh-TW")}</time>
+              <br />
+              <Link href={`/knowledge/${item.id}/edit`}>編輯</Link>
             </li>
           ))}
         </ul>

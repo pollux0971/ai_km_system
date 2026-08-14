@@ -7,6 +7,7 @@ import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getKnowledgeBase, type KnowledgeBaseSummary } from "@/lib/knowledge-bases";
 import { listKnowledgeBaseDocuments, type KnowledgeBaseDocument } from "@/lib/knowledge-documents";
 import KnowledgeDocumentUpload from "./knowledge-document-upload";
+import KnowledgeDocumentUrlImport from "./knowledge-document-url-import";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
@@ -46,6 +47,15 @@ type State =
  * before the knowledge base itself is confirmed to exist. A dedicated
  * test verifies listKnowledgeBaseDocuments is never called when the
  * knowledge base fetch resolves not-found or error.
+ *
+ * E05-S014 "URL import" adds KnowledgeDocumentUrlImport alongside
+ * KnowledgeDocumentUpload, same page, same `refetchDocuments` callback
+ * (renamed conceptually to cover "the list changed" generally, not
+ * just uploads — reused as-is since it was already upload-source
+ * agnostic, just re-fetching the list). A URL-imported document has no
+ * `sizeBytes` (see that field's own doc comment on
+ * KnowledgeBaseDocument) — the size line only renders when the value
+ * is present, rather than showing a misleading "0 B".
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -154,6 +164,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
       <h1>{knowledgeBase.name} — 文件列表</h1>
 
       <KnowledgeDocumentUpload knowledgeBaseId={id} onUploaded={refetchDocuments} />
+      <KnowledgeDocumentUrlImport knowledgeBaseId={id} onImported={refetchDocuments} />
 
       {documents.length === 0 && <EmptyState message="這個知識庫尚無文件。" />}
 
@@ -163,8 +174,12 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
             <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
               <strong>{document.name}</strong>
               <br />
-              <span>{formatFileSize(document.sizeBytes)}</span>
-              <br />
+              {document.sizeBytes !== undefined && (
+                <>
+                  <span>{formatFileSize(document.sizeBytes)}</span>
+                  <br />
+                </>
+              )}
               <time dateTime={document.uploadedAt}>{new Date(document.uploadedAt).toLocaleString("zh-TW")}</time>
             </li>
           ))}

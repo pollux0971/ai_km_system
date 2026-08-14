@@ -42,6 +42,11 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * webkitRelativePath here — that specific behavior (preserving the
  * relative path as the document name) is unit-tested instead, where
  * the property can be set directly on a File object.
+ *
+ * E05-S014 adds KnowledgeDocumentUrlImport (a text input + 匯入
+ * button, separate from the upload widget) — importing a URL and
+ * confirming it lands in the list with no size shown (a URL-imported
+ * document has no sizeBytes) and the detail page's count updates.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -238,4 +243,32 @@ test("E05-S013: selecting a real folder preserves each file's relative path, inc
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("E05-S014: importing a URL adds it to the list without a size, and rejects an invalid URL with a specific message", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+  await expect(page.getByText("這個知識庫尚無文件。")).toBeVisible();
+
+  await page.getByLabel("從網址匯入").fill("not a url");
+  await page.getByRole("button", { name: "匯入" }).click();
+  // Scoped to <main> — an unscoped getByRole("alert") also matches
+  // Next.js's own hidden route-announcer div (id
+  // "__next-route-announcer__"), same collision knowledge-create.spec.ts
+  // (E05-S003) first documented.
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("請輸入有效的網址。");
+  await expect(page.getByText("這個知識庫尚無文件。")).toBeVisible();
+
+  await page.getByLabel("從網址匯入").fill("https://example.com/policy.pdf");
+  await page.getByRole("button", { name: "匯入" }).click();
+
+  await expect(page.getByText("https://example.com/policy.pdf")).toBeVisible();
+  await expect(page.getByLabel("從網址匯入")).toHaveValue("");
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("1 份文件");
 });

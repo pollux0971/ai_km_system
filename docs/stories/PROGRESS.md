@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 12 | 1 | 0 | 0 | 18 |
+| E05 Knowledge Management Experience | 31 | 13 | 1 | 0 | 0 | 17 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 65 | 1 | 0 | 0 | 109 |
+| **合計** | **175** | 66 | 1 | 0 | 0 | 108 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -116,7 +116,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S011 | approved | story/E05-S011-single-file-upload | [E05-S011.md](E05-S011.md) | 獨立審核 APPROVE(Single-file upload;上傳元件內嵌在既有 `/knowledge/[id]/documents` 頁面(非獨立路由),鏡射 `messages.ts` sendMessage 內嵌於對話頁的既有先例;`addKnowledgeBaseDocument` 只收 name/sizeBytes 純值,沿用 E03-S008 FileAttachmentPicker「無真實上傳」的既有先例(E06 Upload API/Object Storage 皆 Team B、todo);選檔→確認上傳兩段式,失敗保留選擇(審核者逐行覆核 handleUpload 確認 setSelectedFile(null) 只在成功路徑);telemetry 記錄 sizeBytes 但絕不記錄檔名(審核者確認三個 trackEvent 呼叫的 properties 皆不含檔名);`formatFileSize` 與 S010 共用同一 domain 內的檔案,審核者確認舊本地定義已刪除、雙方皆改為 import,非假重構;Functional AC 7 判定不適用(同 S003);0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環(E2E locator strict-mode 衝突,`<input type="file">` 隱含 role=button 與其 label 造成的 substring 誤命中,審核者確認修法乾淨、未波及任何既有斷言);審核者獨立重跑 typecheck/lint/build/638 unit/133 E2E 皆綠,force 全量三輪皆 0 cache 全過,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S012 | approved | story/E05-S012-multi-file-upload | [E05-S012.md](E05-S012.md) | 獨立審核 APPROVE(Multi-file upload;純延伸 S011 既有的 `KnowledgeDocumentUpload` 元件與 `addKnowledgeBaseDocument`(未新增任何 lib export,審核者以 `git diff --name-only` 結構性確認 `knowledge-documents.ts` 未被觸碰);選取採累加而非取代,鏡射 `MessageComposer`/`FileAttachmentPicker`(E03-S008)既有先例;循序(非平行)逐檔呼叫,明確分析並拒絕依賴 microtask 排程巧合的平行呼叫方案,審核者逐行覆核 `handleUpload` 確認 `for...of`+`await`、每檔獨立 correlationId 屬實;每個檔案獨立單位,部分失敗不影響其他檔案,失敗的留在清單供重試,審核者確認 remaining/anySucceeded 邏輯與宣稱一致;telemetry 每檔各自一組 attempt/success/failure;0 個 BLOCKER/MAJOR/MINOR;2 次 FIX 循環(RTL/Playwright `exact` 選項語意誤用,審核者直讀 `ByRoleOptions` 型別定義確認根因屬實;E2E `getByRole("listitem")` 誤命中 app shell 導覽項目,修正為 `aria-label` 限定範圍);審核者獨立重跑 typecheck/lint/build/646 unit/134 E2E 皆綠,force 全量三輪皆 0 cache 全過,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S013 | approved | story/E05-S013-folder-upload | [E05-S013.md](E05-S013.md) | 獨立審核 APPROVE(Folder upload;純延伸 S011/S012 既有的 `KnowledgeDocumentUpload` 元件(未新增任何 lib export,審核者以 `git diff --name-only` 結構性確認);新增第二個獨立 `<input webkitdirectory>`(callback ref 命令式設定,避免 `any` 型別斷言,審核者確認 diff 中 0 筆 `as any`);`displayName()` 優先採用 `webkitRelativePath` 保留資料夾結構,審核者確認四處呼叫點(上傳/顯示/移除按鈕/key)皆一致套用;0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環(Playwright 拒絕對 webkitdirectory input 使用 buffer-based setInputFiles,改用真實臨時資料夾反而讓驗證更真實,審核者親自重跑確認該測試真的通過且用 try/finally 清理);審核者獨立重跑 typecheck/lint/build/654 unit/135 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
-| E05-S014 | todo | | | |
+| E05-S014 | approved | story/E05-S014-url-import | [E05-S014.md](E05-S014.md) | 獨立審核 APPROVE(URL import;`KnowledgeBaseDocument.sizeBytes` 改為選填(URL 匯入無真實位元組數可回報,不捏造佔位數字);新增獨立 `addKnowledgeBaseDocumentFromUrl`(格式驗證+http(s)協定白名單,審核者確認 `javascript:`/`file:` 皆有專屬拒絕測試);`KnowledgeDocumentUrlImport` 獨立元件(文字輸入+明確送出);顯示具體錯誤訊息(刻意偏離 S009 用固定通用字串的既有做法,審核者確認兩種失敗情境顯示兩種不同訊息,證實非寫死);0 個 BLOCKER/MAJOR,1 個 MINOR(doc comment 多餘空白行,審核者當場修正);2 次 FIX 循環(`type="url"` 原生驗證攔截 submit 導致自訂驗證/錯誤訊息完全被繞過,改用 type="text";E2E route-announcer 碰撞,審核者確認此寫法已是 3 個既有 spec 檔案使用的既有慣用法,非權宜之計);審核者獨立重跑 typecheck/lint/build/676 unit/136 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S015 | todo | | | |
 | E05-S016 | todo | | | |
 | E05-S017 | todo | | | |

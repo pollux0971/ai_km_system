@@ -188,8 +188,12 @@ test("E03-S033: a mid-thread stream disconnect on a later turn leaves an earlier
 
   await expect(messageItems(page)).toHaveCount(3);
   await expect(messageItems(page).nth(2)).toContainText("有哪些排除項目？");
-  // Scoped to <main> — an unscoped role="alert" also matches
-  // NotificationCenter's own unrelated error state in the header (see
-  // notification-center.tsx), which has nothing to do with this test.
+  // Scoped to <main> — an unscoped role="alert" also matches Next.js
+  // App Router's own built-in route announcer
+  // (id="__next-route-announcer__", visually hidden, aria-live=
+  // "assertive"), which fires role="alert" on every client-side
+  // navigation to announce the new page title to screen readers. That
+  // is unrelated framework infrastructure, not anything this test is
+  // actually checking.
   await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
 });

@@ -839,11 +839,17 @@ describe("MessageThread multi-turn conversation (E03-S017)", () => {
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
 
     submitViaComposer("第二輪");
-    // "AI 回覆中…" only appears once real content has started arriving
-    // (see message-thread.tsx's runStream) — a reliable signal that
-    // turn 2's own accumulated content is non-empty by this point,
-    // without an ambiguous text match against turn 2's own user
-    // message (which also renders the literal text "第二輪").
+    // Waits for "AI 回覆中…" rather than matching "第二輪" text directly,
+    // since the latter would ambiguously match both turn 2's own user
+    // message and the assistant's accumulating content. This is NOT
+    // relying on "AI 回覆中…" being gated on content arrival — `phase`
+    // starts `null` here too (the default empty runGenerationPhases
+    // mock from beforeEach), so the text is already showing from entry
+    // creation. It's reliable because this mock's first yield ("第二輪")
+    // has no `await` before it, so it resolves on the same microtask
+    // tick as the streaming entry's own creation — by the time this
+    // assertion's polling observes the DOM, both updates have already
+    // flushed, so accumulated content is genuinely "第二輪" by this point.
     await waitFor(() => expect(screen.getByText("AI 回覆中…")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
     releaseTurn2Gate();

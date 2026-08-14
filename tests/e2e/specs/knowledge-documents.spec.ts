@@ -24,6 +24,11 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * page.setInputFiles() with an in-memory buffer, not a real file on
  * disk — no real upload happens (see addKnowledgeBaseDocument's own
  * doc comment), so only the File's name/size matter, not its content.
+ *
+ * E05-S012 extends the same upload widget to accept multiple files at
+ * once (setInputFiles with an array) — one critical flow confirming
+ * every selected file lands in the final list and the detail page's
+ * count reflects the whole batch, not just one of them.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -36,6 +41,13 @@ async function login(page: import("@playwright/test").Page) {
 
 function sidebarNav(page: import("@playwright/test").Page) {
   return page.getByRole("navigation", { name: "主導覽" });
+}
+
+// Scoped the same way as sidebarNav — the app shell's own <nav><ul><li>
+// items would otherwise ambiguously match a bare getByRole("listitem")
+// alongside the upload widget's own preview list.
+function pendingUploadList(page: import("@playwright/test").Page) {
+  return page.getByRole("list", { name: "待上傳檔案" });
 }
 
 async function openKnowledgeDetail(page: import("@playwright/test").Page, name: string) {
@@ -100,7 +112,7 @@ test("E05-S011: uploading a file adds it to the list immediately and updates the
     mimeType: "application/pdf",
     buffer: Buffer.from("mock file content for E05-S011 upload test"),
   });
-  await expect(page.getByText("已選擇:新版請假規範.pdf", { exact: false })).toBeVisible();
+  await expect(pendingUploadList(page).getByRole("listitem")).toContainText("新版請假規範.pdf");
 
   await page.getByRole("button", { name: "上傳", exact: true }).click();
 
@@ -135,4 +147,34 @@ test("E05-S011: uploading a second file appends to an already-populated list wit
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
   await expect(page.getByText("文件:", { exact: false })).toContainText("4 份文件");
+});
+
+test("E05-S012: selecting multiple files at once previews all of them, allows removing one before committing, and uploads the rest as a batch", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+  await expect(page.getByText("這個知識庫尚無文件。")).toBeVisible();
+
+  await page.getByLabel("上傳文件").setInputFiles([
+    { name: "第一份.pdf", mimeType: "application/pdf", buffer: Buffer.from("file one") },
+    { name: "第二份.pdf", mimeType: "application/pdf", buffer: Buffer.from("file two") },
+    { name: "第三份.pdf", mimeType: "application/pdf", buffer: Buffer.from("file three") },
+  ]);
+  await expect(pendingUploadList(page).getByRole("listitem")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "移除 第二份.pdf" }).click();
+  await expect(pendingUploadList(page).getByRole("listitem")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+  await expect(page.getByText("第一份.pdf")).toBeVisible();
+  await expect(page.getByText("第三份.pdf")).toBeVisible();
+  await expect(page.getByText("第二份.pdf")).not.toBeVisible();
+  await expect(page.getByText("這個知識庫尚無文件。")).not.toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("2 份文件");
 });

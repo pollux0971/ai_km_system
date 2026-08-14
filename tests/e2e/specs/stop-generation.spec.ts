@@ -93,14 +93,17 @@ test("E03-S012: stopping after some reply text has streamed in keeps that partia
   // stream finishes and reconciles to "sent" first, removing the
   // button out from under a still-in-flight retry ("element was
   // detached from the DOM"). `force: true` is applied deliberately,
-  // not as a blanket escape hatch: the button's existence and
-  // enabled/visible state are already independently confirmed by the
-  // `getByText("AI 回覆中…")` wait immediately above (phase clears to
-  // null in the exact same state update that renders the button), so
-  // skipping only the stability-across-frames check here bypasses
-  // exactly the part of actionability this specific, diagnosed
-  // mechanism makes unreliable — not a way to click something that
-  // might not really be there.
+  // not as a blanket escape hatch: Playwright's `force` option is an
+  // all-or-nothing bypass of every actionability check (attached/
+  // visible/stable/receives-events/enabled), not a per-check toggle,
+  // but attachment and visibility are already independently confirmed
+  // by the `getByText("AI 回覆中…")` wait immediately above (phase
+  // clears to null in the exact same state update that renders the
+  // button) and nothing in this layout occludes the button, so the
+  // only check this specific, diagnosed mechanism actually needed to
+  // skip — frame-to-frame position stability — is the only one that
+  // was ever in question here, even though `force` can't be scoped
+  // that narrowly on its own.
   await expect(page.getByText("AI 回覆中…")).toBeVisible({ timeout: 5000 });
   await page.getByRole("button", { name: "停止生成" }).click({ force: true });
 

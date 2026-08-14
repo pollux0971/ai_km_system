@@ -2071,3 +2071,101 @@ describe("MessageThread stream disconnect/reconnect UX (E03-S031)", () => {
     expect(attemptId).toBe(disconnectedId);
   });
 });
+
+describe("MessageThread message retry UX (E03-S032)", () => {
+  it("retrying a stream-failed regenerate revises the same original message again — it does not fall through to creating a brand new one", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "重試前的內容";
+    });
+    mockedReviseMessage.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
+
+    expect(await screen.findByText("AI 回覆失敗")).toBeInTheDocument();
+    // The failed attempt already went through reviseMessage (not
+    // receiveAssistantReply) — same finalize path the passing "重新產生
+    // revises in place" test (E03-S020 above) asserts for the success
+    // case; this is the failure-path counterpart of that same call.
+    expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
+
+    mockedReviseMessage.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        id: "a1",
+        conversationId: "c1",
+        role: "assistant",
+        content: "重試後的修訂",
+        attachmentNames: [],
+        createdAt: "2026-08-14T00:00:01.000Z",
+        revisions: ["舊的回覆"],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新產生回覆" }));
+
+    // A genuinely second call, updating the SAME message id "a1" again
+    // — this is the actual bug this story fixes: without reviseTarget
+    // threaded through handleRetryStream, this call would never happen
+    // at all, and receiveAssistantReply would fire instead, minting a
+    // brand new message rather than updating "a1".
+    await waitFor(() => expect(mockedReviseMessage).toHaveBeenCalledTimes(2));
+    expect(mockedReviseMessage.mock.calls[1]?.[0]).toBe("a1");
+    expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
+    expect(await screen.findByText("重試後的修訂")).toBeInTheDocument();
+    // The `not.toHaveBeenCalled()`/call-count assertions above are what
+    // actually prove no duplicate backend message was minted — this
+    // listitem count is a supplementary sanity check, not independent
+    // proof by itself: `displayMessages` always updates the SAME array
+    // slot in place by localId regardless of which persistence function
+    // fired, so the count alone would stay 2 even under the old buggy
+    // behavior (it would just be 2 the wrong way, holding the newly
+    // minted message's content instead of "a1"'s).
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("retrying a stream-failed NEW turn preserves its original non-ANSWERED classification instead of silently resetting to ANSWERED", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "部分回覆內容";
+    });
+    mockedReceiveAssistantReply.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer(`保固期限是多久？ ${MOCK_ANSWER_STATE_TRIGGERS.PARTIAL}`);
+
+    expect(await screen.findByText("AI 回覆失敗")).toBeInTheDocument();
+
+    mockedReceiveAssistantReply.mockResolvedValueOnce({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "部分回覆內容", state: "PARTIAL" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新產生回覆" }));
+
+    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledTimes(2));
+    // The bug this fixes: without answerState threaded through the
+    // retry, this 3rd arg would silently read "ANSWERED" instead,
+    // regardless of what the original turn was actually classified as.
+    expect(mockedReceiveAssistantReply.mock.calls[1]?.[2]).toBe("PARTIAL");
+    // Genuinely re-streamed (not just replaying cached text) — same
+    // "actually re-attempted" precedent the pre-existing S12 stream-
+    // failed retry test already establishes.
+    expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(2);
+  });
+});

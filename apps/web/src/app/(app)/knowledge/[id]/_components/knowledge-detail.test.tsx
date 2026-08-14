@@ -70,7 +70,12 @@ describe("KnowledgeDetail (E05-S005)", () => {
 
     render(<KnowledgeDetail id="kb1" />);
 
-    expect(await screen.findByText("尚未設定")).toBeInTheDocument();
+    // Scoped to the "可存取角色:" summary specifically — E05-S008 added a
+    // second, independent "尚未設定" summary (bound prompt) that's ALSO
+    // unconfigured for this same sampleKnowledgeBase fixture, so a bare
+    // findByText("尚未設定") is ambiguous (matches both) as of this story.
+    const summary = await screen.findByText("可存取角色:", { exact: false });
+    expect(summary).toHaveTextContent("尚未設定");
   });
 
   it("shows the labeled roles when a permission is configured", async () => {
@@ -109,6 +114,36 @@ describe("KnowledgeDetail (E05-S005)", () => {
     render(<KnowledgeDetail id="kb1" />);
 
     expect(await screen.findByText("demo-user、demo-sales")).toBeInTheDocument();
+  });
+
+  it("shows a 提示詞設定 link pointing at /knowledge/{id}/prompt", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByRole("link", { name: "提示詞設定" })).toHaveAttribute("href", "/knowledge/kb1/prompt");
+  });
+
+  it("shows 尚未設定 for the bound prompt when none has been configured yet", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("綁定提示詞:", { exact: false });
+    expect(summary).toHaveTextContent("尚未設定");
+  });
+
+  it("shows 已設定 (not the prompt text itself) when a prompt is bound", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleKnowledgeBase, boundPrompt: "請用友善、簡潔的語氣回答客服問題。" },
+    });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("綁定提示詞:", { exact: false });
+    expect(summary).toHaveTextContent("已設定");
+    expect(screen.queryByText("請用友善、簡潔的語氣回答客服問題。")).not.toBeInTheDocument();
   });
 
   it("shows a distinct error state when loading fails", async () => {

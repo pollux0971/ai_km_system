@@ -34,7 +34,12 @@ async function openKnowledgeDetail(page: import("@playwright/test").Page, name: 
 test("E05-S006: checking a role on the permission editor saves immediately and the detail page reflects it", async ({ page }) => {
   await openKnowledgeDetail(page, "產品保固政策");
 
-  await expect(page.getByText("尚未設定")).toBeVisible();
+  // Scoped to the "可存取角色:" summary specifically — E05-S008 added a
+  // second, independent "尚未設定" summary (bound prompt) that's ALSO
+  // unconfigured for a freshly-seeded knowledge base, so a bare
+  // getByText("尚未設定") is ambiguous (matches both) as of that story.
+  const roleSummary = page.getByText("可存取角色:", { exact: false });
+  await expect(roleSummary).toContainText("尚未設定");
 
   await page.getByRole("link", { name: "權限設定" }).click();
   await page.waitForURL((url) => /^\/knowledge\/.+\/permissions$/.test(url.pathname));
@@ -46,7 +51,7 @@ test("E05-S006: checking a role on the permission editor saves immediately and t
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
 
   await expect(page.getByText("維修工程師", { exact: false })).toBeVisible();
-  await expect(page.getByText("尚未設定")).toHaveCount(0);
+  await expect(roleSummary).not.toContainText("尚未設定");
 });
 
 test("E05-S006: unchecking every role returns the knowledge base to 尚未設定", async ({ page }) => {
@@ -64,5 +69,6 @@ test("E05-S006: unchecking every role returns the knowledge base to 尚未設定
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
 
-  await expect(page.getByText("尚未設定")).toBeVisible();
+  // Scoped for the same reason as the test above.
+  await expect(page.getByText("可存取角色:", { exact: false })).toContainText("尚未設定");
 });

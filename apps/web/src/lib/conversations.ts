@@ -160,9 +160,39 @@ export interface ConversationListPage {
 
 export const CONVERSATIONS_PAGE_SIZE = 2;
 
-/** E03-S001/S022: the full conversation list route's data source, one page at a time. */
-export async function listConversations(page = 1): Promise<Result<ConversationListPage, ApiError>> {
-  const all = readStore();
+/**
+ * E03-S023 "Conversation search". Same bare-title-only grounding as
+ * S022 — SOURCE_BASELINE.md gives just "E03-S23 Conversation Search",
+ * no body. Filters BEFORE paginating (not two independent operations
+ * the caller has to combine itself) — `totalCount`/`totalPages` in the
+ * returned page always describe the FILTERED set, so "page 1 of 1"
+ * during an active search means "these are all the matches", not "this
+ * is the first page of the unfiltered list". An empty/whitespace-only
+ * query is treated as "no search" (returns everything, matching every
+ * pre-S023 call site unchanged) rather than "matches nothing" — no
+ * real chat product searches for an empty string as a no-results
+ * query, and that reading also gives S022's own existing tests nothing
+ * to update.
+ *
+ * Matches against `title` only, case-insensitively via
+ * `.toLocaleLowerCase()` — the general-purpose, locale-aware choice for
+ * case-folding (defensive default, not `.toLowerCase()`'s ASCII-biased
+ * one), though independent review confirmed it makes no OBSERVABLE
+ * difference for this specific dataset: Han characters have no case to
+ * fold either way, and the one ASCII pair here ("E-204") folds
+ * identically under both methods in the default locale. Not
+ * `lastMessagePreview`. Real chat products (ChatGPT/Claude's own
+ * sidebar search, the same "real chat products" precedent already used
+ * for S012/S017/S019's design calls) search conversation titles/names,
+ * not full message content, and full-content search would need a
+ * fundamentally different (and heavier) mechanism this MVP-simplified
+ * story doesn't ask for.
+ */
+export async function listConversations(page = 1, query?: string): Promise<Result<ConversationListPage, ApiError>> {
+  const trimmedQuery = query?.trim() ?? "";
+  const all = trimmedQuery
+    ? readStore().filter((item) => item.title.toLocaleLowerCase().includes(trimmedQuery.toLocaleLowerCase()))
+    : readStore();
   const pageSize = CONVERSATIONS_PAGE_SIZE;
   const totalCount = all.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));

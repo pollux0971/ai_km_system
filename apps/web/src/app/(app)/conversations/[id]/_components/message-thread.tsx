@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState, type AnswerState } from "@/lib/answer-state";
+import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, type Message } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
@@ -238,11 +239,40 @@ const logger = createLogger("web:message-thread");
  * file's own doc comment already established is reserved for "still
  * busy" and is what every E2E spec's waitForThreadToSettle helper
  * polls to 0.
+ *
+ * S29 "File-processing status UI" inserts a processing step into
+ * attemptSend, BEFORE sendMessage() itself, whenever the outgoing
+ * message carries attachments — see lib/file-processing.ts for why
+ * this needs its own deterministic mock trigger to make the failure
+ * path reachable at all (no real E06 ingestion backend exists to
+ * report a real outcome from). While processing, the existing
+ * `pending` entry's status text switches from the generic "傳送中…" to
+ * "檔案處理中…" — a distinct wording for a distinct wait, not two
+ * unrelated things pretending to be the same. A new terminal kind,
+ * `attachment-failed`, is added rather than reusing `failed` — S23/S26
+ * already established this file's own precedent that reusing one
+ * label for two different underlying causes (here: the FILES failed
+ * to process vs. the MESSAGE failed to send) is actively misleading,
+ * so it gets its own label ("檔案處理失敗") and its own retry wording
+ * ("重新處理", distinct from "重新傳送") — sharing handleRetry's actual
+ * mechanics is fine since retrying either one is the identical
+ * "go back to pending, run attemptSend again" operation; only the
+ * DISPLAY needs to stay distinct. Deterministic by design (same
+ * attached filenames -> same classification every time, matching how
+ * S21's answer-state triggers behave) — retrying with the exact same
+ * file(s) fails the same way again, which is correct, not a bug.
+ *
+ * conversations/new-file/page.tsx (S28) reuses the same
+ * classifyFileProcessing() check before creating anything, but without
+ * this file's visible processing phase — see that module's own doc
+ * comment for why a second, separate status UI there would be scope
+ * creep this story never asked for.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
   | { kind: "pending"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "failed"; localId: string; content: string; attachmentNames: string[] }
+  | { kind: "attachment-failed"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "streaming"; localId: string; content: string; phase: GenerationPhase | null }
   | { kind: "stream-failed"; localId: string };
 
@@ -291,6 +321,25 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
   async function attemptSend(localId: string, content: string, attachmentNames: string[]) {
     const correlationId = crypto.randomUUID();
+
+    if (attachmentNames.length > 0) {
+      logger.info("processing attached files", { correlationId, conversationId, attachmentCount: attachmentNames.length });
+      trackEvent("file_processing_attempt", { correlationId, properties: { conversationId, attachmentCount: attachmentNames.length } });
+
+      const processingStatus = await simulateFileProcessing(attachmentNames);
+      if (processingStatus === "failed") {
+        logger.error("file processing failed", { correlationId, conversationId, attachmentCount: attachmentNames.length });
+        trackEvent("file_processing_failure", { correlationId, properties: { conversationId } });
+        setDisplayMessages((previous) =>
+          previous.map((entry) => (entry.kind === "pending" && entry.localId === localId ? { ...entry, kind: "attachment-failed" } : entry)),
+        );
+        return;
+      }
+
+      logger.info("file processing succeeded", { correlationId, conversationId, attachmentCount: attachmentNames.length });
+      trackEvent("file_processing_success", { correlationId, properties: { conversationId } });
+    }
+
     logger.info("sending message", { correlationId, conversationId, length: content.length, attachmentCount: attachmentNames.length });
     trackEvent("conversation_message_send_attempt", {
       correlationId,
@@ -325,7 +374,11 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
   function handleRetry(localId: string, content: string, attachmentNames: string[]) {
     setDisplayMessages((previous) =>
-      previous.map((entry) => (entry.kind === "failed" && entry.localId === localId ? { kind: "pending", localId, content, attachmentNames } : entry)),
+      previous.map((entry) =>
+        (entry.kind === "failed" || entry.kind === "attachment-failed") && entry.localId === localId
+          ? { kind: "pending", localId, content, attachmentNames }
+          : entry,
+      ),
     );
     void attemptSend(localId, content, attachmentNames);
   }
@@ -593,12 +646,22 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                     ))}
                   </details>
                 )}
-                {entry.kind === "pending" && <span role="status">傳送中…</span>}
+                {entry.kind === "pending" && (
+                  <span role="status">{entry.attachmentNames.length > 0 ? "檔案處理中…" : "傳送中…"}</span>
+                )}
                 {entry.kind === "streaming" && (
                   <span>
                     <span role="status">{entry.phase ? GENERATION_PHASE_LABELS[entry.phase] : "AI 回覆中…"}</span>
                     <button type="button" onClick={() => handleStop(entry.localId)}>
                       停止生成
+                    </button>
+                  </span>
+                )}
+                {entry.kind === "attachment-failed" && (
+                  <span>
+                    <span role="alert">檔案處理失敗</span>
+                    <button type="button" onClick={() => handleRetry(entry.localId, entry.content, entry.attachmentNames)}>
+                      重新處理
                     </button>
                   </span>
                 )}

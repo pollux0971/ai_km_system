@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
 import { runGenerationPhases } from "@/lib/generation-status";
-import { deleteMessage, listMessages, receiveAssistantReply, sendMessage } from "@/lib/messages";
+import { listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -10,7 +10,7 @@ vi.mock("@/lib/messages", () => ({
   listMessages: vi.fn(),
   sendMessage: vi.fn(),
   receiveAssistantReply: vi.fn(),
-  deleteMessage: vi.fn(),
+  reviseMessage: vi.fn(),
 }));
 
 vi.mock("@/lib/streaming", () => ({
@@ -38,7 +38,7 @@ vi.mock("@/lib/telemetry", () => ({
 const mockedListMessages = vi.mocked(listMessages);
 const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
-const mockedDeleteMessage = vi.mocked(deleteMessage);
+const mockedReviseMessage = vi.mocked(reviseMessage);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
 const mockedTrackEvent = vi.mocked(trackEvent);
@@ -56,7 +56,7 @@ beforeEach(() => {
   mockedListMessages.mockReset();
   mockedSendMessage.mockReset();
   mockedReceiveAssistantReply.mockReset();
-  mockedDeleteMessage.mockReset();
+  mockedReviseMessage.mockReset();
   mockedStreamAssistantReply.mockReset();
   mockedRunGenerationPhases.mockReset();
   mockedTrackEvent.mockReset();
@@ -73,7 +73,7 @@ beforeEach(() => {
     return;
   });
   mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
-  mockedDeleteMessage.mockResolvedValue({ ok: true, value: undefined });
+  mockedReviseMessage.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
 });
 
 function submitViaComposer(content: string) {
@@ -1054,7 +1054,7 @@ describe("MessageThread regenerate answer action (E03-S019)", () => {
     expect(items[3]).toHaveTextContent("重新產生");
   });
 
-  it("clicking 重新產生 deletes the old message and starts a fresh stream that replaces it", async () => {
+  it("clicking 重新產生 revises the old message in place and starts a fresh stream that replaces its content", async () => {
     mockedListMessages.mockResolvedValue({
       ok: true,
       value: [
@@ -1072,15 +1072,16 @@ describe("MessageThread regenerate answer action (E03-S019)", () => {
     mockedStreamAssistantReply.mockImplementation(async function* () {
       yield "新的回覆";
     });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedReviseMessage.mockResolvedValue({
       ok: true,
       value: {
-        id: "a2",
+        id: "a1",
         conversationId: "c1",
         role: "assistant",
         content: "新的回覆",
         attachmentNames: [],
-        createdAt: "2026-08-14T00:00:02.000Z",
+        createdAt: "2026-08-14T00:00:01.000Z",
+        revisions: ["舊的回覆"],
       },
     });
 
@@ -1089,13 +1090,22 @@ describe("MessageThread regenerate answer action (E03-S019)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
-    expect(mockedDeleteMessage).toHaveBeenCalledWith("a1");
+    // E03-S020: finalizes through reviseMessage (update-in-place, same
+    // id "a1"), not receiveAssistantReply (which would mint a new row) —
+    // this is what makes retaining the old content as a revision
+    // possible at all (see messages.ts's reviseMessage doc comment).
+    await waitFor(() => expect(mockedReviseMessage).toHaveBeenCalledWith("a1", "新的回覆"));
+    expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText("新的回覆")).toBeInTheDocument());
-    expect(screen.queryByText("舊的回覆")).not.toBeInTheDocument();
     // Exactly one user message + one (regenerated) assistant reply —
-    // the old reply is genuinely replaced, not left behind as a second
-    // entry (Functional AC 5: no undefined duplicate side effect).
+    // the old reply is genuinely replaced as the CURRENT content, not
+    // left behind as a second top-level entry (Functional AC 5: no
+    // undefined duplicate side effect).
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    // E03-S020: "舊的回覆" is retained, not gone — it now appears inside
+    // the revision history rather than as the current reply.
+    expect(screen.getByText("先前版本（1）")).toBeInTheDocument();
+    expect(screen.getByText("舊的回覆")).toBeInTheDocument();
   });
 
   it("locks the composer while a regeneration is in flight, same as any other turn", async () => {
@@ -1128,7 +1138,7 @@ describe("MessageThread regenerate answer action (E03-S019)", () => {
     expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
   });
 
-  it("stopping a regeneration before any content arrives leaves that turn with no assistant reply at all", async () => {
+  it("E03-S020: stopping a regeneration before any content arrives restores the original reply unchanged", async () => {
     mockedListMessages.mockResolvedValue({
       ok: true,
       value: [
@@ -1169,12 +1179,105 @@ describe("MessageThread regenerate answer action (E03-S019)", () => {
     fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
     releaseGate();
 
-    // The old reply is already gone (deleteMessage already ran when
-    // regenerate was clicked) and nothing replaced it — an accepted,
-    // documented consequence of composing regenerate with S12's
-    // empty-stop-removes-the-entry behavior, not a new gap.
-    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(1));
-    expect(screen.queryByText("舊的回覆")).not.toBeInTheDocument();
+    // Unlike S19 (where the old row was deleted up front, so an empty
+    // stop lost the reply entirely), S20 never touches the original row
+    // until reviseMessage() actually runs — so an empty stop simply
+    // restores it exactly as it was: no revision was ever recorded, and
+    // neither finalize path was called at all.
+    await waitFor(() => expect(screen.getByText("舊的回覆")).toBeInTheDocument());
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByText("先前版本", { exact: false })).not.toBeInTheDocument();
     expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
+    expect(mockedReviseMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("MessageThread answer revision (E03-S020)", () => {
+  it("shows no revision history for a reply that has never been regenerated", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "唯一版本",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("唯一版本");
+    expect(screen.queryByText("先前版本", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("regenerating twice accumulates two revisions, shown oldest first", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "版本一",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+    mockedStreamAssistantReply
+      .mockImplementationOnce(async function* () {
+        yield "版本二";
+      })
+      .mockImplementationOnce(async function* () {
+        yield "版本三";
+      });
+    mockedReviseMessage
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "版本二",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          revisions: ["版本一"],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "版本三",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          revisions: ["版本一", "版本二"],
+        },
+      });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("版本一");
+
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
+    await waitFor(() => expect(screen.getByText("版本二")).toBeInTheDocument());
+    expect(screen.getByText("先前版本（1）")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
+    await waitFor(() => expect(screen.getByText("版本三")).toBeInTheDocument());
+
+    expect(screen.getByText("先前版本（2）")).toBeInTheDocument();
+    // Oldest first — matches reviseMessage's append order (see
+    // messages.test.ts's "accumulates multiple revisions in order").
+    const details = screen.getByText("先前版本（2）").closest("details");
+    if (!details) throw new Error("expected a <details> ancestor for the 先前版本 summary");
+    expect(details).toHaveTextContent(/版本一[\s\S]*版本二/);
   });
 });

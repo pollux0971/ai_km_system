@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConversation, getConversation } from "./conversations";
-import { deleteMessage, listMessages, receiveAssistantReply, sendMessage } from "./messages";
+import { listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "./messages";
 
 describe("listMessages (E03-S009)", () => {
   it("resolves with an empty list for a conversation with no messages", async () => {
@@ -191,23 +191,79 @@ describe("receiveAssistantReply (E03-S010)", () => {
   });
 });
 
-describe("deleteMessage (E03-S019)", () => {
-  it("removes the message with the given id from the store", async () => {
+describe("reviseMessage (E03-S020)", () => {
+  it("replaces the content and keeps the id, conversationId, and createdAt unchanged", async () => {
     const conversation = await createConversation();
     expect(conversation.ok).toBe(true);
     if (!conversation.ok) return;
 
-    const sent = await receiveAssistantReply(conversation.value.id, "舊的回覆");
-    expect(sent.ok).toBe(true);
-    if (!sent.ok) return;
+    const original = await receiveAssistantReply(conversation.value.id, "舊的回覆");
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
 
-    const deleted = await deleteMessage(sent.value.id);
-    expect(deleted.ok).toBe(true);
+    const revised = await reviseMessage(original.value.id, "新的回覆");
+
+    expect(revised.ok).toBe(true);
+    if (revised.ok) {
+      expect(revised.value.content).toBe("新的回覆");
+      expect(revised.value.id).toBe(original.value.id);
+      expect(revised.value.conversationId).toBe(original.value.conversationId);
+      expect(revised.value.createdAt).toBe(original.value.createdAt);
+    }
+  });
+
+  it("retains the replaced content in revisions, rather than discarding it", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const original = await receiveAssistantReply(conversation.value.id, "舊的回覆");
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+
+    const revised = await reviseMessage(original.value.id, "新的回覆");
+
+    expect(revised.ok).toBe(true);
+    if (revised.ok) {
+      expect(revised.value.revisions).toEqual(["舊的回覆"]);
+    }
+  });
+
+  it("accumulates multiple revisions in order across successive calls", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const original = await receiveAssistantReply(conversation.value.id, "版本一");
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+
+    await reviseMessage(original.value.id, "版本二");
+    const third = await reviseMessage(original.value.id, "版本三");
+
+    expect(third.ok).toBe(true);
+    if (third.ok) {
+      expect(third.value.content).toBe("版本三");
+      expect(third.value.revisions).toEqual(["版本一", "版本二"]);
+    }
+  });
+
+  it("is reflected in listMessages — the row is updated in place, not duplicated", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const original = await receiveAssistantReply(conversation.value.id, "舊的回覆");
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+
+    await reviseMessage(original.value.id, "新的回覆");
 
     const list = await listMessages(conversation.value.id);
     expect(list.ok).toBe(true);
     if (list.ok) {
-      expect(list.value).toEqual([]);
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.content).toBe("新的回覆");
     }
   });
 
@@ -217,22 +273,43 @@ describe("deleteMessage (E03-S019)", () => {
     if (!conversation.ok) return;
 
     const kept = await sendMessage(conversation.value.id, "保留這則", []);
-    const toDelete = await receiveAssistantReply(conversation.value.id, "刪除這則");
-    expect(kept.ok && toDelete.ok).toBe(true);
-    if (!kept.ok || !toDelete.ok) return;
+    const toRevise = await receiveAssistantReply(conversation.value.id, "修訂這則");
+    expect(kept.ok && toRevise.ok).toBe(true);
+    if (!kept.ok || !toRevise.ok) return;
 
-    await deleteMessage(toDelete.value.id);
+    await reviseMessage(toRevise.value.id, "修訂後的內容");
 
     const list = await listMessages(conversation.value.id);
     expect(list.ok).toBe(true);
     if (list.ok) {
-      expect(list.value.map((m) => m.id)).toEqual([kept.value.id]);
+      expect(list.value.find((m) => m.id === kept.value.id)?.content).toBe("保留這則");
     }
   });
 
-  it("does not throw or fail when the given id doesn't exist", async () => {
-    const result = await deleteMessage("does-not-exist");
+  it("fails closed with NOT_FOUND when the given id doesn't exist", async () => {
+    const result = await reviseMessage("does-not-exist", "新的回覆");
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("updates the conversation's lastMessagePreview to reflect the revised content", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const original = await receiveAssistantReply(conversation.value.id, "舊的回覆");
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+
+    await reviseMessage(original.value.id, "新的回覆");
+
+    const reloaded = await getConversation(conversation.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.lastMessagePreview).toBe("新的回覆");
+    }
   });
 });

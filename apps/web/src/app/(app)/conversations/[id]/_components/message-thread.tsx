@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
-import { deleteMessage, listMessages, receiveAssistantReply, sendMessage, type Message } from "@/lib/messages";
+import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, type Message } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
@@ -123,24 +123,51 @@ const logger = createLogger("web:message-thread");
  * mid-thread would require inventing branching/discard semantics for
  * everything after it, which nothing asks for.
  *
- * handleRegenerate() calls deleteMessage() on the old message id
- * BEFORE flipping the display entry back to a fresh `streaming` state
- * and re-running runStream() — without the delete, the old message
- * would linger in the store while receiveAssistantReply() (inside the
- * reused runStream) adds a new one, so a reload would show BOTH the
- * discarded and the regenerated reply instead of replacing it (exactly
- * the "重複請求不得造成未定義重複 side effect" Functional AC 5 warns
- * about). Reusing runStream wholesale — same phases, same streaming,
- * same stop support, same telemetry — rather than a parallel
- * implementation means regeneration automatically inherits S12's stop
- * behavior too: stopping a regeneration before any content arrives
- * removes the entry outright (same as any other empty-stop), leaving
- * that turn with no assistant reply at all — the old one is already
- * gone and nothing replaced it. This is an accepted, deliberate
- * consequence of composing two already-independently-justified
- * features, not a new gap; inventing "restore the discarded reply if
- * regeneration is stopped early" would be unrequested undo semantics
- * this story's grounding never asks for.
+ * S20 "Answer Revision" changes what happens when a regeneration
+ * actually completes. SOURCE_BASELINE's only content for S20 is one
+ * line: 「需留下 Revision」— the content being replaced must be
+ * *retained*, not discarded. S19's original mechanism (delete the old
+ * row, then let the reused runStream's receiveAssistantReply() call add
+ * a brand new one) is incompatible with that: once the old row is
+ * deleted there is nothing left to retain a revision history *on*. So
+ * handleRegenerate() no longer deletes anything up front — it passes
+ * the ORIGINAL Message object through to runStream(), which (via
+ * `reviseTarget`) finalizes into reviseMessage() instead of
+ * receiveAssistantReply() when present. reviseMessage() updates that
+ * same row in place (same id, same position in the store) and pushes
+ * the content being overwritten onto that row's `revisions` — so a
+ * reload still shows exactly one entry per turn (Functional AC 5's "no
+ * undefined duplicate side effect" still holds, now via update-in-place
+ * rather than delete-then-recreate) while the prior content survives,
+ * rendered via the "先前版本" `<details>` block below when a message's
+ * `revisions` is non-empty.
+ *
+ * Not deleting up front also changes S19's documented stop-before-
+ * content consequence, as a direct, necessary side effect of the new
+ * mechanism (not an incidental unrelated fix): since the original row
+ * is never touched until reviseMessage() actually runs, stopping a
+ * regeneration before any content arrives now leaves the ORIGINAL reply
+ * exactly as it was — runStream's empty-stop branch restores the
+ * `streaming` entry back to `{ kind: "sent", message: reviseTarget }`
+ * instead of S12/S19's plain "remove the entry" (which still applies,
+ * unchanged, to a genuinely new turn's empty stop — see `reviseTarget`
+ * being undefined there). This is a strict improvement enabled by the
+ * architecture change, not a speculative addition: it falls directly
+ * out of "don't touch the row until you have something to replace it
+ * with," which S20's own "retain, don't discard" grounding already
+ * requires.
+ *
+ * Old revisions render as plain text, not through MessageContent — they
+ * are a historical record of what the answer used to say, not a live,
+ * interactive current answer, so re-parsing citation markers `[N]` into
+ * clickable buttons for no-longer-authoritative text would invent
+ * interaction semantics nothing asks for. The `<details>` list uses
+ * `<p>` per revision rather than `<ul>/<li>` deliberately — nesting
+ * another `<li>` inside this thread's own top-level `<ul>` would collide
+ * with every E2E spec's `page.getByRole("main").getByRole("listitem")`
+ * scoping (see streaming-response.spec.ts's file doc comment for the
+ * general version of this trap), silently inflating the message count
+ * the moment any message had revisions.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -227,8 +254,13 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
    * implementation extending this later is exactly the kind of change
    * that belongs to whichever story actually wires up a real Model
    * Gateway call, not something to speculatively half-build now.
+   *
+   * `reviseTarget` (E03-S020): when present, this stream is regenerating
+   * that specific already-settled message rather than answering a new
+   * turn — see the file doc comment above for why that changes both the
+   * empty-stop branch and the finalize call below.
    */
-  async function runStream(localId: string) {
+  async function runStream(localId: string, reviseTarget?: Message) {
     const correlationId = crypto.randomUUID();
     logger.info("streaming assistant reply", { correlationId, conversationId });
     trackEvent("conversation_message_stream_attempt", { correlationId, properties: { conversationId } });
@@ -263,7 +295,11 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     if (wasStopped && accumulated.length === 0) {
       logger.info("generation stopped before any content arrived", { correlationId, conversationId });
       trackEvent("conversation_message_stream_stopped", { correlationId, properties: { conversationId, hadContent: false } });
-      setDisplayMessages((previous) => previous.filter((entry) => !(entry.kind === "streaming" && entry.localId === localId)));
+      setDisplayMessages((previous) =>
+        reviseTarget
+          ? previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { kind: "sent", message: reviseTarget } : entry))
+          : previous.filter((entry) => !(entry.kind === "streaming" && entry.localId === localId)),
+      );
       return;
     }
 
@@ -272,7 +308,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       trackEvent("conversation_message_stream_stopped", { correlationId, properties: { conversationId, hadContent: true } });
     }
 
-    const result = await receiveAssistantReply(conversationId, accumulated);
+    const result = reviseTarget ? await reviseMessage(reviseTarget.id, accumulated) : await receiveAssistantReply(conversationId, accumulated);
 
     if (!result.ok) {
       logger.error("failed to persist assistant reply", { correlationId, conversationId, code: result.error.code });
@@ -309,14 +345,12 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     stoppedRef.current.add(localId);
   }
 
-  async function handleRegenerate(messageId: string) {
-    await deleteMessage(messageId);
-
+  function handleRegenerate(originalMessage: Message) {
     const localId = crypto.randomUUID();
     setDisplayMessages((previous) =>
-      previous.map((entry) => (entry.kind === "sent" && entry.message.id === messageId ? { kind: "streaming", localId, content: "", phase: null } : entry)),
+      previous.map((entry) => (entry.kind === "sent" && entry.message.id === originalMessage.id ? { kind: "streaming", localId, content: "", phase: null } : entry)),
     );
-    void runStream(localId);
+    void runStream(localId, originalMessage);
   }
 
   function handleCitationClick(citationId: string) {
@@ -372,6 +406,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
             const roleLabel = role === "assistant" ? "AI" : "你";
             const content = entry.kind === "sent" ? entry.message.content : entry.content;
             const attachmentNames = entry.kind === "sent" ? entry.message.attachmentNames : entry.kind === "streaming" ? [] : entry.attachmentNames;
+            const revisions = entry.kind === "sent" ? (entry.message.revisions ?? []) : [];
 
             return (
               <li key={key}>
@@ -381,9 +416,17 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                 </span>
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
                 {entry.kind === "sent" && role === "assistant" && isLastEntry && (
-                  <button type="button" onClick={() => handleRegenerate(entry.message.id)}>
+                  <button type="button" onClick={() => handleRegenerate(entry.message)}>
                     重新產生
                   </button>
+                )}
+                {entry.kind === "sent" && role === "assistant" && revisions.length > 0 && (
+                  <details>
+                    <summary>先前版本（{revisions.length}）</summary>
+                    {revisions.map((revisionContent, revisionIndex) => (
+                      <p key={revisionIndex}>{revisionContent}</p>
+                    ))}
+                  </details>
                 )}
                 {entry.kind === "pending" && <span role="status">傳送中…</span>}
                 {entry.kind === "streaming" && (

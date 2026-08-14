@@ -30,6 +30,18 @@ import { getConversation, touchConversationLastMessage } from "./conversations";
  * connect directly to Object Storage). Assistant replies never have
  * attachments — nothing in the spec suggests a generated reply carries
  * one, and lib/streaming.ts's mock reply is plain text only.
+ *
+ * `revisions` (E03-S020, "Answer Revision") is optional rather than an
+ * always-present `[]`, unlike `attachmentNames` — it only starts to
+ * exist once a message has actually been revised at least once via
+ * reviseMessage(), so every message created by sendMessage/
+ * receiveAssistantReply simply omits it (not "sets it to empty").
+ * Making it required would have forced every pre-existing test fixture
+ * across S009 through S019 to grow a `revisions: []` field for no
+ * behavioral reason — an unrelated, purely mechanical diff this story
+ * doesn't need. Holds prior *content* strings, oldest first; not full
+ * Message snapshots, since nothing else about a revised reply (id,
+ * conversationId, attachmentNames, createdAt) ever changes.
  */
 export interface Message {
   id: string;
@@ -38,6 +50,7 @@ export interface Message {
   content: string;
   attachmentNames: string[];
   createdAt: string;
+  revisions?: string[];
 }
 
 const STORAGE_KEY = "ai-km:mock-messages";
@@ -137,26 +150,37 @@ export async function receiveAssistantReply(conversationId: string, content: str
 }
 
 /**
- * E03-S019: "Regenerate answer action". message-thread.tsx calls this
- * before starting a fresh stream to replace an already-settled
- * assistant reply — without it, regenerating would leave the old
- * message behind in the store while a new one gets added via
- * receiveAssistantReply, so a reload would show BOTH the discarded and
- * the regenerated reply instead of just the one the user actually
- * wanted (a real duplicate-side-effect bug, not just a display quirk —
- * directly the kind of thing Functional AC 5, "重複請求/重試不得造成
- * 未定義重複 side effect", is about).
+ * E03-S020 "Answer Revision". SOURCE_BASELINE's entire content for this
+ * story is one line: 「需留下 Revision」— the content being replaced
+ * must be *retained*, not discarded. This REPLACES S019's
+ * deleteMessage-based regenerate mechanism (removed below; nothing else
+ * called it) rather than extending it: delete-then-recreate-via-
+ * receiveAssistantReply gives the new row a blank history — there's no
+ * "previous content" left anywhere to retain once the old row is gone.
+ * Updating the SAME row in place (same id, same position in the store's
+ * array) makes retention trivial: push the content being overwritten
+ * onto `revisions` first.
  *
- * Deliberately unconditional (no NOT_FOUND/conversation-existence
- * check like sendMessage/receiveAssistantReply have) — unlike those,
- * this is never called with an unverified id from outside; its only
- * caller passes the id of a message message-thread.tsx is already
- * rendering on screen, so the conversation it belongs to is
- * definitionally loaded. Scoped by message id alone (ids are globally
- * unique via crypto.randomUUID()), not conversationId, since there's
- * nothing meaningful to additionally validate.
+ * Fails closed with NOT_FOUND, unlike deleteMessage's deliberately
+ * unconditional precedent — this function actually needs the existing
+ * row's current `content`/`revisions` to build the update, so the
+ * lookup isn't optional plumbing here, it's required by what the
+ * function does.
  */
-export async function deleteMessage(messageId: string): Promise<Result<void, ApiError>> {
-  writeStore(readStore().filter((message) => message.id !== messageId));
-  return { ok: true, value: undefined };
+export async function reviseMessage(messageId: string, newContent: string): Promise<Result<Message, ApiError>> {
+  const messages = readStore();
+  const existing = messages.find((message) => message.id === messageId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } };
+  }
+
+  const revised: Message = {
+    ...existing,
+    content: newContent,
+    revisions: [...(existing.revisions ?? []), existing.content],
+  };
+  writeStore(messages.map((message) => (message.id === messageId ? revised : message)));
+  await touchConversationLastMessage(existing.conversationId, newContent, new Date().toISOString());
+
+  return { ok: true, value: revised };
 }

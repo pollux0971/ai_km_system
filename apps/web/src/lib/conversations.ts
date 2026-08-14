@@ -40,6 +40,15 @@ export interface ConversationSummary {
    * name is used and why "standard" specifically is the default.
    */
   model: AiModel;
+  /**
+   * E03-S026 "Archive/unarchive conversation". Optional rather than an
+   * always-present `false`, same reasoning as messages.ts's `revisions`/
+   * `state` fields: every pre-S026 test fixture across S001-S025 simply
+   * omits it, and every read site treats an absent value as `false`
+   * (not archived) — making it required would force a mechanical,
+   * behavior-unrelated update to every one of those existing fixtures.
+   */
+  archived?: boolean;
 }
 
 /**
@@ -115,9 +124,20 @@ function writeStore(items: ConversationSummary[]): void {
   window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
-/** Home Dashboard's Recent Conversations widget (E01-S008): top 3 only. */
+/**
+ * Home Dashboard's Recent Conversations widget (E01-S008): top 3 only.
+ *
+ * E03-S026: excludes archived conversations — a necessary consequence
+ * of introducing "archived" at all, not scope creep borrowed from a
+ * different story. Archiving is meant to get a conversation out of the
+ * way; if it kept showing up on the Home Dashboard regardless, the
+ * feature wouldn't actually do anything for the surfaces a user
+ * encounters conversations through day to day. Same class of
+ * "correctness requires this" reasoning S025 already used to justify
+ * cascade-deleting a conversation's messages alongside itself.
+ */
 export async function getRecentConversations(): Promise<Result<ConversationSummary[], ApiError>> {
-  return { ok: true, value: readStore().slice(0, 3) };
+  return { ok: true, value: readStore().filter((item) => !item.archived).slice(0, 3) };
 }
 
 /**
@@ -187,12 +207,26 @@ export const CONVERSATIONS_PAGE_SIZE = 2;
  * not full message content, and full-content search would need a
  * fundamentally different (and heavier) mechanism this MVP-simplified
  * story doesn't ask for.
+ *
+ * E03-S026 "Archive/unarchive conversation" adds `archived` as a THIRD
+ * filter dimension, applied FIRST (before search, before pagination) —
+ * `false` (the default) selects the normal active list every pre-S026
+ * call site already expects unchanged; `true` selects only archived
+ * conversations. This is a SWITCH between two mutually-exclusive views,
+ * not an "also include archived" toggle merged into one list — mirrors
+ * how real archive features (the same "real chat/email product"
+ * precedent already used elsewhere in this file) present Active and
+ * Archived as separate views, not one interleaved list a user would
+ * have to visually pick apart. `totalCount`/`totalPages` describe
+ * whichever view was requested, same "describes the actual filtered
+ * result, not some other set" principle search already established.
  */
-export async function listConversations(page = 1, query?: string): Promise<Result<ConversationListPage, ApiError>> {
+export async function listConversations(page = 1, query?: string, archived = false): Promise<Result<ConversationListPage, ApiError>> {
   const trimmedQuery = query?.trim() ?? "";
+  const archivedFiltered = readStore().filter((item) => (item.archived ?? false) === archived);
   const all = trimmedQuery
-    ? readStore().filter((item) => item.title.toLocaleLowerCase().includes(trimmedQuery.toLocaleLowerCase()))
-    : readStore();
+    ? archivedFiltered.filter((item) => item.title.toLocaleLowerCase().includes(trimmedQuery.toLocaleLowerCase()))
+    : archivedFiltered;
   const pageSize = CONVERSATIONS_PAGE_SIZE;
   const totalCount = all.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -355,6 +389,32 @@ export async function deleteConversation(id: string): Promise<Result<void, ApiEr
   }
   writeStore(store.filter((item) => item.id !== id));
   return { ok: true, value: undefined };
+}
+
+/**
+ * E03-S026 "Archive/unarchive conversation". Two separate, explicitly-
+ * named functions (not a single `setConversationArchived(id, boolean)`)
+ * — matches this file's established convention of one verb-named
+ * export per user-facing action (`renameConversation`,
+ * `deleteConversation`), not a generic field setter, so each call site
+ * in UI code reads as the action it actually is.
+ *
+ * Unlike deleteConversation, archiving is REVERSIBLE — the whole point
+ * of "archive/unarchive" being one story is that either direction can
+ * always undo the other, unlike delete's permanent, one-way removal
+ * (see deleteConversation's own doc comment for why delete and archive
+ * are deliberately different capabilities). This reversibility is why
+ * the UI layer built on top of these two functions doesn't need a
+ * confirmation step the way E03-S025's delete does — same "low-risk,
+ * reversible operations don't need a confirm dialog" reasoning E03-S024
+ * already used for rename.
+ */
+export async function archiveConversation(id: string): Promise<Result<ConversationSummary, ApiError>> {
+  return updateConversation(id, { archived: true });
+}
+
+export async function unarchiveConversation(id: string): Promise<Result<ConversationSummary, ApiError>> {
+  return updateConversation(id, { archived: false });
 }
 
 /**

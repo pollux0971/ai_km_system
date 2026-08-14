@@ -57,10 +57,32 @@ type State =
  * conversation" message would be actively misleading to a user who has
  * conversations but just searched for something that doesn't match any
  * of them.
+ *
+ * E03-S026 "Archive/unarchive conversation" adds `viewingArchived`,
+ * switched via a ModeSwitch-style `role="group"` button pair
+ * ("作用中對話"/"已封存對話") — a SWITCH between two mutually-exclusive
+ * views (matching listConversations' own "archived is a view selector,
+ * not an include-toggle" design), not a checkbox that mixes archived
+ * items into the normal list. Changing views resets BOTH `page` and
+ * `query` back to their defaults — carrying over a page number or
+ * search string from one view into the other could land on a
+ * meaningless page (that view's own result set has a different size
+ * and order) or silently keep filtering by a query the user typed
+ * before switching context, neither of which a view switch should do.
+ *
+ * A third empty-state message ("尚無已封存的對話。") covers
+ * viewing-archived-with-zero-results — reusing either existing message
+ * would be wrong here for the same reason S023's search-empty message
+ * exists at all: "尚無對話，開始你的第一個對話" would be false (there
+ * may be plenty of active conversations, just none archived). An active
+ * search query still takes priority over this — searching within the
+ * archived view and finding nothing is still fundamentally a "no
+ * matches" situation, not an "empty archive" one.
  */
 export default function ConversationList() {
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
+  const [viewingArchived, setViewingArchived] = useState(false);
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
@@ -68,33 +90,56 @@ export default function ConversationList() {
     const correlationId = crypto.randomUUID();
 
     setState({ status: "loading" });
-    logger.info("loading conversation list", { correlationId, page, query });
+    logger.info("loading conversation list", { correlationId, page, query, viewingArchived });
 
-    listConversations(page, query).then((result) => {
+    listConversations(page, query, viewingArchived).then((result) => {
       if (cancelled) return;
 
       if (!result.ok) {
-        logger.error("failed to load conversation list", { correlationId, page, query, code: result.error.code });
+        logger.error("failed to load conversation list", { correlationId, page, query, viewingArchived, code: result.error.code });
         setState({ status: "error" });
         return;
       }
 
-      logger.info("conversation list loaded", { correlationId, page, query, count: result.value.items.length, totalCount: result.value.totalCount });
+      logger.info("conversation list loaded", {
+        correlationId,
+        page,
+        query,
+        viewingArchived,
+        count: result.value.items.length,
+        totalCount: result.value.totalCount,
+      });
       setState({ status: "loaded", items: result.value.items, page: result.value.page, totalPages: result.value.totalPages });
     });
 
     return () => {
       cancelled = true;
     };
-  }, [page, query]);
+  }, [page, query, viewingArchived]);
 
   function handleQueryChange(value: string) {
     setQuery(value);
     setPage(1);
   }
 
+  function handleViewChange(archived: boolean) {
+    if (archived === viewingArchived) return;
+    setViewingArchived(archived);
+    setPage(1);
+    setQuery("");
+  }
+
   return (
     <div>
+      <div role="group" aria-label="對話檢視" style={{ marginBottom: 16 }}>
+        <button type="button" aria-pressed={!viewingArchived} onClick={() => handleViewChange(false)}>
+          作用中對話
+        </button>
+        <button type="button" aria-pressed={viewingArchived} onClick={() => handleViewChange(true)}>
+          已封存對話
+        </button>
+      </div>
+
       <div style={{ marginBottom: 16 }}>
         <label htmlFor="conversation-search">搜尋對話</label>
         <br />
@@ -112,7 +157,15 @@ export default function ConversationList() {
       {state.status === "error" && <ErrorMessage message="無法載入對話列表。" />}
 
       {state.status === "loaded" && state.items.length === 0 && state.page === 1 && (
-        <EmptyState message={query.trim() ? `查無符合「${query}」的對話。` : "尚無對話，開始你的第一個對話。"} />
+        <EmptyState
+          message={
+            query.trim()
+              ? `查無符合「${query}」的對話。`
+              : viewingArchived
+                ? "尚無已封存的對話。"
+                : "尚無對話，開始你的第一個對話。"
+          }
+        />
       )}
 
       {state.status === "loaded" && state.items.length > 0 && (

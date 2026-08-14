@@ -125,8 +125,9 @@ describe("ConversationList pagination (E03-S022)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "下一頁" }));
 
-    // 2nd arg "" (E03-S023): no search query is active in this test.
-    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(2, ""));
+    // 2nd arg "" (E03-S023): no search query active. 3rd arg false
+    // (E03-S026): viewing the active (not archived) view.
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(2, "", false));
     expect(await screen.findByText("第二頁對話")).toBeInTheDocument();
     expect(screen.queryByText("第一頁對話")).not.toBeInTheDocument();
   });
@@ -154,8 +155,9 @@ describe("ConversationList pagination (E03-S022)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "上一頁" }));
 
-    // 2nd arg "" (E03-S023): no search query is active in this test.
-    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, ""));
+    // 2nd arg "" (E03-S023): no search query active. 3rd arg false
+    // (E03-S026): viewing the active (not archived) view.
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "", false));
     expect(await screen.findByText("第一頁對話")).toBeInTheDocument();
   });
 });
@@ -169,7 +171,8 @@ describe("ConversationList search (E03-S023)", () => {
 
     fireEvent.change(screen.getByLabelText("搜尋對話"), { target: { value: "保固" } });
 
-    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "保固"));
+    // 3rd arg false (E03-S026): viewing the active (not archived) view.
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "保固", false));
   });
 
   it("shows a distinct empty message (not the generic 'start your first conversation' one) when a search matches nothing", async () => {
@@ -230,6 +233,100 @@ describe("ConversationList search (E03-S023)", () => {
     mockedListConversations.mockResolvedValueOnce(singlePage([SAMPLE_ITEM]));
     fireEvent.change(screen.getByLabelText("搜尋對話"), { target: { value: "測試" } });
 
-    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "測試"));
+    // 3rd arg false (E03-S026): viewing the active (not archived) view.
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "測試", false));
+  });
+});
+
+describe("ConversationList archived view (E03-S026)", () => {
+  it("shows 作用中對話/已封存對話 toggle buttons, with 作用中對話 pressed by default", async () => {
+    mockedListConversations.mockResolvedValue(singlePage([SAMPLE_ITEM]));
+
+    render(<ConversationList />);
+    await screen.findByText("測試對話");
+
+    expect(screen.getByRole("button", { name: "作用中對話" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "已封存對話" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("clicking 已封存對話 re-fetches with archived=true", async () => {
+    mockedListConversations.mockResolvedValue(singlePage([SAMPLE_ITEM]));
+    render(<ConversationList />);
+    await screen.findByText("測試對話");
+
+    const archivedItem = { ...SAMPLE_ITEM, id: "c2", title: "已封存的對話" };
+    mockedListConversations.mockResolvedValueOnce(singlePage([archivedItem]));
+    fireEvent.click(screen.getByRole("button", { name: "已封存對話" }));
+
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "", true));
+    expect(await screen.findByText("已封存的對話")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "已封存對話" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "作用中對話" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("switching back to 作用中對話 re-fetches with archived=false", async () => {
+    mockedListConversations.mockResolvedValue(singlePage([SAMPLE_ITEM]));
+    render(<ConversationList />);
+    await screen.findByText("測試對話");
+    fireEvent.click(screen.getByRole("button", { name: "已封存對話" }));
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "", true));
+
+    mockedListConversations.mockResolvedValueOnce(singlePage([SAMPLE_ITEM]));
+    fireEvent.click(screen.getByRole("button", { name: "作用中對話" }));
+
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "", false));
+  });
+
+  it("switching views resets an in-progress search query and page", async () => {
+    mockedListConversations.mockResolvedValueOnce({
+      ok: true,
+      value: { items: [SAMPLE_ITEM], page: 1, pageSize: 2, totalCount: 3, totalPages: 2 },
+    });
+    render(<ConversationList />);
+    await screen.findByText("測試對話");
+
+    mockedListConversations.mockResolvedValueOnce({
+      ok: true,
+      value: { items: [SAMPLE_ITEM], page: 2, pageSize: 2, totalCount: 3, totalPages: 2 },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "下一頁" }));
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(2, "", false));
+
+    mockedListConversations.mockResolvedValueOnce(singlePage([SAMPLE_ITEM]));
+    fireEvent.change(screen.getByLabelText("搜尋對話"), { target: { value: "測試" } });
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "測試", false));
+
+    mockedListConversations.mockResolvedValueOnce(singlePage([]));
+    fireEvent.click(screen.getByRole("button", { name: "已封存對話" }));
+
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "", true));
+    expect(screen.getByLabelText("搜尋對話")).toHaveValue("");
+  });
+
+  it("shows a distinct empty message ('尚無已封存的對話') when the archived view has zero results", async () => {
+    mockedListConversations.mockResolvedValue(singlePage([SAMPLE_ITEM]));
+    render(<ConversationList />);
+    await screen.findByText("測試對話");
+
+    mockedListConversations.mockResolvedValueOnce(singlePage([]));
+    fireEvent.click(screen.getByRole("button", { name: "已封存對話" }));
+
+    expect(await screen.findByText("尚無已封存的對話。")).toBeInTheDocument();
+    expect(screen.queryByText("尚無對話，開始你的第一個對話。")).not.toBeInTheDocument();
+  });
+
+  it("a search with no matches within the archived view still shows the search-empty message, not the archived-empty one", async () => {
+    mockedListConversations.mockResolvedValue(singlePage([SAMPLE_ITEM]));
+    render(<ConversationList />);
+    await screen.findByText("測試對話");
+    mockedListConversations.mockResolvedValueOnce(singlePage([SAMPLE_ITEM]));
+    fireEvent.click(screen.getByRole("button", { name: "已封存對話" }));
+    await waitFor(() => expect(mockedListConversations).toHaveBeenLastCalledWith(1, "", true));
+
+    mockedListConversations.mockResolvedValueOnce(singlePage([]));
+    fireEvent.change(screen.getByLabelText("搜尋對話"), { target: { value: "找不到" } });
+
+    expect(await screen.findByText("查無符合「找不到」的對話。")).toBeInTheDocument();
+    expect(screen.queryByText("尚無已封存的對話。")).not.toBeInTheDocument();
   });
 });

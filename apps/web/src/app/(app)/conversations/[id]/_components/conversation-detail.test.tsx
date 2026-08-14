@@ -25,6 +25,8 @@ vi.mock("@/lib/conversations", () => ({
   setConversationMode: vi.fn(),
   renameConversation: vi.fn(),
   deleteConversation: vi.fn(),
+  archiveConversation: vi.fn(),
+  unarchiveConversation: vi.fn(),
 }));
 
 vi.mock("@/lib/messages", () => ({
@@ -94,6 +96,10 @@ describe("ConversationDetail (E03-S002/S003/S004/S005/S006)", () => {
     // rename-conversation.test.tsx's own dedicated describe block, not
     // duplicated here.
     expect(screen.getByRole("button", { name: "重新命名" })).toBeInTheDocument();
+    // E03-S026: same reasoning — ArchiveConversation wired in, showing
+    // "封存對話" since this fixture's conversation isn't archived;
+    // deeper behavior covered in archive-conversation.test.tsx.
+    expect(screen.getByRole("button", { name: "封存對話" })).toBeInTheDocument();
     // E03-S025: same reasoning — DeleteConversation wired in, deeper
     // behavior covered in delete-conversation.test.tsx.
     expect(screen.getByRole("button", { name: "刪除對話" })).toBeInTheDocument();

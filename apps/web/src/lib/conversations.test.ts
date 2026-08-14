@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CONVERSATIONS_PAGE_SIZE,
+  archiveConversation,
   createConversation,
   deleteConversation,
   getConversation,
@@ -10,6 +11,7 @@ import {
   setConversationKnowledgeScopes,
   setConversationMode,
   setConversationModel,
+  unarchiveConversation,
 } from "./conversations";
 
 describe("getRecentConversations", () => {
@@ -656,6 +658,173 @@ describe("deleteConversation (E03-S025)", () => {
     expect(list.ok).toBe(true);
     if (list.ok) {
       expect(list.value.items.some((item) => item.id === created.value.id)).toBe(false);
+    }
+  });
+});
+
+describe("archiveConversation / unarchiveConversation (E03-S026)", () => {
+  it("archiveConversation marks an existing conversation as archived", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.archived ?? false).toBe(false);
+
+    const archived = await archiveConversation(created.value.id);
+    expect(archived.ok).toBe(true);
+    if (archived.ok) {
+      expect(archived.value.archived).toBe(true);
+    }
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.archived).toBe(true);
+    }
+  });
+
+  it("unarchiveConversation reverses a previous archive", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveConversation(created.value.id);
+
+    const unarchived = await unarchiveConversation(created.value.id);
+    expect(unarchived.ok).toBe(true);
+    if (unarchived.ok) {
+      expect(unarchived.value.archived).toBe(false);
+    }
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.archived).toBe(false);
+    }
+  });
+
+  it("archiveConversation fails closed with NOT_FOUND for an id that doesn't exist", async () => {
+    const result = await archiveConversation("does-not-exist");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("unarchiveConversation fails closed with NOT_FOUND for an id that doesn't exist", async () => {
+    const result = await unarchiveConversation("does-not-exist");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("archiving an already-archived conversation succeeds again (idempotent, not a stacking error)", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveConversation(created.value.id);
+
+    const archivedAgain = await archiveConversation(created.value.id);
+
+    expect(archivedAgain.ok).toBe(true);
+    if (archivedAgain.ok) {
+      expect(archivedAgain.value.archived).toBe(true);
+    }
+  });
+
+  it("archiving one conversation does not affect another", async () => {
+    const a = await createConversation();
+    const b = await createConversation();
+    expect(a.ok && b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+
+    await archiveConversation(a.value.id);
+
+    const reloadedB = await getConversation(b.value.id);
+    expect(reloadedB.ok).toBe(true);
+    if (reloadedB.ok) {
+      expect(reloadedB.value?.archived ?? false).toBe(false);
+    }
+  });
+
+  it("does not affect a conversation's title, mode, knowledge scopes, or model", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const archived = await archiveConversation(created.value.id);
+    expect(archived.ok).toBe(true);
+    if (archived.ok) {
+      expect(archived.value.title).toBe(created.value.title);
+      expect(archived.value.mode).toBe(created.value.mode);
+      expect(archived.value.knowledgeScopes).toEqual(created.value.knowledgeScopes);
+      expect(archived.value.model).toBe(created.value.model);
+    }
+  });
+});
+
+describe("listConversations archived view (E03-S026)", () => {
+  it("defaults to the active (non-archived) view — an archived conversation does not appear", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveConversation(created.value.id);
+
+    const list = await listConversations();
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.items.some((item) => item.id === created.value.id)).toBe(false);
+    }
+  });
+
+  it("archived=true shows only the archived conversation, not an unarchived one", async () => {
+    const archivedOne = await createConversation();
+    const activeOne = await createConversation();
+    expect(archivedOne.ok && activeOne.ok).toBe(true);
+    if (!archivedOne.ok || !activeOne.ok) return;
+    await archiveConversation(archivedOne.value.id);
+
+    const list = await listConversations(1, "", true);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.items.some((item) => item.id === archivedOne.value.id)).toBe(true);
+      expect(list.value.items.some((item) => item.id === activeOne.value.id)).toBe(false);
+    }
+  });
+
+  it("unarchiving removes a conversation from the archived view again", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveConversation(created.value.id);
+    await unarchiveConversation(created.value.id);
+
+    const archivedList = await listConversations(1, "", true);
+    expect(archivedList.ok).toBe(true);
+    if (archivedList.ok) {
+      expect(archivedList.value.items.some((item) => item.id === created.value.id)).toBe(false);
+    }
+
+    const activeList = await listConversations(1, "", false);
+    expect(activeList.ok).toBe(true);
+    if (activeList.ok) {
+      expect(activeList.value.items.some((item) => item.id === created.value.id)).toBe(true);
+    }
+  });
+});
+
+describe("getRecentConversations archived exclusion (E03-S026)", () => {
+  it("excludes an archived conversation even though it was just created (and would otherwise be most recent)", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveConversation(created.value.id);
+
+    const recent = await getRecentConversations();
+    expect(recent.ok).toBe(true);
+    if (recent.ok) {
+      expect(recent.value.some((item) => item.id === created.value.id)).toBe(false);
     }
   });
 });

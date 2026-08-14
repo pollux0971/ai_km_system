@@ -77,6 +77,36 @@ export interface KnowledgeBaseSummary {
    * `visibleToRoles`/`members`/`boundPrompt`.
    */
   boundModel?: AiModel;
+  /**
+   * E05-S016 "Folder sync setup UI". `folderSyncPath` is the configured
+   * source location (a filesystem path or cloud-storage folder
+   * reference — this story never validates or resolves it against a
+   * real filesystem/cloud API, so it's kept as an opaque string, same
+   * "no real backing system, don't fake validating against one"
+   * reasoning `members`' doc comment already applies to a missing user
+   * directory). `folderSyncEnabled` is a plain boolean — the first one
+   * on this type; every prior KB-configuration field (roles, members,
+   * a prompt, a model) was list- or reference-shaped, this is the first
+   * genuinely binary on/off setting. Both optional, same "absence means
+   * not-yet-configured" reasoning as every sibling field above —
+   * `folderSyncEnabled` is not defaulted to `false` at every read site,
+   * so "never configured" stays distinct from "explicitly turned off
+   * after being set up".
+   *
+   * This is a SETTING ONLY — turning it on starts no real background
+   * job, polls no real filesystem or cloud API, and creates no
+   * KnowledgeBaseDocument entries. The real Folder Sync worker
+   * (E06-S20, Team B) doesn't exist, and this codebase has no
+   * scheduler/worker infrastructure at all to fake one with — building
+   * even a mock "sync runs and adds documents" behavior here would be
+   * exactly the "以 mock 假裝 production path 已完成" DEVELOPMENT_POLICY
+   * forbids, the same reasoning updateKnowledgeBaseVisibleRoles's own
+   * doc comment already gives for not building fake enforcement. A
+   * dedicated test proves enabling sync never adds any document to
+   * listKnowledgeBaseDocuments().
+   */
+  folderSyncPath?: string;
+  folderSyncEnabled?: boolean;
 }
 
 /**
@@ -410,6 +440,49 @@ export async function updateKnowledgeBaseBoundModel(
   }
 
   const updated: KnowledgeBaseSummary = { ...existing, boundModel, updatedAt: new Date().toISOString() };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E05-S016 "Folder sync setup UI". `folderSyncEnabled: true` requires a
+ * non-empty `folderSyncPath` — same server-side-validates-too
+ * discipline as createKnowledgeBase/updateKnowledgeBaseBoundModel: you
+ * cannot turn sync on without a source to sync from. Turning sync OFF
+ * is always allowed regardless of the path (a user may want to pause
+ * sync without discarding the configured location — same "clear the
+ * binding, keep the rest" reasoning updateKnowledgeBaseBoundModel's own
+ * `undefined` case already establishes for a different field). An
+ * empty path is stored as `undefined`, not `""` — same "absence, not
+ * an explicitly-saved empty value" reasoning as every optional field on
+ * this type.
+ *
+ * This function updates the SETTING only — see `folderSyncPath`'s own
+ * doc comment on KnowledgeBaseSummary for why no real sync job, poll,
+ * or document creation ever happens as a result of calling this.
+ */
+export async function updateKnowledgeBaseFolderSync(
+  id: string,
+  folderSyncPath: string,
+  folderSyncEnabled: boolean,
+): Promise<Result<KnowledgeBaseSummary, ApiError>> {
+  const trimmedPath = folderSyncPath.trim();
+  if (folderSyncEnabled && !trimmedPath) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "啟用資料夾同步前，請先輸入資料夾路徑。" } };
+  }
+
+  const store = readStore();
+  const existing = store.find((item) => item.id === id);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const updated: KnowledgeBaseSummary = {
+    ...existing,
+    folderSyncPath: trimmedPath || undefined,
+    folderSyncEnabled,
+    updatedAt: new Date().toISOString(),
+  };
   writeStore(store.map((item) => (item.id === id ? updated : item)));
   return { ok: true, value: updated };
 }

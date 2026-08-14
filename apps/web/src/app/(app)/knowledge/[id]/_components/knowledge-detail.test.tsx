@@ -243,6 +243,50 @@ describe("KnowledgeDetail (E05-S005)", () => {
     expect(mockedListKnowledgeBaseDocuments).not.toHaveBeenCalled();
   });
 
+  it("shows a 資料夾同步設定 link pointing at /knowledge/{id}/folder-sync", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByRole("link", { name: "資料夾同步設定" })).toHaveAttribute(
+      "href",
+      "/knowledge/kb1/folder-sync",
+    );
+  });
+
+  it("shows 尚未設定 for folder sync when no path has been configured yet", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("資料夾同步:", { exact: false });
+    expect(summary).toHaveTextContent("尚未設定");
+  });
+
+  it("shows 已啟用 for folder sync when a path is configured and sync is on", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleKnowledgeBase, folderSyncPath: "/mnt/shared/policies", folderSyncEnabled: true },
+    });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("資料夾同步:", { exact: false });
+    expect(summary).toHaveTextContent("已啟用");
+  });
+
+  it("shows 已停用 for folder sync when a path is configured but sync is off", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleKnowledgeBase, folderSyncPath: "/mnt/shared/policies", folderSyncEnabled: false },
+    });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("資料夾同步:", { exact: false });
+    expect(summary).toHaveTextContent("已停用");
+  });
+
   it("shows a distinct error state when loading fails", async () => {
     mockedGetKnowledgeBase.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
 

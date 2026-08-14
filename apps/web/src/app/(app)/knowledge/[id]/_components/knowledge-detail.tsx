@@ -77,6 +77,16 @@ type State =
  * "－" placeholder instead of discarding an otherwise-successful page
  * load over a secondary enrichment value.
  *
+ * E05-S016 "Folder sync setup UI" adds a one-line summary of
+ * `folderSyncEnabled`/`folderSyncPath` (三態: "尚未設定" when
+ * `folderSyncPath` is absent, "已啟用" when a path is configured and
+ * `folderSyncEnabled` is true, "已停用" when a path is configured but
+ * sync is off) plus a "資料夾同步設定" link to
+ * /knowledge/[id]/folder-sync — same shape as the roles/members/
+ * prompt/model summaries above. Not the path itself — same "summary,
+ * not the full setting" restraint `boundPrompt`'s own summary already
+ * applies (the path is visible in full on the dedicated editor route).
+ *
  * Otherwise only shows the fields KnowledgeBaseSummary currently has
  * (name/description/updatedAt) — no usage stats. That's its own later,
  * separate story (S28); this page's job is establishing the detail
@@ -155,6 +165,7 @@ export default function KnowledgeDetail({ id }: { id: string }) {
     ? (AI_MODELS.find((option) => option.id === knowledgeBase.boundModel)?.label ?? knowledgeBase.boundModel)
     : "尚未綁定";
   const documentCountLabel = documentCount === null ? "－" : documentCount === 0 ? "尚無文件" : `${documentCount} 份文件`;
+  const folderSyncLabel = !knowledgeBase.folderSyncPath ? "尚未設定" : knowledgeBase.folderSyncEnabled ? "已啟用" : "已停用";
 
   return (
     <main style={{ padding: 32 }}>
@@ -186,6 +197,9 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       <p>
         文件:<span>{documentCountLabel}</span>
       </p>
+      <p>
+        資料夾同步:<span>{folderSyncLabel}</span>
+      </p>
       <Link href={`/knowledge/${knowledgeBase.id}/edit`}>編輯</Link>
       {" · "}
       <Link href={`/knowledge/${knowledgeBase.id}/permissions`}>權限設定</Link>
@@ -197,6 +211,8 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       <Link href={`/knowledge/${knowledgeBase.id}/model`}>模型設定</Link>
       {" · "}
       <Link href={`/knowledge/${knowledgeBase.id}/documents`}>文件列表</Link>
+      {" · "}
+      <Link href={`/knowledge/${knowledgeBase.id}/folder-sync`}>資料夾同步設定</Link>
     </main>
   );
 }

@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
+| E05 Knowledge Management Experience | 31 | 0 | 0 | 1 | 0 | 30 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 53 | 0 | 0 | 0 | 122 |
+| **合計** | **175** | 53 | 0 | 1 | 0 | 121 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -103,7 +103,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E05-S001 | todo | | | |
+| E05-S001 | in-progress | story/E05-S001-knowledge-list-page | | DEV 進行中(Knowledge list page,E05 第一個 story) |
 | E05-S002 | todo | | | |
 | E05-S003 | todo | | | |
 | E05-S004 | todo | | | |

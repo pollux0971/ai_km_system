@@ -102,3 +102,23 @@ describe("KnowledgeList search (E05-S002)", () => {
     expect(screen.getByLabelText("搜尋知識庫")).toHaveValue("保固");
   });
 });
+
+describe("KnowledgeList edit link (E05-S004)", () => {
+  it("shows a 編輯 link per item, pointing at /knowledge/{id}/edit", async () => {
+    mockedListKnowledgeBases.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "kb1", name: "測試知識庫一", description: "描述一", updatedAt: "2026-08-13T01:00:00.000Z" },
+        { id: "kb2", name: "測試知識庫二", description: "描述二", updatedAt: "2026-08-12T01:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeList />);
+    await screen.findByText("測試知識庫一");
+
+    const editLinks = screen.getAllByRole("link", { name: "編輯" });
+    expect(editLinks).toHaveLength(2);
+    expect(editLinks[0]).toHaveAttribute("href", "/knowledge/kb1/edit");
+    expect(editLinks[1]).toHaveAttribute("href", "/knowledge/kb2/edit");
+  });
+});

@@ -146,6 +146,35 @@ describe("KnowledgeDetail (E05-S005)", () => {
     expect(screen.queryByText("請用友善、簡潔的語氣回答客服問題。")).not.toBeInTheDocument();
   });
 
+  it("shows a 模型設定 link pointing at /knowledge/{id}/model", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByRole("link", { name: "模型設定" })).toHaveAttribute("href", "/knowledge/kb1/model");
+  });
+
+  it("shows 尚未綁定 for the bound model when none has been configured yet", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("綁定模型:", { exact: false });
+    expect(summary).toHaveTextContent("尚未綁定");
+  });
+
+  it("shows the AI_MODELS label (not the raw id) when a model is bound", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleKnowledgeBase, boundModel: "advanced-local" },
+    });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const summary = await screen.findByText("綁定模型:", { exact: false });
+    expect(summary).toHaveTextContent("進階模型（地端）");
+  });
+
   it("shows a distinct error state when loading fails", async () => {
     mockedGetKnowledgeBase.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
 

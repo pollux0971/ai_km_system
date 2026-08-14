@@ -863,3 +863,122 @@ describe("MessageThread multi-turn conversation (E03-S017)", () => {
     expect(mockedReceiveAssistantReply).toHaveBeenNthCalledWith(2, "c1", "第二輪");
   });
 });
+
+describe("MessageThread conversation context indicator (E03-S018)", () => {
+  it("does not show the indicator at all when there are no messages yet (EmptyState already says so)", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("尚無訊息，開始對話吧。");
+    expect(screen.queryByText("上下文：目前尚無先前訊息。")).not.toBeInTheDocument();
+  });
+
+  it("shows the indicator's own empty-context message once a first message is in flight, before it settles", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockReturnValue(new Promise(() => {}));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("第一輪");
+
+    // The list is no longer empty (it holds the optimistic pending
+    // entry), so EmptyState is gone and the indicator's own "尚無先前
+    // 訊息" is no longer a redundant duplicate — sentMessageCount is
+    // still legitimately 0 since nothing has settled yet.
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("傳送中…"));
+    expect(screen.getByText("上下文：目前尚無先前訊息。")).toBeInTheDocument();
+  });
+
+  it("shows the correct count for previously-sent messages loaded on mount", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "已完成的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    expect(await screen.findByText("上下文：包含 2 則先前訊息。")).toBeInTheDocument();
+  });
+
+  it("does not count a still-pending or still-streaming entry toward the context count", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockReturnValue(new Promise(() => {}));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("第一輪");
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("傳送中…"));
+    expect(screen.getByText("上下文：目前尚無先前訊息。")).toBeInTheDocument();
+  });
+
+  it("counts the user's own message once it settles, even while the assistant's reply is still streaming", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedRunGenerationPhases.mockImplementation(async function* () {
+      yield "searching";
+      await new Promise<void>(() => {});
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("第一輪");
+
+    // attemptSend reconciles the user's own message from pending to
+    // sent BEFORE calling startStream() — so by the time any phase is
+    // visible, the count is already 1 (the user's message), not 0 or 2
+    // (the assistant's reply is still in flight, correctly excluded).
+    await waitFor(() => expect(screen.getByText("搜尋中…")).toBeInTheDocument());
+    expect(screen.getByText("上下文：包含 1 則先前訊息。")).toBeInTheDocument();
+  });
+
+  it("updates the count to 2 once a full turn (user + assistant) settles", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "回覆內容";
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("第一輪");
+
+    await waitFor(() => expect(screen.getByText("上下文：包含 2 則先前訊息。")).toBeInTheDocument());
+  });
+
+  it("updates the count to 4 after a second full turn settles", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { id: "u1", conversationId: "c1", role: "user", content: "第一輪", attachmentNames: [], createdAt: "2026-08-14T00:00:00.000Z" },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { id: "u2", conversationId: "c1", role: "user", content: "第二輪", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+      });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "回覆";
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+
+    submitViaComposer("第一輪");
+    await waitFor(() => expect(screen.getByText("上下文：包含 2 則先前訊息。")).toBeInTheDocument());
+
+    submitViaComposer("第二輪");
+    await waitFor(() => expect(screen.getByText("上下文：包含 4 則先前訊息。")).toBeInTheDocument());
+  });
+});

@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 16 | 0 | 1 | 0 | 14 |
+| E05 Knowledge Management Experience | 31 | 16 | 1 | 0 | 0 | 14 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 69 | 0 | 1 | 0 | 105 |
+| **合計** | **175** | 69 | 1 | 0 | 0 | 105 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -119,7 +119,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S014 | approved | story/E05-S014-url-import | [E05-S014.md](E05-S014.md) | 獨立審核 APPROVE(URL import;`KnowledgeBaseDocument.sizeBytes` 改為選填(URL 匯入無真實位元組數可回報,不捏造佔位數字);新增獨立 `addKnowledgeBaseDocumentFromUrl`(格式驗證+http(s)協定白名單,審核者確認 `javascript:`/`file:` 皆有專屬拒絕測試);`KnowledgeDocumentUrlImport` 獨立元件(文字輸入+明確送出);顯示具體錯誤訊息(刻意偏離 S009 用固定通用字串的既有做法,審核者確認兩種失敗情境顯示兩種不同訊息,證實非寫死);0 個 BLOCKER/MAJOR,1 個 MINOR(doc comment 多餘空白行,審核者當場修正);2 次 FIX 循環(`type="url"` 原生驗證攔截 submit 導致自訂驗證/錯誤訊息完全被繞過,改用 type="text";E2E route-announcer 碰撞,審核者確認此寫法已是 3 個既有 spec 檔案使用的既有慣用法,非權宜之計);審核者獨立重跑 typecheck/lint/build/676 unit/136 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S015 | approved | story/E05-S015-text-knowledge-input | [E05-S015.md](E05-S015.md) | 獨立審核 APPROVE(Text knowledge input;`KnowledgeBaseDocument` 新增選填 `content`,真的儲存輸入文字(與 S011-S014「不假裝擁有不存在的資料」同一原則的相反應用);`sizeBytes` 為真實計算的 UTF-8 位元組數(`new Blob(...).size`),審核者獨立用 `node -e` 複驗「知識」= 6 位元組屬實,與 S014 URL 匯入省略此欄位形成刻意對照;標題/內容雙欄位分離;空白內容明確拒絕;`KnowledgeDocumentTextInput` 第三個獨立元件;0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環(全部 gate 一次通過,審核者獨立重跑同樣一次全線通過);審核者獨立重跑 typecheck/lint/build/697 unit/137 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S016 | approved | story/E05-S016-folder-sync-setup-ui | [E05-S016.md](E05-S016.md) | 獨立審核 APPROVE(Folder sync setup UI;`KnowledgeBaseSummary` 新增第一個純布林設定欄位 `folderSyncEnabled`(先前皆為清單/參照形狀);啟用要求非空路徑,停用永遠允許(暫停但保留路徑設定);純設定,無真實同步 worker(E06-S20,Team B),兩個「is a setting only」測試分別驗證不新增文件、不影響 KB 可見性,審核者確認第一個測試直接比對啟用前後的文件數量,比既有先例更直接;獨立路由比照 S006-S009(而非 S011-S015 的文件頁內元件);審核者獨立追蹤 layout.tsx/SessionGate 巢狀結構確認新路由自動繼承既有 session 保護,未直接採信「不適用」的書面宣稱;0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/723 unit/140 E2E 皆綠,force 全量三輪皆 0 cache 全過,與 DEV 階段數字完全一致、無 flaky,PROGRESS.md 逐列手動計數複核一致) |
-| E05-S017 | in-progress | story/E05-S017-upload-progress | | |
+| E05-S017 | done | story/E05-S017-upload-progress | [E05-S017.md](E05-S017.md) | |
 | E05-S018 | todo | | | |
 | E05-S019 | todo | | | |
 | E05-S020 | todo | | | |

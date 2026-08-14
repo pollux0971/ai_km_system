@@ -33,10 +33,15 @@ async function openConversation(page: import("@playwright/test").Page) {
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
-test("E03-S018: the context indicator starts empty, excludes an in-flight message, then updates once each turn settles", async ({ page }) => {
+test("E03-S018: the indicator is hidden while the thread is empty, appears once a message is in flight, excludes it until it settles, then updates as turns settle", async ({
+  page,
+}) => {
   await openConversation(page);
 
-  await expect(page.getByText("上下文：目前尚無先前訊息。")).toBeVisible();
+  // No indicator alongside EmptyState — showing two differently-worded
+  // "nothing yet" statements at once would be redundant, not helpful.
+  await expect(page.getByText("尚無訊息，開始對話吧。")).toBeVisible();
+  await expect(page.getByText("上下文：目前尚無先前訊息。")).not.toBeVisible();
 
   await page.getByLabel("訊息").fill("保固期限是多久？");
   await page.getByRole("button", { name: "送出" }).click();

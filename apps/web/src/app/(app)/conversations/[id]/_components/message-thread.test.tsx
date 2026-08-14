@@ -865,12 +865,29 @@ describe("MessageThread multi-turn conversation (E03-S017)", () => {
 });
 
 describe("MessageThread conversation context indicator (E03-S018)", () => {
-  it("shows the empty-context message when there are no messages yet", async () => {
+  it("does not show the indicator at all when there are no messages yet (EmptyState already says so)", async () => {
     mockedListMessages.mockResolvedValue({ ok: true, value: [] });
 
     render(<MessageThread conversationId="c1" />);
 
-    expect(await screen.findByText("上下文：目前尚無先前訊息。")).toBeInTheDocument();
+    await screen.findByText("尚無訊息，開始對話吧。");
+    expect(screen.queryByText("上下文：目前尚無先前訊息。")).not.toBeInTheDocument();
+  });
+
+  it("shows the indicator's own empty-context message once a first message is in flight, before it settles", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockReturnValue(new Promise(() => {}));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("第一輪");
+
+    // The list is no longer empty (it holds the optimistic pending
+    // entry), so EmptyState is gone and the indicator's own "尚無先前
+    // 訊息" is no longer a redundant duplicate — sentMessageCount is
+    // still legitimately 0 since nothing has settled yet.
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("傳送中…"));
+    expect(screen.getByText("上下文：目前尚無先前訊息。")).toBeInTheDocument();
   });
 
   it("shows the correct count for previously-sent messages loaded on mount", async () => {
@@ -899,7 +916,7 @@ describe("MessageThread conversation context indicator (E03-S018)", () => {
     mockedSendMessage.mockReturnValue(new Promise(() => {}));
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("上下文：目前尚無先前訊息。");
+    await screen.findByText("尚無訊息，開始對話吧。");
     submitViaComposer("第一輪");
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("傳送中…"));
@@ -915,7 +932,7 @@ describe("MessageThread conversation context indicator (E03-S018)", () => {
     });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("上下文：目前尚無先前訊息。");
+    await screen.findByText("尚無訊息，開始對話吧。");
     submitViaComposer("第一輪");
 
     // attemptSend reconciles the user's own message from pending to
@@ -934,7 +951,7 @@ describe("MessageThread conversation context indicator (E03-S018)", () => {
     });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("上下文：目前尚無先前訊息。");
+    await screen.findByText("尚無訊息，開始對話吧。");
     submitViaComposer("第一輪");
 
     await waitFor(() => expect(screen.getByText("上下文：包含 2 則先前訊息。")).toBeInTheDocument());
@@ -956,7 +973,7 @@ describe("MessageThread conversation context indicator (E03-S018)", () => {
     });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("上下文：目前尚無先前訊息。");
+    await screen.findByText("尚無訊息，開始對話吧。");
 
     submitViaComposer("第一輪");
     await waitFor(() => expect(screen.getByText("上下文：包含 2 則先前訊息。")).toBeInTheDocument());

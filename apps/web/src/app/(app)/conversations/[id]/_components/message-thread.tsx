@@ -101,7 +101,15 @@ const logger = createLogger("web:message-thread");
  * about what's available for the NEXT turn they're about to start.
  * See conversation-context-indicator.tsx for why this is a pure
  * display feature (the epic's own "indicator" wording), not a request
- * to wire real history into lib/streaming.ts's mock call.
+ * to wire real history into lib/streaming.ts's mock call. Suppressed
+ * entirely while `displayMessages.length === 0` — EmptyState's "尚無
+ * 訊息，開始對話吧。" already says there's nothing yet; showing the
+ * indicator's own "上下文：目前尚無先前訊息。" alongside it would be
+ * two differently-worded statements of the exact same fact at once.
+ * Once at least one entry exists (even just a still-in-flight first
+ * message, before anything has settled), the indicator reappears —
+ * `sentMessageCount` can still legitimately read 0 at that point, and
+ * that's meaningful information no longer competing with EmptyState.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -352,7 +360,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
         </ul>
       )}
       <CitationPreviewDrawer citationId={previewCitationId} onClose={handleClosePreview} />
-      <ConversationContextIndicator messageCount={sentMessageCount} />
+      {displayMessages.length > 0 && <ConversationContextIndicator messageCount={sentMessageCount} />}
       <MessageComposer conversationId={conversationId} onSubmit={handleComposerSubmit} disabled={isTurnInFlight} />
     </div>
   );

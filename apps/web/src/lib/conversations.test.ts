@@ -109,12 +109,23 @@ describe("listConversations pagination (E03-S022)", () => {
     expect(page1Ids.some((id) => page2Ids.includes(id))).toBe(false);
   });
 
-  it("a page far beyond the last one resolves with an empty items array, not an error", async () => {
+  it("a page far beyond the last one resolves with an empty items array, not an error, and totalCount/totalPages stay accurate", async () => {
+    const reference = await listConversations();
+    expect(reference.ok).toBe(true);
+    if (!reference.ok) return;
+
     const result = await listConversations(999999);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.items).toEqual([]);
+      // Independent reviewer MINOR finding: an out-of-range page must
+      // not report the dataset as empty just because ITS OWN slice is —
+      // totalCount/totalPages are computed from the full store before
+      // slicing (see listConversations), so they should match a normal
+      // in-range call made around the same time.
+      expect(result.value.totalCount).toBe(reference.value.totalCount);
+      expect(result.value.totalPages).toBe(reference.value.totalPages);
     }
   });
 

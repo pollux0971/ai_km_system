@@ -7,6 +7,11 @@ import ConversationList from "./_components/conversation-list";
  * page existed — that comment already anticipated this story building
  * it). Page frame only; ConversationList owns the loading/error/empty/
  * loaded states.
+ *
+ * E03-S028 adds a second, clearly-distinct entry link
+ * ("上傳檔案開始對話") alongside "開始新對話" — see
+ * conversations/new-file/page.tsx's own doc comment for why this is a
+ * separate route rather than a retrofit of /conversations/new.
  */
 export default function ConversationsPage() {
   return (
@@ -14,6 +19,8 @@ export default function ConversationsPage() {
       <h1>對話</h1>
       <p>
         <Link href="/conversations/new">開始新對話</Link>
+        {" · "}
+        <Link href="/conversations/new-file">上傳檔案開始對話</Link>
       </p>
       <ConversationList />
     </main>

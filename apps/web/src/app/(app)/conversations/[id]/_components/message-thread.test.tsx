@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
 import { runGenerationPhases } from "@/lib/generation-status";
@@ -1467,4 +1467,162 @@ describe("MessageThread answer state rendering (E03-S021)", () => {
       expect(mockedReceiveAssistantReply.mock.calls[0]?.[1]).toBe(fallbackContent);
     },
   );
+});
+
+describe("MessageThread copy answer action (E03-S027)", () => {
+  // navigator.clipboard doesn't exist in jsdom by default — stubbed
+  // locally to this describe block since no other section of this file
+  // needs it.
+  const mockedWriteText = vi.fn();
+
+  beforeEach(() => {
+    mockedWriteText.mockReset();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: mockedWriteText },
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("shows a 複製 button on every settled assistant reply (not just the last one), but not on the user's own message", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        { id: "a2", conversationId: "c1", role: "assistant", content: "第二輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("第二輪回覆");
+    expect(screen.getAllByRole("button", { name: "複製" })).toHaveLength(2);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).not.toHaveTextContent("複製");
+    expect(items[1]).toHaveTextContent("複製");
+    expect(items[2]).not.toHaveTextContent("複製");
+    expect(items[3]).toHaveTextContent("複製");
+  });
+
+  it("clicking 複製 writes that message's raw content (including citation markers, as plain text) to the clipboard and shows 已複製", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "本季成長 12%[1]，主要來自新客戶導入。",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
+    mockedWriteText.mockResolvedValue(undefined);
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText(/本季成長/);
+
+    fireEvent.click(screen.getByRole("button", { name: "複製" }));
+
+    await waitFor(() => expect(mockedWriteText).toHaveBeenCalledWith("本季成長 12%[1]，主要來自新客戶導入。"));
+    expect(await screen.findByRole("button", { name: "已複製" })).toBeInTheDocument();
+  });
+
+  it("copying one message does not mark a different message's button as 已複製", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        { id: "a2", conversationId: "c1", role: "assistant", content: "第二輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
+      ],
+    });
+    mockedWriteText.mockResolvedValue(undefined);
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第二輪回覆");
+
+    const copyButtons = screen.getAllByRole("button", { name: "複製" });
+    fireEvent.click(copyButtons[0]!);
+
+    await waitFor(() => expect(mockedWriteText).toHaveBeenCalledWith("第一輪回覆"));
+    expect(await screen.findByRole("button", { name: "已複製" })).toBeInTheDocument();
+    // Exactly one 已複製 — the other assistant reply's button is untouched.
+    expect(screen.getAllByRole("button", { name: "複製" })).toHaveLength(1);
+  });
+
+  it("已複製 automatically reverts back to 複製 after a short delay", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockedListMessages.mockResolvedValue({
+        ok: true,
+        value: [
+          SENT_USER_MESSAGE,
+          { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+        ],
+      });
+      mockedWriteText.mockResolvedValue(undefined);
+
+      render(<MessageThread conversationId="c1" />);
+      await screen.findByText("第一輪回覆");
+
+      fireEvent.click(screen.getByRole("button", { name: "複製" }));
+      expect(await screen.findByRole("button", { name: "已複製" })).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(screen.getByRole("button", { name: "複製" })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a distinct error message and keeps the 複製 label when the clipboard write fails", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
+    mockedWriteText.mockRejectedValue(new Error("denied"));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "複製" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("複製失敗，請手動選取複製。");
+    expect(screen.getByRole("button", { name: "複製" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "已複製" })).not.toBeInTheDocument();
+  });
+
+  it("disables the button while the copy is in flight", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
+    let resolveWrite!: () => void;
+    mockedWriteText.mockReturnValue(new Promise<void>((resolve) => (resolveWrite = resolve)));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "複製" }));
+
+    expect(screen.getByRole("button", { name: "複製" })).toBeDisabled();
+
+    resolveWrite();
+    await waitFor(() => expect(screen.getByRole("button", { name: "已複製" })).not.toBeDisabled());
+  });
 });

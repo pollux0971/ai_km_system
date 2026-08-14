@@ -193,6 +193,36 @@ const logger = createLogger("web:message-thread");
  * common, unremarkable case renders exactly as it did before this
  * story, matching how real chat products only surface exceptional
  * states rather than badging every normal reply.
+ *
+ * S27 "Copy answer action" adds a "複製" button to EVERY settled
+ * (`kind: "sent"`) assistant reply — unlike S19's regenerate, copying
+ * is non-destructive and has no "only the last reply makes sense"
+ * constraint, so it isn't restricted to `isLastEntry` (the same "real
+ * chat product" precedent this file already leans on elsewhere: real
+ * products let you copy any past reply, not just the latest one). The
+ * epic's own title, "Copy ANSWER action", is itself the scope signal
+ * that this applies to assistant replies only, not the user's own
+ * messages — mirroring how S19's title already settled the
+ * last-entry-only question for regenerate.
+ *
+ * `copyFeedback` tracks the single most-recently-clicked copy button's
+ * transient state (not a Set/map keyed by every message — only one
+ * button's feedback is ever visible at a time in practice, so a lone
+ * `{ messageId, status }` is the simplest structure that covers it).
+ * "已複製" auto-reverts to "複製" after a short delay via
+ * `copyResetTimeoutRef` — this is a genuinely different shape from
+ * S26's `archive-conversation.tsx` label-flip (which persists until
+ * the user clicks again, because archived is a real persisted state);
+ * copying isn't a persisted state at all, so leaving the button
+ * permanently reading "已複製" after the fact would misrepresent it as
+ * one. `navigator.clipboard.writeText()` can reject (insecure context,
+ * permission denial) — a `status: "failed"` reading surfaces that
+ * distinctly via `role="alert"`, the same role this file already uses
+ * for every other permanent-until-superseded negative state (see the
+ * ERROR/PERMISSION_DENIED badge and the stream-failed entry above) —
+ * never `role="status"`, which this file's own doc comment already
+ * established is reserved for "still busy" and is what every E2E
+ * spec's waitForThreadToSettle helper polls to 0.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -207,7 +237,15 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
   const [previewCitationId, setPreviewCitationId] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<{ messageId: string; status: "pending" | "copied" | "failed" } | null>(null);
   const stoppedRef = useRef<Set<string>>(new Set());
+  const copyResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current) clearTimeout(copyResetTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -394,6 +432,30 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     void runStream(localId, originalMessage, originalMessage.state ?? "ANSWERED");
   }
 
+  async function handleCopy(messageId: string, content: string) {
+    const correlationId = crypto.randomUUID();
+    logger.info("copying answer to clipboard", { correlationId, conversationId, messageId });
+    trackEvent("conversation_answer_copy_attempt", { correlationId, properties: { conversationId, messageId } });
+
+    if (copyResetTimeoutRef.current) {
+      clearTimeout(copyResetTimeoutRef.current);
+      copyResetTimeoutRef.current = null;
+    }
+    setCopyFeedback({ messageId, status: "pending" });
+
+    try {
+      await navigator.clipboard.writeText(content);
+      logger.info("copied answer to clipboard", { correlationId, conversationId, messageId });
+      trackEvent("conversation_answer_copy_success", { correlationId, properties: { conversationId, messageId } });
+      setCopyFeedback({ messageId, status: "copied" });
+      copyResetTimeoutRef.current = setTimeout(() => setCopyFeedback(null), 2000);
+    } catch {
+      logger.error("failed to copy answer to clipboard", { correlationId, conversationId, messageId });
+      trackEvent("conversation_answer_copy_failure", { correlationId, properties: { conversationId, messageId } });
+      setCopyFeedback({ messageId, status: "failed" });
+    }
+  }
+
   function handleCitationClick(citationId: string) {
     setPreviewCitationId(citationId);
   }
@@ -474,6 +536,20 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                     answerState !== "ANSWERED" && <span>{ANSWER_STATE_LABELS[answerState]}</span>
                   ))}
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
+                {entry.kind === "sent" && role === "assistant" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(entry.message.id, content)}
+                      disabled={copyFeedback?.messageId === entry.message.id && copyFeedback.status === "pending"}
+                    >
+                      {copyFeedback?.messageId === entry.message.id && copyFeedback.status === "copied" ? "已複製" : "複製"}
+                    </button>
+                    {copyFeedback?.messageId === entry.message.id && copyFeedback.status === "failed" && (
+                      <span role="alert">複製失敗，請手動選取複製。</span>
+                    )}
+                  </>
+                )}
                 {entry.kind === "sent" && role === "assistant" && isLastEntry && (
                   <button type="button" onClick={() => handleRegenerate(entry.message)}>
                     重新產生

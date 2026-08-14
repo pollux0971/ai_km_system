@@ -13,6 +13,17 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * has 3 documents, kb-sample-2 ("設備維修標準作業程序") has 1,
  * kb-sample-3 ("人力資源與請假規範") has 0 — deliberately covering the
  * multi/single/empty list-size states across the existing KB fixtures.
+ *
+ * E05-S011 adds the upload flow itself (KnowledgeDocumentUpload,
+ * embedded directly on this same page) — uploading into both the empty
+ * kb-sample-3 (flips the empty state away) and the already-populated
+ * kb-sample-1 (appends without disturbing the existing 3), and
+ * confirming the detail page's document-count summary reflects the
+ * change after navigating back, same as every other field's own
+ * detail-page integration test in this file's sibling specs.
+ * page.setInputFiles() with an in-memory buffer, not a real file on
+ * disk — no real upload happens (see addKnowledgeBaseDocument's own
+ * doc comment), so only the File's name/size matter, not its content.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -74,4 +85,54 @@ test("E05-S010: a knowledge base with no documents shows 尚無文件 and a dist
   await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
 
   await expect(page.getByText("這個知識庫尚無文件。")).toBeVisible();
+});
+
+test("E05-S011: uploading a file adds it to the list immediately and updates the detail page's document count", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+  await expect(page.getByText("這個知識庫尚無文件。")).toBeVisible();
+
+  await page.getByLabel("上傳文件").setInputFiles({
+    name: "新版請假規範.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("mock file content for E05-S011 upload test"),
+  });
+  await expect(page.getByText("已選擇:新版請假規範.pdf", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+  await expect(page.getByText("新版請假規範.pdf")).toBeVisible();
+  await expect(page.getByText("這個知識庫尚無文件。")).not.toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("1 份文件");
+});
+
+test("E05-S011: uploading a second file appends to an already-populated list without losing the existing ones", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "產品保固政策");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+  await expect(page.getByText("產品保固條款.pdf")).toBeVisible();
+
+  await page.getByLabel("上傳文件").setInputFiles({
+    name: "補充條款.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("mock file content"),
+  });
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+  await expect(page.getByText("補充條款.pdf")).toBeVisible();
+  await expect(page.getByText("產品保固條款.pdf")).toBeVisible();
+  await expect(page.getByText("理賠申請流程.docx")).toBeVisible();
+  await expect(page.getByText("常見保固問題 FAQ.pdf")).toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("4 份文件");
 });

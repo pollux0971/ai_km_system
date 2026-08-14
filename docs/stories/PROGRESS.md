@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 9 | 1 | 0 | 0 | 21 |
+| E05 Knowledge Management Experience | 31 | 11 | 0 | 0 | 0 | 20 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 62 | 1 | 0 | 0 | 112 |
+| **合計** | **175** | 64 | 0 | 0 | 0 | 111 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -113,7 +113,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S008 | approved | story/E05-S008-kb-prompt-binding-ui | [E05-S008.md](E05-S008.md) | 獨立審核 APPROVE(KB prompt binding UI;提示詞直接存於 KB 自身,無真正 Prompt 實體(E11-S12/E12 皆尚未開工);Functional AC 7 判定不適用(內容/設定變更,非存取控制),telemetry 不外洩提示詞原文並有專屬測試驗證;0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環(新摘要與 S006 既有摘要撞名,橫跨 unit+E2E,已根因修正);審核者逐行覆核對 S006 既有 E2E spec 的 2 處必要修正,確認是精確化而非放寬;審核者獨立重跑 typecheck/lint/build/574 unit/2+36 個目標 E2E 皆綠,force 全量(build+test)三輪(DEV 兩輪+審核一輪)皆為 125 E2E 全過、無 flaky) |
 | E05-S009 | approved | story/E05-S009-kb-model-binding-ui | [E05-S009.md](E05-S009.md) | 獨立審核 APPROVE(KB model binding UI;`boundModel` 重用既有 `AiModel`/`AI_MODELS`(E03-S005),不新增獨立型別,選項清單/標籤/disabled 狀態與 `ModelSelector` 共用同一事實來源,審核者獨立讀 `conversations.ts` 原始碼確認「伺服器端拒絕 disabled 模型」與 `setConversationModel` 驗證順序完全一致的宣稱屬實,非編造;即時套用單選(鏡射 `ModelSelector`),多一個「未綁定,依對話設定」選項;telemetry 記錄實際 from/to/model 值(與 S008 排除提示詞原文相反,因模型是固定詞彙非自由格式內容);0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環;未修改任何既有測試檔案斷言(未重演 S008 的摘要文字撞名問題);審核者獨立重跑 typecheck/lint/build/599 unit/128 E2E 皆綠,force 全量(typecheck+lint/build/test)三輪皆 0 cache 全過,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S010 | approved | story/E05-S010-kb-document-list | [E05-S010.md](E05-S010.md) | 獨立審核 APPROVE(KB document list;第一次引入全新實體 `KnowledgeBaseDocument`(獨立模組 `knowledge-documents.ts`,鏡射 `messages.ts` vs `ConversationSummary` 的既有 collection-vs-parent 先例,審核者獨立讀 `messages.ts` 原始碼確認 `listMessages` 逐字相同的「純過濾不查存在」結構屬實);真正的 Document 實體屬於 E06(Team B,36 個 sub-story 皆 todo);純列表,不含上傳(S011-S016)/進度/失敗狀態(S017-S020)/版本控制(E06-S30-32);種子資料刻意分布 3/1/0 筆橫跨既有 3 個 KB fixture,涵蓋多筆/單筆/空清單三態;detail 頁新增文件數量摘要(非清單本身),第二層 fetch 失敗時優雅降級為「－」而非整頁報錯,審核者逐行覆核控制流程確認宣稱屬實;`formatFileSize` 有意識地與 E03 domain 的既有實作重複而非跨 domain 重構,審核者逐字元比對確認完全相同且未觸碰 E03 檔案;0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環(typecheck strict-mode 索引存取,單次修正);審核者獨立重跑 typecheck/lint/build/622 unit/131 E2E 皆綠,force 全量三輪皆 0 cache 全過,與 DEV 階段數字完全一致、無 flaky) |
-| E05-S011 | todo | | | |
+| E05-S011 | approved | story/E05-S011-single-file-upload | [E05-S011.md](E05-S011.md) | 獨立審核 APPROVE(Single-file upload;上傳元件內嵌在既有 `/knowledge/[id]/documents` 頁面(非獨立路由),鏡射 `messages.ts` sendMessage 內嵌於對話頁的既有先例;`addKnowledgeBaseDocument` 只收 name/sizeBytes 純值,沿用 E03-S008 FileAttachmentPicker「無真實上傳」的既有先例(E06 Upload API/Object Storage 皆 Team B、todo);選檔→確認上傳兩段式,失敗保留選擇(審核者逐行覆核 handleUpload 確認 setSelectedFile(null) 只在成功路徑);telemetry 記錄 sizeBytes 但絕不記錄檔名(審核者確認三個 trackEvent 呼叫的 properties 皆不含檔名);`formatFileSize` 與 S010 共用同一 domain 內的檔案,審核者確認舊本地定義已刪除、雙方皆改為 import,非假重構;Functional AC 7 判定不適用(同 S003);0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環(E2E locator strict-mode 衝突,`<input type="file">` 隱含 role=button 與其 label 造成的 substring 誤命中,審核者確認修法乾淨、未波及任何既有斷言);審核者獨立重跑 typecheck/lint/build/638 unit/133 E2E 皆綠,force 全量三輪皆 0 cache 全過,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S012 | todo | | | |
 | E05-S013 | todo | | | |
 | E05-S014 | todo | | | |

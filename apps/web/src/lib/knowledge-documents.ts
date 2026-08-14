@@ -1,4 +1,5 @@
 import type { ApiError, Result } from "@ai-km/types";
+import { getKnowledgeBase } from "./knowledge-bases";
 
 /**
  * E05-S010 "KB document list". A knowledge base's actual document
@@ -89,15 +90,7 @@ const SAMPLE_KNOWLEDGE_BASE_DOCUMENTS: KnowledgeBaseDocument[] = [
 
 const STORAGE_KEY = "ai-km:mock-knowledge-documents";
 
-/**
- * Same sessionStorage-backed reasoning as knowledge-bases.ts's own
- * readStore(). No matching writeStore() yet — this story is list-only
- * (S011 "Single-file upload" is the first to ever add a document);
- * unlike knowledge-bases.ts, where writeStore() was already needed by
- * this same file's own create/update exports, nothing here calls one
- * yet, so adding it now would just be an untested, uncalled function.
- * S011 adds it alongside its own first caller.
- */
+/** Same sessionStorage-backed reasoning as knowledge-bases.ts's own readStore(). */
 function readStore(): KnowledgeBaseDocument[] {
   if (typeof window === "undefined") return SAMPLE_KNOWLEDGE_BASE_DOCUMENTS;
   const raw = window.sessionStorage.getItem(STORAGE_KEY);
@@ -107,6 +100,16 @@ function readStore(): KnowledgeBaseDocument[] {
   } catch {
     return SAMPLE_KNOWLEDGE_BASE_DOCUMENTS;
   }
+}
+
+/**
+ * E05-S011 "Single-file upload". First caller of writeStore() — S010
+ * (list-only) deliberately left it out since nothing called it yet; see
+ * this file's git history for that reasoning.
+ */
+function writeStore(items: KnowledgeBaseDocument[]): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
 /**
@@ -122,4 +125,60 @@ function readStore(): KnowledgeBaseDocument[] {
  */
 export async function listKnowledgeBaseDocuments(knowledgeBaseId: string): Promise<Result<KnowledgeBaseDocument[], ApiError>> {
   return { ok: true, value: readStore().filter((document) => document.knowledgeBaseId === knowledgeBaseId) };
+}
+
+/**
+ * E05-S011 "Single-file upload". Takes plain `name`/`sizeBytes`
+ * primitives already extracted by the caller from a browser `File`
+ * object, not the `File` itself — same "extract what's needed before
+ * calling the mock layer" shape as lib/messages.ts's sendMessage()
+ * taking `attachmentNames: string[]` rather than raw `File[]`, keeping
+ * this module platform-agnostic and trivially unit-testable without a
+ * DOM File polyfill.
+ *
+ * No real upload happens here — no file bytes are read, stored, or
+ * transmitted anywhere. Same "Frontend/BFF may never connect directly
+ * to Object Storage" boundary (this story's own Development
+ * Boundaries) that made conversations/[id]/_components/
+ * file-attachment-picker.tsx (E03-S008) a purely client-side selection
+ * UI with zero real upload — the real Upload API and Object Storage
+ * belong to E06-S01/S02 (Team B), both `todo`.
+ *
+ * Trims and rejects an empty name with VALIDATION_ERROR — same
+ * server-side-validates-too discipline as createKnowledgeBase/
+ * renameConversation, even though a real browser File's `.name` is
+ * very unlikely to ever be empty in practice. No size or file-type
+ * validation — same reasoning FileAttachmentPicker's own doc comment
+ * already gives for declining to invent a limit AI_KM_BMAD_High_Granularity/
+ * never specifies (the one concrete format list in the whole spec
+ * belongs to E06's own parser stories, Team B, not this story).
+ *
+ * Fails closed with NOT_FOUND if the knowledge base doesn't exist —
+ * same reused-check pattern as sendMessage() reusing getConversation().
+ */
+export async function addKnowledgeBaseDocument(
+  knowledgeBaseId: string,
+  name: string,
+  sizeBytes: number,
+): Promise<Result<KnowledgeBaseDocument, ApiError>> {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "檔案名稱不得為空。" } };
+  }
+
+  const knowledgeBase = await getKnowledgeBase(knowledgeBaseId);
+  if (!knowledgeBase.ok) return knowledgeBase;
+  if (!knowledgeBase.value) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const document: KnowledgeBaseDocument = {
+    id: crypto.randomUUID(),
+    knowledgeBaseId,
+    name: trimmedName,
+    sizeBytes,
+    uploadedAt: new Date().toISOString(),
+  };
+  writeStore([...readStore(), document]);
+  return { ok: true, value: document };
 }

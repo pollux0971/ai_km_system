@@ -719,6 +719,20 @@ describe("archiveConversation / unarchiveConversation (E03-S026)", () => {
     }
   });
 
+  it("archiving an already-archived conversation succeeds again (idempotent, not a stacking error)", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveConversation(created.value.id);
+
+    const archivedAgain = await archiveConversation(created.value.id);
+
+    expect(archivedAgain.ok).toBe(true);
+    if (archivedAgain.ok) {
+      expect(archivedAgain.value.archived).toBe(true);
+    }
+  });
+
   it("archiving one conversation does not affect another", async () => {
     const a = await createConversation();
     const b = await createConversation();

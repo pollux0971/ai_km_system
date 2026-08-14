@@ -47,6 +47,12 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * button, separate from the upload widget) — importing a URL and
  * confirming it lands in the list with no size shown (a URL-imported
  * document has no sizeBytes) and the detail page's count updates.
+ *
+ * E05-S015 adds KnowledgeDocumentTextInput (title + content textarea +
+ * 新增 button) — typing knowledge directly and confirming it lands in
+ * the list WITH a size shown this time (unlike URL import, the typed
+ * content is real and its byte length is genuinely computed, not
+ * omitted).
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -267,6 +273,29 @@ test("E05-S014: importing a URL adds it to the list without a size, and rejects 
 
   await expect(page.getByText("https://example.com/policy.pdf")).toBeVisible();
   await expect(page.getByLabel("從網址匯入")).toHaveValue("");
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("1 份文件");
+});
+
+test("E05-S015: typing a title and content adds a text knowledge document with a real computed size", async ({ page }) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+  await expect(page.getByText("這個知識庫尚無文件。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "新增" })).toBeDisabled();
+
+  await page.getByLabel("標題").fill("特休假規則");
+  await page.getByLabel("內容").fill("到職滿一年可享 7 天特休。");
+  await page.getByRole("button", { name: "新增" }).click();
+
+  await expect(page.getByText("特休假規則")).toBeVisible();
+  await expect(page.getByLabel("標題")).toHaveValue("");
+  await expect(page.getByLabel("內容")).toHaveValue("");
+  await expect(page.getByText("這個知識庫尚無文件。")).not.toBeVisible();
+  // Unlike a URL import, typed content has a real, non-zero computed size.
+  await expect(page.getByText(/^\d+(\.\d+)? (B|KB|MB)$/)).toBeVisible();
 
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));

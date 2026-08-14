@@ -187,6 +187,31 @@ describe("ConversationList search (E03-S023)", () => {
     expect(screen.queryByText("尚無對話，開始你的第一個對話。")).not.toBeInTheDocument();
   });
 
+  it("a whitespace-only query is treated as no search active for the empty-state message, matching listConversations' own trim", async () => {
+    // Independent review MINOR finding: the empty-state branch and
+    // listConversations' own "is a search active" check must trim the
+    // same way, or a whitespace-only query could show the "no search
+    // results" message on a genuinely empty account instead of "start
+    // your first conversation". This mock's own listConversations
+    // already treats whitespace-only as untrimmed-empty (returns
+    // everything) — this test exercises the COMPONENT's message
+    // branching in isolation via a directly mocked empty result, since
+    // there's no way to reach a truly empty store through this
+    // codebase's real data layer (no delete-conversation feature).
+    mockedListConversations.mockResolvedValue({
+      ok: true,
+      value: { items: [], page: 1, pageSize: 2, totalCount: 0, totalPages: 1 },
+    });
+
+    render(<ConversationList />);
+    await screen.findByText("尚無對話，開始你的第一個對話。");
+
+    fireEvent.change(screen.getByLabelText("搜尋對話"), { target: { value: "   " } });
+
+    expect(await screen.findByText("尚無對話，開始你的第一個對話。")).toBeInTheDocument();
+    expect(screen.queryByText("查無符合", { exact: false })).not.toBeInTheDocument();
+  });
+
   it("resets to page 1 when the query changes while on a later page", async () => {
     mockedListConversations.mockResolvedValueOnce({
       ok: true,

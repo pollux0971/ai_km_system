@@ -174,9 +174,13 @@ export const CONVERSATIONS_PAGE_SIZE = 2;
  * query, and that reading also gives S022's own existing tests nothing
  * to update.
  *
- * Matches against `title` only, case-insensitively (Unicode-aware via
- * `.toLocaleLowerCase()`, not `.toLowerCase()`, so this isn't
- * ASCII-only-correct for Traditional Chinese content) — not
+ * Matches against `title` only, case-insensitively via
+ * `.toLocaleLowerCase()` — the general-purpose, locale-aware choice for
+ * case-folding (defensive default, not `.toLowerCase()`'s ASCII-biased
+ * one), though independent review confirmed it makes no OBSERVABLE
+ * difference for this specific dataset: Han characters have no case to
+ * fold either way, and the one ASCII pair here ("E-204") folds
+ * identically under both methods in the default locale. Not
  * `lastMessagePreview`. Real chat products (ChatGPT/Claude's own
  * sidebar search, the same "real chat products" precedent already used
  * for S012/S017/S019's design calls) search conversation titles/names,

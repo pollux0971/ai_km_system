@@ -48,12 +48,15 @@ type State =
  * land on a page number beyond the filtered result set's own last
  * page, showing an empty page 2 of 1 rather than the actual matches.
  *
- * The empty-state message branches on whether a search is active: an
- * empty *search* result ("查無符合...的對話") is a materially different
- * situation from a genuinely empty conversation list ("尚無對話，開始
- * 你的第一個對話") — reusing the "start your first conversation"
- * message would be actively misleading to a user who has conversations
- * but just searched for something that doesn't match any of them.
+ * The empty-state message branches on `query.trim()` (not raw `query`)
+ * — mirroring listConversations' own trim exactly, so a whitespace-only
+ * search reads as "no search active" on both sides, not just the data
+ * layer. An empty *search* result ("查無符合...的對話") is a materially
+ * different situation from a genuinely empty conversation list ("尚無
+ * 對話，開始你的第一個對話") — reusing the "start your first
+ * conversation" message would be actively misleading to a user who has
+ * conversations but just searched for something that doesn't match any
+ * of them.
  */
 export default function ConversationList() {
   const [page, setPage] = useState(1);
@@ -109,7 +112,7 @@ export default function ConversationList() {
       {state.status === "error" && <ErrorMessage message="無法載入對話列表。" />}
 
       {state.status === "loaded" && state.items.length === 0 && state.page === 1 && (
-        <EmptyState message={query ? `查無符合「${query}」的對話。` : "尚無對話，開始你的第一個對話。"} />
+        <EmptyState message={query.trim() ? `查無符合「${query}」的對話。` : "尚無對話，開始你的第一個對話。"} />
       )}
 
       {state.status === "loaded" && state.items.length > 0 && (

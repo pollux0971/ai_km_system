@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 0 | 1 | 0 | 0 | 30 |
+| E05 Knowledge Management Experience | 31 | 1 | 0 | 0 | 0 | 30 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 53 | 1 | 0 | 0 | 121 |
+| **合計** | **175** | 54 | 0 | 0 | 0 | 121 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -103,7 +103,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E05-S001 | done | story/E05-S001-knowledge-list-page | [E05-S001.md](E05-S001.md) | DEV 完成,待獨立審核(Knowledge list page,E05 第一個 story;SOURCE_BASELINE 僅標題,但 nav-items.ts 早在 E01-S006 就明確預告「each is created by its owning epic's own first story」,不需 advisor;鏡射 E03-S001「當時」(非現在累積後)的原始形狀;SOURCE_BASELINE 把 List/Search/Create/Edit/Detail 拆成各自獨立 story,故本 story 只做列表,不做新增入口、不做項目連結;0 次 FIX 循環;typecheck/lint/build/460 unit/19 個目標 E2E 皆綠,force 全量兩輪(108 E2E)皆綠) |
+| E05-S001 | approved | story/E05-S001-knowledge-list-page | [E05-S001.md](E05-S001.md) | 獨立審核 APPROVE(Knowledge list page,E05 第一個 story;SOURCE_BASELINE 僅標題,但 nav-items.ts 早在 E01-S006 就明確預告「each is created by its owning epic's own first story」,審核者用 git log --follow 複驗屬實,不需 advisor;鏡射 E03-S001「當時」(非現在累積後)的原始形狀,審核者用 git show 逐項比對確認;SOURCE_BASELINE 把 List/Search/Create/Edit/Detail 拆成各自獨立 story,故本 story 只做列表;0 次 FIX 循環;typecheck/lint/build/460 unit/19 個目標 E2E 皆綠,force 全量兩輪(108 E2E)皆綠;1 個 MINOR(Scope 說明未明確記錄已讀過 epic 檔章節)已修正) |
 | E05-S002 | todo | | | |
 | E05-S003 | todo | | | |
 | E05-S004 | todo | | | |

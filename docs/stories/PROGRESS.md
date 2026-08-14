@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 17 | 0 | 0 | 0 | 14 |
+| E05 Knowledge Management Experience | 31 | 17 | 0 | 1 | 0 | 13 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 70 | 0 | 0 | 0 | 105 |
+| **合計** | **175** | 70 | 0 | 1 | 0 | 104 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -120,7 +120,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S015 | approved | story/E05-S015-text-knowledge-input | [E05-S015.md](E05-S015.md) | 獨立審核 APPROVE(Text knowledge input;`KnowledgeBaseDocument` 新增選填 `content`,真的儲存輸入文字(與 S011-S014「不假裝擁有不存在的資料」同一原則的相反應用);`sizeBytes` 為真實計算的 UTF-8 位元組數(`new Blob(...).size`),審核者獨立用 `node -e` 複驗「知識」= 6 位元組屬實,與 S014 URL 匯入省略此欄位形成刻意對照;標題/內容雙欄位分離;空白內容明確拒絕;`KnowledgeDocumentTextInput` 第三個獨立元件;0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環(全部 gate 一次通過,審核者獨立重跑同樣一次全線通過);審核者獨立重跑 typecheck/lint/build/697 unit/137 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S016 | approved | story/E05-S016-folder-sync-setup-ui | [E05-S016.md](E05-S016.md) | 獨立審核 APPROVE(Folder sync setup UI;`KnowledgeBaseSummary` 新增第一個純布林設定欄位 `folderSyncEnabled`(先前皆為清單/參照形狀);啟用要求非空路徑,停用永遠允許(暫停但保留路徑設定);純設定,無真實同步 worker(E06-S20,Team B),兩個「is a setting only」測試分別驗證不新增文件、不影響 KB 可見性,審核者確認第一個測試直接比對啟用前後的文件數量,比既有先例更直接;獨立路由比照 S006-S009(而非 S011-S015 的文件頁內元件);審核者獨立追蹤 layout.tsx/SessionGate 巢狀結構確認新路由自動繼承既有 session 保護,未直接採信「不適用」的書面宣稱;0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/723 unit/140 E2E 皆綠,force 全量三輪皆 0 cache 全過,與 DEV 階段數字完全一致、無 flaky,PROGRESS.md 逐列手動計數複核一致) |
 | E05-S017 | approved | story/E05-S017-upload-progress | [E05-S017.md](E05-S017.md) | 獨立審核 APPROVE(Upload progress;新增獨立模組 `lib/upload-progress.ts`(`simulateUploadStep`)而非替 `addKnowledgeBaseDocument` 加參數,審核者獨立確認該檔案 diff 為 0 行,約 40 個既有單元測試零風險;上傳元件新增每檔進度計數,失敗檔案仍推進計數(留給 E05-S020 的失敗狀態呈現本身刻意不做,審核者獨立確認 S020 標題確實是「Processing failure state」);1 次 FIX 循環——本 story 加入的真實延遲讓 E05-S012/S013 兩個既有測試的「上傳後立刻比對檔名可見」斷言暴露出與待上傳預覽清單的潛在歧義,審核者對抗性地把修法還原到舊版本重跑,確認 100% 重現原始失敗,證實修法確實必要而非巧合,還原後 diff 為 0 確認未留殘留;修法本身只新增等待、未放寬任何既有斷言;審核者獨立重跑 typecheck/lint/build/729 unit/141 E2E 皆綠,force 全量三輪皆 0 cache 全過,另外對 S013 測試獨立重跑 5 次額外複驗穩定,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
-| E05-S018 | todo | | | |
+| E05-S018 | in-progress | story/E05-S018-parse-progress | | |
 | E05-S019 | todo | | | |
 | E05-S020 | todo | | | |
 | E05-S021 | todo | | | |

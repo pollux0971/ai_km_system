@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CONVERSATIONS_PAGE_SIZE,
   createConversation,
+  deleteConversation,
   getConversation,
   getRecentConversations,
   listConversations,
@@ -585,6 +586,76 @@ describe("renameConversation (E03-S024)", () => {
     expect(reloadedB.ok).toBe(true);
     if (reloadedB.ok) {
       expect(reloadedB.value?.title).toBe("新對話");
+    }
+  });
+});
+
+describe("deleteConversation (E03-S025)", () => {
+  it("removes an existing conversation from the store", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const deleted = await deleteConversation(created.value.id);
+    expect(deleted.ok).toBe(true);
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value).toBeNull();
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
+    const result = await deleteConversation("does-not-exist");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("a second delete of the same (already-deleted) id fails closed with NOT_FOUND — no undefined duplicate side effect", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const first = await deleteConversation(created.value.id);
+    expect(first.ok).toBe(true);
+
+    const second = await deleteConversation(created.value.id);
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("does not affect other conversations", async () => {
+    const a = await createConversation();
+    const b = await createConversation();
+    expect(a.ok && b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+
+    await deleteConversation(a.value.id);
+
+    const reloadedB = await getConversation(b.value.id);
+    expect(reloadedB.ok).toBe(true);
+    if (reloadedB.ok) {
+      expect(reloadedB.value?.id).toBe(b.value.id);
+    }
+  });
+
+  it("a deleted conversation no longer appears in listConversations", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await deleteConversation(created.value.id);
+
+    const list = await listConversations();
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.items.some((item) => item.id === created.value.id)).toBe(false);
     }
   });
 });

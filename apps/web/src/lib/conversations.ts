@@ -322,6 +322,42 @@ export async function renameConversation(id: string, title: string): Promise<Res
 }
 
 /**
+ * E03-S025 "Delete conversation confirmation". SOURCE_BASELINE.md
+ * gives this story only its title; the epic file's own expanded title
+ * adds "confirmation" — the calling UI is expected to get an explicit
+ * confirm step before this ever runs, not that this function itself
+ * takes a confirmation parameter (there's nothing for a data-layer
+ * function to "confirm" beyond the id it's given).
+ *
+ * A REAL removal from the store, not a soft/archived flag — E03-S026
+ * "Archive Conversation" exists as its own separate, not-yet-built
+ * story immediately after this one in SOURCE_BASELINE's outline, so
+ * "archive" and "delete" are deliberately two different capabilities;
+ * inventing soft-delete semantics here would silently pre-empt what
+ * S026 is supposed to own.
+ *
+ * Fails closed with NOT_FOUND for an id that doesn't match anything —
+ * same `updateConversation`-adjacent reasoning as every other mutation
+ * in this file: a caller (or a duplicate/retried request, Functional
+ * AC 5) can't mistake "already gone" for "just deleted it". Doesn't
+ * touch `lib/messages.ts`'s store directly — this module has no
+ * existing precedent of reaching into messages.ts's storage (the
+ * established dependency direction runs the other way: messages.ts
+ * already calls INTO this file's touchConversationLastMessage, never
+ * the reverse) — cascade-deleting a conversation's messages is the
+ * caller's job, calling both this and messages.ts's own
+ * deleteMessagesForConversation.
+ */
+export async function deleteConversation(id: string): Promise<Result<void, ApiError>> {
+  const store = readStore();
+  if (!store.some((item) => item.id === id)) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } };
+  }
+  writeStore(store.filter((item) => item.id !== id));
+  return { ok: true, value: undefined };
+}
+
+/**
  * E03-S009: called by lib/messages.ts once a message is actually sent,
  * so the conversation list/dashboard preview reflects the latest
  * message instead of staying frozen at whatever createConversation()

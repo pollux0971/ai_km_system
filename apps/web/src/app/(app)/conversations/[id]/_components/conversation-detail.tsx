@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getConversation, type ConversationMode, type ConversationSummary } from "@/lib/conversations";
+import { DeleteConversation } from "./delete-conversation";
 import { KnowledgeSelector } from "./knowledge-selector";
 import { MessageThread } from "./message-thread";
 import { ModelSelector } from "./model-selector";
@@ -46,6 +47,15 @@ type State =
  * this component keeping the heading and only adding a button next to
  * it — no other sibling here reads the live title the way currentMode
  * is threaded to ModelSelector, so there's nothing to lift up.
+ *
+ * S25 "Delete Conversation" adds <DeleteConversation> right after
+ * RenameConversation — both are controls about the conversation's own
+ * identity/existence (its name, and whether it exists at all), grouped
+ * together rather than separated by the mode/knowledge/model controls
+ * that follow. Unlike every other control here, a successful delete
+ * navigates away entirely (back to /conversations) — there is no
+ * "still on this page, showing the updated result" outcome, since the
+ * page's own subject no longer exists.
  */
 export default function ConversationDetail({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -108,6 +118,7 @@ export default function ConversationDetail({ id }: { id: string }) {
   return (
     <main style={{ padding: 32 }}>
       <RenameConversation conversationId={state.conversation.id} initialTitle={state.conversation.title} />
+      <DeleteConversation conversationId={state.conversation.id} title={state.conversation.title} />
       <ModeSwitch
         conversationId={state.conversation.id}
         initialMode={state.conversation.mode}

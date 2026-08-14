@@ -212,3 +212,30 @@ export async function reviseMessage(messageId: string, newContent: string, state
 
   return { ok: true, value: revised };
 }
+
+/**
+ * E03-S025 "Delete conversation confirmation". Cascade-cleanup for
+ * lib/conversations.ts's deleteConversation() — called by the SAME
+ * caller (DeleteConversation, the UI component), not by
+ * deleteConversation() itself, since conversations.ts has no existing
+ * precedent of reaching into this module's store (messages.ts already
+ * calls INTO conversations.ts's touchConversationLastMessage; the
+ * reverse direction doesn't exist anywhere in this codebase, and
+ * introducing it here for the first time would tangle these two
+ * intentionally-separate collections — see messages.ts's own top-of-
+ * file doc comment on why Message is kept apart from
+ * ConversationSummary in the first place).
+ *
+ * Deliberately unconditional (no NOT_FOUND check) — same reasoning the
+ * original S019 deleteMessage() gave for its own unconditional design:
+ * this is a cleanup step for messages whose parent conversation is
+ * already confirmed gone (the caller only reaches this after
+ * deleteConversation() itself already succeeded), not a user-facing
+ * mutation with its own existence contract to enforce. A conversation
+ * with zero messages (never sent anything) is a completely normal,
+ * expected case, not an error.
+ */
+export async function deleteMessagesForConversation(conversationId: string): Promise<Result<void, ApiError>> {
+  writeStore(readStore().filter((message) => message.conversationId !== conversationId));
+  return { ok: true, value: undefined };
+}

@@ -1,19 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ConversationDetail from "./conversation-detail";
-import { getConversation, setConversationMode } from "@/lib/conversations";
-import { listMessages } from "@/lib/messages";
+import { deleteConversation, getConversation, setConversationMode } from "@/lib/conversations";
+import { deleteMessagesForConversation, listMessages } from "@/lib/messages";
 import { CurrentUserProvider } from "@/lib/session-context";
+
+// E03-S025: DeleteConversation (rendered as part of this page) calls
+// useRouter() — without a mock, Next.js's real hook throws outside an
+// actual app router context. Stable object reference across renders,
+// same reasoning as conversations/new/page.test.tsx's own mockRouter
+// (see session-gate.test.tsx for why that stability matters).
+const { mockReplace, mockRefresh, mockRouter } = vi.hoisted(() => {
+  const mockReplace = vi.fn();
+  const mockRefresh = vi.fn();
+  return { mockReplace, mockRefresh, mockRouter: { replace: mockReplace, refresh: mockRefresh } };
+});
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => mockRouter,
+}));
 
 vi.mock("@/lib/conversations", () => ({
   getConversation: vi.fn(),
   setConversationMode: vi.fn(),
   renameConversation: vi.fn(),
+  deleteConversation: vi.fn(),
 }));
 
 vi.mock("@/lib/messages", () => ({
   listMessages: vi.fn(),
   sendMessage: vi.fn(),
+  deleteMessagesForConversation: vi.fn(),
 }));
 
 vi.mock("@/lib/telemetry", () => ({
@@ -22,12 +39,19 @@ vi.mock("@/lib/telemetry", () => ({
 
 const mockedGetConversation = vi.mocked(getConversation);
 const mockedSetConversationMode = vi.mocked(setConversationMode);
+const mockedDeleteConversation = vi.mocked(deleteConversation);
 const mockedListMessages = vi.mocked(listMessages);
+const mockedDeleteMessagesForConversation = vi.mocked(deleteMessagesForConversation);
 
 beforeEach(() => {
+  mockReplace.mockReset();
+  mockRefresh.mockReset();
   mockedSetConversationMode.mockReset();
+  mockedDeleteConversation.mockReset();
   mockedListMessages.mockReset();
   mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+  mockedDeleteMessagesForConversation.mockReset();
+  mockedDeleteMessagesForConversation.mockResolvedValue({ ok: true, value: undefined });
 });
 
 function renderDetailAs(id: string, roles: string[] = ["general_user"]) {
@@ -70,6 +94,9 @@ describe("ConversationDetail (E03-S002/S003/S004/S005/S006)", () => {
     // rename-conversation.test.tsx's own dedicated describe block, not
     // duplicated here.
     expect(screen.getByRole("button", { name: "重新命名" })).toBeInTheDocument();
+    // E03-S025: same reasoning — DeleteConversation wired in, deeper
+    // behavior covered in delete-conversation.test.tsx.
+    expect(screen.getByRole("button", { name: "刪除對話" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "對話模式" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "進階模式" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("group", { name: "知識來源" })).toBeInTheDocument();

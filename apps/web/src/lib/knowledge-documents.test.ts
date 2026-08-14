@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { addKnowledgeBaseDocument, listKnowledgeBaseDocuments } from "./knowledge-documents";
+import { addKnowledgeBaseDocument, addKnowledgeBaseDocumentFromUrl, listKnowledgeBaseDocuments } from "./knowledge-documents";
 
 beforeEach(() => {
   window.sessionStorage.clear();
@@ -130,5 +130,120 @@ describe("addKnowledgeBaseDocument (E05-S011)", () => {
     expect(listedOther.ok).toBe(true);
     if (!listedOther.ok) return;
     expect(listedOther.value.some((document) => document.name === "只屬於三號.pdf")).toBe(false);
+  });
+});
+
+describe("addKnowledgeBaseDocumentFromUrl (E05-S014)", () => {
+  it("imports a document from a valid https URL, with no sizeBytes", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "https://example.com/report.pdf");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.knowledgeBaseId).toBe("kb-sample-3");
+    expect(result.value.name).toBe("https://example.com/report.pdf");
+    expect(result.value.sizeBytes).toBeUndefined();
+    expect(() => new Date(result.value.uploadedAt).toISOString()).not.toThrow();
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value).toHaveLength(1);
+    expect(listed.value[0]?.id).toBe(result.value.id);
+  });
+
+  it("imports a document from a valid http URL", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "http://internal.example.com/doc");
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("trims surrounding whitespace from the URL", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "  https://example.com/report.pdf  ");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.name).toBe("https://example.com/report.pdf");
+  });
+
+  it("rejects an empty or whitespace-only URL with VALIDATION_ERROR, without adding anything", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "   ");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value).toEqual([]);
+  });
+
+  it("rejects a malformed URL with VALIDATION_ERROR, without adding anything", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "not a url");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value).toEqual([]);
+  });
+
+  it("rejects a non-http(s) scheme (e.g. javascript:) with VALIDATION_ERROR, without adding anything", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "javascript:alert(1)");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value).toEqual([]);
+  });
+
+  it("rejects a file: scheme URL with VALIDATION_ERROR", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "file:///etc/passwd");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("fails with NOT_FOUND for a knowledge base id that doesn't exist, without adding anything", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("this-id-does-not-exist", "https://example.com/a");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("appends to the existing list without disturbing the knowledge base's other documents", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-1", "https://example.com/imported");
+    expect(result.ok).toBe(true);
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-1");
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value).toHaveLength(4);
+    expect(listed.value.map((document) => document.name)).toEqual([
+      "產品保固條款.pdf",
+      "理賠申請流程.docx",
+      "常見保固問題 FAQ.pdf",
+      "https://example.com/imported",
+    ]);
+    // Every pre-existing file-sourced document still has its real sizeBytes.
+    expect(listed.value.slice(0, 3).every((document) => typeof document.sizeBytes === "number")).toBe(true);
+  });
+
+  it("is a setting only — importing a URL does not remove the knowledge base from listKnowledgeBases()", async () => {
+    const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "https://example.com/report.pdf");
+    expect(result.ok).toBe(true);
+
+    const { listKnowledgeBases } = await import("./knowledge-bases");
+    const all = await listKnowledgeBases();
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value.some((item) => item.id === "kb-sample-3")).toBe(true);
+    }
   });
 });

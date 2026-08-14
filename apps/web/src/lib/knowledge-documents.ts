@@ -37,12 +37,22 @@ import { getKnowledgeBase } from "./knowledge-bases";
  * ahead of them would be guessing at their eventual taxonomy; the
  * extension in `name` already visually communicates type well enough
  * for a bare list.
+ *
+ * `sizeBytes` is optional as of E05-S014 "URL import" — a URL-imported
+ * source has no real byte count to report (nothing is actually
+ * fetched; see addKnowledgeBaseDocumentFromUrl's own doc comment), and
+ * inventing a placeholder number would misrepresent a value that
+ * genuinely doesn't exist yet, the same "don't fake data you don't
+ * have" discipline S006/S007's "is a setting only" tests already
+ * enforce for a different kind of claim. File-sourced documents
+ * (addKnowledgeBaseDocument, S011-S013) always still provide a real
+ * one — this is purely additive, existing callers are unaffected.
  */
 export interface KnowledgeBaseDocument {
   id: string;
   knowledgeBaseId: string;
   name: string;
-  sizeBytes: number;
+  sizeBytes?: number;
   uploadedAt: string;
 }
 
@@ -177,6 +187,69 @@ export async function addKnowledgeBaseDocument(
     knowledgeBaseId,
     name: trimmedName,
     sizeBytes,
+    uploadedAt: new Date().toISOString(),
+  };
+  writeStore([...readStore(), document]);
+  return { ok: true, value: document };
+}
+
+/**
+ * E05-S014 "URL import". A separate function from
+ * addKnowledgeBaseDocument, not an overload sharing its `name`
+ * parameter — a URL needs its OWN validation (must actually parse as a
+ * URL, must be http/https), which is a different concern from "is this
+ * a non-empty string" and doesn't apply to a file's `.name` (already
+ * guaranteed well-formed by the OS file picker). Rejecting non-http(s)
+ * schemes (e.g. `javascript:`, `file:`) is grounded in this story's
+ * own title — "URL import" means importing WEB content, not an
+ * arbitrary URI scheme — not an invented security restriction; this
+ * codebase never renders a document's `name` as a clickable `<a
+ * href>`, so there's no navigation-based XSS surface either way.
+ *
+ * No real fetch happens here — nothing crawls the URL, downloads its
+ * content, or extracts anything from it. Same "Frontend/BFF may never
+ * connect directly to Object Storage" boundary as
+ * addKnowledgeBaseDocument, extended to "no direct external HTTP
+ * fetch" for the same reason: the real URL Ingestion (E06-S18) and
+ * HTML Extraction (E06-S19) pipelines are both Team B, both `todo`.
+ * The resulting KnowledgeBaseDocument stores the URL itself as `name`
+ * and omits `sizeBytes` entirely (see that field's own doc comment) —
+ * there is no byte count to report for content that was never
+ * actually retrieved.
+ *
+ * Fails closed with NOT_FOUND if the knowledge base doesn't exist —
+ * same reused-check pattern as addKnowledgeBaseDocument/sendMessage().
+ */
+export async function addKnowledgeBaseDocumentFromUrl(
+  knowledgeBaseId: string,
+  url: string,
+): Promise<Result<KnowledgeBaseDocument, ApiError>> {
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "網址不得為空。" } };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmedUrl);
+  } catch {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請輸入有效的網址。" } };
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "只支援 http(s) 網址。" } };
+  }
+
+  const knowledgeBase = await getKnowledgeBase(knowledgeBaseId);
+  if (!knowledgeBase.ok) return knowledgeBase;
+  if (!knowledgeBase.value) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const document: KnowledgeBaseDocument = {
+    id: crypto.randomUUID(),
+    knowledgeBaseId,
+    name: trimmedUrl,
     uploadedAt: new Date().toISOString(),
   };
   writeStore([...readStore(), document]);

@@ -157,6 +157,82 @@ describe("listConversations pagination (E03-S022)", () => {
   });
 });
 
+describe("listConversations search (E03-S023)", () => {
+  // Search assertions below use substrings unique to one seed title
+  // ("產品保固政策詢問", "設備 E-204 錯誤代碼排查", "Q3 銷售報表彙整") —
+  // safe to assert an exact match count of 1 even though this file's
+  // shared sessionStorage store accumulates createConversation() calls
+  // across tests, because every created conversation is always titled
+  // "新對話" (see createConversation's fixed default), which shares no
+  // substring with any seed title searched for here.
+
+  it("an empty or whitespace-only query returns everything unfiltered, same as no query at all", async () => {
+    const noQuery = await listConversations(1);
+    const emptyQuery = await listConversations(1, "");
+    const whitespaceQuery = await listConversations(1, "   ");
+
+    expect(noQuery.ok && emptyQuery.ok && whitespaceQuery.ok).toBe(true);
+    if (!noQuery.ok || !emptyQuery.ok || !whitespaceQuery.ok) return;
+    expect(emptyQuery.value).toEqual(noQuery.value);
+    expect(whitespaceQuery.value).toEqual(noQuery.value);
+  });
+
+  it("matches a substring of the title, case-sensitively-typed-but-case-insensitively-matched", async () => {
+    const result = await listConversations(1, "產品");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalCount).toBe(1);
+      expect(result.value.items[0]?.title).toBe("產品保固政策詢問");
+    }
+  });
+
+  it("matches ASCII letters case-insensitively", async () => {
+    const result = await listConversations(1, "e-204");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalCount).toBe(1);
+      expect(result.value.items[0]?.title).toBe("設備 E-204 錯誤代碼排查");
+    }
+  });
+
+  it("a query matching nothing resolves with an empty items array and totalCount 0, not an error", async () => {
+    const result = await listConversations(1, "沒有任何對話會符合這串文字");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toEqual([]);
+      expect(result.value.totalCount).toBe(0);
+      expect(result.value.totalPages).toBe(1);
+    }
+  });
+
+  it("totalPages reflects the FILTERED result count, not the full unfiltered dataset", async () => {
+    // "報" only matches "Q3 銷售報表彙整" — a single-item filtered set
+    // must report totalPages 1, even though CONVERSATIONS_PAGE_SIZE (2)
+    // would put the unfiltered dataset's 3+ items across 2+ pages.
+    const result = await listConversations(1, "報");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalCount).toBe(1);
+      expect(result.value.totalPages).toBe(1);
+    }
+  });
+
+  it("does not match lastMessagePreview content, only title", async () => {
+    // Seed data: "產品保固政策詢問"'s preview contains "原廠零件", which
+    // doesn't appear in any seed title.
+    const result = await listConversations(1, "原廠零件");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toEqual([]);
+    }
+  });
+});
+
 describe("createConversation (E03-S001)", () => {
   it("creates a conversation with a default title and prepends it to the full list", async () => {
     const created = await createConversation();

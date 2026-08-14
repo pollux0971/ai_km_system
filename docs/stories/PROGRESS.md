@@ -109,7 +109,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S004 | approved | story/E05-S004-edit-kb-metadata | [E05-S004.md](E05-S004.md) | 獨立審核 APPROVE(Edit KB metadata;新增 `/knowledge/[id]/edit` 表單路由與 `getKnowledgeBase`/`updateKnowledgeBase`,鏡射 `ConversationDetail`+`/knowledge/new` 既有設計;0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環——E2E not-found 測試因 mock session 是純記憶體變數、`page.goto()` 會清空而無法測,審核者獨立重新追蹤 SessionGate/layout/not-found.tsx 原始碼四個環節確認根因屬實,移除決策誠實無造假;審核者獨立重跑 typecheck/lint/build/500 unit/3+28 個目標 E2E 皆綠,force 全量(build+test)三輪(DEV 兩輪+審核一輪)皆為 117 E2E 全過、無 flaky) |
 | E05-S005 | approved | story/E05-S005-kb-detail-page | [E05-S005.md](E05-S005.md) | 獨立審核 APPROVE(KB detail page;新增 `/knowledge/[id]` 完全重用 S04 既有 `getKnowledgeBase`,零 lib 變更;鏡射 `ConversationDetail`+`conversation-list.tsx` 既有設計;0 個 BLOCKER/MAJOR;2 個 MINOR(doc comment 排版空行、測試註解 Unicode 字元名稱不精確)皆由審核者當場修正;1 次 FIX 循環——toLocaleString 隱藏空白字元導致斷言失敗,審核者獨立寫 Node 腳本重現字元碼證實根因屬實;審核者獨立重跑 typecheck/lint/build/507 unit/2+30 個目標 E2E 皆綠,force 全量(build+test)三輪(DEV 兩輪+審核一輪)皆為 119 E2E 全過、無 flaky) |
 | E05-S006 | approved | story/E05-S006-kb-permission-editor | [E05-S006.md](E05-S006.md) | 獨立審核 APPROVE(KB permission editor;開工前 `/advisor` 分析權限模型,依 SOURCE_BASELINE §5/§15 選用 `@ai-km/permissions` 既有 `Role` 型別,審核者獨立重讀原始碼確認 `listKnowledgeBases()` 完全不依角色過濾、「is a setting only」測試真實有效,證實「純設定非強制執行」的核心宣稱屬實;0 個 BLOCKER/MAJOR/MINOR;1 次 FIX 循環(文字節點分割導致的 exact-match 斷言問題,已根因修正);審核者獨立重跑 typecheck/lint/build/529 unit/2+32 個目標 E2E 皆綠,force 全量(build+test)三輪(DEV 兩輪+審核一輪)皆為 121 E2E 全過、無 flaky) |
-| E05-S007 | todo | | | |
+| E05-S007 | in-progress | story/E05-S007-kb-member-editor | | |
 | E05-S008 | todo | | | |
 | E05-S009 | todo | | | |
 | E05-S010 | todo | | | |

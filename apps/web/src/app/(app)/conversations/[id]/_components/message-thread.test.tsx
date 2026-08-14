@@ -1845,12 +1845,15 @@ describe("MessageThread no-evidence/abstention UX (E03-S030)", () => {
   // capability end-to-end (classification, fallback content, badge,
   // dedicated E2E coverage). Per
   // AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md's
-  // AI Agent Rule ("不知道產品行為 → BLOCKED/ASSUMPTION") and its
-  // explicit prohibition on "Developer 自己腦補需求 → 擴大 scope",
-  // inventing new visible UI content beyond what SOURCE_BASELINE
-  // actually specifies (a "try rephrasing" suggestion, a link to a
-  // Knowledge Base page that doesn't exist yet — E05 is 0/31 approved)
-  // would be self-invented product behavior policy forbids. This
+  // Scope Freeze section's explicit, unconditional prohibition on
+  // "Developer 自己腦補需求 → 擴大 scope" (the AI Agent Rule's "不知道
+  // 產品行為 → BLOCKED/ASSUMPTION" is related but actually permits a
+  // self-adopted ASSUMPTION path — Scope Freeze is the decisive,
+  // unconditional citation here), inventing new visible UI content
+  // beyond what SOURCE_BASELINE actually specifies (a "try rephrasing"
+  // suggestion, a link to a Knowledge Base page that doesn't exist yet
+  // — E05 is 0/31 approved) would be exactly the self-invented product
+  // behavior that section forbids. This
   // story's remaining increment is verifying two real interactions
   // between S21's abstention states and LATER features that didn't
   // exist yet when S21 shipped and were never cross-tested: citation

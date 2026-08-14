@@ -1,10 +1,29 @@
 import type { ApiError, Result } from "@ai-km/types";
+import type { Role } from "@ai-km/permissions";
 
 export interface KnowledgeBaseSummary {
   id: string;
   name: string;
   description: string;
   updatedAt: string;
+  /**
+   * E05-S006 "KB permission editor". Optional, not defaulted to `[]` at
+   * every read site the way E03-S026's `archived?: boolean` is — absence
+   * here means "not yet configured" (a genuinely distinct state from an
+   * explicitly-saved empty list, i.e. "deliberately granted to no
+   * role"), which matters for a permission-flavored field the way it
+   * wouldn't for a boolean flag. Optional rather than backfilled onto
+   * SAMPLE_KNOWLEDGE_BASES and every existing test fixture, same
+   * mechanical-update-avoidance reasoning `archived?` already
+   * established. A plain `Role[]` (not `Role[] | "all"` the way
+   * lib/knowledge-scopes.ts's KnowledgeScopeOption models a static
+   * config table) — mirrors ConversationSummary.knowledgeScopes's own
+   * shape instead, since this is a per-entity SELECTION being recorded,
+   * not a declarative options table; "select every role individually"
+   * already reaches the same "everyone" outcome through the identical
+   * mechanism, without a second sentinel value to keep in sync.
+   */
+  visibleToRoles?: Role[];
 }
 
 /**
@@ -202,6 +221,48 @@ export async function updateKnowledgeBase(
     description: description?.trim() ?? "",
     updatedAt: new Date().toISOString(),
   };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E05-S006 "KB permission editor". Takes the complete new role list (not
+ * one add/remove at a time) — same "caller reports what's checked now,
+ * never diffs against the previous selection itself" reasoning
+ * setConversationKnowledgeScopes() already established for an identical
+ * checkbox-group shape. No VALIDATION_ERROR branch: unlike `name`,
+ * `Role[]` has no "must be non-empty" rule — an empty array is a
+ * meaningful, valid state (deliberately granted to no role), the same
+ * way setConversationKnowledgeScopes() accepts `[]` without a validation
+ * branch either. `visibleToRoles` values are plain fixed-vocabulary role
+ * identifiers, not enterprise content or secrets, so — unlike
+ * name/description — this module's UI callers may include them directly
+ * in telemetry; this function itself does no logging.
+ *
+ * This module has no real enforcement point to wire this into: nothing
+ * in this codebase yet performs real per-user KB retrieval that a
+ * permission setting would gate (E06 Knowledge Ingestion doesn't exist).
+ * This function only records the SETTING — same UX-only-visibility
+ * caveat lib/knowledge-scopes.ts's own KNOWLEDGE_SCOPES table already
+ * documents for its own `roles` field (Frontend/UX Boundary: "UI
+ * permission hiding 只屬 UX，不可作為 security control"). Building a
+ * fake enforcement layer on top of this mock (e.g. filtering
+ * listKnowledgeBases() by the current user's role) would be exactly the
+ * "以 mock 假裝 production path 已完成" DEVELOPMENT_POLICY forbids, so
+ * this story deliberately doesn't add one — real enforcement is E02/E06
+ * Team B's job once those domains exist.
+ */
+export async function updateKnowledgeBaseVisibleRoles(
+  id: string,
+  visibleToRoles: Role[],
+): Promise<Result<KnowledgeBaseSummary, ApiError>> {
+  const store = readStore();
+  const existing = store.find((item) => item.id === id);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const updated: KnowledgeBaseSummary = { ...existing, visibleToRoles, updatedAt: new Date().toISOString() };
   writeStore(store.map((item) => (item.id === id ? updated : item)));
   return { ok: true, value: updated };
 }

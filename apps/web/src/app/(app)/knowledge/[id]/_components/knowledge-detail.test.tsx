@@ -57,6 +57,33 @@ describe("KnowledgeDetail (E05-S005)", () => {
     expect(await screen.findByRole("link", { name: "編輯" })).toHaveAttribute("href", "/knowledge/kb1/edit");
   });
 
+  it("shows a 權限設定 link pointing at /knowledge/{id}/permissions", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByRole("link", { name: "權限設定" })).toHaveAttribute("href", "/knowledge/kb1/permissions");
+  });
+
+  it("shows 尚未設定 when no permission has been configured yet", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByText("尚未設定")).toBeInTheDocument();
+  });
+
+  it("shows the labeled roles when a permission is configured", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleKnowledgeBase, visibleToRoles: ["maintenance_engineer", "knowledge_manager"] },
+    });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByText("維修工程師、知識管理者")).toBeInTheDocument();
+  });
+
   it("shows a distinct error state when loading fails", async () => {
     mockedGetKnowledgeBase.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
 

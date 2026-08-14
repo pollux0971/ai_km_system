@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createKnowledgeBase, getKnowledgeBase, listKnowledgeBases, updateKnowledgeBase } from "./knowledge-bases";
+import {
+  createKnowledgeBase,
+  getKnowledgeBase,
+  listKnowledgeBases,
+  updateKnowledgeBase,
+  updateKnowledgeBaseVisibleRoles,
+} from "./knowledge-bases";
 
 describe("listKnowledgeBases (E05-S001)", () => {
   it("resolves with a non-empty list of knowledge base summaries", async () => {
@@ -244,6 +250,81 @@ describe("updateKnowledgeBase (E05-S004)", () => {
     if (after.ok) {
       const firstIndexAfter = after.value.findIndex((item) => item.id === first.value.id);
       expect(firstIndexAfter).toBe(firstIndexBefore);
+    }
+  });
+});
+
+describe("updateKnowledgeBaseVisibleRoles (E05-S006)", () => {
+  it("saves the given role list and refreshes updatedAt", async () => {
+    const created = await createKnowledgeBase("維修知識庫（權限測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseVisibleRoles(created.value.id, ["maintenance_engineer", "knowledge_manager"]);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.id).toBe(created.value.id);
+      expect(updated.value.visibleToRoles).toEqual(["maintenance_engineer", "knowledge_manager"]);
+      expect(new Date(updated.value.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(created.value.updatedAt).getTime());
+    }
+  });
+
+  it("accepts an empty role list as a valid, meaningful state (granted to no role), not a validation error", async () => {
+    const created = await createKnowledgeBase("業務知識庫（權限測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseVisibleRoles(created.value.id, []);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) expect(updated.value.visibleToRoles).toEqual([]);
+  });
+
+  it("is reflected by a subsequent getKnowledgeBase() call", async () => {
+    const created = await createKnowledgeBase("行政知識庫（權限測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseVisibleRoles(created.value.id, ["general_user"]);
+    const reloaded = await getKnowledgeBase(created.value.id);
+
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) expect(reloaded.value?.visibleToRoles).toEqual(["general_user"]);
+  });
+
+  it("does not disturb the knowledge base's name or description", async () => {
+    const created = await createKnowledgeBase("財務知識庫（權限測試）", "財務相關文件。");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseVisibleRoles(created.value.id, ["it_administrator"]);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.name).toBe("財務知識庫（權限測試）");
+      expect(updated.value.description).toBe("財務相關文件。");
+    }
+  });
+
+  it("fails with NOT_FOUND for an id that doesn't match anything", async () => {
+    const result = await updateKnowledgeBaseVisibleRoles("this-id-does-not-exist", ["general_user"]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("is a setting only — restricting visibleToRoles does not remove the knowledge base from listKnowledgeBases(), because this codebase has no real per-viewer enforcement to apply it (see this function's own doc comment)", async () => {
+    const created = await createKnowledgeBase("稽核知識庫（權限測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseVisibleRoles(created.value.id, ["super_administrator"]);
+
+    const all = await listKnowledgeBases();
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value.some((item) => item.id === created.value.id)).toBe(true);
     }
   });
 });

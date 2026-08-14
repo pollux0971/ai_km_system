@@ -28,6 +28,11 @@ test("E03-S005: an advanced-mode conversation shows the model selector with its 
   await page.waitForURL((url) => url.pathname === "/conversations");
 
   // Seed data: "Q3 銷售報表彙整" is mode "advanced", model "advanced-local".
+  // E03-S022 added pagination (CONVERSATIONS_PAGE_SIZE=2) — "Q3 銷售
+  // 報表彙整" is the 3rd seed conversation, so it's on page 2 every
+  // time /conversations is freshly landed on (including after
+  // navigating away and back — the page resets to 1).
+  await page.getByRole("button", { name: "下一頁" }).click();
   await page.getByRole("link", { name: "Q3 銷售報表彙整" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
@@ -55,6 +60,11 @@ test("E03-S005: switching the model persists across leaving and returning to the
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
+  // E03-S022 added pagination (CONVERSATIONS_PAGE_SIZE=2) — "Q3 銷售
+  // 報表彙整" is the 3rd seed conversation, so it's on page 2 every
+  // time /conversations is freshly landed on (including after
+  // navigating away and back — the page resets to 1).
+  await page.getByRole("button", { name: "下一頁" }).click();
   await page.getByRole("link", { name: "Q3 銷售報表彙整" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
   const conversationUrl = page.url();
@@ -67,6 +77,11 @@ test("E03-S005: switching the model persists across leaving and returning to the
   await page.waitForURL((url) => url.pathname === "/");
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
+  // E03-S022 added pagination (CONVERSATIONS_PAGE_SIZE=2) — "Q3 銷售
+  // 報表彙整" is the 3rd seed conversation, so it's on page 2 every
+  // time /conversations is freshly landed on (including after
+  // navigating away and back — the page resets to 1).
+  await page.getByRole("button", { name: "下一頁" }).click();
   await page.getByRole("link", { name: "Q3 銷售報表彙整" }).click();
   await page.waitForURL(conversationUrl);
 
@@ -78,6 +93,11 @@ test("E03-S005: the cloud model option is visible but disabled", async ({ page }
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
+  // E03-S022 added pagination (CONVERSATIONS_PAGE_SIZE=2) — "Q3 銷售
+  // 報表彙整" is the 3rd seed conversation, so it's on page 2 every
+  // time /conversations is freshly landed on (including after
+  // navigating away and back — the page resets to 1).
+  await page.getByRole("button", { name: "下一頁" }).click();
   await page.getByRole("link", { name: "Q3 銷售報表彙整" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 

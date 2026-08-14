@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONVERSATIONS_PAGE_SIZE,
   createConversation,
   getConversation,
   getRecentConversations,
@@ -39,13 +40,13 @@ describe("getRecentConversations", () => {
 });
 
 describe("listConversations (E03-S001)", () => {
-  it("resolves with a non-empty list sharing the same shape as getRecentConversations", async () => {
+  it("resolves with a non-empty page of items sharing the same shape as getRecentConversations", async () => {
     const result = await listConversations();
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.length).toBeGreaterThan(0);
-      for (const item of result.value) {
+      expect(result.value.items.length).toBeGreaterThan(0);
+      for (const item of result.value.items) {
         expect(item.id).toBeTruthy();
         expect(item.title).toBeTruthy();
         expect(item.lastMessageAt).toBeTruthy();
@@ -54,17 +55,93 @@ describe("listConversations (E03-S001)", () => {
     }
   });
 
-  it("grows by exactly one after createConversation()", async () => {
+  it("totalCount grows by exactly one after createConversation()", async () => {
     const before = await listConversations();
     expect(before.ok).toBe(true);
-    const countBefore = before.ok ? before.value.length : -1;
+    const countBefore = before.ok ? before.value.totalCount : -1;
 
     await createConversation();
 
     const after = await listConversations();
     expect(after.ok).toBe(true);
     if (after.ok) {
-      expect(after.value.length).toBe(countBefore + 1);
+      expect(after.value.totalCount).toBe(countBefore + 1);
+    }
+  });
+});
+
+describe("listConversations pagination (E03-S022)", () => {
+  it("defaults to page 1 and returns at most CONVERSATIONS_PAGE_SIZE items", async () => {
+    const result = await listConversations();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.page).toBe(1);
+      expect(result.value.pageSize).toBe(CONVERSATIONS_PAGE_SIZE);
+      expect(result.value.items.length).toBeLessThanOrEqual(CONVERSATIONS_PAGE_SIZE);
+    }
+  });
+
+  it("reports totalPages consistent with totalCount", async () => {
+    // Not a hardcoded expected totalCount — this file's sessionStorage-
+    // backed store is shared and accumulates across every test/describe
+    // block that calls createConversation() within this same run (same
+    // pattern getRecentConversations's "never returns more than 3 items"
+    // test already relies on), so only the totalCount/totalPages
+    // RELATIONSHIP is something this test can reliably assert.
+    const result = await listConversations();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalPages).toBe(Math.ceil(result.value.totalCount / CONVERSATIONS_PAGE_SIZE));
+    }
+  });
+
+  it("page 2 contains different items than page 1, with no overlap", async () => {
+    const page1 = await listConversations(1);
+    const page2 = await listConversations(2);
+
+    expect(page1.ok && page2.ok).toBe(true);
+    if (!page1.ok || !page2.ok) return;
+
+    const page1Ids = page1.value.items.map((item) => item.id);
+    const page2Ids = page2.value.items.map((item) => item.id);
+    expect(page1Ids.some((id) => page2Ids.includes(id))).toBe(false);
+  });
+
+  it("a page far beyond the last one resolves with an empty items array, not an error", async () => {
+    const result = await listConversations(999999);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toEqual([]);
+    }
+  });
+
+  it("clamps a page below 1 to page 1 rather than failing", async () => {
+    const zero = await listConversations(0);
+    const negative = await listConversations(-5);
+    const page1 = await listConversations(1);
+
+    expect(zero.ok && negative.ok && page1.ok).toBe(true);
+    if (!zero.ok || !negative.ok || !page1.ok) return;
+    expect(zero.value.items).toEqual(page1.value.items);
+    expect(negative.value.items).toEqual(page1.value.items);
+  });
+
+  it("a newly created conversation appears on page 1 (prepended), shifting later items onto later pages", async () => {
+    const before = await listConversations(1);
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const after = await listConversations(1);
+    expect(after.ok).toBe(true);
+    if (after.ok) {
+      expect(after.value.items[0]).toEqual(created.value);
     }
   });
 });
@@ -82,7 +159,7 @@ describe("createConversation (E03-S001)", () => {
     const list = await listConversations();
     expect(list.ok).toBe(true);
     if (list.ok) {
-      expect(list.value[0]).toEqual(created.value);
+      expect(list.value.items[0]).toEqual(created.value);
     }
   });
 

@@ -38,7 +38,10 @@ test("E03-S002: opening a conversation shows its title and current mode", async 
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
-  // Seed data: "Q3 銷售報表彙整" is mode "advanced".
+  // Seed data: "Q3 銷售報表彙整" is mode "advanced". E03-S022 added
+  // pagination (CONVERSATIONS_PAGE_SIZE=2) — this seed conversation is
+  // 3rd, so it's on page 2, not visible on the initial page-1 view.
+  await page.getByRole("button", { name: "下一頁" }).click();
   await page.getByRole("link", { name: "Q3 銷售報表彙整" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 

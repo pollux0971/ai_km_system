@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 21 | 0 | 0 | 0 | 12 |
+| E03 AI Conversation Experience | 33 | 21 | 1 | 0 | 0 | 11 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 41 | 0 | 0 | 0 | 134 |
+| **合計** | **175** | 41 | 1 | 0 | 0 | 133 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -86,7 +86,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S019 | approved | story/E03-S019-regenerate-answer-action | [E03-S019.md](E03-S019.md) | 獨立審核 APPROVE(重新產生回覆動作:deleteMessage 避免重複、只作用於最後一則;順帶修正高負載下復發的既有 flaky E2E stop-generation.spec.ts,已證實非本 story 造成);1 個 MINOR(force:true 註解誇大其粒度)已修正並以 2 次 force 全量重跑(13/13 tasks、75/75 E2E)重新驗證 |
 | E03-S020 | approved | story/E03-S020-answer-revision | [E03-S020.md](E03-S020.md) | 獨立審核 APPROVE(Answer Revision,SOURCE_BASELINE「需留下 Revision」:把 S19 的 deleteMessage 刪除＋新增機制改為 reviseMessage 原地更新＋保留舊內容,新增「先前版本」history UI;連帶讓 regenerate 途中空內容停止時舊回覆不再遺失;0 次 FIX 循環,gate 一次全綠;獨立重跑 typecheck/lint/build/302 unit/7 個目標 E2E 皆綠,逐項核對機制/UI/listitem 隔離/停止行為/scope/AC 對照後確認無誤)；1 個 MINOR(revisions 列表用 index 當 React key)經獨立審核判定安全、非缺陷,無需修正 |
 | E03-S021 | approved | story/E03-S021-answer-state-rendering | [E03-S021.md](E03-S021.md) | 獨立審核 APPROVE(Answer State Rendering,SOURCE_BASELINE 列舉 6 個狀態:/advisor 引用 SOURCE_BASELINE §5 #32/#35 + readme_zh.md 授權建立誠實 mock trigger(`[模擬:XXX]`)分類機制,而非發明假 RAG/authorization;PARTIAL 保留正常串流,其餘 4 態以固定佔位句取代;過程中自行發現並修正 role="status" 與 waitForThreadToSettle 衝突、role="alert" 無 name-from-content 兩個問題;0 次正式 FIX 循環;獨立重跑 typecheck/lint/build/329 unit/10 個目標 E2E 皆綠,逐項核對 /advisor 依據、mock 機制、5 個既有測試修正皆屬機械性變更後確認無誤)；2 個 MINOR(既有測試修正計數誤植為 4、mock trigger 比對機制與既有精確比對先例的類別差異說明)皆為證據文件精確度問題,已修正計數/歸屬,無需改動程式碼 |
-| E03-S022 | todo | | | |
+| E03-S022 | done | story/E03-S022-conversation-history-pagination | [E03-S022.md](E03-S022.md) | Conversation History Pagination(epic 展開標題):listConversations 改回傳分頁物件(page/pageSize/totalCount/totalPages),固定 pageSize=2 讓既有 3 筆種子資料集本身即跨兩頁;1 次 FIX 循環(既有 model-selector/conversation-detail E2E 因種子對話換頁而變紅,已修復並從 typecheck 重新跑完整序列);待獨立審核 |
 | E03-S023 | todo | | | |
 | E03-S024 | todo | | | |
 | E03-S025 | todo | | | |

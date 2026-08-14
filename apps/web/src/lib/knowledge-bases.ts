@@ -1,5 +1,6 @@
 import type { ApiError, Result } from "@ai-km/types";
 import type { Role } from "@ai-km/permissions";
+import { AI_MODELS, type AiModel } from "./ai-models";
 
 export interface KnowledgeBaseSummary {
   id: string;
@@ -58,6 +59,24 @@ export interface KnowledgeBaseSummary {
    * prompt, fall back to the platform default" state, not an error.
    */
   boundPrompt?: string;
+  /**
+   * E05-S009 "KB model binding UI". Unlike `boundPrompt` (E05-S008, no
+   * real entity to reference) and `members` (E05-S007, no real user
+   * directory), a real model registry already exists in this codebase —
+   * lib/ai-models.ts's `AI_MODELS`/`AiModel`, established by E03-S005
+   * for ConversationSummary.model and grounded in SOURCE_BASELINE.md's
+   * own numbered decisions (#28 Model Gateway, #29 cloud LLM off by
+   * default, #30 on-prem first) rather than invented vendor names. This
+   * field reuses that exact type rather than inventing a parallel one.
+   * Optional — unlike ConversationSummary.model (required: a
+   * conversation always needs some model to generate a response right
+   * now), a knowledge base's bound model is a standing PREFERENCE for
+   * when it's later drawn into a conversation, and "no override, defer
+   * to whatever the conversation itself is using" is a valid, meaningful
+   * state, same "absence means not-yet-configured" reasoning as
+   * `visibleToRoles`/`members`/`boundPrompt`.
+   */
+  boundModel?: AiModel;
 }
 
 /**
@@ -357,6 +376,40 @@ export async function updateKnowledgeBaseBoundPrompt(
   }
 
   const updated: KnowledgeBaseSummary = { ...existing, boundPrompt: boundPrompt.trim(), updatedAt: new Date().toISOString() };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E05-S009 "KB model binding UI". `boundModel: undefined` explicitly
+ * means "clear the binding, defer to the conversation's own model" —
+ * unlike `AI_MODELS` (a fixed 3-option enum with no "none" member),
+ * this field's own optionality (see KnowledgeBaseSummary.boundModel's
+ * doc comment) needs a way back to "unset", the same way S006/S007's
+ * multi-select fields can return to `[]`. Rejects a disabled model
+ * (the "cloud" option) server-side too — mirrors
+ * lib/conversations.ts's setConversationModel() exactly, including
+ * reusing AI_MODELS as the single source of truth for which ids are
+ * currently real/enabled, not a second hardcoded list to keep in sync.
+ */
+export async function updateKnowledgeBaseBoundModel(
+  id: string,
+  boundModel: AiModel | undefined,
+): Promise<Result<KnowledgeBaseSummary, ApiError>> {
+  if (boundModel) {
+    const option = AI_MODELS.find((candidate) => candidate.id === boundModel);
+    if (!option || option.disabled) {
+      return { ok: false, error: { code: "VALIDATION_ERROR", message: "這個模型目前無法使用。" } };
+    }
+  }
+
+  const store = readStore();
+  const existing = store.find((item) => item.id === id);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const updated: KnowledgeBaseSummary = { ...existing, boundModel, updatedAt: new Date().toISOString() };
   writeStore(store.map((item) => (item.id === id ? updated : item)));
   return { ok: true, value: updated };
 }

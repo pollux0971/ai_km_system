@@ -6,6 +6,7 @@ import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getKnowledgeBase, type KnowledgeBaseSummary } from "@/lib/knowledge-bases";
 import { roleLabel } from "@/lib/role-labels";
+import { AI_MODELS } from "@/lib/ai-models";
 
 const logger = createLogger("web:knowledge-detail");
 
@@ -53,11 +54,16 @@ type State =
  * dedicated editor route already displays in full) plus a "提示詞設定"
  * link to /knowledge/[id]/prompt.
  *
+ * E05-S009 "KB model binding UI" adds a one-line summary of
+ * `boundModel` (its AI_MODELS label when bound, or "尚未綁定" when
+ * absent) plus a "模型設定" link to /knowledge/[id]/model — same
+ * shape as the roles/members/prompt summaries above.
+ *
  * Otherwise only shows the fields KnowledgeBaseSummary currently has
- * (name/description/updatedAt) — no document list, model settings, or
- * usage stats. Those are each their own later, separate story (S09,
- * S10, S28); this page's job is establishing the detail route itself
- * with what data exists today, not reaching ahead into their scope.
+ * (name/description/updatedAt) — no document list or usage stats.
+ * Those are each their own later, separate story (S10, S28); this
+ * page's job is establishing the detail route itself with what data
+ * exists today, not reaching ahead into their scope.
  */
 export default function KnowledgeDetail({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -116,6 +122,9 @@ export default function KnowledgeDetail({ id }: { id: string }) {
   }
 
   const { knowledgeBase } = state;
+  const boundModelLabel = knowledgeBase.boundModel
+    ? (AI_MODELS.find((option) => option.id === knowledgeBase.boundModel)?.label ?? knowledgeBase.boundModel)
+    : "尚未綁定";
 
   return (
     <main style={{ padding: 32 }}>
@@ -141,6 +150,9 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       <p>
         綁定提示詞:<span>{knowledgeBase.boundPrompt ? "已設定" : "尚未設定"}</span>
       </p>
+      <p>
+        綁定模型:<span>{boundModelLabel}</span>
+      </p>
       <Link href={`/knowledge/${knowledgeBase.id}/edit`}>編輯</Link>
       {" · "}
       <Link href={`/knowledge/${knowledgeBase.id}/permissions`}>權限設定</Link>
@@ -148,6 +160,8 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       <Link href={`/knowledge/${knowledgeBase.id}/members`}>成員設定</Link>
       {" · "}
       <Link href={`/knowledge/${knowledgeBase.id}/prompt`}>提示詞設定</Link>
+      {" · "}
+      <Link href={`/knowledge/${knowledgeBase.id}/model`}>模型設定</Link>
     </main>
   );
 }

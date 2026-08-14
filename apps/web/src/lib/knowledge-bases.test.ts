@@ -4,6 +4,7 @@ import {
   getKnowledgeBase,
   listKnowledgeBases,
   updateKnowledgeBase,
+  updateKnowledgeBaseBoundModel,
   updateKnowledgeBaseBoundPrompt,
   updateKnowledgeBaseMembers,
   updateKnowledgeBaseVisibleRoles,
@@ -492,6 +493,99 @@ describe("updateKnowledgeBaseBoundPrompt (E05-S008)", () => {
     if (!created.ok) return;
 
     await updateKnowledgeBaseBoundPrompt(created.value.id, "測試提示詞內容。");
+
+    const all = await listKnowledgeBases();
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value.some((item) => item.id === created.value.id)).toBe(true);
+    }
+  });
+});
+
+describe("updateKnowledgeBaseBoundModel (E05-S009)", () => {
+  it("saves the bound model and refreshes updatedAt", async () => {
+    const created = await createKnowledgeBase("客服知識庫（模型測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseBoundModel(created.value.id, "advanced-local");
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.id).toBe(created.value.id);
+      expect(updated.value.boundModel).toBe("advanced-local");
+      expect(new Date(updated.value.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(created.value.updatedAt).getTime());
+    }
+  });
+
+  it("clears the binding back to undefined ('defer to the conversation') when passed undefined", async () => {
+    const created = await createKnowledgeBase("業務知識庫（模型測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await updateKnowledgeBaseBoundModel(created.value.id, "standard");
+
+    const cleared = await updateKnowledgeBaseBoundModel(created.value.id, undefined);
+
+    expect(cleared.ok).toBe(true);
+    if (cleared.ok) expect(cleared.value.boundModel).toBeUndefined();
+  });
+
+  it("rejects the disabled cloud model with VALIDATION_ERROR, same as setConversationModel", async () => {
+    const created = await createKnowledgeBase("行政知識庫（模型測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await updateKnowledgeBaseBoundModel(created.value.id, "cloud");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("is reflected by a subsequent getKnowledgeBase() call", async () => {
+    const created = await createKnowledgeBase("財務知識庫（模型測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseBoundModel(created.value.id, "advanced-local");
+    const reloaded = await getKnowledgeBase(created.value.id);
+
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) expect(reloaded.value?.boundModel).toBe("advanced-local");
+  });
+
+  it("does not disturb the knowledge base's name, description, visibleToRoles, members, or boundPrompt", async () => {
+    const created = await createKnowledgeBase("稽核知識庫（模型測試）", "稽核相關文件。");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await updateKnowledgeBaseVisibleRoles(created.value.id, ["auditor"]);
+    await updateKnowledgeBaseMembers(created.value.id, ["demo-user"]);
+    await updateKnowledgeBaseBoundPrompt(created.value.id, "請謹慎核對數字。");
+
+    const updated = await updateKnowledgeBaseBoundModel(created.value.id, "standard");
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.name).toBe("稽核知識庫（模型測試）");
+      expect(updated.value.description).toBe("稽核相關文件。");
+      expect(updated.value.visibleToRoles).toEqual(["auditor"]);
+      expect(updated.value.members).toEqual(["demo-user"]);
+      expect(updated.value.boundPrompt).toBe("請謹慎核對數字。");
+    }
+  });
+
+  it("fails with NOT_FOUND for an id that doesn't match anything", async () => {
+    const result = await updateKnowledgeBaseBoundModel("this-id-does-not-exist", "standard");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("is a setting only — binding a model does not remove the knowledge base from listKnowledgeBases()", async () => {
+    const created = await createKnowledgeBase("系統知識庫（模型測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseBoundModel(created.value.id, "standard");
 
     const all = await listKnowledgeBases();
     expect(all.ok).toBe(true);

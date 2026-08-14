@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 23 | 0 | 0 | 0 | 10 |
+| E03 AI Conversation Experience | 33 | 24 | 0 | 0 | 0 | 9 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 43 | 0 | 0 | 0 | 132 |
+| **合計** | **175** | 44 | 0 | 0 | 0 | 131 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -88,7 +88,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S021 | approved | story/E03-S021-answer-state-rendering | [E03-S021.md](E03-S021.md) | 獨立審核 APPROVE(Answer State Rendering,SOURCE_BASELINE 列舉 6 個狀態:/advisor 引用 SOURCE_BASELINE §5 #32/#35 + readme_zh.md 授權建立誠實 mock trigger(`[模擬:XXX]`)分類機制,而非發明假 RAG/authorization;PARTIAL 保留正常串流,其餘 4 態以固定佔位句取代;過程中自行發現並修正 role="status" 與 waitForThreadToSettle 衝突、role="alert" 無 name-from-content 兩個問題;0 次正式 FIX 循環;獨立重跑 typecheck/lint/build/329 unit/10 個目標 E2E 皆綠,逐項核對 /advisor 依據、mock 機制、5 個既有測試修正皆屬機械性變更後確認無誤)；2 個 MINOR(既有測試修正計數誤植為 4、mock trigger 比對機制與既有精確比對先例的類別差異說明)皆為證據文件精確度問題,已修正計數/歸屬,無需改動程式碼 |
 | E03-S022 | approved | story/E03-S022-conversation-history-pagination | [E03-S022.md](E03-S022.md) | 獨立審核 APPROVE(Conversation History Pagination,epic 展開標題:listConversations 改回傳分頁物件,固定 pageSize=2 讓既有 3 筆種子資料集本身即跨兩頁;1 次 FIX 循環,既有 model-selector/conversation-detail E2E 因種子對話換頁而變紅,已修復並從 typecheck 重新跑完整序列;獨立以全 repo grep 逐項核對 breaking-change 消費端範圍、4 處跨 story E2E 修正皆為純新增無鬆綁斷言、pagination 數學邊界皆正確)；1 個 MINOR(超出範圍頁碼測試未一併斷言 totalCount/totalPages)已加強測試;1 個 MINOR(既有 Node 版本不符,與本 story 無關)無需處理 |
 | E03-S023 | approved | story/E03-S023-conversation-search | [E03-S023.md](E03-S023.md) | 獨立審核 APPROVE(Conversation Search:listConversations 新增 optional query 參數,先過濾再分頁;只比對 title;吸取 S022 教訓,實作前主動驗證跨 story E2E 迴歸風險,0 次 FIX 循環一次全綠;獨立以全 repo grep 確認唯一消費端、重跑 3 個曾受 S022 影響的既有 E2E 皆過、test-pollution 安全性逐字元核對皆屬實)；2 個 MINOR(.toLocaleLowerCase() 註解誇大實際差異、空白查詢在 UI 與資料層 trim 不一致的潛在缺陷)皆已修正 |
-| E03-S024 | todo | | | |
+| E03-S024 | approved | story/E03-S024-rename-conversation | [E03-S024.md](E03-S024.md) | 獨立審核 APPROVE(Rename Conversation:renameConversation 新增於 lib,trim 後為空 → VALIDATION_ERROR(UI 停用按鈕雙重防護,獨立驗證資料層繞過 UI 直呼仍正確擋下);RenameConversation 元件整個接管標題區塊(顯示/編輯雙態);0 次 FIX 循環;獨立重跑 typecheck/lint/build/366 unit/21 個目標 E2E 皆綠,逐項核對驗證邏輯、狀態機、wiring、scope 皆屬實)；3 個 MINOR 皆經審核明確判定不影響功能、無需修正,其中 1 個(測試未區分伺服器回傳值與本地回顯)仍主動加強測試以求嚴謹 |
 | E03-S025 | todo | | | |
 | E03-S026 | todo | | | |
 | E03-S027 | todo | | | |

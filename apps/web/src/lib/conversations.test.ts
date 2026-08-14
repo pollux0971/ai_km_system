@@ -5,6 +5,7 @@ import {
   getConversation,
   getRecentConversations,
   listConversations,
+  renameConversation,
   setConversationKnowledgeScopes,
   setConversationMode,
   setConversationModel,
@@ -481,6 +482,109 @@ describe("setConversationModel (E03-S005)", () => {
     if (switched.ok) {
       expect(switched.value.mode).toBe(created.value.mode);
       expect(switched.value.knowledgeScopes).toEqual(created.value.knowledgeScopes);
+    }
+  });
+});
+
+describe("renameConversation (E03-S024)", () => {
+  it("renames an existing conversation and persists it", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.title).toBe("新對話");
+
+    const renamed = await renameConversation(created.value.id, "季度預算討論");
+    expect(renamed.ok).toBe(true);
+    if (renamed.ok) {
+      expect(renamed.value.title).toBe("季度預算討論");
+    }
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.title).toBe("季度預算討論");
+    }
+  });
+
+  it("trims surrounding whitespace before storing", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const renamed = await renameConversation(created.value.id, "  季度預算討論  ");
+    expect(renamed.ok).toBe(true);
+    if (renamed.ok) {
+      expect(renamed.value.title).toBe("季度預算討論");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR for an empty title, not producing a partial rename", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await renameConversation(created.value.id, "");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const reloaded = await getConversation(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.title).toBe("新對話");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR for a whitespace-only title", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await renameConversation(created.value.id, "   ");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
+    const result = await renameConversation("does-not-exist", "新標題");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("does not affect a conversation's mode, knowledge scopes, or model", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const renamed = await renameConversation(created.value.id, "新標題");
+    expect(renamed.ok).toBe(true);
+    if (renamed.ok) {
+      expect(renamed.value.mode).toBe(created.value.mode);
+      expect(renamed.value.knowledgeScopes).toEqual(created.value.knowledgeScopes);
+      expect(renamed.value.model).toBe(created.value.model);
+    }
+  });
+
+  it("does not affect other conversations", async () => {
+    const a = await createConversation();
+    const b = await createConversation();
+    expect(a.ok && b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+
+    await renameConversation(a.value.id, "只改這個");
+
+    const reloadedB = await getConversation(b.value.id);
+    expect(reloadedB.ok).toBe(true);
+    if (reloadedB.ok) {
+      expect(reloadedB.value?.title).toBe("新對話");
     }
   });
 });

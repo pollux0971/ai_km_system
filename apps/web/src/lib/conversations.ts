@@ -120,9 +120,59 @@ export async function getRecentConversations(): Promise<Result<ConversationSumma
   return { ok: true, value: readStore().slice(0, 3) };
 }
 
-/** E03-S001: the full conversation list route's data source. */
-export async function listConversations(): Promise<Result<ConversationSummary[], ApiError>> {
-  return { ok: true, value: readStore() };
+/**
+ * E03-S022 "Conversation history pagination". SOURCE_BASELINE.md gives
+ * this story only its title — the epic file's own expanded title
+ * ("Conversation history pagination") is what establishes this is
+ * about paginating the LIST route (E03-S001), not messages within a
+ * single conversation (that's a different concept entirely, never
+ * named anywhere in this epic).
+ *
+ * `pageSize` defaults to 2 — deliberately small, chosen so this mock's
+ * fixed 3-item SAMPLE_CONVERSATIONS seed set already spans exactly 2
+ * pages without any test/E2E flow needing to first create additional
+ * conversations through the UI. This is an honest testability-driven
+ * choice for a fixed small mock dataset, not a claim about what a real
+ * production page size would be — matches Functional AC 8's "MVP 可以
+ * 簡化演算法" allowance the same way S021's fixed fallback sentences do.
+ *
+ * Page-number based (not cursor-based) — this is a plain in-memory
+ * array with no concurrent-write/real-database concerns a cursor would
+ * exist to solve, so offset-by-page is the simplest correct choice, not
+ * an under-engineered shortcut.
+ *
+ * `page` is clamped to at least 1 rather than erroring on an invalid
+ * value (0, negative, or beyond the last page) — this is a passive
+ * display parameter, not a security- or mutation-relevant input, so
+ * leniently returning the nearest valid page (or an empty `items` for
+ * an out-of-range page) is more useful than fail-closed rejection,
+ * which Functional AC 2 reserves for inputs that could cause an
+ * incorrect result or a partial side effect; neither applies to a pure
+ * read.
+ */
+export interface ConversationListPage {
+  items: ConversationSummary[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+export const CONVERSATIONS_PAGE_SIZE = 2;
+
+/** E03-S001/S022: the full conversation list route's data source, one page at a time. */
+export async function listConversations(page = 1): Promise<Result<ConversationListPage, ApiError>> {
+  const all = readStore();
+  const pageSize = CONVERSATIONS_PAGE_SIZE;
+  const totalCount = all.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const safePage = Math.max(1, page);
+  const start = (safePage - 1) * pageSize;
+
+  return {
+    ok: true,
+    value: { items: all.slice(start, start + pageSize), page: safePage, pageSize, totalCount, totalPages },
+  };
 }
 
 /**

@@ -96,7 +96,7 @@ export function DeleteConversation({ conversationId, title }: { conversationId: 
   }
 
   return (
-    <div role="alertdialog" aria-label="確認刪除對話">
+    <div role="alertdialog" aria-label={`確認刪除對話：${title}`}>
       <p>確定要刪除「{title}」嗎？此操作無法復原。</p>
       <button type="button" onClick={handleConfirmDelete} disabled={pending}>
         確認刪除

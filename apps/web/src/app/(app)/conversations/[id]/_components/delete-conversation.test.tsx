@@ -50,7 +50,12 @@ describe("DeleteConversation (E03-S025)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "刪除對話" }));
 
-    expect(screen.getByRole("alertdialog", { name: "確認刪除對話" })).toBeInTheDocument();
+    // Independent review MINOR finding: the accessible name itself
+    // names the specific conversation (not just the visible <p>
+    // content) — a screen reader announcing the dialog by name alone
+    // hears which conversation is at stake immediately, not only after
+    // reading further into the content.
+    expect(screen.getByRole("alertdialog", { name: "確認刪除對話：測試對話" })).toBeInTheDocument();
     expect(screen.getByText("確定要刪除「測試對話」嗎？此操作無法復原。")).toBeInTheDocument();
     expect(mockedDeleteConversation).not.toHaveBeenCalled();
   });

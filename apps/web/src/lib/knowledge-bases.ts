@@ -71,6 +71,35 @@ function readStore(): KnowledgeBaseSummary[] {
   }
 }
 
-export async function listKnowledgeBases(): Promise<Result<KnowledgeBaseSummary[], ApiError>> {
-  return { ok: true, value: readStore() };
+/**
+ * E05-S002 "Knowledge search/filter". SOURCE_BASELINE.md gives this
+ * story only its title ("E05-S02 Knowledge Search"); the epic file's
+ * own expanded title adds "/filter" — read as the same single
+ * mechanism (a search that filters the list), not a second, distinct
+ * filter dimension: KnowledgeBaseSummary (E05-S001) has no category/tag
+ * field yet for any OTHER kind of filter to apply to, and no
+ * SOURCE_BASELINE/epic content suggests one exists.
+ *
+ * Same design as E03-S023 "Conversation search"'s listConversations():
+ * an empty/whitespace-only query is "no search" (returns everything),
+ * matching the pre-S002 call site unchanged; matches against `name`
+ * only, not `description` — mirrors ConversationSummary's own
+ * title-only (not lastMessagePreview) search scope, same "real product
+ * sidebar search matches names, not full content" precedent. No
+ * debounce — this is an in-memory array filter with no real network
+ * latency to debounce against.
+ *
+ * No pagination added here — unlike E03 (where S022 Pagination and
+ * S023 Search are two separate stories), SOURCE_BASELINE's E05 outline
+ * (S01-S28) has no dedicated pagination story at all; adding one now
+ * would be inventing a capability neither SOURCE_BASELINE nor this
+ * story's own title asks for.
+ */
+export async function listKnowledgeBases(query?: string): Promise<Result<KnowledgeBaseSummary[], ApiError>> {
+  const trimmedQuery = query?.trim() ?? "";
+  const all = readStore();
+  const filtered = trimmedQuery
+    ? all.filter((item) => item.name.toLocaleLowerCase().includes(trimmedQuery.toLocaleLowerCase()))
+    : all;
+  return { ok: true, value: filtered };
 }

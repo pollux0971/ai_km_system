@@ -64,6 +64,11 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * default 500ms/file pacing keeps this comfortably under Playwright's
  * default assertion timeout while still giving each intermediate count
  * a solid, non-flaky window to be caught in.
+ *
+ * E05-S018 adds a second real-timer phase to that same single-file
+ * upload — 解析中 following 上傳中 — confirming both are genuinely
+ * visible in sequence in a real browser, not just correct in the
+ * mocked unit tests.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -357,4 +362,27 @@ test("E05-S017: uploading multiple files shows a per-file progress count that ad
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
   await expect(page.getByText("文件:", { exact: false })).toContainText("2 份文件");
+});
+
+test("E05-S018: uploading a file shows a 解析中 phase after 上傳中, before the document appears", async ({ page }) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await page.getByLabel("上傳文件").setInputFiles({
+    name: "新規範.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("file content"),
+  });
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+  await expect(page.getByText(/上傳中.*第 1 \/ 1 筆/)).toBeVisible();
+  await expect(page.getByText(/解析中.*第 1 \/ 1 筆/)).toBeVisible();
+
+  await expect(page.getByText(/上傳中|解析中/)).not.toBeVisible();
+  await expect(page.getByText("新規範.pdf")).toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("1 份文件");
 });

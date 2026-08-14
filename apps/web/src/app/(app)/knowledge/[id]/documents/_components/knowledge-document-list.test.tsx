@@ -20,6 +20,22 @@ vi.mock("@/lib/knowledge-documents", () => ({
   addKnowledgeBaseDocumentFromText: vi.fn(),
 }));
 
+// E05-S017/S018: this file renders the REAL KnowledgeDocumentUpload
+// (not a mock of it) to exercise the full upload flow end-to-end, so
+// its own real per-file delay primitives need the same wholesale-mock
+// treatment knowledge-document-upload.test.tsx already gives them —
+// otherwise a real upload here waits out real wall-clock time (500ms
+// per phase) that can exceed RTL's default waitFor timeout, exactly
+// what started happening once S018 stacked a second real phase on top
+// of S017's first one.
+vi.mock("@/lib/upload-progress", () => ({
+  simulateUploadStep: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/parse-progress", () => ({
+  simulateParseStep: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));

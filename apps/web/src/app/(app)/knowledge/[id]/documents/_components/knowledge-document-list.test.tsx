@@ -323,3 +323,48 @@ describe("KnowledgeDocumentList (E05-S010)", () => {
     expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("KnowledgeDocumentList — processing failure state (E05-S020)", () => {
+  it("shows a 處理失敗 indicator for a document with status failed", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "損毀檔案.pdf", sizeBytes: 500, status: "failed", uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    expect(await screen.findByText("損毀檔案.pdf")).toBeInTheDocument();
+    expect(screen.getByText("處理失敗")).toBeInTheDocument();
+  });
+
+  it("does not show 處理失敗 for a document without a failed status", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "正常檔案.pdf", sizeBytes: 500, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("正常檔案.pdf");
+    expect(screen.queryByText("處理失敗")).not.toBeInTheDocument();
+  });
+
+  it("shows 處理失敗 only next to the failed document, not the others, in a mixed list", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "正常一.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "損毀二.pdf", sizeBytes: 200, status: "failed", uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc3", knowledgeBaseId: "kb1", name: "正常三.pdf", sizeBytes: 300, uploadedAt: "2026-08-15T00:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("損毀二.pdf");
+    expect(screen.getAllByText("處理失敗")).toHaveLength(1);
+  });
+});

@@ -58,13 +58,37 @@ import { getKnowledgeBase } from "./knowledge-bases";
  * addKnowledgeBaseDocumentFromText's own doc comment for the full
  * reasoning, including why `sizeBytes` for THIS source is a real
  * computed value (unlike URL import's) rather than omitted.
+ *
+ * `status` is optional as of E05-S020 "Processing failure state" —
+ * absence means "ready" (the implicit state of every document created
+ * before this story, and of every SAMPLE_KNOWLEDGE_BASE_DOCUMENTS
+ * fixture below), same "absence is the common/default case" reasoning
+ * every other optional field on this type already follows.
+ * `"failed"` is the only value ever explicitly written — see
+ * addKnowledgeBaseDocument's own doc comment for how a document ends
+ * up there. This is a genuinely different failure mode from
+ * addKnowledgeBaseDocument returning `ok: false` (E05-S011's own
+ * empty-name/NOT_FOUND paths): those mean NO document was ever
+ * created at all (E05-S017/S018/S019's own "skip parse/index, keep
+ * the file selected for retry" logic is entirely about that case,
+ * untouched by this story); `status: "failed"` means a document WAS
+ * created — the (simulated) processing that happens to it afterward
+ * is what failed, mirroring how a real async ingestion pipeline
+ * reports success at upload time and only discovers a processing
+ * failure once the pipeline actually runs. E05-S021 "Retry processing
+ * action" (a later story) is what will act on a `"failed"` document —
+ * this story's own job stops at making that state reachable, real, and
+ * visible.
  */
+export type DocumentProcessingStatus = "ready" | "failed";
+
 export interface KnowledgeBaseDocument {
   id: string;
   knowledgeBaseId: string;
   name: string;
   sizeBytes?: number;
   content?: string;
+  status?: DocumentProcessingStatus;
   uploadedAt: string;
 }
 
@@ -177,7 +201,23 @@ export async function listKnowledgeBaseDocuments(knowledgeBaseId: string): Promi
  *
  * Fails closed with NOT_FOUND if the knowledge base doesn't exist —
  * same reused-check pattern as sendMessage() reusing getConversation().
+ *
+ * E05-S020 "Processing failure state": if `name` contains
+ * MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER, the created document is
+ * stamped `status: "failed"` — same deterministic bracketed-marker
+ * convention MOCK_ANSWER_STATE_TRIGGERS (E03-S021) and
+ * MOCK_FILE_PROCESSING_FAILURE_TRIGGER (E03-S029) already established,
+ * the only way to make a mock-with-no-real-backend's failure path
+ * genuinely reachable and testable through the UI rather than merely
+ * theoretically coded. Still returns `ok: true` — the document itself
+ * WAS created (this function's own job); marking it failed is a
+ * property of the created document, not a reason to reject creating it
+ * (see this function's own DocumentProcessingStatus doc comment on
+ * KnowledgeBaseDocument for the full reasoning on why this differs
+ * from an `ok: false` rejection).
  */
+export const MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER = "[模擬:KB_PROCESSING_FAILED]";
+
 export async function addKnowledgeBaseDocument(
   knowledgeBaseId: string,
   name: string,
@@ -200,6 +240,7 @@ export async function addKnowledgeBaseDocument(
     name: trimmedName,
     sizeBytes,
     uploadedAt: new Date().toISOString(),
+    ...(trimmedName.includes(MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER) ? { status: "failed" as const } : {}),
   };
   writeStore([...readStore(), document]);
   return { ok: true, value: document };

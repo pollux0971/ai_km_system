@@ -201,6 +201,21 @@ function displayName(file: File): string {
  * S020 reasoning above. This completes the upload → parse → index
  * sequence; still nothing persisted, still entirely cleared once the
  * batch settles.
+ *
+ * E05-S020 "Processing failure state" needs NO changes to the phase
+ * loop above — a document whose (mock) processing is destined to fail
+ * still has `result.ok === true` (see addKnowledgeBaseDocument's own
+ * doc comment: creation itself succeeded, so it still goes through the
+ * full upload → parse → index sequence exactly like any other
+ * document), so the only addition here is telemetry: once
+ * `result.value.status === "failed"` is known, a distinct
+ * `knowledge_base_document_processing_failed` event fires (sharing the
+ * same correlationId as the success event above it — the upload really
+ * did succeed; this is a second, separate fact about the same
+ * operation, not a contradiction of it). The actual FAILED indicator a
+ * user sees lives on the document list itself
+ * (knowledge-document-list.tsx), not here — this widget's own job is
+ * adding documents, not rendering the list they end up in.
  */
 export default function KnowledgeDocumentUpload({
   knowledgeBaseId,
@@ -266,6 +281,14 @@ export default function KnowledgeDocumentUpload({
           properties: { knowledgeBaseId, sizeBytes: result.value.sizeBytes },
         });
         anySucceeded = true;
+
+        if (result.value.status === "failed") {
+          logger.error("document processing failed", { correlationId, knowledgeBaseId, documentId: result.value.id });
+          trackEvent("knowledge_base_document_processing_failed", {
+            correlationId,
+            properties: { knowledgeBaseId, documentId: result.value.id },
+          });
+        }
       }
 
       await simulateUploadStep();

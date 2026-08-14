@@ -70,6 +70,14 @@ type State =
  * field already follows (e.g. boundPrompt's own summary never shows
  * the prompt text itself).
  *
+ * E05-S020 "Processing failure state" adds a plain "處理失敗" text
+ * indicator for any document with `status === "failed"` (see that
+ * field's own doc comment on KnowledgeBaseDocument) — plain text, not
+ * a color-only cue, per this story's own UX Acceptance ("不得只靠
+ * 顏色傳達狀態"). No retry action here — E05-S021 "Retry processing
+ * action" is its own later story for that; this one's job is only
+ * making the failed state visible.
+ *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
  * an unconditional filter, same as listMessages/listKnowledgeBases), so
@@ -188,6 +196,12 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
             <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
               <strong>{document.name}</strong>
               <br />
+              {document.status === "failed" && (
+                <>
+                  <span>處理失敗</span>
+                  <br />
+                </>
+              )}
               {document.sizeBytes !== undefined && (
                 <>
                   <span>{formatFileSize(document.sizeBytes)}</span>

@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 30 | 0 | 0 | 0 | 3 |
+| E03 AI Conversation Experience | 33 | 30 | 0 | 1 | 0 | 2 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 50 | 0 | 0 | 0 | 125 |
+| **合計** | **175** | 50 | 0 | 1 | 0 | 124 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -95,7 +95,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S028 | approved | story/E03-S028-file-chat-entry-flow | [E03-S028.md](E03-S028.md) | 獨立審核 APPROVE,0 個 BLOCKER/MAJOR/MINOR(File-chat entry flow,epic 展開標題「entry flow」限定為新進入點,非 S008 附件選擇器的變形;新增獨立路由 /conversations/new-file,獨立確認 /conversations/new 的 diff 為空、且 S001 自己的既有 E2E 測試逐字不變仍全綠,零回歸主張成立;sendMessage 失敗時 rollback deleteConversation,避免留下部分建立的幽靈對話;成功導向對話詳情頁而非列表頁;message-thread.tsx 確認未被觸碰,無偷加自動串流邏輯;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/423 unit/27 個目標 E2E/force 全量皆綠,並獨立複算 PROGRESS.md 總覽表算術正確) |
 | E03-S029 | approved | story/E03-S029-file-processing-status | [E03-S029.md](E03-S029.md) | 獨立審核 APPROVE,0 個 BLOCKER/MAJOR(File-processing status UI,epic 展開標題確認範圍止於處理狀態 UI,不含真正檔案解析(E06/Team B);審核者獨立核對沿用 S21 answer-state 的 [模擬:X] mock trigger 慣例屬實;新增 attachment-failed 獨立狀態,審核者確認與訊息傳送失敗的 failed kind 是結構上不同、互斥可達的路徑;純 ephemeral 模擬不持久化,審核者自行寫測試驗證歷史訊息重新載入確實不會再閃處理中;S08 composer 與 S28 entry flow 兩個附件來源皆已涵蓋;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/437 unit/33 個目標 E2E 皆綠,force 全量兩輪皆綠;同時修正 S028 approved 後總覽表計數未同步的既有錯誤(第二次發生,已記錄 memory);2 個 MINOR(相關迴歸 E2E 數字誤植 33/33 應為 30/30——已修正;失敗路徑 telemetry correlationId 未直接測試——結構上由單一共用 const 保證,不需額外測試)已處理 |
 | E03-S030 | approved | story/E03-S030-no-evidence-abstention-ux | [E03-S030.md](E03-S030.md) | 獨立審核第 1 輪 REQUEST-CHANGES(1 個 BLOCKER:原始 EVIDENCE 宣稱 SOURCE_BASELINE 對本 story 無任何內文,實際上 line 1251 有 «» 逐字引用的顯示文字「找不到足夠企業資料支持此答案。」,先前關鍵字搜尋未涵蓋這個字串而漏掉;2 個 MINOR:policy 引用措辭過度絕對、regenerate 固定 fallback 狀態會留下內容相同的 revision 未特別處理)→ 修正 `answer-state.ts` 的 NO_EVIDENCE fallback 文字對齊 SOURCE_BASELINE 引言,同步更新 `answer-state.spec.ts`/`no-evidence-abstention.spec.ts` 的斷言,`message-thread.test.tsx` 因透過常數引用而自動套用新值;完整重跑 gate 兩輪皆綠 → 第 2 輪獨立審核 REQUEST-CHANGES(1 個 MAJOR:本列備註未同步更新,仍宣稱「未修改任何既有實作程式碼」與 BLOCKER 修正後的實況不符;1 個 MINOR:`message-thread.test.tsx` 的文件註解有一處 policy 引用措辭未同步修正)→ 已修正本列備註與該處註解措辭,待第 3 輪獨立審核複驗(`/keep-working-till-end` 流程「同一 story 最多 2 輪重審」,此為第 2 輪重審,仍在上限內)→ 第 3 輪獨立審核 APPROVE,2 個新 MINOR(前一輪修正時把重審上限規則誤植為出自 `.claude/rules/STORY_WORKFLOW.md`,實際上出自 `.claude/commands/keep-working-till-end.md`;Gate 紀錄表格未補上第 2 輪修正後的複驗列)均不阻擋,已一併修正 |
-| E03-S031 | todo | | | |
+| E03-S031 | in-progress | story/E03-S031-stream-disconnect-reconnect-ux | | |
 | E03-S032 | todo | | | |
 | E03-S033 | todo | | | |
 

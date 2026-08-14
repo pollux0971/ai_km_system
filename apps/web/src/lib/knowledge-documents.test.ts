@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { addKnowledgeBaseDocument, addKnowledgeBaseDocumentFromUrl, listKnowledgeBaseDocuments } from "./knowledge-documents";
+import {
+  addKnowledgeBaseDocument,
+  addKnowledgeBaseDocumentFromText,
+  addKnowledgeBaseDocumentFromUrl,
+  listKnowledgeBaseDocuments,
+} from "./knowledge-documents";
 
 beforeEach(() => {
   window.sessionStorage.clear();
@@ -237,6 +242,107 @@ describe("addKnowledgeBaseDocumentFromUrl (E05-S014)", () => {
 
   it("is a setting only — importing a URL does not remove the knowledge base from listKnowledgeBases()", async () => {
     const result = await addKnowledgeBaseDocumentFromUrl("kb-sample-3", "https://example.com/report.pdf");
+    expect(result.ok).toBe(true);
+
+    const { listKnowledgeBases } = await import("./knowledge-bases");
+    const all = await listKnowledgeBases();
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value.some((item) => item.id === "kb-sample-3")).toBe(true);
+    }
+  });
+});
+
+describe("addKnowledgeBaseDocumentFromText (E05-S015)", () => {
+  it("adds a document with the given title, content, and a real computed sizeBytes", async () => {
+    const result = await addKnowledgeBaseDocumentFromText("kb-sample-3", "退貨政策摘要", "商品收到 7 天內可退貨。");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.knowledgeBaseId).toBe("kb-sample-3");
+    expect(result.value.name).toBe("退貨政策摘要");
+    expect(result.value.content).toBe("商品收到 7 天內可退貨。");
+    expect(result.value.sizeBytes).toBe(new Blob(["商品收到 7 天內可退貨。"]).size);
+    expect(result.value.sizeBytes).toBeGreaterThan(0);
+    expect(() => new Date(result.value.uploadedAt).toISOString()).not.toThrow();
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value).toHaveLength(1);
+    expect(listed.value[0]?.id).toBe(result.value.id);
+  });
+
+  it("computes sizeBytes as the real UTF-8 byte length, not the character count (multi-byte text)", async () => {
+    // "知識" is 2 characters but 6 UTF-8 bytes (3 bytes each).
+    const result = await addKnowledgeBaseDocumentFromText("kb-sample-3", "標題", "知識");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.sizeBytes).toBe(6);
+  });
+
+  it("trims surrounding whitespace from both title and content", async () => {
+    const result = await addKnowledgeBaseDocumentFromText("kb-sample-3", "  標題  ", "  內容  ");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.name).toBe("標題");
+    expect(result.value.content).toBe("內容");
+  });
+
+  it("rejects an empty or whitespace-only title with VALIDATION_ERROR, without adding anything", async () => {
+    const result = await addKnowledgeBaseDocumentFromText("kb-sample-3", "   ", "有內容");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value).toEqual([]);
+  });
+
+  it("rejects an empty or whitespace-only content with VALIDATION_ERROR, without adding anything", async () => {
+    const result = await addKnowledgeBaseDocumentFromText("kb-sample-3", "有標題", "   ");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value).toEqual([]);
+  });
+
+  it("fails with NOT_FOUND for a knowledge base id that doesn't exist, without adding anything", async () => {
+    const result = await addKnowledgeBaseDocumentFromText("this-id-does-not-exist", "標題", "內容");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("appends to the existing list without disturbing the knowledge base's other documents", async () => {
+    const result = await addKnowledgeBaseDocumentFromText("kb-sample-1", "新增知識", "這是新增的內容。");
+    expect(result.ok).toBe(true);
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-1");
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value).toHaveLength(4);
+    expect(listed.value.map((document) => document.name)).toEqual([
+      "產品保固條款.pdf",
+      "理賠申請流程.docx",
+      "常見保固問題 FAQ.pdf",
+      "新增知識",
+    ]);
+    // Pre-existing file-sourced documents are untouched and still have no `content`.
+    expect(listed.value.slice(0, 3).every((document) => document.content === undefined)).toBe(true);
+  });
+
+  it("is a setting only — adding text knowledge does not remove the knowledge base from listKnowledgeBases()", async () => {
+    const result = await addKnowledgeBaseDocumentFromText("kb-sample-3", "標題", "內容");
     expect(result.ok).toBe(true);
 
     const { listKnowledgeBases } = await import("./knowledge-bases");

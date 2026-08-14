@@ -47,12 +47,24 @@ import { getKnowledgeBase } from "./knowledge-bases";
  * enforce for a different kind of claim. File-sourced documents
  * (addKnowledgeBaseDocument, S011-S013) always still provide a real
  * one — this is purely additive, existing callers are unaffected.
+ *
+ * `content` is optional as of E05-S015 "Text knowledge input" — the
+ * one document source where real body text genuinely exists and is
+ * genuinely available (the user typed or pasted it directly; no file
+ * to read, no URL to fetch). Unlike file uploads (never store real
+ * bytes — Frontend/BFF must never connect directly to Object Storage)
+ * or URL imports (nothing is ever fetched), there is no reason to
+ * withhold this one, honestly-available piece of content — see
+ * addKnowledgeBaseDocumentFromText's own doc comment for the full
+ * reasoning, including why `sizeBytes` for THIS source is a real
+ * computed value (unlike URL import's) rather than omitted.
  */
 export interface KnowledgeBaseDocument {
   id: string;
   knowledgeBaseId: string;
   name: string;
   sizeBytes?: number;
+  content?: string;
   uploadedAt: string;
 }
 
@@ -250,6 +262,76 @@ export async function addKnowledgeBaseDocumentFromUrl(
     id: crypto.randomUUID(),
     knowledgeBaseId,
     name: trimmedUrl,
+    uploadedAt: new Date().toISOString(),
+  };
+  writeStore([...readStore(), document]);
+  return { ok: true, value: document };
+}
+
+/**
+ * E05-S015 "Text knowledge input". Takes a separate `title` and
+ * `content` — same "give this a name, then its body" split
+ * createKnowledgeBase's `name`/`description` already established, not
+ * a single blob the way `addKnowledgeBaseDocumentFromUrl`'s `url` is a
+ * single field (a URL has no separate "title" independent of the
+ * address itself; typed knowledge naturally does).
+ *
+ * Rejects an empty CONTENT with VALIDATION_ERROR (as well as an empty
+ * title) — unlike `boundPrompt` (S008), where an empty value is a
+ * meaningful state ("no custom prompt, fall back to platform
+ * default"), a text-knowledge-input document with no content has no
+ * analogous meaningful interpretation; the entire point of this
+ * capability is adding real content, so an empty submission is
+ * rejected the same way an empty file name or malformed URL is.
+ *
+ * `sizeBytes` here is a REAL, computed value
+ * (`new Blob([trimmedContent]).size`, the actual UTF-8 byte length) —
+ * a deliberate departure from addKnowledgeBaseDocumentFromUrl's
+ * omission. That omission exists because URL import fetches nothing,
+ * so no byte count exists to report; here, by contrast, the content
+ * genuinely exists (the caller has it in hand), so computing its real
+ * size is honest, not fabricated — same "don't fake data you don't
+ * have, but don't withhold data you do have either" principle applied
+ * to its logical conclusion.
+ *
+ * `content` itself is stored on the document (see that field's own
+ * doc comment on KnowledgeBaseDocument) — but nothing in this story
+ * renders it anywhere beyond what already exists (the document list
+ * only ever showed name/size/time for any source). Surfacing the full
+ * stored text is its own future concern, not something this story's
+ * own title ("input") reaches ahead into.
+ *
+ * Fails closed with NOT_FOUND if the knowledge base doesn't exist —
+ * same reused-check pattern as every other addKnowledgeBaseDocument*
+ * function.
+ */
+export async function addKnowledgeBaseDocumentFromText(
+  knowledgeBaseId: string,
+  title: string,
+  content: string,
+): Promise<Result<KnowledgeBaseDocument, ApiError>> {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "標題不得為空。" } };
+  }
+
+  const trimmedContent = content.trim();
+  if (!trimmedContent) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "內容不得為空。" } };
+  }
+
+  const knowledgeBase = await getKnowledgeBase(knowledgeBaseId);
+  if (!knowledgeBase.ok) return knowledgeBase;
+  if (!knowledgeBase.value) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const document: KnowledgeBaseDocument = {
+    id: crypto.randomUUID(),
+    knowledgeBaseId,
+    name: trimmedTitle,
+    content: trimmedContent,
+    sizeBytes: new Blob([trimmedContent]).size,
     uploadedAt: new Date().toISOString(),
   };
   writeStore([...readStore(), document]);

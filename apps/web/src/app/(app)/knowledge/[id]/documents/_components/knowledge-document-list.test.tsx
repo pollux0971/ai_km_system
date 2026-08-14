@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import KnowledgeDocumentList from "./knowledge-document-list";
 import { getKnowledgeBase } from "@/lib/knowledge-bases";
-import { addKnowledgeBaseDocument, addKnowledgeBaseDocumentFromUrl, listKnowledgeBaseDocuments } from "@/lib/knowledge-documents";
+import {
+  addKnowledgeBaseDocument,
+  addKnowledgeBaseDocumentFromText,
+  addKnowledgeBaseDocumentFromUrl,
+  listKnowledgeBaseDocuments,
+} from "@/lib/knowledge-documents";
 
 vi.mock("@/lib/knowledge-bases", () => ({
   getKnowledgeBase: vi.fn(),
@@ -12,6 +17,7 @@ vi.mock("@/lib/knowledge-documents", () => ({
   listKnowledgeBaseDocuments: vi.fn(),
   addKnowledgeBaseDocument: vi.fn(),
   addKnowledgeBaseDocumentFromUrl: vi.fn(),
+  addKnowledgeBaseDocumentFromText: vi.fn(),
 }));
 
 vi.mock("@/lib/telemetry", () => ({
@@ -22,6 +28,7 @@ const mockedGetKnowledgeBase = vi.mocked(getKnowledgeBase);
 const mockedListKnowledgeBaseDocuments = vi.mocked(listKnowledgeBaseDocuments);
 const mockedAddKnowledgeBaseDocument = vi.mocked(addKnowledgeBaseDocument);
 const mockedAddKnowledgeBaseDocumentFromUrl = vi.mocked(addKnowledgeBaseDocumentFromUrl);
+const mockedAddKnowledgeBaseDocumentFromText = vi.mocked(addKnowledgeBaseDocumentFromText);
 
 const sampleKnowledgeBase = {
   id: "kb1",
@@ -35,6 +42,7 @@ beforeEach(() => {
   mockedListKnowledgeBaseDocuments.mockReset();
   mockedAddKnowledgeBaseDocument.mockReset();
   mockedAddKnowledgeBaseDocumentFromUrl.mockReset();
+  mockedAddKnowledgeBaseDocumentFromText.mockReset();
 });
 
 describe("KnowledgeDocumentList (E05-S010)", () => {
@@ -248,6 +256,43 @@ describe("KnowledgeDocumentList (E05-S010)", () => {
     fireEvent.click(screen.getByRole("button", { name: "匯入" }));
 
     await waitFor(() => expect(screen.getByText("https://example.com/imported.pdf")).toBeInTheDocument());
+    expect(screen.queryByText("這個知識庫尚無文件。")).not.toBeInTheDocument();
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the E05-S015 text-input widget once loaded, alongside upload and URL import", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    expect(await screen.findByLabelText("標題")).toBeInTheDocument();
+    expect(screen.getByLabelText("內容")).toBeInTheDocument();
+    expect(screen.getByLabelText("上傳文件")).toBeInTheDocument();
+    expect(screen.getByLabelText("從網址匯入")).toBeInTheDocument();
+  });
+
+  it("refreshes the document list after successfully adding text knowledge, same as after upload/URL import", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "退貨政策", content: "7 天內可退貨。", sizeBytes: 20, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+      });
+    mockedAddKnowledgeBaseDocumentFromText.mockResolvedValue({
+      ok: true,
+      value: { id: "doc1", knowledgeBaseId: "kb1", name: "退貨政策", content: "7 天內可退貨。", sizeBytes: 20, uploadedAt: "2026-08-15T00:00:00.000Z" },
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    fireEvent.change(screen.getByLabelText("標題"), { target: { value: "退貨政策" } });
+    fireEvent.change(screen.getByLabelText("內容"), { target: { value: "7 天內可退貨。" } });
+    fireEvent.click(screen.getByRole("button", { name: "新增" }));
+
+    await waitFor(() => expect(screen.getByText("退貨政策")).toBeInTheDocument());
     expect(screen.queryByText("這個知識庫尚無文件。")).not.toBeInTheDocument();
     expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(2);
   });

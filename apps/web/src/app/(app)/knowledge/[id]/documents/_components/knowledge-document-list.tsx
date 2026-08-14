@@ -8,6 +8,7 @@ import { getKnowledgeBase, type KnowledgeBaseSummary } from "@/lib/knowledge-bas
 import { listKnowledgeBaseDocuments, type KnowledgeBaseDocument } from "@/lib/knowledge-documents";
 import KnowledgeDocumentUpload from "./knowledge-document-upload";
 import KnowledgeDocumentUrlImport from "./knowledge-document-url-import";
+import KnowledgeDocumentTextInput from "./knowledge-document-text-input";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
@@ -56,6 +57,18 @@ type State =
  * `sizeBytes` (see that field's own doc comment on
  * KnowledgeBaseDocument) — the size line only renders when the value
  * is present, rather than showing a misleading "0 B".
+ *
+ * E05-S015 "Text knowledge input" adds a third source,
+ * KnowledgeDocumentTextInput, same page, same `refetchDocuments`
+ * callback (passed as `onAdded`). Needed no changes to the list
+ * rendering below — a text-input document always has a real, computed
+ * `sizeBytes` (see addKnowledgeBaseDocumentFromText's own doc
+ * comment), so the existing conditional-size-rendering logic already
+ * added for S014 handles it correctly with zero further changes; its
+ * stored `content` is never rendered here (or anywhere yet) — same
+ * "input ≠ view" scope discipline this page's every other summary
+ * field already follows (e.g. boundPrompt's own summary never shows
+ * the prompt text itself).
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -165,6 +178,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
 
       <KnowledgeDocumentUpload knowledgeBaseId={id} onUploaded={refetchDocuments} />
       <KnowledgeDocumentUrlImport knowledgeBaseId={id} onImported={refetchDocuments} />
+      <KnowledgeDocumentTextInput knowledgeBaseId={id} onAdded={refetchDocuments} />
 
       {documents.length === 0 && <EmptyState message="這個知識庫尚無文件。" />}
 

@@ -14,17 +14,18 @@ type State =
   | { status: "loaded"; items: KnowledgeBaseSummary[] };
 
 /**
- * E05-S001: the full knowledge base list. Items aren't linked to a
- * detail view — /knowledge/[id] doesn't exist yet (that's E05-S05 "KB
- * Detail"'s job) — inventing a link to a route that isn't there yet
- * would just be a dead link, same reasoning E03-S001's own
- * conversation-list.tsx originally used for /conversations/[id].
+ * E05-S001: the full knowledge base list.
  *
  * E05-S004 "Edit KB metadata" adds a distinct, explicitly-labeled "編輯"
- * link per item to /knowledge/{id}/edit — a different, real route this
- * same story builds, not the whole-item-to-detail-view link the S001
- * paragraph above still deliberately avoids.
+ * link per item to /knowledge/{id}/edit.
  *
+ * E05-S005 "KB detail page" links each item's name to /knowledge/{id} —
+ * deferred at E05-S001 ("inventing a link to a route that isn't there
+ * yet would just be a dead link"), now fulfilled since that route
+ * exists, mirroring conversation-list.tsx's own item-name-to-detail
+ * link exactly (E03-S001 deferred → E03-S002 fulfilled, same pattern).
+ *
+
  * E05-S002 "Knowledge search/filter" adds `query`, searched on every
  * keystroke (no debounce — this mock's search is an instant in-memory
  * array filter, not a real network call with latency worth debouncing
@@ -94,7 +95,9 @@ export default function KnowledgeList() {
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
           {state.items.map((item) => (
             <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
-              <strong>{item.name}</strong>
+              <Link href={`/knowledge/${item.id}`}>
+                <strong>{item.name}</strong>
+              </Link>
               <br />
               <span>{item.description}</span>
               <br />

@@ -84,6 +84,33 @@ describe("KnowledgeDetail (E05-S005)", () => {
     expect(await screen.findByText("維修工程師、知識管理者")).toBeInTheDocument();
   });
 
+  it("shows a 成員設定 link pointing at /knowledge/{id}/members", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByRole("link", { name: "成員設定" })).toHaveAttribute("href", "/knowledge/kb1/members");
+  });
+
+  it("shows 尚無成員 when no members have been configured yet", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByText("尚無成員")).toBeInTheDocument();
+  });
+
+  it("shows the joined member list when members are configured", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleKnowledgeBase, members: ["demo-user", "demo-sales"] },
+    });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    expect(await screen.findByText("demo-user、demo-sales")).toBeInTheDocument();
+  });
+
   it("shows a distinct error state when loading fails", async () => {
     mockedGetKnowledgeBase.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
 

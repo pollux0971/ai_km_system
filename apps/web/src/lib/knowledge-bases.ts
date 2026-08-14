@@ -71,6 +71,11 @@ function readStore(): KnowledgeBaseSummary[] {
   }
 }
 
+function writeStore(items: KnowledgeBaseSummary[]): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
 /**
  * E05-S002 "Knowledge search/filter". SOURCE_BASELINE.md gives this
  * story only its title ("E05-S02 Knowledge Search"); the epic file's
@@ -102,4 +107,45 @@ export async function listKnowledgeBases(query?: string): Promise<Result<Knowled
     ? all.filter((item) => item.name.toLocaleLowerCase().includes(trimmedQuery.toLocaleLowerCase()))
     : all;
   return { ok: true, value: filtered };
+}
+
+/**
+ * E05-S003 "Create KB form". Unlike lib/conversations.ts's
+ * createConversation() (which takes no arguments and defaults
+ * `title: "新對話"`), this story's own name names a "form" — and unlike a
+ * disposable per-message conversation thread, a knowledge base is a
+ * longer-lived organizational container users pick out by name, so a
+ * list of several identically-named "新知識庫" entries would actually be
+ * confusing rather than harmless. `name` is therefore real required
+ * user input, fail-closed with VALIDATION_ERROR when blank — same
+ * server-validates-too precedent as renameConversation(). `description`
+ * is optional (defaults to "" when omitted/blank): nothing in
+ * SOURCE_BASELINE or the epic template's AC requires it, and
+ * KnowledgeBaseSummary.description being a non-optional `string` (not
+ * `string | undefined`) is satisfied by "" same as any other field.
+ *
+ * Prepends to the store (same as createConversation()) so the new
+ * knowledge base immediately appears at the top of listKnowledgeBases().
+ * No uniqueness check against existing names — neither
+ * createConversation() nor renameConversation() enforce uniqueness on
+ * their own identity field either, and nothing in this story's AC asks
+ * for it.
+ */
+export async function createKnowledgeBase(
+  name: string,
+  description?: string,
+): Promise<Result<KnowledgeBaseSummary, ApiError>> {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "知識庫名稱不得為空。" } };
+  }
+
+  const knowledgeBase: KnowledgeBaseSummary = {
+    id: crypto.randomUUID(),
+    name: trimmedName,
+    description: description?.trim() ?? "",
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore([knowledgeBase, ...readStore()]);
+  return { ok: true, value: knowledgeBase };
 }

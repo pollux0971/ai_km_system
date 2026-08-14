@@ -7,9 +7,17 @@ import { addKnowledgeBaseDocument } from "@/lib/knowledge-documents";
 import { trackEvent } from "@/lib/telemetry";
 import { simulateUploadStep } from "@/lib/upload-progress";
 import { simulateParseStep } from "@/lib/parse-progress";
+import { simulateIndexStep } from "@/lib/index-progress";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-upload");
+
+/** E05-S017/S018/S019: display label for each ephemeral per-file progress phase. */
+const UPLOAD_PHASE_LABELS: Record<"uploading" | "parsing" | "indexing", string> = {
+  uploading: "上傳中",
+  parsing: "解析中",
+  indexing: "索引中",
+};
 
 /** See this component's own doc comment for why this prefers webkitRelativePath. */
 function displayName(file: File): string {
@@ -185,6 +193,14 @@ function displayName(file: File): string {
  * parse; skipping it for a failed file is not a new failure STATE (see
  * S020 above), it is simply not doing work for an item that never
  * reached the point where parsing would apply.
+ *
+ * E05-S019 "Index progress" adds a THIRD ephemeral phase the same way:
+ * `phase` gains `"indexing"`, status text switches to "索引中…", and
+ * `simulateIndexStep()` runs after a successful parsing phase, same
+ * "only for a file that actually got this far" gating as parsing's own
+ * S020 reasoning above. This completes the upload → parse → index
+ * sequence; still nothing persisted, still entirely cleared once the
+ * batch settles.
  */
 export default function KnowledgeDocumentUpload({
   knowledgeBaseId,
@@ -198,9 +214,11 @@ export default function KnowledgeDocumentUpload({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [failedCount, setFailedCount] = useState(0);
-  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; phase: "uploading" | "parsing" } | null>(
-    null,
-  );
+  const [uploadProgress, setUploadProgress] = useState<{
+    current: number;
+    total: number;
+    phase: "uploading" | "parsing" | "indexing";
+  } | null>(null);
 
   function handleFilesSelected(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -255,6 +273,9 @@ export default function KnowledgeDocumentUpload({
       if (result.ok) {
         setUploadProgress({ current: index + 1, total, phase: "parsing" });
         await simulateParseStep();
+
+        setUploadProgress({ current: index + 1, total, phase: "indexing" });
+        await simulateIndexStep();
       }
     }
 
@@ -324,7 +345,7 @@ export default function KnowledgeDocumentUpload({
       {pending && (
         <p role="status" style={{ marginTop: 8 }}>
           {uploadProgress
-            ? `${uploadProgress.phase === "parsing" ? "解析中" : "上傳中"}…（第 ${uploadProgress.current} / ${uploadProgress.total} 筆）`
+            ? `${UPLOAD_PHASE_LABELS[uploadProgress.phase]}…（第 ${uploadProgress.current} / ${uploadProgress.total} 筆）`
             : "上傳中…"}
         </p>
       )}

@@ -6,9 +6,11 @@ import {
   updateKnowledgeBase,
   updateKnowledgeBaseBoundModel,
   updateKnowledgeBaseBoundPrompt,
+  updateKnowledgeBaseFolderSync,
   updateKnowledgeBaseMembers,
   updateKnowledgeBaseVisibleRoles,
 } from "./knowledge-bases";
+import { listKnowledgeBaseDocuments } from "./knowledge-documents";
 
 describe("listKnowledgeBases (E05-S001)", () => {
   it("resolves with a non-empty list of knowledge base summaries", async () => {
@@ -586,6 +588,140 @@ describe("updateKnowledgeBaseBoundModel (E05-S009)", () => {
     if (!created.ok) return;
 
     await updateKnowledgeBaseBoundModel(created.value.id, "standard");
+
+    const all = await listKnowledgeBases();
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value.some((item) => item.id === created.value.id)).toBe(true);
+    }
+  });
+});
+
+describe("updateKnowledgeBaseFolderSync (E05-S016)", () => {
+  it("enables sync with a valid path, refreshing updatedAt", async () => {
+    const created = await createKnowledgeBase("客服知識庫（同步測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseFolderSync(created.value.id, "/mnt/shared/policies", true);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.folderSyncPath).toBe("/mnt/shared/policies");
+      expect(updated.value.folderSyncEnabled).toBe(true);
+      expect(new Date(updated.value.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(created.value.updatedAt).getTime());
+    }
+  });
+
+  it("rejects enabling sync with an empty path, without disturbing any existing state", async () => {
+    const created = await createKnowledgeBase("業務知識庫（同步測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await updateKnowledgeBaseFolderSync(created.value.id, "   ", true);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const reloaded = await getKnowledgeBase(created.value.id);
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) {
+      expect(reloaded.value?.folderSyncEnabled).toBeUndefined();
+      expect(reloaded.value?.folderSyncPath).toBeUndefined();
+    }
+  });
+
+  it("allows disabling sync regardless of the path (pausing without discarding the configured location)", async () => {
+    const created = await createKnowledgeBase("行政知識庫（同步測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await updateKnowledgeBaseFolderSync(created.value.id, "/mnt/shared/hr", true);
+
+    const disabled = await updateKnowledgeBaseFolderSync(created.value.id, "/mnt/shared/hr", false);
+
+    expect(disabled.ok).toBe(true);
+    if (disabled.ok) {
+      expect(disabled.value.folderSyncEnabled).toBe(false);
+      expect(disabled.value.folderSyncPath).toBe("/mnt/shared/hr");
+    }
+  });
+
+  it("allows saving a path while sync stays disabled", async () => {
+    const created = await createKnowledgeBase("財務知識庫（同步測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await updateKnowledgeBaseFolderSync(created.value.id, "/mnt/shared/finance", false);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.folderSyncPath).toBe("/mnt/shared/finance");
+      expect(result.value.folderSyncEnabled).toBe(false);
+    }
+  });
+
+  it("trims surrounding whitespace from the path, and stores an empty path as undefined (not an empty string)", async () => {
+    const created = await createKnowledgeBase("稽核知識庫（同步測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const trimmed = await updateKnowledgeBaseFolderSync(created.value.id, "  /mnt/shared/audit  ", false);
+    expect(trimmed.ok).toBe(true);
+    if (trimmed.ok) expect(trimmed.value.folderSyncPath).toBe("/mnt/shared/audit");
+
+    const cleared = await updateKnowledgeBaseFolderSync(created.value.id, "   ", false);
+    expect(cleared.ok).toBe(true);
+    if (cleared.ok) expect(cleared.value.folderSyncPath).toBeUndefined();
+  });
+
+  it("fails with NOT_FOUND for an id that doesn't match anything", async () => {
+    const result = await updateKnowledgeBaseFolderSync("this-id-does-not-exist", "/mnt/shared/x", false);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("does not disturb the knowledge base's other fields", async () => {
+    const created = await createKnowledgeBase("系統知識庫（同步測試）", "系統相關文件。");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await updateKnowledgeBaseVisibleRoles(created.value.id, ["it_administrator"]);
+    await updateKnowledgeBaseMembers(created.value.id, ["demo-user"]);
+
+    const updated = await updateKnowledgeBaseFolderSync(created.value.id, "/mnt/shared/system", true);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.name).toBe("系統知識庫（同步測試）");
+      expect(updated.value.description).toBe("系統相關文件。");
+      expect(updated.value.visibleToRoles).toEqual(["it_administrator"]);
+      expect(updated.value.members).toEqual(["demo-user"]);
+    }
+  });
+
+  it("is a setting only — enabling folder sync never adds any document to listKnowledgeBaseDocuments()", async () => {
+    const created = await createKnowledgeBase("研發知識庫（同步測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const before = await listKnowledgeBaseDocuments(created.value.id);
+    expect(before.ok).toBe(true);
+    const beforeCount = before.ok ? before.value.length : -1;
+
+    const updated = await updateKnowledgeBaseFolderSync(created.value.id, "/mnt/shared/rd", true);
+    expect(updated.ok).toBe(true);
+
+    const after = await listKnowledgeBaseDocuments(created.value.id);
+    expect(after.ok).toBe(true);
+    if (after.ok) expect(after.value).toHaveLength(beforeCount);
+  });
+
+  it("is a setting only — enabling folder sync does not remove the knowledge base from listKnowledgeBases()", async () => {
+    const created = await createKnowledgeBase("客服知識庫（同步測試二）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseFolderSync(created.value.id, "/mnt/shared/support", true);
 
     const all = await listKnowledgeBases();
     expect(all.ok).toBe(true);

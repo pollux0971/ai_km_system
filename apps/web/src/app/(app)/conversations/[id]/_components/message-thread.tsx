@@ -302,6 +302,61 @@ const logger = createLogger("web:message-thread");
  * new turn (attemptSend -> startStream), which is also the only place
  * SOURCE_BASELINE-adjacent precedent (S21's classifyAnswerState, S29's
  * classifyFileProcessing) ever checks a fresh user question at all.
+ *
+ * S32 "Message retry UX" — like S31, SOURCE_BASELINE.md has no section
+ * for this story either (E03's entries there still end at S30) and the
+ * epic file's own S32 section is the same title-only MVP boilerplate
+ * every late story gets. Unlike S31, there was no existing forward-
+ * reference pre-naming this story — the scope instead comes directly
+ * from this story's own generic Functional AC 5, shared by every story
+ * in this epic file: "重複請求或重試可能發生，Then 不得造成未定義重複
+ * side effect." Auditing the four existing retry/reconnect mechanisms
+ * already in this file (`failed`/`attachment-failed` -> handleRetry,
+ * `stream-disconnected` -> handleReconnect, `stream-failed` ->
+ * handleRetryStream) against that AC found `handleRetryStream` in
+ * violation: it called `runStream(localId)` with no further arguments,
+ * silently discarding both the `answerState` the original attempt was
+ * classified under AND — the actually serious part — `reviseTarget`.
+ * Losing `reviseTarget` means retrying a `stream-failed` entry that
+ * came from `handleRegenerate` (reviseMessage() failed to persist) no
+ * longer revises the original message on retry; it falls through to
+ * runStream's `receiveAssistantReply` branch instead and creates a
+ * brand new one — an actual undefined duplicate side effect, the exact
+ * thing AC 5 prohibits. `stream-failed` now carries the `answerState`
+ * and `reviseTarget` that were in flight when persistence failed, and
+ * handleRetryStream threads both back through, so a retried regenerate
+ * still revises the same message and a retried non-ANSWERED turn keeps
+ * its original classification — the same "reconnect finalizes under
+ * the SAME classification it started under" principle S31 already
+ * established for `stream-disconnected`, applied to the one place it
+ * was missing.
+ *
+ * The other three mechanisms needed no change: `handleRetry` always
+ * calls `attemptSend` fresh from the message's own `content`/
+ * `attachmentNames`, which recomputes everything from scratch and never
+ * carries a `reviseTarget` concept in the first place (`failed`/
+ * `attachment-failed` only ever happen on a brand new send, never a
+ * regenerate). `handleReconnect`/`stream-disconnected` has the identical
+ * shape of gap in principle (it also hardcodes `reviseTarget` to
+ * `undefined`) but it is NOT a reachable bug today: disconnect can only
+ * occur when `simulateDisconnect` is true, and `handleRegenerate` never
+ * passes that argument (see the S31 section above) — regenerating can
+ * never disconnect, so there is no live path that would ever lose a
+ * `reviseTarget` there. Extending it anyway would be a speculative,
+ * unrequested change to code with no reachable failure to fix.
+ *
+ * `stream-failed` itself (S10/S12) has never had E2E coverage in this
+ * codebase, for a structural reason unrelated to this story: its only
+ * failure trigger is a stale/nonexistent id passed to
+ * receiveAssistantReply/reviseMessage (see lib/messages.ts), which —
+ * unlike S21/S29/S31's bracketed `[模擬:X]` triggers — has no path a
+ * real UI interaction can produce (you cannot navigate to an invalid
+ * conversation and still have a composer to type into). `failed`'s own
+ * retry ("重新傳送") has the identical gap for the identical reason.
+ * This story's fix and tests stay at the same unit level this whole
+ * mechanism has always been verified at; inventing a new mock-trigger
+ * mechanism just to force an E2E path here would be new scope nothing
+ * asks for.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -309,7 +364,7 @@ type DisplayMessage =
   | { kind: "failed"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "attachment-failed"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "streaming"; localId: string; content: string; phase: GenerationPhase | null }
-  | { kind: "stream-failed"; localId: string }
+  | { kind: "stream-failed"; localId: string; answerState: AnswerState; reviseTarget?: Message }
   | { kind: "stream-disconnected"; localId: string; content: string; answerState: AnswerState };
 
 type LoadState = "loading" | "error" | "loaded";
@@ -531,7 +586,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       logger.error("failed to persist assistant reply", { correlationId, conversationId, code: result.error.code });
       trackEvent("conversation_message_stream_failure", { correlationId, properties: { code: result.error.code } });
       setDisplayMessages((previous) =>
-        previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { kind: "stream-failed", localId } : entry)),
+        previous.map((entry) =>
+          entry.kind === "streaming" && entry.localId === localId ? { kind: "stream-failed", localId, answerState, reviseTarget } : entry,
+        ),
       );
       return;
     }
@@ -549,13 +606,13 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     void runStream(localId, undefined, answerState, simulateDisconnect);
   }
 
-  function handleRetryStream(localId: string) {
+  function handleRetryStream(localId: string, answerState: AnswerState, reviseTarget?: Message) {
     setDisplayMessages((previous) =>
       previous.map((entry) =>
         entry.kind === "stream-failed" && entry.localId === localId ? { kind: "streaming", localId, content: "", phase: null } : entry,
       ),
     );
-    void runStream(localId);
+    void runStream(localId, reviseTarget, answerState);
   }
 
   /**
@@ -670,7 +727,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                 <li key={entry.localId}>
                   <span>AI</span>
                   <span role="alert">AI 回覆失敗</span>
-                  <button type="button" onClick={() => handleRetryStream(entry.localId)}>
+                  <button type="button" onClick={() => handleRetryStream(entry.localId, entry.answerState, entry.reviseTarget)}>
                     重新產生回覆
                   </button>
                 </li>

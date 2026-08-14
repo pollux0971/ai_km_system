@@ -26,13 +26,13 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 32 | 0 | 1 | 0 | 0 |
+| E03 AI Conversation Experience | 33 | 32 | 1 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 0 | 0 | 0 | 0 | 31 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 52 | 0 | 1 | 0 | 122 |
+| **合計** | **175** | 52 | 1 | 0 | 0 | 122 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -97,7 +97,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S030 | approved | story/E03-S030-no-evidence-abstention-ux | [E03-S030.md](E03-S030.md) | 獨立審核第 1 輪 REQUEST-CHANGES(1 個 BLOCKER:原始 EVIDENCE 宣稱 SOURCE_BASELINE 對本 story 無任何內文,實際上 line 1251 有 «» 逐字引用的顯示文字「找不到足夠企業資料支持此答案。」,先前關鍵字搜尋未涵蓋這個字串而漏掉;2 個 MINOR:policy 引用措辭過度絕對、regenerate 固定 fallback 狀態會留下內容相同的 revision 未特別處理)→ 修正 `answer-state.ts` 的 NO_EVIDENCE fallback 文字對齊 SOURCE_BASELINE 引言,同步更新 `answer-state.spec.ts`/`no-evidence-abstention.spec.ts` 的斷言,`message-thread.test.tsx` 因透過常數引用而自動套用新值;完整重跑 gate 兩輪皆綠 → 第 2 輪獨立審核 REQUEST-CHANGES(1 個 MAJOR:本列備註未同步更新,仍宣稱「未修改任何既有實作程式碼」與 BLOCKER 修正後的實況不符;1 個 MINOR:`message-thread.test.tsx` 的文件註解有一處 policy 引用措辭未同步修正)→ 已修正本列備註與該處註解措辭,待第 3 輪獨立審核複驗(`/keep-working-till-end` 流程「同一 story 最多 2 輪重審」,此為第 2 輪重審,仍在上限內)→ 第 3 輪獨立審核 APPROVE,2 個新 MINOR(前一輪修正時把重審上限規則誤植為出自 `.claude/rules/STORY_WORKFLOW.md`,實際上出自 `.claude/commands/keep-working-till-end.md`;Gate 紀錄表格未補上第 2 輪修正後的複驗列)均不阻擋,已一併修正 |
 | E03-S031 | approved | story/E03-S031-stream-disconnect-reconnect-ux | [E03-S031.md](E03-S031.md) | 獨立審核 APPROVE(Stream disconnect/reconnect UX,SOURCE_BASELINE 完全無此 story 章節(E03 條目在 S30 結束)——審核者獨立複驗:通篇 grep disconnect/reconnect/斷線/重連 等關鍵字零命中,非 S30 那種關鍵字漏搜情境;lib/streaming.ts 於 S10 預留的明確伏筆經 `git show` 原始 commit 複驗屬實非事後編造;沿用 S21/S29/S30 的 [模擬:X] mock trigger 慣例;stream-disconnected 與既有 stream-failed 結構上互斥路徑經程式碼複驗;重新連線沿用原始 answerState 有專屬非預設狀態測試把關;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/452 unit/32 個目標 E2E 皆綠;零 BLOCKER/MAJOR/MINOR) |
 | E03-S032 | approved | story/E03-S032-message-retry-ux | [E03-S032.md](E03-S032.md) | 獨立審核 APPROVE(Message retry UX,SOURCE_BASELINE 無此 story 章節(E03 條目在 S30 結束);修正 `handleRetryStream` 遺失 `reviseTarget`/`answerState` 的真實 bug——重試一次失敗的 regenerate 原本會產生重複訊息而非更新原訊息,直接違反 AC 5;審核者獨立重建 fix 前的舊程式碼親自追蹤確認 bug 屬實可達、兩個新測試在舊碼下確實會失敗;`stream-disconnected` 同形狀缺口因目前不可達,刻意不動,審核者亦獨立確認;0 次 FIX 循環;typecheck/lint/build/454 unit/32 個目標 E2E 皆綠,force 全量兩輪皆綠;1 個 MINOR(測試註解鑑別力宣稱過度)已修正) |
-| E03-S033 | in-progress | story/E03-S033-conversation-e2e-mocked-backend | | DEV 進行中(conversation E2E with mocked backend) |
+| E03-S033 | done | story/E03-S033-conversation-e2e-mocked-backend | [E03-S033.md](E03-S033.md) | DEV 完成,待獨立審核(conversation E2E with mocked backend,E03 最後一個 story;SOURCE_BASELINE 無此 story 章節,範圍依 epic 標題本身+SOURCE_BASELINE §11 團隊分工(E2E 是 Team A 職責)+稽核既有 30+ 個 spec 找到的組合層級覆蓋缺口判斷,不需 advisor;純新增一個 spec 檔(2 個測試),無任何原始碼變更;1 次 FIX 循環(測試自己的 locator scope 遺漏,非產品 bug);typecheck/lint/build/454 unit/27 個目標 E2E 皆綠,force 全量兩輪(107 E2E)皆綠) |
 
 ## E05 Knowledge Management Experience(31)
 

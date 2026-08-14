@@ -59,7 +59,16 @@ function sampleFolderFile(relativePath: string, byteLength = 500) {
   return file;
 }
 
-function sampleDocument(overrides: Partial<{ id: string; knowledgeBaseId: string; name: string; sizeBytes: number; uploadedAt: string }> = {}) {
+function sampleDocument(
+  overrides: Partial<{
+    id: string;
+    knowledgeBaseId: string;
+    name: string;
+    sizeBytes: number;
+    status: "ready" | "failed";
+    uploadedAt: string;
+  }> = {},
+) {
   return {
     id: "doc1",
     knowledgeBaseId: "kb1",
@@ -628,5 +637,54 @@ describe("KnowledgeDocumentUpload (E05-S019 index progress)", () => {
 
     await waitFor(() => expect(mockedSimulateIndexStep).toHaveBeenCalledTimes(2));
     expect(order).toEqual(["parse-step", "index-step", "parse-step", "index-step"]);
+  });
+});
+
+describe("KnowledgeDocumentUpload (E05-S020 processing failure state)", () => {
+  it("emits knowledge_base_document_processing_failed, sharing the success event's correlation id, when the created document's status is failed", async () => {
+    mockedAddKnowledgeBaseDocument.mockResolvedValue({ ok: true, value: sampleDocument({ id: "doc-failed", status: "failed" }) });
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [sampleFile()] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(mockedAddKnowledgeBaseDocument).toHaveBeenCalled());
+
+    const successCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "knowledge_base_document_upload_success");
+    const failedCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "knowledge_base_document_processing_failed");
+    expect(successCall).toBeDefined();
+    expect(failedCall).toBeDefined();
+    const success = successCall as [string, { correlationId: string }];
+    const failed = failedCall as [string, { correlationId: string; properties: { knowledgeBaseId: string; documentId: string } }];
+    expect(failed[1].correlationId).toBe(success[1].correlationId);
+    expect(failed[1].properties).toEqual({ knowledgeBaseId: "kb1", documentId: "doc-failed" });
+  });
+
+  it("does not emit knowledge_base_document_processing_failed for an ordinarily successful document", async () => {
+    mockedAddKnowledgeBaseDocument.mockResolvedValue({ ok: true, value: sampleDocument() });
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [sampleFile()] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(mockedAddKnowledgeBaseDocument).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+
+    const failedCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "knowledge_base_document_processing_failed");
+    expect(failedCall).toBeUndefined();
+  });
+
+  it("still calls onUploaded for a processing-failed document — it was created and belongs in the refreshed list", async () => {
+    mockedAddKnowledgeBaseDocument.mockResolvedValue({ ok: true, value: sampleDocument({ status: "failed" }) });
+    const onUploaded = vi.fn();
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={onUploaded} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [sampleFile()] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledTimes(1));
+    // Not the "N 個檔案上傳失敗" retry-affordance path — that's only
+    // for a rejected addKnowledgeBaseDocument call (result.ok: false).
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

@@ -4,6 +4,7 @@ import {
   addKnowledgeBaseDocumentFromText,
   addKnowledgeBaseDocumentFromUrl,
   listKnowledgeBaseDocuments,
+  MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER,
 } from "./knowledge-documents";
 
 beforeEach(() => {
@@ -135,6 +136,51 @@ describe("addKnowledgeBaseDocument (E05-S011)", () => {
     expect(listedOther.ok).toBe(true);
     if (!listedOther.ok) return;
     expect(listedOther.value.some((document) => document.name === "只屬於三號.pdf")).toBe(false);
+  });
+});
+
+describe("addKnowledgeBaseDocument — processing failure state (E05-S020)", () => {
+  it("stamps status:failed when the name contains MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER", async () => {
+    const result = await addKnowledgeBaseDocument("kb-sample-3", `毀損檔案${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}.pdf`, 500);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.status).toBe("failed");
+  });
+
+  it("leaves status undefined (ready) for an ordinarily-named file", async () => {
+    const result = await addKnowledgeBaseDocument("kb-sample-3", "正常檔案.pdf", 500);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.status).toBeUndefined();
+  });
+
+  it("still returns ok:true for a processing-failed document — creation itself succeeded", async () => {
+    const result = await addKnowledgeBaseDocument("kb-sample-3", `會失敗${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}.pdf`, 500);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("a processing-failed document is still recorded and listed like any other", async () => {
+    await addKnowledgeBaseDocument("kb-sample-3", `失敗檔案${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}.pdf`, 500);
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const failedDoc = listed.value.find((document) => document.name.includes("失敗檔案"));
+    expect(failedDoc).toBeDefined();
+    expect(failedDoc?.status).toBe("failed");
+    expect(failedDoc?.sizeBytes).toBe(500);
+  });
+
+  it("the trigger match is a substring, not an exact-name match — same convention as MOCK_FILE_PROCESSING_FAILURE_TRIGGER (E03-S029)", async () => {
+    const result = await addKnowledgeBaseDocument(
+      "kb-sample-3",
+      `報告前綴${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}後綴.docx`,
+      500,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.status).toBe("failed");
   });
 });
 

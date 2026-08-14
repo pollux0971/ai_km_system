@@ -73,6 +73,14 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * E05-S019 adds the third and final real-timer phase — 索引中
  * following 解析中 — completing the upload → parse → index sequence
  * this same single-file test now confirms end to end.
+ *
+ * E05-S020 adds a deterministic mock trigger
+ * (MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER, embedded in the file
+ * name) that marks the created document status:"failed" — this test
+ * confirms the upload itself still succeeds (all three real-timer
+ * phases still play out, same as any other file) and the document
+ * still lands in the list, but with a distinct 處理失敗 indicator
+ * instead of the generic upload-failure alert S011 already covers.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -409,6 +417,37 @@ test("E05-S019: uploading a file shows all three progress phases in order — �
 
   await expect(page.getByText(/上傳中|解析中|索引中/)).not.toBeVisible();
   await expect(page.getByText("索引測試.pdf")).toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("1 份文件");
+});
+
+test("E05-S020: a file whose processing is mock-triggered to fail still uploads successfully, but shows 處理失敗 in the list", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await page.getByLabel("上傳文件").setInputFiles({
+    name: "損毀報告[模擬:KB_PROCESSING_FAILED].pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("file content"),
+  });
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+  // Still a real upload — all three real-timer phases play out exactly
+  // as for any other file, since addKnowledgeBaseDocument itself
+  // succeeds (ok: true); only the resulting document's status differs.
+  await expect(page.getByText(/上傳中/)).toBeVisible();
+  await expect(page.getByText(/上傳中|解析中|索引中/)).not.toBeVisible();
+
+  await expect(page.getByText("損毀報告", { exact: false })).toBeVisible();
+  await expect(page.getByText("處理失敗")).toBeVisible();
+  // Not the generic "N 個檔案上傳失敗" retry-affordance alert — that
+  // path is only for a rejected addKnowledgeBaseDocument call.
+  await expect(page.getByRole("main").getByRole("alert")).not.toBeVisible();
 
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));

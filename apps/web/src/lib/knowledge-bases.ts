@@ -40,6 +40,24 @@ export interface KnowledgeBaseSummary {
    * list" reasoning as `visibleToRoles`.
    */
   members?: string[];
+  /**
+   * E05-S008 "KB prompt binding UI". A REFERENCE to a separate Prompt
+   * entity (matching this codebase's real eventual architecture — the
+   * admin-managed "8. 系統核心體驗" bullet list SOURCE_BASELINE.md
+   * documents alongside User/Role/KB/Model, owned by E11-S12 "Prompt
+   * Admin" (Team A, not yet built) and executed by E12 "Model & Prompt
+   * Platform" (Team B, not yet built)) isn't buildable yet — same
+   * "no real entity directory, so don't fake a picker" reasoning
+   * `members` above already applies to a missing User directory. This
+   * story instead binds the prompt TEXT directly to the knowledge base
+   * as its own property — "binding" here means "this KB carries its own
+   * custom instructions," not "this KB references entity #N in a
+   * catalog that doesn't exist yet." Optional, same "absence means
+   * not-yet-configured" reasoning as `visibleToRoles`/`members` — an
+   * explicitly-saved empty string is a valid, meaningful "no custom
+   * prompt, fall back to the platform default" state, not an error.
+   */
+  boundPrompt?: string;
 }
 
 /**
@@ -310,6 +328,35 @@ export async function updateKnowledgeBaseMembers(
 
   const normalizedMembers = [...new Set(members.map((member) => member.trim()).filter(Boolean))];
   const updated: KnowledgeBaseSummary = { ...existing, members: normalizedMembers, updatedAt: new Date().toISOString() };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E05-S008 "KB prompt binding UI". Trims but never rejects with
+ * VALIDATION_ERROR: an empty/whitespace-only prompt is a valid,
+ * meaningful "no custom prompt bound" state — see `boundPrompt`'s own
+ * doc comment on KnowledgeBaseSummary — the same "empty is meaningful,
+ * not an error" precedent `visibleToRoles`/`members` already establish
+ * for this story's sibling KB-configuration fields. Unlike those two,
+ * this is FREE-FORM CONTENT (not a fixed-vocabulary role or a short
+ * opaque identifier) — closer to `description` than to
+ * `visibleToRoles`/`members` — so callers must not log the actual
+ * `boundPrompt` text (see knowledge-prompt-editor.tsx's own doc
+ * comment for why), the same restraint createKnowledgeBase/
+ * updateKnowledgeBase already apply to `name`/`description`.
+ */
+export async function updateKnowledgeBaseBoundPrompt(
+  id: string,
+  boundPrompt: string,
+): Promise<Result<KnowledgeBaseSummary, ApiError>> {
+  const store = readStore();
+  const existing = store.find((item) => item.id === id);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const updated: KnowledgeBaseSummary = { ...existing, boundPrompt: boundPrompt.trim(), updatedAt: new Date().toISOString() };
   writeStore(store.map((item) => (item.id === id ? updated : item)));
   return { ok: true, value: updated };
 }

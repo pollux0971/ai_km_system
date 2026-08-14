@@ -4,6 +4,7 @@ import {
   getKnowledgeBase,
   listKnowledgeBases,
   updateKnowledgeBase,
+  updateKnowledgeBaseBoundPrompt,
   updateKnowledgeBaseMembers,
   updateKnowledgeBaseVisibleRoles,
 } from "./knowledge-bases";
@@ -409,6 +410,88 @@ describe("updateKnowledgeBaseMembers (E05-S007)", () => {
     if (!created.ok) return;
 
     await updateKnowledgeBaseMembers(created.value.id, ["demo-user"]);
+
+    const all = await listKnowledgeBases();
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value.some((item) => item.id === created.value.id)).toBe(true);
+    }
+  });
+});
+
+describe("updateKnowledgeBaseBoundPrompt (E05-S008)", () => {
+  it("saves the trimmed prompt text and refreshes updatedAt", async () => {
+    const created = await createKnowledgeBase("客服知識庫（提示詞測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseBoundPrompt(created.value.id, "  請用友善、簡潔的語氣回答客服問題。  ");
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.id).toBe(created.value.id);
+      expect(updated.value.boundPrompt).toBe("請用友善、簡潔的語氣回答客服問題。");
+      expect(new Date(updated.value.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(created.value.updatedAt).getTime());
+    }
+  });
+
+  it("accepts an empty or whitespace-only prompt as a valid, meaningful state (no custom prompt bound), not a validation error", async () => {
+    const created = await createKnowledgeBase("業務知識庫（提示詞測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const empty = await updateKnowledgeBaseBoundPrompt(created.value.id, "");
+    const whitespaceOnly = await updateKnowledgeBaseBoundPrompt(created.value.id, "   ");
+
+    expect(empty.ok && whitespaceOnly.ok).toBe(true);
+    if (!empty.ok || !whitespaceOnly.ok) return;
+    expect(empty.value.boundPrompt).toBe("");
+    expect(whitespaceOnly.value.boundPrompt).toBe("");
+  });
+
+  it("is reflected by a subsequent getKnowledgeBase() call", async () => {
+    const created = await createKnowledgeBase("行政知識庫（提示詞測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseBoundPrompt(created.value.id, "回答時請引用相關規範條號。");
+    const reloaded = await getKnowledgeBase(created.value.id);
+
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) expect(reloaded.value?.boundPrompt).toBe("回答時請引用相關規範條號。");
+  });
+
+  it("does not disturb the knowledge base's name, description, visibleToRoles, or members", async () => {
+    const created = await createKnowledgeBase("財務知識庫（提示詞測試）", "財務相關文件。");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await updateKnowledgeBaseVisibleRoles(created.value.id, ["auditor"]);
+    await updateKnowledgeBaseMembers(created.value.id, ["demo-user"]);
+
+    const updated = await updateKnowledgeBaseBoundPrompt(created.value.id, "請謹慎核對數字。");
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.name).toBe("財務知識庫（提示詞測試）");
+      expect(updated.value.description).toBe("財務相關文件。");
+      expect(updated.value.visibleToRoles).toEqual(["auditor"]);
+      expect(updated.value.members).toEqual(["demo-user"]);
+    }
+  });
+
+  it("fails with NOT_FOUND for an id that doesn't match anything", async () => {
+    const result = await updateKnowledgeBaseBoundPrompt("this-id-does-not-exist", "測試提示詞");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("is a setting only — binding a prompt does not remove the knowledge base from listKnowledgeBases()", async () => {
+    const created = await createKnowledgeBase("稽核知識庫（提示詞測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseBoundPrompt(created.value.id, "測試提示詞內容。");
 
     const all = await listKnowledgeBases();
     expect(all.ok).toBe(true);

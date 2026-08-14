@@ -2127,9 +2127,14 @@ describe("MessageThread message retry UX (E03-S032)", () => {
     expect(mockedReviseMessage.mock.calls[1]?.[0]).toBe("a1");
     expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
     expect(await screen.findByText("重試後的修訂")).toBeInTheDocument();
-    // Still exactly one user message + one assistant reply — a second,
-    // separate assistant row is exactly the "undefined duplicate side
-    // effect" this story's own Functional AC 5 prohibits.
+    // The `not.toHaveBeenCalled()`/call-count assertions above are what
+    // actually prove no duplicate backend message was minted — this
+    // listitem count is a supplementary sanity check, not independent
+    // proof by itself: `displayMessages` always updates the SAME array
+    // slot in place by localId regardless of which persistence function
+    // fired, so the count alone would stay 2 even under the old buggy
+    // behavior (it would just be 2 the wrong way, holding the newly
+    // minted message's content instead of "a1"'s).
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });
 

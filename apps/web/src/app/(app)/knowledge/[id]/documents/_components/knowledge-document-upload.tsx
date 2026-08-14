@@ -6,6 +6,7 @@ import { ErrorMessage } from "@ai-km/ui";
 import { addKnowledgeBaseDocument } from "@/lib/knowledge-documents";
 import { trackEvent } from "@/lib/telemetry";
 import { simulateUploadStep } from "@/lib/upload-progress";
+import { simulateParseStep } from "@/lib/parse-progress";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-upload");
@@ -169,6 +170,21 @@ function displayName(file: File): string {
  * state" — E05-S020 is its own dedicated later story for that; a
  * failed file here still advances the counter and still lands in the
  * pre-existing failedCount/ErrorMessage path exactly as before.
+ *
+ * E05-S018 "Parse progress" adds a SECOND, separate ephemeral phase
+ * after a file's own upload succeeds: `uploadProgress` gains a
+ * `phase: "uploading" | "parsing"` tag, and the same status text
+ * switches from "上傳中…" to "解析中…" for that file while
+ * `simulateParseStep()` (see that module's own doc comment) is
+ * awaited. Mirrors generation-status.ts's own multi-phase-single-
+ * operation shape (searching → reading → generating) — neither phase
+ * is persisted onto KnowledgeBaseDocument itself, both stay purely
+ * transient UI state cleared the moment the whole batch settles. The
+ * parsing phase only runs for a file that actually succeeded — a
+ * failed upload never produced a document, so there is nothing to
+ * parse; skipping it for a failed file is not a new failure STATE (see
+ * S020 above), it is simply not doing work for an item that never
+ * reached the point where parsing would apply.
  */
 export default function KnowledgeDocumentUpload({
   knowledgeBaseId,
@@ -182,7 +198,9 @@ export default function KnowledgeDocumentUpload({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [failedCount, setFailedCount] = useState(0);
-  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; phase: "uploading" | "parsing" } | null>(
+    null,
+  );
 
   function handleFilesSelected(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -206,7 +224,7 @@ export default function KnowledgeDocumentUpload({
     let anySucceeded = false;
 
     for (const [index, file] of selectedFiles.entries()) {
-      setUploadProgress({ current: index + 1, total });
+      setUploadProgress({ current: index + 1, total, phase: "uploading" });
       const correlationId = crypto.randomUUID();
       logger.info("uploading document", { correlationId, knowledgeBaseId, sizeBytes: file.size });
       trackEvent("knowledge_base_document_upload_attempt", {
@@ -233,6 +251,11 @@ export default function KnowledgeDocumentUpload({
       }
 
       await simulateUploadStep();
+
+      if (result.ok) {
+        setUploadProgress({ current: index + 1, total, phase: "parsing" });
+        await simulateParseStep();
+      }
     }
 
     setPending(false);
@@ -300,7 +323,9 @@ export default function KnowledgeDocumentUpload({
 
       {pending && (
         <p role="status" style={{ marginTop: 8 }}>
-          {uploadProgress ? `上傳中…（第 ${uploadProgress.current} / ${uploadProgress.total} 筆）` : "上傳中…"}
+          {uploadProgress
+            ? `${uploadProgress.phase === "parsing" ? "解析中" : "上傳中"}…（第 ${uploadProgress.current} / ${uploadProgress.total} 筆）`
+            : "上傳中…"}
         </p>
       )}
       {failedCount > 0 && (

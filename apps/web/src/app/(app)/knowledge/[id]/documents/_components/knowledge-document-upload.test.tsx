@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import KnowledgeDocumentUpload from "./knowledge-document-upload";
 import { addKnowledgeBaseDocument } from "@/lib/knowledge-documents";
 import { trackEvent } from "@/lib/telemetry";
+import { simulateUploadStep } from "@/lib/upload-progress";
 
 vi.mock("@/lib/knowledge-documents", () => ({
   addKnowledgeBaseDocument: vi.fn(),
@@ -12,8 +13,20 @@ vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
 
+// E05-S017: auto-resolves instantly by default (a bare vi.fn() with no
+// configured return value resolves `undefined` synchronously-enough for
+// RTL's own waitFor/findBy polling), so every pre-existing test above
+// this story stays exactly as fast/deterministic as before — same
+// "mock the whole delay-having module so consuming-component tests are
+// unaffected by its real timing" idiom message-thread.test.tsx already
+// established for generation-status.ts/file-processing.ts.
+vi.mock("@/lib/upload-progress", () => ({
+  simulateUploadStep: vi.fn().mockResolvedValue(undefined),
+}));
+
 const mockedAddKnowledgeBaseDocument = vi.mocked(addKnowledgeBaseDocument);
 const mockedTrackEvent = vi.mocked(trackEvent);
+const mockedSimulateUploadStep = vi.mocked(simulateUploadStep);
 
 function sampleFile(name = "保固條款.pdf", byteLength = 500) {
   return new File([new Uint8Array(byteLength)], name, { type: "application/pdf" });
@@ -44,6 +57,8 @@ function sampleDocument(overrides: Partial<{ id: string; knowledgeBaseId: string
 beforeEach(() => {
   mockedAddKnowledgeBaseDocument.mockReset();
   mockedTrackEvent.mockReset();
+  mockedSimulateUploadStep.mockReset();
+  mockedSimulateUploadStep.mockResolvedValue(undefined);
 });
 
 describe("KnowledgeDocumentUpload (E05-S011 single-file base)", () => {
@@ -368,5 +383,82 @@ describe("KnowledgeDocumentUpload (E05-S013 folder upload)", () => {
 
     resolveUpload({ ok: true, value: sampleDocument() });
     await waitFor(() => expect(mockedAddKnowledgeBaseDocument).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("KnowledgeDocumentUpload (E05-S017 upload progress)", () => {
+  it("shows 第 1 / 1 筆 for a single-file upload before it settles", async () => {
+    let resolveUpload!: (result: Awaited<ReturnType<typeof addKnowledgeBaseDocument>>) => void;
+    mockedAddKnowledgeBaseDocument.mockReturnValueOnce(new Promise((resolve) => (resolveUpload = resolve)));
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [sampleFile()] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("上傳中…（第 1 / 1 筆）");
+
+    resolveUpload({ ok: true, value: sampleDocument() });
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("advances the progress count from 1/3 to 2/3 to 3/3 only as each file's own upload resolves, then clears it", async () => {
+    const resolvers: Array<(result: Awaited<ReturnType<typeof addKnowledgeBaseDocument>>) => void> = [];
+    mockedAddKnowledgeBaseDocument.mockImplementation(() => new Promise((resolve) => resolvers.push(resolve)));
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), {
+      target: { files: [sampleFile("一.pdf", 100), sampleFile("二.pdf", 200), sampleFile("三.pdf", 300)] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("第 1 / 3 筆"));
+
+    resolvers[0]!({ ok: true, value: sampleDocument({ name: "一.pdf" }) });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("第 2 / 3 筆"));
+
+    resolvers[1]!({ ok: true, value: sampleDocument({ name: "二.pdf" }) });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("第 3 / 3 筆"));
+
+    resolvers[2]!({ ok: true, value: sampleDocument({ name: "三.pdf" }) });
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("still advances the progress count on a file that fails, not just successful ones", async () => {
+    const resolvers: Array<(result: Awaited<ReturnType<typeof addKnowledgeBaseDocument>>) => void> = [];
+    mockedAddKnowledgeBaseDocument.mockImplementation(() => new Promise((resolve) => resolvers.push(resolve)));
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), {
+      target: { files: [sampleFile("會失敗.pdf", 100), sampleFile("會成功.pdf", 200)] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("第 1 / 2 筆"));
+
+    resolvers[0]!({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("第 2 / 2 筆"));
+
+    resolvers[1]!({ ok: true, value: sampleDocument({ name: "會成功.pdf" }) });
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("calls simulateUploadStep exactly once per file, after that file's own result is known", async () => {
+    const order: string[] = [];
+    mockedAddKnowledgeBaseDocument.mockImplementation(async (_kbId, name) => {
+      order.push(`upload:${name}`);
+      return { ok: true, value: sampleDocument({ name }) };
+    });
+    mockedSimulateUploadStep.mockImplementation(async () => {
+      order.push("delay");
+    });
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), {
+      target: { files: [sampleFile("一.pdf", 100), sampleFile("二.pdf", 200)] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(mockedSimulateUploadStep).toHaveBeenCalledTimes(2));
+    expect(order).toEqual(["upload:一.pdf", "delay", "upload:二.pdf", "delay"]);
   });
 });

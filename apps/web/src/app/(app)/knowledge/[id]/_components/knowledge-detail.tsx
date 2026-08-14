@@ -42,10 +42,14 @@ type State =
  * group itself (that stays on its own route) — this page's own job is
  * viewing, not editing.
  *
+ * E05-S007 "KB member editor" adds the same shape of summary for
+ * `members` (comma-joined identifiers, or "尚無成員" when absent/empty)
+ * plus a "成員設定" link to /knowledge/[id]/members.
+ *
  * Otherwise only shows the fields KnowledgeBaseSummary currently has
- * (name/description/updatedAt) — no document list, member/prompt/model
+ * (name/description/updatedAt) — no document list, prompt/model
  * settings, or usage stats. Those are each their own later, separate
- * story (S07-S10, S28); this page's job is establishing the detail
+ * story (S08-S10, S28); this page's job is establishing the detail
  * route itself with what data exists today, not reaching ahead into
  * their scope.
  */
@@ -122,9 +126,17 @@ export default function KnowledgeDetail({ id }: { id: string }) {
             : "尚未設定"}
         </span>
       </p>
+      <p>
+        成員:
+        <span>
+          {knowledgeBase.members && knowledgeBase.members.length > 0 ? knowledgeBase.members.join("、") : "尚無成員"}
+        </span>
+      </p>
       <Link href={`/knowledge/${knowledgeBase.id}/edit`}>編輯</Link>
       {" · "}
       <Link href={`/knowledge/${knowledgeBase.id}/permissions`}>權限設定</Link>
+      {" · "}
+      <Link href={`/knowledge/${knowledgeBase.id}/members`}>成員設定</Link>
     </main>
   );
 }

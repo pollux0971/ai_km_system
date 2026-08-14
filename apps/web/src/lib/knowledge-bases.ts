@@ -24,6 +24,22 @@ export interface KnowledgeBaseSummary {
    * mechanism, without a second sentinel value to keep in sync.
    */
   visibleToRoles?: Role[];
+  /**
+   * E05-S007 "KB member editor". Complements S006's role-based
+   * `visibleToRoles` with per-specific-person access — the common "share
+   * with these people too, not just role holders" pattern. Opaque
+   * identifier strings, not a `User[]`/userId-typed field: E02-S01
+   * "User Entity" (Team B) doesn't exist, and packages/auth-client's
+   * mock only defines 3 login fixtures for E2E authentication tests
+   * (MOCK_VALID_USERNAME etc.) — not a general user directory this
+   * story could legitimately treat as one. Same "no real entity
+   * directory, so don't fake a picker" reasoning
+   * updateKnowledgeBaseVisibleRoles's own doc comment already applies to
+   * DEPARTMENT/GROUP/PROJECT/USER-scoped ACL targets. Optional, same
+   * "absence means not-yet-configured, distinct from an explicit empty
+   * list" reasoning as `visibleToRoles`.
+   */
+  members?: string[];
 }
 
 /**
@@ -263,6 +279,37 @@ export async function updateKnowledgeBaseVisibleRoles(
   }
 
   const updated: KnowledgeBaseSummary = { ...existing, visibleToRoles, updatedAt: new Date().toISOString() };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E05-S007 "KB member editor". Takes the complete new member list (not
+ * one add/remove at a time), same reasoning as
+ * updateKnowledgeBaseVisibleRoles/setConversationKnowledgeScopes — the
+ * caller reports what the list looks like now. Normalizes
+ * (trim, drop empty, de-duplicate) rather than rejecting with
+ * VALIDATION_ERROR: unlike `name`, there's no single "the input" that
+ * failed validation here — this is a list-shaped field where a stray
+ * blank/duplicate entry is more naturally absorbed than the whole save
+ * rejected, same "defense in depth" spirit as the UI's own add-member
+ * guard (see knowledge-member-editor.tsx), not a replacement for it.
+ * `members` are opaque identifier strings — see this field's own doc
+ * comment on KnowledgeBaseSummary for why (no real user directory
+ * exists to validate against).
+ */
+export async function updateKnowledgeBaseMembers(
+  id: string,
+  members: string[],
+): Promise<Result<KnowledgeBaseSummary, ApiError>> {
+  const store = readStore();
+  const existing = store.find((item) => item.id === id);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個知識庫。" } };
+  }
+
+  const normalizedMembers = [...new Set(members.map((member) => member.trim()).filter(Boolean))];
+  const updated: KnowledgeBaseSummary = { ...existing, members: normalizedMembers, updatedAt: new Date().toISOString() };
   writeStore(store.map((item) => (item.id === id ? updated : item)));
   return { ok: true, value: updated };
 }

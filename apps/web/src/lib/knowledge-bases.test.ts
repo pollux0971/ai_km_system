@@ -4,6 +4,7 @@ import {
   getKnowledgeBase,
   listKnowledgeBases,
   updateKnowledgeBase,
+  updateKnowledgeBaseMembers,
   updateKnowledgeBaseVisibleRoles,
 } from "./knowledge-bases";
 
@@ -320,6 +321,94 @@ describe("updateKnowledgeBaseVisibleRoles (E05-S006)", () => {
     if (!created.ok) return;
 
     await updateKnowledgeBaseVisibleRoles(created.value.id, ["super_administrator"]);
+
+    const all = await listKnowledgeBases();
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value.some((item) => item.id === created.value.id)).toBe(true);
+    }
+  });
+});
+
+describe("updateKnowledgeBaseMembers (E05-S007)", () => {
+  it("saves the given member list and refreshes updatedAt", async () => {
+    const created = await createKnowledgeBase("客服知識庫（成員測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseMembers(created.value.id, ["demo-user", "demo-maintenance"]);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.id).toBe(created.value.id);
+      expect(updated.value.members).toEqual(["demo-user", "demo-maintenance"]);
+      expect(new Date(updated.value.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(created.value.updatedAt).getTime());
+    }
+  });
+
+  it("trims, drops empty entries, and de-duplicates, rather than failing with a validation error", async () => {
+    const created = await createKnowledgeBase("業務知識庫（成員測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseMembers(created.value.id, ["  demo-user  ", "", "   ", "demo-user"]);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) expect(updated.value.members).toEqual(["demo-user"]);
+  });
+
+  it("accepts an empty member list as a valid, meaningful state (no members), not a validation error", async () => {
+    const created = await createKnowledgeBase("行政知識庫（成員測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseMembers(created.value.id, []);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) expect(updated.value.members).toEqual([]);
+  });
+
+  it("is reflected by a subsequent getKnowledgeBase() call", async () => {
+    const created = await createKnowledgeBase("財務知識庫（成員測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseMembers(created.value.id, ["demo-sales"]);
+    const reloaded = await getKnowledgeBase(created.value.id);
+
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) expect(reloaded.value?.members).toEqual(["demo-sales"]);
+  });
+
+  it("does not disturb the knowledge base's name, description, or visibleToRoles", async () => {
+    const created = await createKnowledgeBase("稽核知識庫（成員測試）", "稽核相關文件。");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await updateKnowledgeBaseVisibleRoles(created.value.id, ["auditor"]);
+
+    const updated = await updateKnowledgeBaseMembers(created.value.id, ["demo-user"]);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.name).toBe("稽核知識庫（成員測試）");
+      expect(updated.value.description).toBe("稽核相關文件。");
+      expect(updated.value.visibleToRoles).toEqual(["auditor"]);
+    }
+  });
+
+  it("fails with NOT_FOUND for an id that doesn't match anything", async () => {
+    const result = await updateKnowledgeBaseMembers("this-id-does-not-exist", ["demo-user"]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("is a setting only — adding members does not remove the knowledge base from listKnowledgeBases() for any other caller, because this codebase has no real per-viewer enforcement to apply it", async () => {
+    const created = await createKnowledgeBase("系統知識庫（成員測試）");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseMembers(created.value.id, ["demo-user"]);
 
     const all = await listKnowledgeBases();
     expect(all.ok).toBe(true);

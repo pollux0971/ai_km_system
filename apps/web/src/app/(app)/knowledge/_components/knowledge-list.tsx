@@ -25,7 +25,6 @@ type State =
  * exists, mirroring conversation-list.tsx's own item-name-to-detail
  * link exactly (E03-S001 deferred → E03-S002 fulfilled, same pattern).
  *
-
  * E05-S002 "Knowledge search/filter" adds `query`, searched on every
  * keystroke (no debounce — this mock's search is an instant in-memory
  * array filter, not a real network call with latency worth debouncing

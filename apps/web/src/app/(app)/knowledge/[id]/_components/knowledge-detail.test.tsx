@@ -39,12 +39,12 @@ describe("KnowledgeDetail (E05-S005)", () => {
     // Asserts via the <time> element's machine-readable dateTime attribute,
     // not its Intl-formatted rendered text — same reasoning no existing
     // test in this codebase (knowledge-list.test.tsx included) asserts on
-    // a toLocaleString() rendering: it can contain locale-specific
-    // whitespace (e.g. a narrow no-break space around 上午/下午) that
-    // Testing Library's DOM-text normalizer collapses but a raw
-    // freshly-computed comparison string wouldn't, causing a byte-level
-    // mismatch invisible to the eye — confirmed as the actual cause of
-    // this exact assertion's first-run failure during this story's own
+    // a toLocaleString() rendering: zh-TW formatting inserts a U+2009 THIN
+    // SPACE before 上午/下午 that Testing Library's DOM-text normalizer
+    // collapses but a raw freshly-computed comparison string wouldn't,
+    // causing a byte-level mismatch invisible to the eye — confirmed (via
+    // a standalone Node repro of the exact codepoints) as the actual cause
+    // of this exact assertion's first-run failure during this story's own
     // development.
     expect(document.querySelector("time")).toHaveAttribute("datetime", sampleKnowledgeBase.updatedAt);
   });

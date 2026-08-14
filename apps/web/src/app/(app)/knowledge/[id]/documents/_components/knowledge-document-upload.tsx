@@ -9,8 +9,14 @@ import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-upload");
 
+/** See this component's own doc comment for why this prefers webkitRelativePath. */
+function displayName(file: File): string {
+  return file.webkitRelativePath || file.name;
+}
+
 /**
- * E05-S011 "Single-file upload" / E05-S012 "Multi-file upload". A
+ * E05-S011 "Single-file upload" / E05-S012 "Multi-file upload" /
+ * E05-S013 "Folder upload". A
  * select-then-confirm two-step flow (pick file(s) → review each one's
  * name/size, remove any before committing → explicit 上傳 button), not
  * S06/S07/S09's instant-apply-on-change pattern — those instant-apply
@@ -28,6 +34,45 @@ const logger = createLogger("web:knowledge-document-upload");
  * every dialog invocation, so accumulating in component state (not
  * just trusting the input's current `.files`) is what makes "add more
  * files in a second picker invocation" possible at all.
+ *
+ * A SECOND, separate `<input type="file">` (not a toggle on the first
+ * one) provides folder selection — `webkitdirectory` is a static
+ * attribute the browser reads once when the picker opens, not
+ * something togglable per-click on a single input without swapping the
+ * DOM node, so two visually-distinct, separately-labeled inputs
+ * ("上傳文件" / "上傳資料夾") is the natural shape, matching how real
+ * products (e.g. Google Drive) commonly offer "Upload files" and
+ * "Upload folder" as two distinct entry points. Both inputs feed the
+ * exact same `handleFilesSelected` accumulation into the same
+ * `selectedFiles` list — folder-selected files aren't a separate
+ * concept from individually-picked ones once selected, they're still
+ * just `File` objects, so the entire preview/remove/upload/telemetry
+ * machinery below needs zero changes to support them.
+ *
+ * `webkitdirectory` isn't a recognized prop in React's built-in
+ * `InputHTMLAttributes` typing (it's a non-standard, WebKit-prefixed
+ * attribute despite being supported by every major browser), so it's
+ * set imperatively via a callback ref rather than a JSX prop or an
+ * `any`-typed prop spread — avoids both a type-safety hole and a
+ * second `useEffect` render round-trip (a callback ref runs
+ * synchronously when the node mounts).
+ *
+ * `displayName()` prefers `file.webkitRelativePath` (e.g.
+ * "報告資料夾/2026/Q3/摘要.pdf") over the bare `file.name` — only
+ * folder-selected files ever have a non-empty `webkitRelativePath`;
+ * individually-picked files (this story's own S011/S012 flows) keep
+ * showing and uploading under their plain name exactly as before, this
+ * is purely additive. Preserving the relative path (not flattening to
+ * just the base filename) matters specifically for folder uploads:
+ * multiple same-named files from different subfolders (a real
+ * possibility once someone selects a whole folder tree) would
+ * otherwise be visually indistinguishable in the preview list and in
+ * knowledge-document-list.tsx's own rendering — same reasoning that
+ * knowledge-documents.ts's own `name` field doc comment gives for
+ * "the extension in `name` already visually communicates type", now
+ * extended to "the relative path visually communicates provenance".
+ * No document-shape or lib-layer change needed — `name` was always a
+ * free-form string; a folder-qualified name is still just a string.
  *
  * Takes an `onUploaded` callback rather than owning the document list
  * itself — this component's only job is the upload action; the parent
@@ -116,6 +161,7 @@ export default function KnowledgeDocumentUpload({
   onUploaded: () => void;
 }) {
   const inputId = useId();
+  const folderInputId = useId();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [failedCount, setFailedCount] = useState(0);
@@ -148,7 +194,7 @@ export default function KnowledgeDocumentUpload({
         properties: { knowledgeBaseId, sizeBytes: file.size },
       });
 
-      const result = await addKnowledgeBaseDocument(knowledgeBaseId, file.name, file.size);
+      const result = await addKnowledgeBaseDocument(knowledgeBaseId, displayName(file), file.size);
 
       if (!result.ok) {
         logger.error("failed to upload document", { correlationId, knowledgeBaseId, code: result.error.code });
@@ -192,15 +238,34 @@ export default function KnowledgeDocumentUpload({
           event.target.value = "";
         }}
       />
+      <br />
+      <label htmlFor={folderInputId}>上傳資料夾</label>
+      <br />
+      <input
+        id={folderInputId}
+        type="file"
+        multiple
+        disabled={pending}
+        ref={(el) => {
+          // webkitdirectory isn't a recognized JSX prop — see this
+          // component's own doc comment for why this is set here,
+          // imperatively, instead.
+          if (el) el.webkitdirectory = true;
+        }}
+        onChange={(event) => {
+          handleFilesSelected(event.target.files);
+          event.target.value = "";
+        }}
+      />
 
       {selectedFiles.length > 0 && (
         <>
           <ul aria-label="待上傳檔案">
             {selectedFiles.map((file, index) => (
-              <li key={`${file.name}-${index}`}>
-                {file.name}({formatFileSize(file.size)})
+              <li key={`${displayName(file)}-${index}`}>
+                {displayName(file)}({formatFileSize(file.size)})
                 <button type="button" onClick={() => handleRemove(index)} disabled={pending}>
-                  移除 {file.name}
+                  移除 {displayName(file)}
                 </button>
               </li>
             ))}

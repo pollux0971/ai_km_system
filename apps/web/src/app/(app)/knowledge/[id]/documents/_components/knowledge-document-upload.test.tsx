@@ -19,6 +19,17 @@ function sampleFile(name = "保固條款.pdf", byteLength = 500) {
   return new File([new Uint8Array(byteLength)], name, { type: "application/pdf" });
 }
 
+// jsdom's File constructor has no option for webkitRelativePath — real
+// browsers set it automatically for files that came from a
+// webkitdirectory picker. Object.defineProperty mirrors that after the
+// fact for tests, same as how a real folder-selected File would arrive.
+function sampleFolderFile(relativePath: string, byteLength = 500) {
+  const name = relativePath.split("/").pop() ?? relativePath;
+  const file = new File([new Uint8Array(byteLength)], name, { type: "application/pdf" });
+  Object.defineProperty(file, "webkitRelativePath", { value: relativePath, configurable: true });
+  return file;
+}
+
 function sampleDocument(overrides: Partial<{ id: string; knowledgeBaseId: string; name: string; sizeBytes: number; uploadedAt: string }> = {}) {
   return {
     id: "doc1",
@@ -264,5 +275,98 @@ describe("KnowledgeDocumentUpload (E05-S012 multi-file)", () => {
     const listContainer = screen.getByRole("list");
     expect(within(listContainer).getByRole("button", { name: "移除 甲.pdf" })).toBeInTheDocument();
     expect(within(listContainer).getByRole("button", { name: "移除 乙.pdf" })).toBeInTheDocument();
+  });
+});
+
+describe("KnowledgeDocumentUpload (E05-S013 folder upload)", () => {
+  it("shows a separate 上傳資料夾 input, distinct from 上傳文件", () => {
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+
+    expect(screen.getByLabelText("上傳文件")).toBeInTheDocument();
+    expect(screen.getByLabelText("上傳資料夾")).toBeInTheDocument();
+    expect(screen.getByLabelText("上傳文件")).not.toBe(screen.getByLabelText("上傳資料夾"));
+  });
+
+  it("sets webkitdirectory on the folder input's underlying DOM node", () => {
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+
+    const folderInput = screen.getByLabelText("上傳資料夾") as HTMLInputElement;
+    expect(folderInput.webkitdirectory).toBe(true);
+    expect(screen.getByLabelText("上傳文件")).not.toHaveProperty("webkitdirectory", true);
+  });
+
+  it("selecting files via the folder input adds them to the same preview list as 上傳文件", () => {
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [sampleFile("單獨檔案.pdf", 100)] } });
+    fireEvent.change(screen.getByLabelText("上傳資料夾"), {
+      target: { files: [sampleFolderFile("我的資料夾/報告.pdf", 200)] },
+    });
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("shows the folder-relative path (not just the bare file name) for a folder-selected file", () => {
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("上傳資料夾"), {
+      target: { files: [sampleFolderFile("報告資料夾/2026/摘要.pdf", 300)] },
+    });
+
+    const item = screen.getByRole("listitem");
+    expect(item).toHaveTextContent("報告資料夾/2026/摘要.pdf");
+  });
+
+  it("uploads a folder-selected file using its relative path as the document name, not just the bare file name", async () => {
+    mockedAddKnowledgeBaseDocument.mockResolvedValue({ ok: true, value: sampleDocument({ name: "報告資料夾/摘要.pdf" }) });
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳資料夾"), {
+      target: { files: [sampleFolderFile("報告資料夾/摘要.pdf", 300)] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(mockedAddKnowledgeBaseDocument).toHaveBeenCalled());
+    expect(mockedAddKnowledgeBaseDocument).toHaveBeenCalledWith("kb1", "報告資料夾/摘要.pdf", 300);
+  });
+
+  it("a regularly-selected file (no webkitRelativePath) still uploads under its plain name, unaffected by this story", async () => {
+    mockedAddKnowledgeBaseDocument.mockResolvedValue({ ok: true, value: sampleDocument({ name: "保固條款.pdf" }) });
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [sampleFile("保固條款.pdf", 500)] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(mockedAddKnowledgeBaseDocument).toHaveBeenCalled());
+    expect(mockedAddKnowledgeBaseDocument).toHaveBeenCalledWith("kb1", "保固條款.pdf", 500);
+  });
+
+  it("disambiguates two same-named files from different subfolders in both the preview and their 移除 buttons", () => {
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("上傳資料夾"), {
+      target: { files: [sampleFolderFile("甲資料夾/report.pdf", 100), sampleFolderFile("乙資料夾/report.pdf", 200)] },
+    });
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent("甲資料夾/report.pdf");
+    expect(items[1]).toHaveTextContent("乙資料夾/report.pdf");
+    expect(screen.getByRole("button", { name: "移除 甲資料夾/report.pdf" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "移除 乙資料夾/report.pdf" })).toBeInTheDocument();
+  });
+
+  it("disables the folder input while an upload is in flight, same as the regular file input", async () => {
+    let resolveUpload!: (result: Awaited<ReturnType<typeof addKnowledgeBaseDocument>>) => void;
+    mockedAddKnowledgeBaseDocument.mockReturnValueOnce(new Promise((resolve) => (resolveUpload = resolve)));
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳資料夾"), { target: { files: [sampleFolderFile("a/b.pdf", 100)] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(screen.getByLabelText("上傳資料夾")).toBeDisabled());
+
+    resolveUpload({ ok: true, value: sampleDocument() });
+    await waitFor(() => expect(mockedAddKnowledgeBaseDocument).toHaveBeenCalledTimes(1));
   });
 });

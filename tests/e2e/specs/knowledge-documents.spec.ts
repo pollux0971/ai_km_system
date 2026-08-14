@@ -69,6 +69,10 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * upload — 解析中 following 上傳中 — confirming both are genuinely
  * visible in sequence in a real browser, not just correct in the
  * mocked unit tests.
+ *
+ * E05-S019 adds the third and final real-timer phase — 索引中
+ * following 解析中 — completing the upload → parse → index sequence
+ * this same single-file test now confirms end to end.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -381,6 +385,30 @@ test("E05-S018: uploading a file shows a 解析中 phase after 上傳中, before
 
   await expect(page.getByText(/上傳中|解析中/)).not.toBeVisible();
   await expect(page.getByText("新規範.pdf")).toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("1 份文件");
+});
+
+test("E05-S019: uploading a file shows all three progress phases in order — 上傳中, 解析中, then 索引中", async ({ page }) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await page.getByLabel("上傳文件").setInputFiles({
+    name: "索引測試.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("file content"),
+  });
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+  await expect(page.getByText(/上傳中.*第 1 \/ 1 筆/)).toBeVisible();
+  await expect(page.getByText(/解析中.*第 1 \/ 1 筆/)).toBeVisible();
+  await expect(page.getByText(/索引中.*第 1 \/ 1 筆/)).toBeVisible();
+
+  await expect(page.getByText(/上傳中|解析中|索引中/)).not.toBeVisible();
+  await expect(page.getByText("索引測試.pdf")).toBeVisible();
 
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));

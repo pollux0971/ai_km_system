@@ -20,7 +20,7 @@ vi.mock("@/lib/knowledge-documents", () => ({
   addKnowledgeBaseDocumentFromText: vi.fn(),
 }));
 
-// E05-S017/S018: this file renders the REAL KnowledgeDocumentUpload
+// E05-S017/S018/S019: this file renders the REAL KnowledgeDocumentUpload
 // (not a mock of it) to exercise the full upload flow end-to-end, so
 // its own real per-file delay primitives need the same wholesale-mock
 // treatment knowledge-document-upload.test.tsx already gives them —
@@ -34,6 +34,16 @@ vi.mock("@/lib/upload-progress", () => ({
 
 vi.mock("@/lib/parse-progress", () => ({
   simulateParseStep: vi.fn().mockResolvedValue(undefined),
+}));
+
+// E05-S019: mocked upfront alongside its two siblings above (learned
+// from S018's own FIX cycle, where this exact gap — a real delay
+// primitive left unmocked in this file — went unnoticed until stacking
+// a second phase pushed the real wait past RTL's default timeout;
+// adding this one proactively rather than waiting to rediscover the
+// same problem a third time).
+vi.mock("@/lib/index-progress", () => ({
+  simulateIndexStep: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/telemetry", () => ({

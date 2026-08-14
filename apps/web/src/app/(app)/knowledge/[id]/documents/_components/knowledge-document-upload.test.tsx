@@ -5,6 +5,7 @@ import { addKnowledgeBaseDocument } from "@/lib/knowledge-documents";
 import { trackEvent } from "@/lib/telemetry";
 import { simulateUploadStep } from "@/lib/upload-progress";
 import { simulateParseStep } from "@/lib/parse-progress";
+import { simulateIndexStep } from "@/lib/index-progress";
 
 vi.mock("@/lib/knowledge-documents", () => ({
   addKnowledgeBaseDocument: vi.fn(),
@@ -32,10 +33,16 @@ vi.mock("@/lib/parse-progress", () => ({
   simulateParseStep: vi.fn().mockResolvedValue(undefined),
 }));
 
+// E05-S019: same idiom again, for the third and final phase.
+vi.mock("@/lib/index-progress", () => ({
+  simulateIndexStep: vi.fn().mockResolvedValue(undefined),
+}));
+
 const mockedAddKnowledgeBaseDocument = vi.mocked(addKnowledgeBaseDocument);
 const mockedTrackEvent = vi.mocked(trackEvent);
 const mockedSimulateUploadStep = vi.mocked(simulateUploadStep);
 const mockedSimulateParseStep = vi.mocked(simulateParseStep);
+const mockedSimulateIndexStep = vi.mocked(simulateIndexStep);
 
 function sampleFile(name = "保固條款.pdf", byteLength = 500) {
   return new File([new Uint8Array(byteLength)], name, { type: "application/pdf" });
@@ -70,6 +77,8 @@ beforeEach(() => {
   mockedSimulateUploadStep.mockResolvedValue(undefined);
   mockedSimulateParseStep.mockReset();
   mockedSimulateParseStep.mockResolvedValue(undefined);
+  mockedSimulateIndexStep.mockReset();
+  mockedSimulateIndexStep.mockResolvedValue(undefined);
 });
 
 describe("KnowledgeDocumentUpload (E05-S011 single-file base)", () => {
@@ -542,5 +551,82 @@ describe("KnowledgeDocumentUpload (E05-S018 parse progress)", () => {
 
     await waitFor(() => expect(mockedSimulateParseStep).toHaveBeenCalledTimes(2));
     expect(order).toEqual(["upload-step", "parse-step", "upload-step", "parse-step"]);
+  });
+});
+
+describe("KnowledgeDocumentUpload (E05-S019 index progress)", () => {
+  it("shows all three phases in order — 上傳中 then 解析中 then 索引中 — for a single successful file", async () => {
+    let resolveUpload!: (result: Awaited<ReturnType<typeof addKnowledgeBaseDocument>>) => void;
+    let resolveParse!: () => void;
+    let resolveIndex!: () => void;
+    mockedAddKnowledgeBaseDocument.mockReturnValueOnce(new Promise((resolve) => (resolveUpload = resolve)));
+    mockedSimulateParseStep.mockReturnValueOnce(new Promise((resolve) => (resolveParse = resolve)));
+    mockedSimulateIndexStep.mockReturnValueOnce(new Promise((resolve) => (resolveIndex = resolve)));
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [sampleFile()] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("上傳中…（第 1 / 1 筆）");
+
+    resolveUpload({ ok: true, value: sampleDocument() });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("解析中…（第 1 / 1 筆）"));
+
+    resolveParse();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("索引中…（第 1 / 1 筆）"));
+
+    resolveIndex();
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("skips both 解析中 and 索引中 entirely for a file that fails to upload", async () => {
+    mockedAddKnowledgeBaseDocument.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [sampleFile()] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await screen.findByRole("alert");
+    expect(mockedSimulateParseStep).not.toHaveBeenCalled();
+    expect(mockedSimulateIndexStep).not.toHaveBeenCalled();
+  });
+
+  it("still shows a 索引中 phase for every successful file in a batch, even one that follows a failed file", async () => {
+    mockedAddKnowledgeBaseDocument.mockImplementation(async (_kbId, name) => {
+      if (name === "會失敗.pdf") return { ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } };
+      return { ok: true, value: sampleDocument({ name }) };
+    });
+    let resolveIndex!: () => void;
+    mockedSimulateIndexStep.mockReturnValueOnce(new Promise((resolve) => (resolveIndex = resolve)));
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), {
+      target: { files: [sampleFile("會失敗.pdf", 100), sampleFile("會成功.pdf", 200)] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("索引中…（第 2 / 2 筆）"));
+    resolveIndex();
+    await screen.findByRole("alert");
+  });
+
+  it("calls simulateIndexStep exactly once per successful file, after simulateParseStep for that same file", async () => {
+    const order: string[] = [];
+    mockedAddKnowledgeBaseDocument.mockImplementation(async (_kbId, name) => ({ ok: true, value: sampleDocument({ name }) }));
+    mockedSimulateParseStep.mockImplementation(async () => {
+      order.push("parse-step");
+    });
+    mockedSimulateIndexStep.mockImplementation(async () => {
+      order.push("index-step");
+    });
+
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("上傳文件"), {
+      target: { files: [sampleFile("一.pdf", 100), sampleFile("二.pdf", 200)] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    await waitFor(() => expect(mockedSimulateIndexStep).toHaveBeenCalledTimes(2));
+    expect(order).toEqual(["parse-step", "index-step", "parse-step", "index-step"]);
   });
 });

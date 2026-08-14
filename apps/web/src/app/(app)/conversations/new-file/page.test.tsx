@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import FileChatEntryPage from "./page";
 import { createConversation, deleteConversation } from "@/lib/conversations";
+import { classifyFileProcessing } from "@/lib/file-processing";
 import { sendMessage } from "@/lib/messages";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -25,6 +26,10 @@ vi.mock("@/lib/messages", () => ({
   sendMessage: vi.fn(),
 }));
 
+vi.mock("@/lib/file-processing", () => ({
+  classifyFileProcessing: vi.fn(),
+}));
+
 vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
@@ -32,6 +37,7 @@ vi.mock("@/lib/telemetry", () => ({
 const mockedCreateConversation = vi.mocked(createConversation);
 const mockedDeleteConversation = vi.mocked(deleteConversation);
 const mockedSendMessage = vi.mocked(sendMessage);
+const mockedClassifyFileProcessing = vi.mocked(classifyFileProcessing);
 const mockedTrackEvent = vi.mocked(trackEvent);
 
 const sampleConversation = {
@@ -63,7 +69,14 @@ beforeEach(() => {
   mockedCreateConversation.mockReset();
   mockedDeleteConversation.mockReset();
   mockedSendMessage.mockReset();
+  mockedClassifyFileProcessing.mockReset();
   mockedTrackEvent.mockReset();
+
+  // E03-S029: every pre-existing test in this file selects an ordinary
+  // filename and expects the create-then-attach flow to proceed — this
+  // default keeps them passing unchanged; the one test that cares about
+  // the failure path overrides it explicitly.
+  mockedClassifyFileProcessing.mockReturnValue("done");
 });
 
 describe("FileChatEntryPage (E03-S028)", () => {
@@ -190,5 +203,18 @@ describe("FileChatEntryPage (E03-S028)", () => {
     const attemptId = (attemptCall as [string, { correlationId: string }])[1].correlationId;
     const successId = (successCall as [string, { correlationId: string }])[1].correlationId;
     expect(attemptId).toBe(successId);
+  });
+
+  it("E03-S029: shows a distinct 檔案處理失敗 error and never calls createConversation when file processing fails", async () => {
+    mockedClassifyFileProcessing.mockReturnValue("failed");
+
+    render(<FileChatEntryPage />);
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("報表.pdf")] } });
+    fireEvent.click(screen.getByRole("button", { name: "開始對話" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("檔案處理失敗，請確認檔案後再試一次。");
+    expect(mockedCreateConversation).not.toHaveBeenCalled();
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

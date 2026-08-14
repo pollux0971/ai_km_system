@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage } from "@ai-km/ui";
 import { createConversation, deleteConversation } from "@/lib/conversations";
+import { classifyFileProcessing } from "@/lib/file-processing";
 import { sendMessage } from "@/lib/messages";
 import { trackEvent } from "@/lib/telemetry";
 import { FileAttachmentPicker } from "../[id]/_components/file-attachment-picker";
 
 const logger = createLogger("web:file-chat-entry");
 
-type State = { status: "idle" } | { status: "creating" } | { status: "error" };
+type State = { status: "idle" } | { status: "creating" } | { status: "error" } | { status: "processing-failed" };
 
 /**
  * E03-S028 "File-chat entry flow". SOURCE_BASELINE.md gives this story
@@ -82,6 +83,21 @@ type State = { status: "idle" } | { status: "creating" } | { status: "error" };
  * 缺席 — landing in a real conversation that already shows the
  * attached file, ready to continue chatting normally, is that
  * capability; a fully autonomous first reply is not part of it.
+ *
+ * E03-S029 "File-processing status UI" adds a classifyFileProcessing()
+ * check (see lib/file-processing.ts) BEFORE createConversation() even
+ * runs — failing as early as possible means there's nothing to roll
+ * back if the files themselves don't pass processing, simpler than the
+ * sendMessage-failure rollback path above. Deliberately reuses the
+ * classify function WITHOUT message-thread.tsx's own visible
+ * multi-second "檔案處理中…" phase — this page already has its own
+ * generic "建立中…" pending indicator covering its whole multi-step
+ * flow, and adding a second, separate status concept here would be a
+ * new UI pattern this story never asked for. `processing-failed` is
+ * its own distinct State/error message rather than reusing the generic
+ * "error" — the underlying cause (the FILES, not the conversation
+ * creation itself) is different, matching this file's own established
+ * "don't reuse a label for a different cause" reasoning above.
  */
 export default function FileChatEntryPage() {
   const router = useRouter();
@@ -104,6 +120,13 @@ export default function FileChatEntryPage() {
     setState({ status: "creating" });
     logger.info("starting file-chat entry", { correlationId, fileCount: fileNames.length });
     trackEvent("file_chat_entry_attempt", { correlationId, properties: { fileCount: fileNames.length } });
+
+    if (classifyFileProcessing(fileNames) === "failed") {
+      logger.error("file processing failed for file-chat entry", { correlationId, fileCount: fileNames.length });
+      trackEvent("file_chat_entry_failure", { correlationId, properties: { code: "FILE_PROCESSING_FAILED" } });
+      setState({ status: "processing-failed" });
+      return;
+    }
 
     const created = await createConversation();
     if (!created.ok) {
@@ -143,6 +166,7 @@ export default function FileChatEntryPage() {
         {state.status === "creating" && <span role="status">建立中…</span>}
       </p>
       {state.status === "error" && <ErrorMessage message="無法建立新對話，請稍後再試。" />}
+      {state.status === "processing-failed" && <ErrorMessage message="檔案處理失敗，請確認檔案後再試一次。" />}
     </main>
   );
 }

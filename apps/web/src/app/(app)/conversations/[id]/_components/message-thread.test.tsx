@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
+import { MOCK_FILE_PROCESSING_FAILURE_TRIGGER, simulateFileProcessing } from "@/lib/file-processing";
 import { runGenerationPhases } from "@/lib/generation-status";
 import { listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
@@ -16,6 +17,15 @@ vi.mock("@/lib/messages", () => ({
 
 vi.mock("@/lib/streaming", () => ({
   streamAssistantReply: vi.fn(),
+}));
+
+// Same reasoning as the generation-status mock above: a plain
+// synchronous factory, value duplicated rather than vi.importActual'd.
+// Only simulateFileProcessing (which has a real 800ms default delay)
+// needs faking — the trigger string itself is inert data.
+vi.mock("@/lib/file-processing", () => ({
+  MOCK_FILE_PROCESSING_FAILURE_TRIGGER: "[模擬:PROCESSING_FAILED]",
+  simulateFileProcessing: vi.fn(),
 }));
 
 // message-thread.tsx only reads GENERATION_PHASE_LABELS (for rendering)
@@ -43,6 +53,7 @@ const mockedReviseMessage = vi.mocked(reviseMessage);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
 const mockedTrackEvent = vi.mocked(trackEvent);
+const mockedSimulateFileProcessing = vi.mocked(simulateFileProcessing);
 
 const DEFAULT_ASSISTANT_MESSAGE = {
   id: "assistant-default",
@@ -61,6 +72,16 @@ beforeEach(() => {
   mockedStreamAssistantReply.mockReset();
   mockedRunGenerationPhases.mockReset();
   mockedTrackEvent.mockReset();
+  mockedSimulateFileProcessing.mockReset();
+
+  // Only reached when a submitted message actually has attachments —
+  // every pre-S29 test uses submitViaComposer, which never attaches
+  // files, so this default only matters for S29's own new tests below
+  // (each of which overrides it explicitly anyway); it exists purely
+  // so this mock always has SOME implementation rather than throwing
+  // "not implemented" if a future test exercises this path without
+  // configuring it first.
+  mockedSimulateFileProcessing.mockResolvedValue("done");
 
   // Sensible defaults so tests focused purely on the S09/S10 send/stream
   // flow don't also need to know about S11's phase step — a successful
@@ -1685,5 +1706,130 @@ describe("MessageThread copy answer action (E03-S027)", () => {
     // slots, not one shared one that only ever reflects the latest click.
     await waitFor(() => expect(within(items[1]!).getByRole("button", { name: "已複製" })).toBeInTheDocument());
     expect(within(items[3]!).getByRole("button", { name: "已複製" })).toBeInTheDocument();
+  });
+});
+
+function submitViaComposerWithFile(content: string, fileName: string) {
+  fireEvent.change(screen.getByLabelText("附件"), {
+    target: { files: [new File(["x"], fileName, { type: "text/plain" })] },
+  });
+  if (content) {
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: content } });
+  }
+  fireEvent.click(screen.getByRole("button", { name: "送出" }));
+}
+
+describe("MessageThread file processing status (E03-S029)", () => {
+  it("shows 檔案處理中… (not the generic 傳送中…) while an attached file is being processed", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSimulateFileProcessing.mockReturnValue(new Promise(() => {}));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposerWithFile("你好", "報表.pdf");
+
+    expect(screen.getByRole("status")).toHaveTextContent("檔案處理中…");
+    expect(screen.queryByText("傳送中…")).not.toBeInTheDocument();
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("a message with no attachments still shows the generic 傳送中…, not 檔案處理中…, and never calls simulateFileProcessing", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockReturnValue(new Promise(() => {}));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    expect(screen.getByRole("status")).toHaveTextContent("傳送中…");
+    expect(mockedSimulateFileProcessing).not.toHaveBeenCalled();
+  });
+
+  it("on successful processing, proceeds to call sendMessage and shows the message as sent with the attachment listed", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSimulateFileProcessing.mockResolvedValue("done");
+    mockedSendMessage.mockResolvedValue({
+      ok: true,
+      value: { id: "m1", conversationId: "c1", role: "user", content: "你好", attachmentNames: ["報表.pdf"], createdAt: "2026-08-14T00:00:00.000Z" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposerWithFile("你好", "報表.pdf");
+
+    await waitFor(() => expect(mockedSendMessage).toHaveBeenCalledWith("c1", "你好", ["報表.pdf"]));
+    expect(await screen.findByText("（附件：報表.pdf）")).toBeInTheDocument();
+  });
+
+  it("a filename containing the mock failure trigger shows 檔案處理失敗 with a 重新處理 button, and never calls sendMessage", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSimulateFileProcessing.mockResolvedValue("failed");
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposerWithFile("你好", `損毀${MOCK_FILE_PROCESSING_FAILURE_TRIGGER}.pdf`);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("檔案處理失敗");
+    expect(screen.getByRole("button", { name: "重新處理" })).toBeInTheDocument();
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("clicking 重新處理 re-invokes file processing (not a cached prior result), and can proceed to send once it succeeds", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSimulateFileProcessing.mockResolvedValueOnce("failed").mockResolvedValueOnce("done");
+    mockedSendMessage.mockResolvedValue({
+      ok: true,
+      value: { id: "m1", conversationId: "c1", role: "user", content: "你好", attachmentNames: ["a.pdf"], createdAt: "2026-08-14T00:00:00.000Z" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposerWithFile("你好", "a.pdf");
+    await screen.findByRole("alert");
+    expect(mockedSimulateFileProcessing).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "重新處理" }));
+
+    await waitFor(() => expect(mockedSimulateFileProcessing).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockedSendMessage).toHaveBeenCalledWith("c1", "你好", ["a.pdf"]));
+  });
+
+  it("blocks a new turn from being submitted while file processing is still in flight", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSimulateFileProcessing.mockReturnValue(new Promise(() => {}));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposerWithFile("你好", "報表.pdf");
+
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+  });
+
+  it("emits file_processing attempt/success telemetry sharing one correlation id, distinct from the message-send events", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSimulateFileProcessing.mockResolvedValue("done");
+    mockedSendMessage.mockResolvedValue({
+      ok: true,
+      value: { id: "m1", conversationId: "c1", role: "user", content: "你好", attachmentNames: ["報表.pdf"], createdAt: "2026-08-14T00:00:00.000Z" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposerWithFile("你好", "報表.pdf");
+
+    await waitFor(() => expect(mockedSendMessage).toHaveBeenCalled());
+
+    const attemptCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "file_processing_attempt");
+    const successCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "file_processing_success");
+    expect(attemptCall).toBeDefined();
+    expect(successCall).toBeDefined();
+    const attemptId = (attemptCall as [string, { correlationId: string }])[1].correlationId;
+    const successId = (successCall as [string, { correlationId: string }])[1].correlationId;
+    expect(attemptId).toBe(successId);
+
+    // The same correlationId also covers the subsequent
+    // conversation_message_send_* events (one operation, one id) — not
+    // re-asserted here since that pairing is already covered by other
+    // describe blocks' own telemetry tests.
   });
 });

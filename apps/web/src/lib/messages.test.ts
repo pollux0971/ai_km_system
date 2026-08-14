@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConversation, getConversation } from "./conversations";
-import { listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "./messages";
+import { deleteMessagesForConversation, listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "./messages";
 
 describe("listMessages (E03-S009)", () => {
   it("resolves with an empty list for a conversation with no messages", async () => {
@@ -371,5 +371,59 @@ describe("reviseMessage (E03-S020)", () => {
     if (reloaded.ok) {
       expect(reloaded.value?.lastMessagePreview).toBe("新的回覆");
     }
+  });
+});
+
+describe("deleteMessagesForConversation (E03-S025)", () => {
+  it("removes all messages belonging to the given conversation", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    await sendMessage(conversation.value.id, "第一則", []);
+    await receiveAssistantReply(conversation.value.id, "第二則");
+
+    const deleted = await deleteMessagesForConversation(conversation.value.id);
+    expect(deleted.ok).toBe(true);
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toEqual([]);
+    }
+  });
+
+  it("does not affect messages belonging to other conversations", async () => {
+    const a = await createConversation();
+    const b = await createConversation();
+    expect(a.ok && b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+
+    await sendMessage(a.value.id, "屬於 A", []);
+    await sendMessage(b.value.id, "屬於 B", []);
+
+    await deleteMessagesForConversation(a.value.id);
+
+    const listB = await listMessages(b.value.id);
+    expect(listB.ok).toBe(true);
+    if (listB.ok) {
+      expect(listB.value.map((m) => m.content)).toEqual(["屬於 B"]);
+    }
+  });
+
+  it("does not throw or fail for a conversation that has no messages", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const result = await deleteMessagesForConversation(conversation.value.id);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not throw or fail for a conversationId that doesn't exist", async () => {
+    const result = await deleteMessagesForConversation("does-not-exist");
+
+    expect(result.ok).toBe(true);
   });
 });

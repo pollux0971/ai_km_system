@@ -24,3 +24,13 @@ const ROLE_LABELS: Record<Role, string> = {
 export function roleLabel(role: string): string {
   return ROLE_LABELS[role as Role] ?? role;
 }
+
+/**
+ * E05-S006 "KB permission editor": every Role this codebase's type system
+ * knows about, in the same order as SOURCE_BASELINE.md §7 and ROLE_LABELS
+ * above — for rendering a complete, fixed checkbox set. Derived from
+ * ROLE_LABELS' own keys (Object.keys) rather than a second hand-typed
+ * literal array, so the two can't silently drift apart if a future role
+ * is added to one but not the other.
+ */
+export const ALL_ROLES: Role[] = Object.keys(ROLE_LABELS) as Role[];

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getKnowledgeBase, type KnowledgeBaseSummary } from "@/lib/knowledge-bases";
+import { roleLabel } from "@/lib/role-labels";
 
 const logger = createLogger("web:knowledge-detail");
 
@@ -33,12 +34,20 @@ type State =
  * "separate routes, not one shared inline widget" relationship
  * /knowledge/new and /knowledge already have.
  *
- * Only shows the fields KnowledgeBaseSummary currently has
- * (name/description/updatedAt) — no document list, permission/member/
- * prompt/model settings, or usage stats. Those are each their own later,
- * separate story (S06-S10, S28); this page's job is establishing the
- * detail route itself with what data exists today, not reaching ahead
- * into their scope.
+ * E05-S006 "KB permission editor" adds a one-line summary of
+ * `visibleToRoles` here (labeled roles, or "尚未設定" when absent/empty)
+ * plus a "權限設定" link to /knowledge/[id]/permissions — same
+ * "separate route, one link out to it" relationship this page already
+ * has with S04's edit route. Only a summary, not the editable checkbox
+ * group itself (that stays on its own route) — this page's own job is
+ * viewing, not editing.
+ *
+ * Otherwise only shows the fields KnowledgeBaseSummary currently has
+ * (name/description/updatedAt) — no document list, member/prompt/model
+ * settings, or usage stats. Those are each their own later, separate
+ * story (S07-S10, S28); this page's job is establishing the detail
+ * route itself with what data exists today, not reaching ahead into
+ * their scope.
  */
 export default function KnowledgeDetail({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -105,7 +114,17 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       <p>
         最後更新:<time dateTime={knowledgeBase.updatedAt}>{new Date(knowledgeBase.updatedAt).toLocaleString("zh-TW")}</time>
       </p>
+      <p>
+        可存取角色:
+        <span>
+          {knowledgeBase.visibleToRoles && knowledgeBase.visibleToRoles.length > 0
+            ? knowledgeBase.visibleToRoles.map(roleLabel).join("、")
+            : "尚未設定"}
+        </span>
+      </p>
       <Link href={`/knowledge/${knowledgeBase.id}/edit`}>編輯</Link>
+      {" · "}
+      <Link href={`/knowledge/${knowledgeBase.id}/permissions`}>權限設定</Link>
     </main>
   );
 }

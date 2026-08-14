@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { roleLabel } from "./role-labels";
+import { ALL_ROLES, roleLabel } from "./role-labels";
 
 describe("roleLabel", () => {
   it("labels every known Role from packages/permissions", () => {
@@ -16,5 +16,15 @@ describe("roleLabel", () => {
 
   it("falls back to the raw string for an unrecognized role (fail-safe, not silent)", () => {
     expect(roleLabel("some-future-role")).toBe("some-future-role");
+  });
+});
+
+describe("ALL_ROLES (E05-S006)", () => {
+  it("contains exactly the 9 roles SOURCE_BASELINE.md §7 defines, each with a label", () => {
+    expect(ALL_ROLES).toHaveLength(9);
+    expect(new Set(ALL_ROLES).size).toBe(9);
+    for (const role of ALL_ROLES) {
+      expect(roleLabel(role)).not.toBe(role);
+    }
   });
 });

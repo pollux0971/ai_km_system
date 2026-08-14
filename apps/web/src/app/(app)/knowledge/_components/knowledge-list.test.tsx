@@ -81,7 +81,7 @@ describe("KnowledgeList search (E05-S002)", () => {
     expect(screen.queryByText("尚無知識庫。")).not.toBeInTheDocument();
   });
 
-  it("the search box stays visible and keeps its typed value through a loading/error render, not just the loaded state", async () => {
+  it("the search box stays visible and keeps its typed value through a loading render, then an error render, not just the loaded state", async () => {
     mockedListKnowledgeBases.mockResolvedValue({
       ok: true,
       value: [{ id: "kb1", name: "測試知識庫", description: "測試描述", updatedAt: "2026-08-13T01:00:00.000Z" }],
@@ -89,8 +89,14 @@ describe("KnowledgeList search (E05-S002)", () => {
     render(<KnowledgeList />);
     await screen.findByText("測試知識庫");
 
-    mockedListKnowledgeBases.mockResolvedValueOnce({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+    let resolveSearch!: (result: Awaited<ReturnType<typeof listKnowledgeBases>>) => void;
+    mockedListKnowledgeBases.mockReturnValueOnce(new Promise((resolve) => (resolveSearch = resolve)));
     fireEvent.change(screen.getByLabelText("搜尋知識庫"), { target: { value: "保固" } });
+
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    expect(screen.getByLabelText("搜尋知識庫")).toHaveValue("保固");
+
+    resolveSearch({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
 
     expect(await screen.findByRole("alert")).toHaveTextContent("無法載入知識庫列表。");
     expect(screen.getByLabelText("搜尋知識庫")).toHaveValue("保固");

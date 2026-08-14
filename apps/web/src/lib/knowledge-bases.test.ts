@@ -37,7 +37,7 @@ describe("listKnowledgeBases search (E05-S002)", () => {
     expect(whitespaceQuery.value).toEqual(noQuery.value);
   });
 
-  it("matches a substring of the name, case-insensitively", async () => {
+  it("matches a substring of the name", async () => {
     const result = await listKnowledgeBases("產品");
 
     expect(result.ok).toBe(true);

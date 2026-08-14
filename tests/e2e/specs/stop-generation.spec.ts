@@ -76,8 +76,36 @@ test("E03-S012: stopping after some reply text has streamed in keeps that partia
   // Reproduced deterministically via `git stash` back to pre-S013 code
   // plus `pnpm turbo run test --force`, confirming this file — not
   // S013's changes — was the root cause.
+  //
+  // E03-S019: the same flake resurfaced under heavier concurrent load
+  // (more E2E spec files have accumulated in this suite since S013),
+  // even with the fix above already in place — confirmed via `git diff`
+  // (this file untouched by S019) and running this spec in isolation
+  // (passes cleanly alone), so it's still not caused by whichever
+  // story happens to be running when it's hit. The deeper mechanism:
+  // every streamed character re-renders this <li>, including the
+  // sibling <span> holding the growing reply text — under enough CPU
+  // contention, that can shift the stop button's on-screen bounding
+  // box between the animation frames Playwright's actionability check
+  // compares for a mouse click, so it never observes two stable frames
+  // in a row and keeps retrying (visible in the error log: repeated
+  // "element is not stable") until either it finally lands or the
+  // stream finishes and reconciles to "sent" first, removing the
+  // button out from under a still-in-flight retry ("element was
+  // detached from the DOM"). `force: true` is applied deliberately,
+  // not as a blanket escape hatch: Playwright's `force` option is an
+  // all-or-nothing bypass of every actionability check (attached/
+  // visible/stable/receives-events/enabled), not a per-check toggle,
+  // but attachment and visibility are already independently confirmed
+  // by the `getByText("AI 回覆中…")` wait immediately above (phase
+  // clears to null in the exact same state update that renders the
+  // button) and nothing in this layout occludes the button, so the
+  // only check this specific, diagnosed mechanism actually needed to
+  // skip — frame-to-frame position stability — is the only one that
+  // was ever in question here, even though `force` can't be scoped
+  // that narrowly on its own.
   await expect(page.getByText("AI 回覆中…")).toBeVisible({ timeout: 5000 });
-  await page.getByRole("button", { name: "停止生成" }).click();
+  await page.getByRole("button", { name: "停止生成" }).click({ force: true });
 
   await expect(page.getByRole("button", { name: "停止生成" })).not.toBeVisible();
   const items = messageItems(page);

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
-import { listMessages, receiveAssistantReply, sendMessage, type Message } from "@/lib/messages";
+import { deleteMessage, listMessages, receiveAssistantReply, sendMessage, type Message } from "@/lib/messages";
 import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
@@ -110,6 +110,37 @@ const logger = createLogger("web:message-thread");
  * message, before anything has settled), the indicator reappears —
  * `sentMessageCount` can still legitimately read 0 at that point, and
  * that's meaningful information no longer competing with EmptyState.
+ *
+ * S19 "Regenerate Answer" adds a "重新產生" control on the LAST entry
+ * only, and only when it's a settled (`kind: "sent"`) assistant reply
+ * — distinct wording from S10's existing "重新產生回覆" (which retries
+ * a *failed* stream) so the two never read as the same action; this
+ * one redoes an already-*successful* reply the user wants a different
+ * answer for. Deliberately restricted to the last entry: SOURCE_BASELINE
+ * defines nothing about regenerating a message buried earlier in the
+ * thread, and real chat products (the same precedent already used for
+ * S12/S17) only ever offer this on the most recent reply — doing it
+ * mid-thread would require inventing branching/discard semantics for
+ * everything after it, which nothing asks for.
+ *
+ * handleRegenerate() calls deleteMessage() on the old message id
+ * BEFORE flipping the display entry back to a fresh `streaming` state
+ * and re-running runStream() — without the delete, the old message
+ * would linger in the store while receiveAssistantReply() (inside the
+ * reused runStream) adds a new one, so a reload would show BOTH the
+ * discarded and the regenerated reply instead of replacing it (exactly
+ * the "重複請求不得造成未定義重複 side effect" Functional AC 5 warns
+ * about). Reusing runStream wholesale — same phases, same streaming,
+ * same stop support, same telemetry — rather than a parallel
+ * implementation means regeneration automatically inherits S12's stop
+ * behavior too: stopping a regeneration before any content arrives
+ * removes the entry outright (same as any other empty-stop), leaving
+ * that turn with no assistant reply at all — the old one is already
+ * gone and nothing replaced it. This is an accepted, deliberate
+ * consequence of composing two already-independently-justified
+ * features, not a new gap; inventing "restore the discarded reply if
+ * regeneration is stopped early" would be unrequested undo semantics
+ * this story's grounding never asks for.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -278,6 +309,16 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     stoppedRef.current.add(localId);
   }
 
+  async function handleRegenerate(messageId: string) {
+    await deleteMessage(messageId);
+
+    const localId = crypto.randomUUID();
+    setDisplayMessages((previous) =>
+      previous.map((entry) => (entry.kind === "sent" && entry.message.id === messageId ? { kind: "streaming", localId, content: "", phase: null } : entry)),
+    );
+    void runStream(localId);
+  }
+
   function handleCitationClick(citationId: string) {
     setPreviewCitationId(citationId);
   }
@@ -311,7 +352,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
         <EmptyState message="尚無訊息，開始對話吧。" />
       ) : (
         <ul>
-          {displayMessages.map((entry) => {
+          {displayMessages.map((entry, index) => {
+            const isLastEntry = index === displayMessages.length - 1;
+
             if (entry.kind === "stream-failed") {
               return (
                 <li key={entry.localId}>
@@ -337,6 +380,11 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                   <MessageContent content={content} withCitations={role === "assistant"} onCitationClick={handleCitationClick} />
                 </span>
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
+                {entry.kind === "sent" && role === "assistant" && isLastEntry && (
+                  <button type="button" onClick={() => handleRegenerate(entry.message.id)}>
+                    重新產生
+                  </button>
+                )}
                 {entry.kind === "pending" && <span role="status">傳送中…</span>}
                 {entry.kind === "streaming" && (
                   <span>

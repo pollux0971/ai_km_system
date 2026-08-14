@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConversation, getConversation } from "./conversations";
-import { listMessages, receiveAssistantReply, sendMessage } from "./messages";
+import { deleteMessage, listMessages, receiveAssistantReply, sendMessage } from "./messages";
 
 describe("listMessages (E03-S009)", () => {
   it("resolves with an empty list for a conversation with no messages", async () => {
@@ -188,5 +188,51 @@ describe("receiveAssistantReply (E03-S010)", () => {
     if (list.ok) {
       expect(list.value.map((m) => m.role)).toEqual(["user", "assistant"]);
     }
+  });
+});
+
+describe("deleteMessage (E03-S019)", () => {
+  it("removes the message with the given id from the store", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const sent = await receiveAssistantReply(conversation.value.id, "舊的回覆");
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) return;
+
+    const deleted = await deleteMessage(sent.value.id);
+    expect(deleted.ok).toBe(true);
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toEqual([]);
+    }
+  });
+
+  it("does not affect other messages in the same conversation", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const kept = await sendMessage(conversation.value.id, "保留這則", []);
+    const toDelete = await receiveAssistantReply(conversation.value.id, "刪除這則");
+    expect(kept.ok && toDelete.ok).toBe(true);
+    if (!kept.ok || !toDelete.ok) return;
+
+    await deleteMessage(toDelete.value.id);
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.map((m) => m.id)).toEqual([kept.value.id]);
+    }
+  });
+
+  it("does not throw or fail when the given id doesn't exist", async () => {
+    const result = await deleteMessage("does-not-exist");
+
+    expect(result.ok).toBe(true);
   });
 });

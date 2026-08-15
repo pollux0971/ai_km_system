@@ -7,6 +7,7 @@ import {
   addKnowledgeBaseDocumentFromText,
   addKnowledgeBaseDocumentFromUrl,
   listKnowledgeBaseDocuments,
+  retryDocumentProcessing,
 } from "@/lib/knowledge-documents";
 
 vi.mock("@/lib/knowledge-bases", () => ({
@@ -18,6 +19,7 @@ vi.mock("@/lib/knowledge-documents", () => ({
   addKnowledgeBaseDocument: vi.fn(),
   addKnowledgeBaseDocumentFromUrl: vi.fn(),
   addKnowledgeBaseDocumentFromText: vi.fn(),
+  retryDocumentProcessing: vi.fn(),
 }));
 
 // E05-S017/S018/S019: this file renders the REAL KnowledgeDocumentUpload
@@ -55,6 +57,7 @@ const mockedListKnowledgeBaseDocuments = vi.mocked(listKnowledgeBaseDocuments);
 const mockedAddKnowledgeBaseDocument = vi.mocked(addKnowledgeBaseDocument);
 const mockedAddKnowledgeBaseDocumentFromUrl = vi.mocked(addKnowledgeBaseDocumentFromUrl);
 const mockedAddKnowledgeBaseDocumentFromText = vi.mocked(addKnowledgeBaseDocumentFromText);
+const mockedRetryDocumentProcessing = vi.mocked(retryDocumentProcessing);
 
 const sampleKnowledgeBase = {
   id: "kb1",
@@ -69,6 +72,7 @@ beforeEach(() => {
   mockedAddKnowledgeBaseDocument.mockReset();
   mockedAddKnowledgeBaseDocumentFromUrl.mockReset();
   mockedAddKnowledgeBaseDocumentFromText.mockReset();
+  mockedRetryDocumentProcessing.mockReset();
 });
 
 describe("KnowledgeDocumentList (E05-S010)", () => {
@@ -366,5 +370,59 @@ describe("KnowledgeDocumentList — processing failure state (E05-S020)", () => 
 
     await screen.findByText("損毀二.pdf");
     expect(screen.getAllByText("處理失敗")).toHaveLength(1);
+  });
+});
+
+describe("KnowledgeDocumentList — retry processing action (E05-S021)", () => {
+  it("shows a 重試 button next to a failed document", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "損毀檔案.pdf", sizeBytes: 500, status: "failed", uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("損毀檔案.pdf");
+    expect(screen.getByRole("button", { name: "重試" })).toBeInTheDocument();
+  });
+
+  it("does not show a 重試 button next to a document that isn't failed", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "正常檔案.pdf", sizeBytes: 500, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("正常檔案.pdf");
+    expect(screen.queryByRole("button", { name: "重試" })).not.toBeInTheDocument();
+  });
+
+  it("a successful retry refreshes the list, clearing 處理失敗 and its 重試 button once the document is ready", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "損毀檔案.pdf", sizeBytes: 500, status: "failed", uploadedAt: "2026-08-15T00:00:00.000Z" }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "損毀檔案.pdf", sizeBytes: 500, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+      });
+    mockedRetryDocumentProcessing.mockResolvedValue({
+      ok: true,
+      value: { id: "doc1", knowledgeBaseId: "kb1", name: "損毀檔案.pdf", sizeBytes: 500, uploadedAt: "2026-08-15T00:00:00.000Z" },
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("處理失敗");
+
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+
+    await waitFor(() => expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("處理失敗")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重試" })).not.toBeInTheDocument();
   });
 });

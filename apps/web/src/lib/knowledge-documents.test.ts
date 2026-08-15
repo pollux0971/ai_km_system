@@ -5,6 +5,7 @@ import {
   addKnowledgeBaseDocumentFromUrl,
   listKnowledgeBaseDocuments,
   MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER,
+  retryDocumentProcessing,
 } from "./knowledge-documents";
 
 beforeEach(() => {
@@ -181,6 +182,99 @@ describe("addKnowledgeBaseDocument — processing failure state (E05-S020)", () 
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.status).toBe("failed");
+  });
+});
+
+describe("retryDocumentProcessing (E05-S021)", () => {
+  it("clears status back to ready (undefined) for a failed document", async () => {
+    const created = await addKnowledgeBaseDocument(
+      "kb-sample-3",
+      `重試對象${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}.pdf`,
+      500,
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.status).toBe("failed");
+
+    const retried = await retryDocumentProcessing("kb-sample-3", created.value.id);
+
+    expect(retried.ok).toBe(true);
+    if (retried.ok) expect(retried.value.status).toBeUndefined();
+  });
+
+  it("returns NOT_FOUND for a document id that doesn't exist", async () => {
+    const result = await retryDocumentProcessing("kb-sample-3", "this-id-does-not-exist");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns NOT_FOUND when the document exists but belongs to a different knowledge base", async () => {
+    const created = await addKnowledgeBaseDocument(
+      "kb-sample-3",
+      `跨庫測試${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}.pdf`,
+      500,
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await retryDocumentProcessing("kb-sample-1", created.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns VALIDATION_ERROR when attempting to retry a document that isn't currently failed", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "正常文件.pdf", 500);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.status).toBeUndefined();
+
+    const result = await retryDocumentProcessing("kb-sample-3", created.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("does not disturb the document's other fields", async () => {
+    const created = await addKnowledgeBaseDocument(
+      "kb-sample-3",
+      `保留欄位${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}.pdf`,
+      12_345,
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const retried = await retryDocumentProcessing("kb-sample-3", created.value.id);
+
+    expect(retried.ok).toBe(true);
+    if (retried.ok) {
+      expect(retried.value.id).toBe(created.value.id);
+      expect(retried.value.name).toBe(created.value.name);
+      expect(retried.value.sizeBytes).toBe(12_345);
+      expect(retried.value.uploadedAt).toBe(created.value.uploadedAt);
+    }
+  });
+
+  it("does not affect other documents in the same knowledge base", async () => {
+    const untouched = await addKnowledgeBaseDocument("kb-sample-3", "不受影響.pdf", 100);
+    const failed = await addKnowledgeBaseDocument(
+      "kb-sample-3",
+      `會被重試${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}.pdf`,
+      200,
+    );
+    expect(untouched.ok).toBe(true);
+    expect(failed.ok).toBe(true);
+    if (!untouched.ok || !failed.ok) return;
+
+    await retryDocumentProcessing("kb-sample-3", failed.value.id);
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const other = listed.value.find((document) => document.id === untouched.value.id);
+    expect(other?.status).toBeUndefined();
+    expect(other?.name).toBe("不受影響.pdf");
   });
 });
 

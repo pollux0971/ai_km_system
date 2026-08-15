@@ -9,6 +9,7 @@ import { listKnowledgeBaseDocuments, type KnowledgeBaseDocument } from "@/lib/kn
 import KnowledgeDocumentUpload from "./knowledge-document-upload";
 import KnowledgeDocumentUrlImport from "./knowledge-document-url-import";
 import KnowledgeDocumentTextInput from "./knowledge-document-text-input";
+import KnowledgeDocumentRetryButton from "./knowledge-document-retry-button";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
@@ -74,9 +75,14 @@ type State =
  * indicator for any document with `status === "failed"` (see that
  * field's own doc comment on KnowledgeBaseDocument) — plain text, not
  * a color-only cue, per this story's own UX Acceptance ("不得只靠
- * 顏色傳達狀態"). No retry action here — E05-S021 "Retry processing
- * action" is its own later story for that; this one's job is only
- * making the failed state visible.
+ * 顏色傳達狀態").
+ *
+ * E05-S021 "Retry processing action" adds KnowledgeDocumentRetryButton
+ * right next to that same indicator, only for a failed document — the
+ * direct next step S020 itself deferred. Its own `onRetried` prop is
+ * this same `refetchDocuments`, exactly like every other
+ * list-changing widget on this page already receives — a successful
+ * retry is "the list changed" the same way a new upload is.
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -199,6 +205,11 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
               {document.status === "failed" && (
                 <>
                   <span>處理失敗</span>
+                  <KnowledgeDocumentRetryButton
+                    knowledgeBaseId={id}
+                    documentId={document.id}
+                    onRetried={refetchDocuments}
+                  />
                   <br />
                 </>
               )}

@@ -247,6 +247,59 @@ export async function addKnowledgeBaseDocument(
 }
 
 /**
+ * E05-S021 "Retry processing action". Acts on a document already
+ * created by addKnowledgeBaseDocument (E05-S011/S020) whose (mock)
+ * processing ended in `status: "failed"` — the direct next step after
+ * that story made the failed state reachable, real, and visible; this
+ * one gives the user something to DO about it.
+ *
+ * Fails closed with NOT_FOUND if the document doesn't exist, OR exists
+ * but belongs to a different knowledge base (same "never touches
+ * another knowledge base's documents" discipline
+ * listKnowledgeBaseDocuments's own doc comment already establishes —
+ * checked here, not just filtered, since this is a targeted mutation
+ * by id rather than a list read). Fails closed with VALIDATION_ERROR
+ * if the document isn't currently `"failed"` — retrying something
+ * that was never broken isn't a meaningful action.
+ *
+ * On success, always clears `status` back to ready (deterministic,
+ * not a re-evaluation of MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER
+ * against the document's own unchanged name — retrying gives the SAME
+ * name back to the SAME check, which would deterministically fail
+ * forever, defeating the entire point of a retry action existing at
+ * all). A user's deliberate retry click is treated as sufficient
+ * signal that the (mock) underlying issue is presumed resolved — same
+ * "MVP 可以簡化視覺或演算法,但此能力本身不可缺席" allowance this
+ * story's own boilerplate AC explicitly grants; a "retry can also
+ * fail" simulation isn't required by this story's AC and isn't
+ * invented here.
+ *
+ * No artificial delay lives inside this function, same as
+ * addKnowledgeBaseDocument's own zero-delay shape — a visible "retry
+ * in progress" pause is a presentation-layer concern the CALLING
+ * component orchestrates (reusing parse-progress.ts/index-progress.ts,
+ * since a retry conceptually re-runs parsing and indexing, not
+ * uploading — the document already exists).
+ */
+export async function retryDocumentProcessing(
+  knowledgeBaseId: string,
+  documentId: string,
+): Promise<Result<KnowledgeBaseDocument, ApiError>> {
+  const store = readStore();
+  const existing = store.find((document) => document.id === documentId && document.knowledgeBaseId === knowledgeBaseId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } };
+  }
+  if (existing.status !== "failed") {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "這份文件目前不是處理失敗狀態，不需要重試。" } };
+  }
+
+  const updated: KnowledgeBaseDocument = { ...existing, status: undefined };
+  writeStore(store.map((document) => (document.id === documentId ? updated : document)));
+  return { ok: true, value: updated };
+}
+
+/**
  * E05-S014 "URL import". A separate function from
  * addKnowledgeBaseDocument, not an overload sharing its `name`
  * parameter — a URL needs its OWN validation (must actually parse as a

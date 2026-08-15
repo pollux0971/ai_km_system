@@ -81,6 +81,11 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * phases still play out, same as any other file) and the document
  * still lands in the list, but with a distinct 處理失敗 indicator
  * instead of the generic upload-failure alert S011 already covers.
+ *
+ * E05-S021 adds a 重試 button next to that same indicator — this test
+ * confirms clicking it (real timing again, reusing the same 解析中/
+ * 索引中 delay primitives) genuinely clears the failed state: the
+ * document keeps its name/size, but 處理失敗 and 重試 both disappear.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -452,4 +457,27 @@ test("E05-S020: a file whose processing is mock-triggered to fail still uploads 
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
   await expect(page.getByText("文件:", { exact: false })).toContainText("1 份文件");
+});
+
+test("E05-S021: retrying a processing-failed document clears its 處理失敗 state and 重試 button", async ({ page }) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await page.getByLabel("上傳文件").setInputFiles({
+    name: "待重試報告[模擬:KB_PROCESSING_FAILED].pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("file content"),
+  });
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+  await expect(page.getByText(/上傳中|解析中|索引中/)).not.toBeVisible();
+  await expect(page.getByText("處理失敗")).toBeVisible();
+
+  await page.getByRole("button", { name: "重試" }).click();
+
+  await expect(page.getByRole("button", { name: "重試中…" })).toBeVisible();
+  await expect(page.getByText("處理失敗")).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "重試" })).not.toBeVisible();
+  // The document itself — name, still in the list — survives the retry.
+  await expect(page.getByText("待重試報告", { exact: false })).toBeVisible();
 });

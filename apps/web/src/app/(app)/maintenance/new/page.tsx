@@ -36,10 +36,15 @@ const UNSELECTED_VALUE = "";
  * unsaved until creation is confirmed, and stays put (not reset) if it
  * fails, so the user doesn't have to re-pick anything to retry.
  *
- * Redirects to /maintenance (the home list) on success, not to a case
- * detail page — /maintenance/[id] (E07-S021 "Case detail") doesn't
- * exist yet, same constraint knowledge/new/page.tsx documents for why
- * it redirects to /knowledge instead of /knowledge/[id].
+ * Redirected to /maintenance (the home list) on success until E07-S006
+ * "Diagnostic session shell" — /maintenance/[id] (E07-S021 "Case
+ * detail") still doesn't exist, but /maintenance/[id]/session (S006,
+ * keyed by case id, independent of the still-missing detail route) now
+ * does, so success now lands directly inside the new case's diagnostic
+ * session, mirroring conversations/new's own "land directly inside the
+ * new item" precedent instead of knowledge/new's "redirect to list"
+ * one — see maintenance-session.tsx's own doc comment for the other
+ * side of this.
  *
  * Functional AC 7 (audit event for sensitive operations) is judged
  * N/A — creating a new case is a content-creation action, not an
@@ -158,7 +163,7 @@ export default function NewMaintenanceCasePage() {
       properties: { maintenanceCaseId: result.value.id, equipmentId, errorCode: errorCode || undefined },
     });
     router.refresh();
-    router.replace("/maintenance");
+    router.replace(`/maintenance/${result.value.id}/session`);
   }
 
   return (

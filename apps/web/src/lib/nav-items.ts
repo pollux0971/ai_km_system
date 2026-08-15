@@ -71,12 +71,20 @@ export function visibleEntryCards(userRoles: string[]): NavItem[] {
  * user-menu, not the sidebar) — those routes are open to any authenticated
  * user by design, not an oversight.
  *
- * Exact match only, deliberately — none of E05/E07/E09's routes have
- * nested pages yet (e.g. /maintenance/<id>). When one of those epics adds
- * a sub-route that needs the same restriction as its parent, add an
- * explicit NAV_ITEMS entry (or extend this to prefix-match) at that time;
- * don't presume the shape of a route tree that doesn't exist yet.
+ * Exact match OR nested-under-a-listed-href — this file's own doc comment
+ * used to say "exact match only, deliberately, since none of E05/E07/E09's
+ * routes have nested pages yet", explicitly flagging this as the moment to
+ * revisit once one did. E07-S006 is that moment: /maintenance/[id]/session
+ * (and /maintenance/new, already live since E07-S002) are both nested under
+ * /maintenance and both need the exact same maintenance_engineer/
+ * super_administrator restriction their parent already has — without
+ * prefix-matching, rolesRequiredFor("/maintenance/x/session") resolves to
+ * undefined (no exact NAV_ITEMS entry), which RoleGuard treats as
+ * unrestricted, silently opening maintenance case content to any
+ * authenticated role. `${item.href}/` (not a bare startsWith(item.href))
+ * keeps this from also matching an unrelated sibling like
+ * /maintenance-report.
  */
 export function rolesRequiredFor(pathname: string): NavItem["roles"] | undefined {
-  return NAV_ITEMS.find((item) => item.href === pathname)?.roles;
+  return NAV_ITEMS.find((item) => item.href === pathname || pathname.startsWith(`${item.href}/`))?.roles;
 }

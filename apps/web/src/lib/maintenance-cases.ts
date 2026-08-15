@@ -150,6 +150,22 @@ export async function listMaintenanceCases(): Promise<Result<MaintenanceCaseSumm
 }
 
 /**
+ * E07-S006 "Diagnostic session shell". First single-item lookup this
+ * file exports — same `value: T | null` (not a rejected Promise or a
+ * NOT_FOUND error) shape getKnowledgeBase already establishes for "the
+ * fetch itself succeeded; the id just doesn't resolve to anything",
+ * leaving the NOT_FOUND-vs-error distinction to the caller. Needed now
+ * because starting a diagnostic session (this same story) requires
+ * confirming the case it's for genuinely exists before creating one —
+ * same "fails closed with NOT_FOUND if the parent doesn't exist"
+ * precedent addKnowledgeBaseDocument already follows for its own
+ * knowledgeBaseId.
+ */
+export async function getMaintenanceCase(id: string): Promise<Result<MaintenanceCaseSummary | null, ApiError>> {
+  return { ok: true, value: readStore().find((item) => item.id === id) ?? null };
+}
+
+/**
  * E07-S002 "Equipment selector" / E07-S003 "Serial-number input" /
  * E07-S004 "Error-code search UI" / E07-S005 "Problem description
  * input". Creates the case with whatever's been entered — this is now

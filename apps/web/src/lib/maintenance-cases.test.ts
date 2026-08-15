@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMaintenanceCase, listMaintenanceCases } from "./maintenance-cases";
+import { createMaintenanceCase, getMaintenanceCase, listMaintenanceCases } from "./maintenance-cases";
 import { EQUIPMENT_OPTIONS } from "./equipment";
 import { ERROR_CODE_OPTIONS } from "./error-codes";
 
@@ -33,6 +33,25 @@ describe("listMaintenanceCases (E07-S001)", () => {
     const timestamps = result.value.map((item) => item.updatedAt);
     const sorted = [...timestamps].sort((a, b) => b.localeCompare(a));
     expect(timestamps).toEqual(sorted);
+  });
+});
+
+describe("getMaintenanceCase (E07-S006)", () => {
+  it("resolves the matching case when the id exists", async () => {
+    const result = await getMaintenanceCase("case-sample-1");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value?.id).toBe("case-sample-1");
+    expect(result.value?.title).toBe("生產線 3 號機台異音診斷");
+  });
+
+  it("resolves null (not an error) for an unknown id", async () => {
+    const result = await getMaintenanceCase("not-a-real-case-id");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBeNull();
   });
 });
 

@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CurrentStepCard from "./current-step-card";
-import { goToPreviousStep, selectDecisionOption } from "@/lib/diagnostic-sessions";
+import { goToPreviousStep, restartDiagnosticSession, selectDecisionOption } from "@/lib/diagnostic-sessions";
 
 vi.mock("@/lib/diagnostic-sessions", () => ({
   selectDecisionOption: vi.fn(),
   goToPreviousStep: vi.fn(),
+  restartDiagnosticSession: vi.fn(),
 }));
 
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
+const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
 
 describe("CurrentStepCard (E07-S007)", () => {
   it("shows the 1-indexed step number and the step's instruction text", () => {
@@ -206,6 +208,55 @@ describe("CurrentStepCard previous-step action (E07-S010)", () => {
     fireEvent.click(screen.getByRole("button", { name: "上一步" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("已經是第一步。");
+    expect(onAdvanced).not.toHaveBeenCalled();
+  });
+});
+
+describe("CurrentStepCard restart action (E07-S011)", () => {
+  const restartedSession = {
+    id: "session1",
+    maintenanceCaseId: "case1",
+    status: "OPEN" as const,
+    currentStepIndex: 0,
+    createdAt: "2026-08-15T00:00:00.000Z",
+    updatedAt: "2026-08-15T00:03:00.000Z",
+  };
+
+  beforeEach(() => {
+    mockedRestartDiagnosticSession.mockReset();
+  });
+
+  it("renders a 重新開始 button whenever sessionId is present, even on the very first step", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "重新開始" })).toBeInTheDocument();
+  });
+
+  it("does not render a 重新開始 button when sessionId is absent (S007 behavior unchanged)", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByRole("button", { name: "重新開始" })).not.toBeInTheDocument();
+  });
+
+  it("clicking 重新開始 calls restartDiagnosticSession and invokes onAdvanced with the updated session on success", async () => {
+    mockedRestartDiagnosticSession.mockResolvedValue({ ok: true, value: restartedSession });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 1, instruction: "測試步驟內容" }} onAdvanced={onAdvanced} />);
+    fireEvent.click(screen.getByRole("button", { name: "重新開始" }));
+
+    expect(mockedRestartDiagnosticSession).toHaveBeenCalledWith("session1");
+    await waitFor(() => expect(onAdvanced).toHaveBeenCalledWith(restartedSession));
+  });
+
+  it("shows an error message and does not call onAdvanced when restarting fails", async () => {
+    mockedRestartDiagnosticSession.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個診斷 session。" } });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 1, instruction: "測試步驟內容" }} onAdvanced={onAdvanced} />);
+    fireEvent.click(screen.getByRole("button", { name: "重新開始" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("找不到這個診斷 session。");
     expect(onAdvanced).not.toHaveBeenCalled();
   });
 });

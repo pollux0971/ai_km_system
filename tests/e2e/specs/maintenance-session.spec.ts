@@ -260,3 +260,30 @@ test("E07-S010: no 上一步 button is shown on the first step (nothing to go ba
 
   await expect(page.getByRole("button", { name: "上一步" })).not.toBeVisible();
 });
+
+test("E07-S011: clicking 重新開始 resets a fully-advanced session back to the first step and 待處理 status", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+  await page.getByLabel("補充說明").fill("現場有明顯異音");
+  await page.getByRole("button", { name: "異常已排除" }).click();
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+  await expect(page.getByText("進行中", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "重新開始" }).click();
+
+  await expect(page.getByRole("heading", { name: "步驟 1", level: 2 })).toBeVisible();
+  await expect(page.getByText("待處理")).toBeVisible();
+  await expect(page.getByText("現場有明顯異音")).not.toBeVisible();
+  await expect(page.getByLabel("補充說明")).toHaveValue("");
+
+  // A genuinely fresh start — the repeat-guard doesn't block re-selecting.
+  await page.getByRole("button", { name: "異常仍然存在" }).click();
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+});
+
+test("E07-S011: 重新開始 is available even on the very first step", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  await expect(page.getByRole("button", { name: "重新開始" })).toBeVisible();
+});

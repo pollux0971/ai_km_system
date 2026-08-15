@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage } from "@ai-km/ui";
-import { goToPreviousStep, selectDecisionOption, type DiagnosticSession } from "@/lib/diagnostic-sessions";
+import { goToPreviousStep, restartDiagnosticSession, selectDecisionOption, type DiagnosticSession } from "@/lib/diagnostic-sessions";
 import type { DiagnosticStep } from "@/lib/diagnostic-steps";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -64,6 +64,13 @@ const logger = createLogger("web:current-step-card");
  * re-renders it with new props, it doesn't unmount/remount), so without
  * this the textarea would keep showing a stale, already-submitted-or-
  * abandoned draft after the session has moved to a different step.
+ *
+ * The 重新開始 button (E07-S011 "Restart diagnostic") is deliberately NOT
+ * gated on `step.stepIndex` the way 上一步 is — it's a session-level
+ * action, not a step-level one (see restartDiagnosticSession's own doc
+ * comment), so it renders whenever `sessionId` is present, including on
+ * the very first step. No confirmation dialog: this resets Team A mock
+ * local state, not an irreversible business action.
  */
 export default function CurrentStepCard({
   sessionId,
@@ -142,6 +149,30 @@ export default function CurrentStepCard({
     onAdvanced?.(result.value);
   }
 
+  async function handleRestart() {
+    if (pending || !sessionId) return;
+
+    const correlationId = crypto.randomUUID();
+    setPending(true);
+    setError(null);
+    logger.info("restarting diagnostic session", { correlationId, sessionId });
+    trackEvent("maintenance_session_restart_attempt", { correlationId, properties: { sessionId } });
+
+    const result = await restartDiagnosticSession(sessionId);
+
+    setPending(false);
+    if (!result.ok) {
+      logger.error("failed to restart diagnostic session", { correlationId, sessionId, code: result.error.code });
+      trackEvent("maintenance_session_restart_failure", { correlationId, properties: { sessionId, code: result.error.code } });
+      setError(result.error.message);
+      return;
+    }
+
+    logger.info("diagnostic session restarted", { correlationId, sessionId });
+    trackEvent("maintenance_session_restart_success", { correlationId, properties: { sessionId } });
+    onAdvanced?.(result.value);
+  }
+
   return (
     <section>
       <h2>步驟 {step.stepIndex + 1}</h2>
@@ -176,6 +207,13 @@ export default function CurrentStepCard({
         <p>
           <button type="button" onClick={handleGoBack} disabled={pending}>
             上一步
+          </button>
+        </p>
+      )}
+      {sessionId && (
+        <p>
+          <button type="button" onClick={handleRestart} disabled={pending}>
+            重新開始
           </button>
         </p>
       )}

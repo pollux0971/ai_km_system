@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import MaintenanceSession from "./maintenance-session";
 import { getMaintenanceCase } from "@/lib/maintenance-cases";
-import { createDiagnosticSession, getDiagnosticSessionForCase, goToPreviousStep, selectDecisionOption } from "@/lib/diagnostic-sessions";
+import {
+  createDiagnosticSession,
+  getDiagnosticSessionForCase,
+  goToPreviousStep,
+  restartDiagnosticSession,
+  selectDecisionOption,
+} from "@/lib/diagnostic-sessions";
 import { getCurrentDiagnosticStep } from "@/lib/diagnostic-steps";
 
 vi.mock("@/lib/maintenance-cases", () => ({
@@ -14,6 +20,7 @@ vi.mock("@/lib/diagnostic-sessions", () => ({
   createDiagnosticSession: vi.fn(),
   selectDecisionOption: vi.fn(),
   goToPreviousStep: vi.fn(),
+  restartDiagnosticSession: vi.fn(),
 }));
 
 const mockedGetMaintenanceCase = vi.mocked(getMaintenanceCase);
@@ -21,6 +28,7 @@ const mockedGetDiagnosticSessionForCase = vi.mocked(getDiagnosticSessionForCase)
 const mockedCreateDiagnosticSession = vi.mocked(createDiagnosticSession);
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
+const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
 
 const sampleCase = {
   id: "case1",
@@ -43,6 +51,7 @@ beforeEach(() => {
   mockedCreateDiagnosticSession.mockReset();
   mockedSelectDecisionOption.mockReset();
   mockedGoToPreviousStep.mockReset();
+  mockedRestartDiagnosticSession.mockReset();
 });
 
 describe("MaintenanceSession (E07-S006)", () => {
@@ -195,5 +204,22 @@ describe("MaintenanceSession (E07-S006)", () => {
 
     expect(mockedGoToPreviousStep).toHaveBeenCalledWith("session1");
     expect(await screen.findByRole("heading", { name: "步驟 1", level: 2 })).toBeInTheDocument();
+  });
+
+  it("E07-S011: clicking 重新開始 resets to the first step and 待處理 status", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleSession, currentStepIndex: 1, status: "IN_PROGRESS" as const, lastSelectedOptionId: "resolved" },
+    });
+    mockedRestartDiagnosticSession.mockResolvedValue({ ok: true, value: sampleSession });
+
+    render(<MaintenanceSession id="case1" />);
+    const restartButton = await screen.findByRole("button", { name: "重新開始" });
+    fireEvent.click(restartButton);
+
+    expect(mockedRestartDiagnosticSession).toHaveBeenCalledWith("session1");
+    expect(await screen.findByRole("heading", { name: "步驟 1", level: 2 })).toBeInTheDocument();
+    expect(screen.getByText("待處理")).toBeInTheDocument();
   });
 });

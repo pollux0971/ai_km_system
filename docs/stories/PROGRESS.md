@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 22 | 1 | 0 | 0 | 8 |
+| E05 Knowledge Management Experience | 31 | 23 | 0 | 0 | 0 | 8 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 75 | 1 | 0 | 0 | 99 |
+| **合計** | **175** | 76 | 0 | 0 | 0 | 99 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -125,7 +125,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S020 | approved | story/E05-S020-processing-failure-state | [E05-S020.md](E05-S020.md) | 獨立審核 APPROVE(Processing failure state;三個 progress story 一路刻意留給本 story 的第一個持久化欄位——`KnowledgeBaseDocument.status?: "ready"\|"failed"`,缺席=ready;新增 `MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER` 決定性 mock 觸發機制,延續 E03-S021/S029 既有慣例;核心設計判斷是觸發後仍回傳 `ok:true`(文件確實被建立,失敗的是後續處理),審核者逐行複驗 `addKnowledgeBaseDocument` diff 確認 `return {ok:true,...}` 這行完全未變更,只新增一行條件式 spread;同時複驗既有「上傳失敗保留檔案供重試」邏輯完全不受影響(不會誤觸發在處理失敗的文件上);清單新增純文字「處理失敗」指示器,不含任何重試操作(留給 E05-S021);0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/752 unit/144 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S021 | approved | story/E05-S021-retry-processing-action | [E05-S021.md](E05-S021.md) | 獨立審核 APPROVE(Retry processing action;新增 `retryDocumentProcessing`(NOT_FOUND 含跨庫防呆、VALIDATION_ERROR 拒絕非失敗文件)與 `KnowledgeDocumentRetryButton`;核心設計判斷是重試成功為確定性、不重新評估原始 `MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER`(否則文件名稱不變會導致永遠重試失敗,功能形同虛設),審核者逐行複驗 `retryDocumentProcessing` 原始碼確認函式內完全沒有引用該常數,證實宣稱逐字屬實;重用 S018/S019 既有的 parse/index 計時原語而非新增第四個;`knowledge-document-list.tsx` 新增的整合測試證明「重試→onRetried→refetchDocuments」真的串起來而非各自獨立通過;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/770 unit/145 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S022 | approved | story/E05-S022-document-preview | [E05-S022.md](E05-S022.md) | 獨立審核 APPROVE(Document preview;架構上這條 story 鏈中最簡單的一個——純 UI 狀態切換,`content` 早已在 `KnowledgeDocumentList` 手中,零新增 fetch、零新增 lib 函式,審核者用 `git diff -- apps/web/src/lib/ \| wc -l` 對整個 lib 目錄複驗確認為 0,是本 session 至今驗證最徹底的一次「零 lib 變更」宣稱;只有文字輸入(S015)文件有真實內容可預覽,檔案/URL 來源誠實顯示「此文件目前無法預覽。」而非假造內容,延續本 story 鏈自 S011 起的一致原則;telemetry 只有單一 view 事件、每次展開都發送(不是只發送一次),鏡射既有 page_view 語意;1 次 FIX 循環——自己新增測試用了會撞到巢狀元素的自訂文字 matcher 導致崩潰,審核者確認這純粹是測試撰寫問題、元件實作行為從未有誤,修正後改用 `querySelector` 直接鎖定元素;審核者獨立重跑 typecheck/lint/build/781 unit/146 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
-| E05-S023 | done | story/E05-S023-document-metadata-editor | [E05-S023.md](E05-S023.md) | |
+| E05-S023 | approved | story/E05-S023-document-metadata-editor | [E05-S023.md](E05-S023.md) | 獨立審核 APPROVE(Document metadata editor;`name` 是 `KnowledgeBaseDocument` 唯一同時符合「中繼資料」與「有意義可編輯」的既有欄位,不發明新欄位;新增 `renameKnowledgeBaseDocument` 與 `KnowledgeDocumentNameEditor`,逐項鏡射已核准的 `RenameConversation`(E03-S024);通用錯誤訊息(而非具體伺服器訊息)的選擇與 S014/S016/S021 顯示具體訊息的判斷表面不同但背後原則一致(client 端已擋掉常見失敗情境 vs. 真正會送達伺服器的情境);開發階段(執行任何 gate 之前)自行發現「用 `<span>` 包裝導致 DOM 多一層巢狀、破壞既有 S022 E2E 測試的 `.locator("..")` 範圍限定」的結構性問題並改用 React Fragment 修正,審核者對抗性複驗——親自把元件還原成 `<span>` 版本重跑既有 E2E 測試,穩定重現 2/2 次逾時失敗,證實修法確實必要而非巧合,還原後 diff 為 0 確認無殘留;審核者獨立重跑 typecheck/lint/build/800 unit/147 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S024 | todo | | | |
 | E05-S025 | todo | | | |
 | E05-S026 | todo | | | |

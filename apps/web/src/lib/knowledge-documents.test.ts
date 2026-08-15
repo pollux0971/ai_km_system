@@ -4,6 +4,7 @@ import {
   addKnowledgeBaseDocumentFromText,
   addKnowledgeBaseDocumentFromUrl,
   archiveKnowledgeBaseDocument,
+  deleteKnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
   MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER,
   renameKnowledgeBaseDocument,
@@ -165,6 +166,80 @@ describe("archiveKnowledgeBaseDocument / unarchiveKnowledgeBaseDocument (E05-S02
     const listed = await listKnowledgeBaseDocuments("kb-sample-3");
     expect(listed.ok).toBe(true);
     if (listed.ok) expect(listed.value.find((document) => document.id === untouched.value.id)?.archived).toBeUndefined();
+  });
+});
+
+describe("deleteKnowledgeBaseDocument (E05-S026)", () => {
+  it("removes an existing document from the store", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "待刪除.pdf", 100);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const deleted = await deleteKnowledgeBaseDocument("kb-sample-3", created.value.id);
+    expect(deleted.ok).toBe(true);
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value.some((document) => document.id === created.value.id)).toBe(false);
+  });
+
+  it("fails closed with NOT_FOUND for a document id that doesn't exist, rather than silently no-op-ing", async () => {
+    const result = await deleteKnowledgeBaseDocument("kb-sample-3", "this-id-does-not-exist");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("fails closed with NOT_FOUND when the document exists but belongs to a different knowledge base", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "跨庫測試.pdf", 100);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await deleteKnowledgeBaseDocument("kb-sample-1", created.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("a second delete of the same (already-deleted) id fails closed with NOT_FOUND — no undefined duplicate side effect", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "待刪除.pdf", 100);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const first = await deleteKnowledgeBaseDocument("kb-sample-3", created.value.id);
+    expect(first.ok).toBe(true);
+
+    const second = await deleteKnowledgeBaseDocument("kb-sample-3", created.value.id);
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.error.code).toBe("NOT_FOUND");
+  });
+
+  it("does not affect other documents in the same knowledge base", async () => {
+    const untouched = await addKnowledgeBaseDocument("kb-sample-3", "不受影響.pdf", 100);
+    const toDelete = await addKnowledgeBaseDocument("kb-sample-3", "待刪除.pdf", 200);
+    expect(untouched.ok).toBe(true);
+    expect(toDelete.ok).toBe(true);
+    if (!untouched.ok || !toDelete.ok) return;
+
+    await deleteKnowledgeBaseDocument("kb-sample-3", toDelete.value.id);
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value.some((document) => document.id === untouched.value.id)).toBe(true);
+  });
+
+  it("a deleted document no longer appears in either the active or archived view", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "待刪除.pdf", 100);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveKnowledgeBaseDocument("kb-sample-3", created.value.id);
+
+    await deleteKnowledgeBaseDocument("kb-sample-3", created.value.id);
+
+    const activeView = await listKnowledgeBaseDocuments("kb-sample-3");
+    const archivedView = await listKnowledgeBaseDocuments("kb-sample-3", true);
+    expect(activeView.ok && !activeView.value.some((document) => document.id === created.value.id)).toBe(true);
+    expect(archivedView.ok && !archivedView.value.some((document) => document.id === created.value.id)).toBe(true);
   });
 });
 

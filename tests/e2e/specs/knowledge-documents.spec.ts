@@ -107,6 +107,12 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * under 已封存文件 (and the siblings don't), then unarchives it and
  * confirms it returns to 作用中文件 — a real round trip through the
  * mock store, not just a one-way check.
+ *
+ * E05-S026 adds a 刪除文件 control (mirroring E03-S025's
+ * DeleteConversation role="alertdialog" confirm/cancel shape) to every
+ * document — this test confirms 取消 leaves a document untouched, then
+ * confirms deleting one for real removes it from the list AND drops the
+ * detail page's own count, without disturbing the remaining documents.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -596,4 +602,32 @@ test("E05-S025: archiving a document removes it from the active view and the det
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
   await expect(page.getByText("文件:", { exact: false })).toContainText("3 份文件");
+});
+
+test("E05-S026: 取消 leaves a document untouched; confirming a delete removes it from the list and the detail page's count", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "產品保固政策");
+  await expect(page.getByText("文件:", { exact: false })).toContainText("3 份文件");
+
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  const targetItem = page.getByText("產品保固條款.pdf").locator("..");
+  await targetItem.getByRole("button", { name: "刪除文件" }).click();
+  await expect(page.getByRole("alertdialog", { name: "確認刪除文件：產品保固條款.pdf" })).toBeVisible();
+
+  await targetItem.getByRole("button", { name: "取消" }).click();
+  await expect(page.getByText("產品保固條款.pdf")).toBeVisible();
+
+  await targetItem.getByRole("button", { name: "刪除文件" }).click();
+  await targetItem.getByRole("button", { name: "確認刪除" }).click();
+
+  await expect(page.getByText("產品保固條款.pdf")).toHaveCount(0);
+  await expect(page.getByText("理賠申請流程.docx")).toBeVisible();
+  await expect(page.getByText("常見保固問題 FAQ.pdf")).toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("2 份文件");
 });

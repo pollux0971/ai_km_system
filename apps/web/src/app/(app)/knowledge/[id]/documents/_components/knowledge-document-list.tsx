@@ -13,6 +13,7 @@ import KnowledgeDocumentRetryButton from "./knowledge-document-retry-button";
 import KnowledgeDocumentPreview from "./knowledge-document-preview";
 import KnowledgeDocumentNameEditor from "./knowledge-document-name-editor";
 import KnowledgeDocumentArchiveToggle from "./knowledge-document-archive-toggle";
+import KnowledgeDocumentDeleteButton from "./knowledge-document-delete-button";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
@@ -158,6 +159,18 @@ type State =
  * which render originally captured it — turning every stale mutation
  * callback into "refresh whatever the user is currently looking at",
  * which is the only reading that's ever correct.
+ *
+ * E05-S026 "Delete document confirmation" adds
+ * KnowledgeDocumentDeleteButton for EVERY document, in both views
+ * (unlike the three add-widgets, deletion isn't restricted to the
+ * active view — an archived document can still be permanently removed,
+ * see deleteKnowledgeBaseDocument's own doc comment for why archiving
+ * and deleting stay two independent, orthogonal capabilities). Its
+ * `onDeleted` is the same `refetchDocuments` every other mutating child
+ * on this page already receives — a successful delete re-fetches
+ * whichever view the user is currently on (via the same
+ * viewingArchivedRef-backed default described above), which is exactly
+ * what makes the just-deleted document disappear from it.
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -327,6 +340,13 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
                 documentId={document.id}
                 archived={document.archived ?? false}
                 onToggled={refetchDocuments}
+              />
+              <br />
+              <KnowledgeDocumentDeleteButton
+                knowledgeBaseId={id}
+                documentId={document.id}
+                name={document.name}
+                onDeleted={refetchDocuments}
               />
             </li>
           ))}

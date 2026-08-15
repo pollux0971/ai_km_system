@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import KnowledgeDocumentList from "./knowledge-document-list";
 import { getKnowledgeBase } from "@/lib/knowledge-bases";
 import {
@@ -7,6 +7,7 @@ import {
   addKnowledgeBaseDocumentFromText,
   addKnowledgeBaseDocumentFromUrl,
   archiveKnowledgeBaseDocument,
+  deleteKnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
   renameKnowledgeBaseDocument,
   retryDocumentProcessing,
@@ -26,6 +27,7 @@ vi.mock("@/lib/knowledge-documents", () => ({
   renameKnowledgeBaseDocument: vi.fn(),
   archiveKnowledgeBaseDocument: vi.fn(),
   unarchiveKnowledgeBaseDocument: vi.fn(),
+  deleteKnowledgeBaseDocument: vi.fn(),
 }));
 
 // E05-S017/S018/S019: this file renders the REAL KnowledgeDocumentUpload
@@ -67,6 +69,7 @@ const mockedRetryDocumentProcessing = vi.mocked(retryDocumentProcessing);
 const mockedRenameKnowledgeBaseDocument = vi.mocked(renameKnowledgeBaseDocument);
 const mockedArchiveKnowledgeBaseDocument = vi.mocked(archiveKnowledgeBaseDocument);
 const mockedUnarchiveKnowledgeBaseDocument = vi.mocked(unarchiveKnowledgeBaseDocument);
+const mockedDeleteKnowledgeBaseDocument = vi.mocked(deleteKnowledgeBaseDocument);
 
 const sampleKnowledgeBase = {
   id: "kb1",
@@ -85,6 +88,7 @@ beforeEach(() => {
   mockedRenameKnowledgeBaseDocument.mockReset();
   mockedArchiveKnowledgeBaseDocument.mockReset();
   mockedUnarchiveKnowledgeBaseDocument.mockReset();
+  mockedDeleteKnowledgeBaseDocument.mockReset();
 });
 
 describe("KnowledgeDocumentList (E05-S010)", () => {
@@ -768,5 +772,101 @@ describe("KnowledgeDocumentList — archive document action (E05-S025)", () => {
     expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(3, "kb1", true);
     expect(screen.getByText("既有已封存.pdf")).toBeInTheDocument();
     expect(screen.queryByText("上傳中的檔案.pdf")).not.toBeInTheDocument();
+  });
+});
+
+describe("KnowledgeDocumentList — delete document confirmation (E05-S026)", () => {
+  it("shows a 刪除文件 control for every document in the list", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "第一份.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "第二份.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("第一份.pdf");
+    expect(screen.getAllByRole("button", { name: "刪除文件" })).toHaveLength(2);
+  });
+
+  it("deleting a document (after confirming) removes it from the list, without disturbing the others", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          { id: "doc1", knowledgeBaseId: "kb1", name: "要刪除的.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+          { id: "doc2", knowledgeBaseId: "kb1", name: "保留的.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [{ id: "doc2", knowledgeBaseId: "kb1", name: "保留的.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+      });
+    mockedDeleteKnowledgeBaseDocument.mockResolvedValue({ ok: true, value: undefined });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("要刪除的.pdf");
+
+    const targetItem = screen.getByText("要刪除的.pdf").closest("li")!;
+    fireEvent.click(within(targetItem).getByRole("button", { name: "刪除文件" }));
+    fireEvent.click(within(targetItem).getByRole("button", { name: "確認刪除" }));
+
+    await waitFor(() => expect(screen.queryByText("要刪除的.pdf")).not.toBeInTheDocument());
+    expect(screen.getByText("保留的.pdf")).toBeInTheDocument();
+    expect(mockedDeleteKnowledgeBaseDocument).toHaveBeenCalledWith("kb1", "doc1");
+  });
+
+  it("clicking 取消 on the delete confirmation leaves the document in the list", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "不刪除.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("不刪除.pdf");
+
+    fireEvent.click(screen.getByRole("button", { name: "刪除文件" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.getByText("不刪除.pdf")).toBeInTheDocument();
+    expect(mockedDeleteKnowledgeBaseDocument).not.toHaveBeenCalled();
+  });
+
+  it("deleting an archived document while viewing 已封存文件 refreshes that same view, not the active one", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "doc1",
+            knowledgeBaseId: "kb1",
+            name: "已封存待刪除.pdf",
+            sizeBytes: 100,
+            archived: true,
+            uploadedAt: "2026-08-15T00:00:00.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, value: [] });
+    mockedDeleteKnowledgeBaseDocument.mockResolvedValue({ ok: true, value: undefined });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+    await screen.findByText("已封存待刪除.pdf");
+
+    fireEvent.click(screen.getByRole("button", { name: "刪除文件" }));
+    fireEvent.click(screen.getByRole("button", { name: "確認刪除" }));
+
+    await waitFor(() => expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(3, "kb1", true));
+    expect(await screen.findByText("尚無已封存的文件。")).toBeInTheDocument();
   });
 });

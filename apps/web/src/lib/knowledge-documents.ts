@@ -417,6 +417,38 @@ export async function unarchiveKnowledgeBaseDocument(
 }
 
 /**
+ * E05-S026 "Delete document confirmation". Mirrors deleteConversation
+ * (E03-S025) — a REAL removal from the store, not a soft/archived flag;
+ * S025 "Archive document action" already exists as the separate,
+ * reversible capability immediately before this one, so "archive" and
+ * "delete" stay deliberately distinct here too. Fails closed with
+ * NOT_FOUND for a document that doesn't exist, OR exists but belongs to
+ * a different knowledge base — same cross-KB-safe check every other
+ * targeted-by-id document mutation in this file already uses; a second
+ * delete of an already-deleted id fails closed the same way rather than
+ * silently no-op-ing (Functional AC 5 — no undefined duplicate side
+ * effect from a retried request).
+ *
+ * Unlike deleteConversation, which cascades to
+ * deleteMessagesForConversation() at the CALLING component (see that
+ * function's own doc comment for why the cascade lives one layer up),
+ * there is no cascade here to orchestrate: a KnowledgeBaseDocument has
+ * no child entities of its own — content/status/sizeBytes/archived are
+ * all plain fields on the document record itself, not separately-stored
+ * data reachable only through it. Deleting the record is already the
+ * whole operation.
+ */
+export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, documentId: string): Promise<Result<void, ApiError>> {
+  const store = readStore();
+  if (!store.some((document) => document.id === documentId && document.knowledgeBaseId === knowledgeBaseId)) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } };
+  }
+
+  writeStore(store.filter((document) => document.id !== documentId));
+  return { ok: true, value: undefined };
+}
+
+/**
  * E05-S014 "URL import". A separate function from
  * addKnowledgeBaseDocument, not an overload sharing its `name`
  * parameter — a URL needs its OWN validation (must actually parse as a

@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import {
+  escalateDiagnosticSession,
   goToPreviousStep,
   restartDiagnosticSession,
   selectDecisionOption,
@@ -204,6 +205,26 @@ function formatFileSize(bytes: number): string {
  * above — returning to a high-risk step (上一步/重新開始) must require
  * re-acknowledging it, not silently carry over a stale confirmation from
  * before.
+ *
+ * The 升級此案例 button + 升級原因 textarea (E07-S018 "Escalation action")
+ * are session-level (gated on `sessionId` alone, like 重新開始) and
+ * available on every step, not just ones with options — escalating the
+ * whole case isn't a step-level decision. Shares the shared `pending`/
+ * `error` state with select/back/restart/skip (structurally the same
+ * "one mutation in flight" concern those four already share, see this
+ * file's own top doc comment) — escalating is a real mutation, unlike AI
+ * 說明/SOP 引用來源's non-mutating reads or the safety checkbox's pure
+ * local state. Deliberately NOT gated behind `safetyGateBlocking` — see
+ * escalateDiagnosticSession's own doc comment for why requiring
+ * "acknowledge the danger first" would be backwards for an action whose
+ * whole point is asking for help with it. Once `recordedEscalationReason`
+ * is set, the button/textarea are replaced by a recorded-value display
+ * (same "an input with no visible effect anywhere would be a write-only
+ * void" pattern `recordedDetail` above already establishes) — reusing its
+ * own presence as the gate is safe because a reason is always set together
+ * with `status: "ESCALATED"` (see escalateDiagnosticSession), so there's
+ * no need for a separate `sessionStatus` prop just to know whether to hide
+ * the escalation UI.
  */
 export default function CurrentStepCard({
   sessionId,
@@ -213,6 +234,7 @@ export default function CurrentStepCard({
   recordedSkipReason,
   recordedPhotoFileName,
   recordedPhotoSizeBytes,
+  recordedEscalationReason,
 }: {
   sessionId?: string;
   step: DiagnosticStep;
@@ -221,6 +243,7 @@ export default function CurrentStepCard({
   recordedSkipReason?: string;
   recordedPhotoFileName?: string;
   recordedPhotoSizeBytes?: number;
+  recordedEscalationReason?: string;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -236,10 +259,12 @@ export default function CurrentStepCard({
   const [sopError, setSopError] = useState<string | null>(null);
   const [sopCitation, setSopCitation] = useState<SopCitation | null>(null);
   const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
+  const [escalationReason, setEscalationReason] = useState("");
   const detailFieldId = useId();
   const skipFieldId = useId();
   const photoFieldId = useId();
   const safetyFieldId = useId();
+  const escalationFieldId = useId();
   const safetyGateBlocking = Boolean(step.safetyWarning) && !safetyAcknowledged;
 
   useEffect(() => {
@@ -253,6 +278,7 @@ export default function CurrentStepCard({
     setSopError(null);
     setSopCitation(null);
     setSafetyAcknowledged(false);
+    setEscalationReason("");
   }, [step.stepIndex]);
 
   function handleToggleSafetyAcknowledged() {
@@ -374,6 +400,31 @@ export default function CurrentStepCard({
 
     logger.info("diagnostic step skipped", { correlationId, sessionId });
     trackEvent("maintenance_session_skip_success", { correlationId, properties: { sessionId } });
+    onAdvanced?.(result.value);
+  }
+
+  async function handleEscalate() {
+    const trimmedReason = escalationReason.trim();
+    if (pending || !sessionId || !trimmedReason) return;
+
+    const correlationId = crypto.randomUUID();
+    setPending(true);
+    setError(null);
+    logger.info("escalating diagnostic session", { correlationId, sessionId });
+    trackEvent("maintenance_session_escalate_attempt", { correlationId, properties: { sessionId } });
+
+    const result = await escalateDiagnosticSession(sessionId, trimmedReason);
+
+    setPending(false);
+    if (!result.ok) {
+      logger.error("failed to escalate diagnostic session", { correlationId, sessionId, code: result.error.code });
+      trackEvent("maintenance_session_escalate_failure", { correlationId, properties: { sessionId, code: result.error.code } });
+      setError(result.error.message);
+      return;
+    }
+
+    logger.info("diagnostic session escalated", { correlationId, sessionId });
+    trackEvent("maintenance_session_escalate_success", { correlationId, properties: { sessionId } });
     onAdvanced?.(result.value);
   }
 
@@ -576,6 +627,30 @@ export default function CurrentStepCard({
             重新開始
           </button>
         </p>
+      )}
+      {recordedEscalationReason && (
+        <p>
+          已升級此案例,原因:<span>{recordedEscalationReason}</span>
+        </p>
+      )}
+      {sessionId && !recordedEscalationReason && (
+        <>
+          <p>
+            <label htmlFor={escalationFieldId}>升級原因</label>
+            <br />
+            <textarea
+              id={escalationFieldId}
+              value={escalationReason}
+              onChange={(event) => setEscalationReason(event.target.value)}
+              disabled={pending}
+            />
+          </p>
+          <p>
+            <button type="button" onClick={handleEscalate} disabled={pending || !escalationReason.trim()}>
+              升級此案例
+            </button>
+          </p>
+        </>
       )}
       {error && <ErrorMessage message={error} />}
     </section>

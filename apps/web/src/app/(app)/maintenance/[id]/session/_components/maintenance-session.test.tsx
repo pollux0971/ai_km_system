@@ -4,6 +4,7 @@ import MaintenanceSession from "./maintenance-session";
 import { getMaintenanceCase } from "@/lib/maintenance-cases";
 import {
   createDiagnosticSession,
+  escalateDiagnosticSession,
   getDiagnosticSessionForCase,
   goToPreviousStep,
   restartDiagnosticSession,
@@ -23,6 +24,7 @@ vi.mock("@/lib/diagnostic-sessions", () => ({
   goToPreviousStep: vi.fn(),
   restartDiagnosticSession: vi.fn(),
   skipDiagnosticStep: vi.fn(),
+  escalateDiagnosticSession: vi.fn(),
 }));
 
 const mockedGetMaintenanceCase = vi.mocked(getMaintenanceCase);
@@ -32,6 +34,7 @@ const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
 const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
+const mockedEscalateDiagnosticSession = vi.mocked(escalateDiagnosticSession);
 
 const sampleCase = {
   id: "case1",
@@ -56,6 +59,7 @@ beforeEach(() => {
   mockedGoToPreviousStep.mockReset();
   mockedRestartDiagnosticSession.mockReset();
   mockedSkipDiagnosticStep.mockReset();
+  mockedEscalateDiagnosticSession.mockReset();
 });
 
 describe("MaintenanceSession (E07-S006)", () => {
@@ -267,5 +271,17 @@ describe("MaintenanceSession (E07-S006)", () => {
     render(<MaintenanceSession id="case1" />);
 
     expect(await screen.findByText("現場照片.jpg", { exact: false })).toBeInTheDocument();
+  });
+
+  it("E07-S018: shows a previously recorded escalation reason when the session already has one", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleSession, status: "ESCALATED" as const, lastEscalationReason: "現場情況超出可自行處理範圍" },
+    });
+
+    render(<MaintenanceSession id="case1" />);
+
+    expect(await screen.findByText("現場情況超出可自行處理範圍")).toBeInTheDocument();
   });
 });

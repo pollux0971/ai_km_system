@@ -473,3 +473,36 @@ test("E07-S017: going back to a high-risk step requires re-acknowledging the war
   await expect(page.getByLabel("我已閱讀並了解上述安全警告")).not.toBeChecked();
   await expect(page.getByRole("button", { name: "異常已排除" })).toBeDisabled();
 });
+
+test("E07-S018: typing a reason and clicking 升級此案例 marks the case escalated, hides the escalation UI, and shows the recorded reason", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByLabel("升級原因").fill("現場情況超出可自行處理範圍");
+  await page.getByRole("button", { name: "升級此案例" }).click();
+
+  // exact:true — the recorded-reason paragraph's own text starts with
+  // "已升級此案例", which would otherwise collide with the status span
+  // under the default substring match, same class of accidental-collision
+  // fix E07-S004's own EVIDENCE already documents for exact:true.
+  await expect(page.getByText("已升級", { exact: true })).toBeVisible();
+  await expect(page.getByText("現場情況超出可自行處理範圍")).toBeVisible();
+  await expect(page.getByRole("button", { name: "升級此案例" })).not.toBeVisible();
+});
+
+test("E07-S018: 升級此案例 works even when a high-risk step's safety warning hasn't been acknowledged yet", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  // Deliberately do NOT check 我已閱讀並了解上述安全警告 or select an option
+  // first — E07-S018's own gate (escalation) is independent of E07-S017's
+  // safety-confirmation gate, see current-step-card.tsx's own doc comment.
+  await page.getByLabel("升級原因").fill("現場情況超出可自行處理範圍");
+  await page.getByRole("button", { name: "升級此案例" }).click();
+
+  // exact:true — the recorded-reason paragraph's own text starts with
+  // "已升級此案例", which would otherwise collide with the status span
+  // under the default substring match, same class of accidental-collision
+  // fix E07-S004's own EVIDENCE already documents for exact:true.
+  await expect(page.getByText("已升級", { exact: true })).toBeVisible();
+});

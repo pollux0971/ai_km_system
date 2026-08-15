@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 26 | 0 | 0 | 1 | 4 |
+| E05 Knowledge Management Experience | 31 | 26 | 1 | 0 | 1 | 3 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 79 | 0 | 0 | 1 | 95 |
+| **合計** | **175** | 79 | 1 | 0 | 1 | 94 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -130,7 +130,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S025 | approved | story/E05-S025-archive-document-action | [E05-S025.md](E05-S025.md) | 獨立審核 APPROVE(Archive document action;`archived?: boolean` 新增至 `KnowledgeBaseDocument`,`listKnowledgeBaseDocuments` 的 `archived` 為視圖切換而非 include-toggle,鏡射 E03-S026;`KnowledgeDocumentArchiveToggle` 刻意不留本地 state,因所在清單 item 一旦視圖切換就會整個消失;1 個 MAJOR(獨立審核發現:已封存視圖隱藏上傳元件後,`KnowledgeDocumentUpload` 可在上傳中途 unmount,其非同步序列無 unmount 防護仍會呼叫 stale 的 `refetchDocuments` closure,靜默用錯誤視圖覆蓋畫面——修正為讀取每次 render 同步更新的 `viewingArchivedRef.current`,以對抗性還原驗證修法必要且有效)已修正並複驗;審核者獨立重跑 typecheck/lint/build/826 unit/148 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致) |
 | E05-S026 | approved | story/E05-S026-delete-document-confirmation | [E05-S026.md](E05-S026.md) | 獨立審核 APPROVE(Delete document confirmation;`deleteKnowledgeBaseDocument` 真實移除,鏡射 E03-S025 deleteConversation,跨知識庫防呆+重複刪除冪等皆驗證;`KnowledgeDocumentDeleteButton` 鏡射 DeleteConversation 的 role="alertdialog" 確認流程,但無 cascade(文件無子實體)、無導覽(活在清單項目非詳情頁)、兩個視圖皆顯示(封存與刪除正交);審核者專門分析本 story 是否重演 S025 剛發現的 stale-closure race,確認刪除操作無人工延遲、`onDeleted` 直接沿用已修正的 `refetchDocuments`,結構上排除同類風險;0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/845 unit/149 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
 | E05-S027 | approved | story/E05-S027-document-permission-editor | [E05-S027.md](E05-S027.md) | 獨立審核 APPROVE(Document permission editor;`visibleToRoles?: Role[]` 新增至 `KnowledgeBaseDocument`,直接套用 E05-S006 已核准的「純設定非強制執行」判斷,不重新跑 advisor;`KnowledgeDocumentPermissionEditor` 組合 S006 角色 checkbox 內容模型與 S022 inline 展開/收合結構;審核者專門分析並排除本 story 重演 S025 race condition 的可能(`visibleToRoles` 只有自己的 setter 會變更,單使用者 mock 系統無外部並行修改風險);誠實揭露並經審核者獨立複驗兩則 DEV 階段流程雜訊——背景指令互相干擾導致一次假性 build 失敗與一次假性 E2E 中斷(與程式碼無關,乾淨重跑後確認皆綠)、branch 延遲建立但 main 未受影響(git 歷史複驗確認);0 個 BLOCKER/MAJOR/MINOR;0 次真正 FIX 循環;審核者獨立重跑 typecheck/lint/build/865 unit/150 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
-| E05-S028 | todo | | | |
+| E05-S028 | done | story/E05-S028-kb-usage-stats-thin-slice | [E05-S028.md](E05-S028.md) | 待獨立審核 |
 | E05-S029 | todo | | | |
 | E05-S030 | todo | | | |
 | E05-S031 | todo | | | |

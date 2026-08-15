@@ -45,6 +45,22 @@ function sidebarNav(page: import("@playwright/test").Page) {
   return page.getByRole("navigation", { name: "主導覽" });
 }
 
+/**
+ * E07-S006: submitting now lands on the new case's diagnostic session
+ * (/maintenance/[id]/session), not back on /maintenance directly — see
+ * page.tsx's own updated doc comment. Returns to the home list via the
+ * session page's own in-app "返回維修助手首頁" link, NOT page.goto(): a
+ * hard reload wipes the mock AuthClient's in-memory session (see this
+ * file's own top doc comment) and would redirect to /login instead of
+ * reaching the list.
+ */
+async function submitAndReturnToList(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "建立案例" }).click();
+  await page.waitForURL((url) => /^\/maintenance\/[^/]+\/session$/.test(url.pathname));
+  await page.getByRole("link", { name: "返回維修助手首頁" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+}
+
 test("E07-S001: maintenance home shows the seeded maintenance cases to a maintenance_engineer", async ({ page }) => {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
@@ -82,9 +98,7 @@ test("E07-S002: creating a maintenance case for a chosen equipment adds it to th
   // default — why the equivalent unit test never hit this), and
   // "搜尋錯誤代碼(選填)" contains "錯誤代碼(選填)" as a substring.
   await page.getByLabel("錯誤代碼(選填)", { exact: true }).selectOption({ label: "E305 — 氣壓不足" });
-  await page.getByRole("button", { name: "建立案例" }).click();
-
-  await page.waitForURL((url) => url.pathname === "/maintenance");
+  await submitAndReturnToList(page);
   await expect(page.getByText("空壓機 A")).toBeVisible();
   await expect(page.getByText("序號:SN-2026-0042")).toBeVisible();
   await expect(page.getByText("錯誤代碼:E305 — 氣壓不足")).toBeVisible();
@@ -102,9 +116,7 @@ test("E07-S005: a typed problem description becomes the case's title, replacing 
 
   await page.getByLabel("選擇設備").selectOption({ label: "CNC 加工機 2 號" });
   await page.getByLabel("問題描述(選填)").fill("加工精度異常，尺寸公差超出範圍");
-  await page.getByRole("button", { name: "建立案例" }).click();
-
-  await page.waitForURL((url) => url.pathname === "/maintenance");
+  await submitAndReturnToList(page);
   await expect(page.getByText("加工精度異常，尺寸公差超出範圍")).toBeVisible();
   await expect(page.getByText("CNC 加工機 2 號", { exact: true })).not.toBeVisible();
 });
@@ -120,9 +132,7 @@ test("E07-S003: a maintenance case can still be created with equipment alone, le
   await page.waitForURL((url) => url.pathname === "/maintenance/new");
 
   await page.getByLabel("選擇設備").selectOption({ label: "傳送帶馬達" });
-  await page.getByRole("button", { name: "建立案例" }).click();
-
-  await page.waitForURL((url) => url.pathname === "/maintenance");
+  await submitAndReturnToList(page);
   const newCaseItem = page.getByText("傳送帶馬達").locator("..");
   await expect(newCaseItem.getByText(/^序號:/)).toHaveCount(0);
 });

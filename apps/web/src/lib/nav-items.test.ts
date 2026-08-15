@@ -100,4 +100,16 @@ describe("rolesRequiredFor (E01-S017)", () => {
   it("returns undefined for a path not listed in NAV_ITEMS (e.g. /profile) — open by design, not an oversight", () => {
     expect(rolesRequiredFor("/profile")).toBeUndefined();
   });
+
+  it("(E07-S006) inherits the parent's allow-list for routes nested under a role-restricted href", () => {
+    expect(rolesRequiredFor("/maintenance/new")).toEqual(["maintenance_engineer", "super_administrator"]);
+    expect(rolesRequiredFor("/maintenance/case-sample-1/session")).toEqual([
+      "maintenance_engineer",
+      "super_administrator",
+    ]);
+  });
+
+  it("(E07-S006) does not match an unrelated route that merely shares a prefix string, not a path segment", () => {
+    expect(rolesRequiredFor("/maintenance-report")).toBeUndefined();
+  });
 });

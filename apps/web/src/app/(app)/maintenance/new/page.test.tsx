@@ -73,14 +73,14 @@ describe("NewMaintenanceCasePage (E07-S002)", () => {
     expect(screen.getByRole("link", { name: "取消" })).toHaveAttribute("href", "/maintenance");
   });
 
-  it("submits the selected equipmentId with an empty serial number, no error code, and no problem description, then redirects to /maintenance and refreshes the router cache", async () => {
+  it("submits the selected equipmentId with an empty serial number, no error code, and no problem description, then redirects to the new case's diagnostic session and refreshes the router cache", async () => {
     mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
 
     render(<NewMaintenanceCasePage />);
     fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
     fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/maintenance"));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(`/maintenance/${sampleCase.id}/session`));
     expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "", "", "");
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });

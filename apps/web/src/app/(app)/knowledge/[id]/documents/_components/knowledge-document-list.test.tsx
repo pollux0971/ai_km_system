@@ -391,6 +391,18 @@ describe("KnowledgeDocumentList — processing failure state (E05-S020)", () => 
     await screen.findByText("損毀二.pdf");
     expect(screen.getAllByText("處理失敗")).toHaveLength(1);
   });
+
+  it("renders 處理失敗 with role=alert (E05-S029)", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "損毀檔案.pdf", sizeBytes: 500, status: "failed", uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("處理失敗");
+  });
 });
 
 describe("KnowledgeDocumentList — retry processing action (E05-S021)", () => {
@@ -935,5 +947,63 @@ describe("KnowledgeDocumentList — document permission editor (E05-S027)", () =
     await waitFor(() => expect(mockedUpdateKnowledgeBaseDocumentVisibleRoles).toHaveBeenCalledWith("kb1", "doc1", ["general_user"]));
     expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(1);
     expect(screen.getByText("文件.pdf")).toBeInTheDocument();
+  });
+});
+
+describe("KnowledgeDocumentList — document state badges (E05-S029)", () => {
+  it("shows a 已封存 status badge for an archived document", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "已封存的.pdf", sizeBytes: 100, archived: true, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    // Wait for real content first — LoadingIndicator also renders
+    // role="status" ("載入中…") while state.status === "loading", so an
+    // unscoped findByRole("status") can resolve to that transient
+    // element instead of waiting for this document's own badge, same
+    // "wait for known loaded content before querying more specifically"
+    // pattern every other test in this file already follows.
+    await screen.findByText("已封存的.pdf");
+    expect(screen.getByRole("status")).toHaveTextContent("已封存");
+  });
+
+  it("does not show a 已封存 badge for a document that isn't archived", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "作用中的.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("作用中的.pdf");
+    expect(screen.queryByText("已封存")).not.toBeInTheDocument();
+  });
+
+  it("shows both 處理失敗 and 已封存 badges together for a document that is both failed and archived", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "doc1",
+          knowledgeBaseId: "kb1",
+          name: "又失敗又封存.pdf",
+          sizeBytes: 100,
+          status: "failed",
+          archived: true,
+          uploadedAt: "2026-08-15T00:00:00.000Z",
+        },
+      ],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("又失敗又封存.pdf");
+    expect(screen.getByRole("alert")).toHaveTextContent("處理失敗");
+    expect(screen.getByText("已封存")).toBeInTheDocument();
   });
 });

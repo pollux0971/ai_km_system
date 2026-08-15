@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
@@ -120,23 +120,44 @@ type State =
  * handleViewChange calls refetchDocuments(archived) directly — the
  * exact same "silent in-place refresh" already used after every mutation
  * on this page (upload/rename/retry/archive), just with an explicit
- * view argument instead of the default. That default (`= viewingArchived`)
- * is what every mutation's own onSuccess callback relies on:
- * archiving/unarchiving a document re-fetches the CURRENT view, which is
- * exactly what makes the just-toggled item disappear from it. The three
- * add-widgets (upload/URL import/text input) only render for the active
- * view — adding a document while looking at the archive would either
- * need to silently switch views out from under the user or leave the
- * newly-added (always non-archived, per KnowledgeBaseDocument.archived's
- * own doc comment) item invisible in the view still on screen; hiding
- * the widgets sidesteps both. A third empty-state message ("尚無已封存
- * 的文件。") covers viewing-archived-with-zero-results, same reasoning as
+ * view argument instead of the default. That default is what every
+ * mutation's own onSuccess callback relies on: archiving/unarchiving a
+ * document re-fetches the CURRENT view, which is exactly what makes the
+ * just-toggled item disappear from it. The three add-widgets (upload/URL
+ * import/text input) only render for the active view — adding a
+ * document while looking at the archive would either need to silently
+ * switch views out from under the user or leave the newly-added (always
+ * non-archived, per KnowledgeBaseDocument.archived's own doc comment)
+ * item invisible in the view still on screen; hiding the widgets
+ * sidesteps both. A third empty-state message ("尚無已封存的文件。")
+ * covers viewing-archived-with-zero-results, same reasoning as
  * ConversationList's own third message — reusing "這個知識庫尚無文件。"
  * here would be false whenever active documents exist and only the
  * archive is empty. KnowledgeDocumentArchiveToggle receives
  * `document.archived ?? false` (absence-means-not-archived, per that
  * field's own doc comment) and the same `() => refetchDocuments()`
  * shape every other mutating child on this page already receives.
+ *
+ * refetchDocuments' default (`archived: boolean = viewingArchivedRef.
+ * current`) reads a ref, not the `viewingArchived` state variable
+ * directly — hiding the add-widgets while viewing the archive means
+ * KnowledgeDocumentUpload can now unmount mid-upload (switching views
+ * mid-upload unmounts it, since it stops matching `!viewingArchived`),
+ * but its own async upload sequence (knowledge-document-upload.tsx has
+ * no unmount guard around it, same as every sibling add-widget) keeps
+ * running and still calls the `onUploaded` it was given when it
+ * mounted. That callback is a `refetchDocuments` closure from the
+ * render where the upload started — if its default read the plain
+ * `viewingArchived` variable, it would freeze whatever view was active
+ * at that render forever, and the stale callback firing after a view
+ * switch would silently overwrite the now-displayed view's list with
+ * the OTHER view's documents while the toggle buttons still claimed the
+ * view never changed. The ref is mutated on every render (see below),
+ * so a default relying on `.current` always reads whichever view is
+ * actually on screen at the moment the callback fires, regardless of
+ * which render originally captured it — turning every stale mutation
+ * callback into "refresh whatever the user is currently looking at",
+ * which is the only reading that's ever correct.
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -155,6 +176,8 @@ type State =
 export default function KnowledgeDocumentList({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [viewingArchived, setViewingArchived] = useState(false);
+  const viewingArchivedRef = useRef(viewingArchived);
+  viewingArchivedRef.current = viewingArchived;
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +218,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
     };
   }, [id]);
 
-  async function refetchDocuments(archived: boolean = viewingArchived) {
+  async function refetchDocuments(archived: boolean = viewingArchivedRef.current) {
     const correlationId = crypto.randomUUID();
     logger.info("refreshing document list", { correlationId, id, archived });
     const documentsResult = await listKnowledgeBaseDocuments(id, archived);

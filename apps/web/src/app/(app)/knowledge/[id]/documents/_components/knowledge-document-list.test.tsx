@@ -700,4 +700,73 @@ describe("KnowledgeDocumentList — archive document action (E05-S025)", () => {
     expect(mockedUnarchiveKnowledgeBaseDocument).toHaveBeenCalledWith("kb1", "doc1");
     expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(3, "kb1", true);
   });
+
+  it("a stale in-flight upload started before a view switch refreshes the CURRENTLY-viewed view on completion, not the view active when it started", async () => {
+    // Regression test: KnowledgeDocumentUpload is hidden (unmounted) while
+    // viewingArchived is true, but its own async upload sequence has no
+    // unmount guard and still calls onUploaded when it finishes. Before
+    // refetchDocuments' default read a ref, a slow upload started on the
+    // active view that finished AFTER the user switched to the archived
+    // view would silently overwrite the now-displayed archived list with
+    // the active one, while the view-switch buttons still claimed 已封存文件
+    // was selected.
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "existing-archived",
+            knowledgeBaseId: "kb1",
+            name: "既有已封存.pdf",
+            sizeBytes: 50,
+            archived: true,
+            uploadedAt: "2026-08-15T00:00:00.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "existing-archived",
+            knowledgeBaseId: "kb1",
+            name: "既有已封存.pdf",
+            sizeBytes: 50,
+            archived: true,
+            uploadedAt: "2026-08-15T00:00:00.000Z",
+          },
+        ],
+      });
+    let resolveAdd!: (value: Awaited<ReturnType<typeof addKnowledgeBaseDocument>>) => void;
+    mockedAddKnowledgeBaseDocument.mockReturnValue(new Promise((resolve) => (resolveAdd = resolve)));
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    const file = new File([new Uint8Array(100)], "上傳中的檔案.pdf");
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    // Switch views WHILE the upload's addKnowledgeBaseDocument call is
+    // still pending — this unmounts KnowledgeDocumentUpload.
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+    await screen.findByText("既有已封存.pdf");
+    expect(screen.queryByLabelText("上傳文件")).not.toBeInTheDocument();
+
+    // Now let the stale, in-flight upload complete.
+    resolveAdd({
+      ok: true,
+      value: { id: "new-doc", knowledgeBaseId: "kb1", name: "上傳中的檔案.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+    });
+
+    // The stale upload's own onUploaded fires and refetches — it must
+    // reflect the CURRENTLY-viewed (archived) list, not silently
+    // overwrite it with the active view the upload started under.
+    await waitFor(() => expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(3));
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(3, "kb1", true);
+    expect(screen.getByText("既有已封存.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("上傳中的檔案.pdf")).not.toBeInTheDocument();
+  });
 });

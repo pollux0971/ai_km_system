@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 18 | 1 | 0 | 0 | 6 |
+| E07 Maintenance Assistant Experience | 25 | 19 | 0 | 0 | 0 | 6 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 101 | 1 | 0 | 1 | 72 |
+| **合計** | **175** | 102 | 0 | 0 | 1 | 72 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -157,7 +157,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S016 | approved | story/E07-S016-safety-warning-component | [E07-S016.md](E07-S016.md) | 獨立審核 APPROVE(Safety warning component;判定主動、無條件顯示(role="alert"),不比照 S014/S015 的 toggle 面板模式——安全資訊不該藏在點擊後面;不 gated 在 sessionId(非按鈕,不撞 S007 凍結測試);新增 DiagnosticStep.safetyWarning? 純欄位,不建獨立 async 模組;僅 step 0 有警告;不做確認/阻擋邏輯(留給 E07-S017);0 次 FIX 循環;本 session 至今唯一不需要新增 lib 檔案的 story;maintenance-session.tsx/diagnostic-sessions.ts 零異動;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1067/1067 unit test,181/181 E2E 全過;另以獨立對抗性突變(移除整個顯示條件,永遠渲染)複驗,精準命中 7 個測試——不只預期的空狀態測試,還包括 S008/S010/S011/S012/S014/S015 各自的錯誤路徑測試(因為無條件的 role="alert" 會與同檔案內任何真正的錯誤訊息 role="alert" 衝突),比預期更完整地證實這個條件式渲染的必要性;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S017 | approved | story/E07-S017-high-risk-confirmation-gate | [E07-S017.md](E07-S017.md) | 獨立審核 APPROVE(High-risk confirmation gate;重用 step.safetyWarning 存在本身作為 gate 觸發信號(不新增第二個 highRisk 欄位);gate 選項+略過按鈕,不 gate 上一步/重新開始/AI 說明/SOP 引用來源;純前端狀態,stepIndex 變更時重置;1 次 FIX 循環(誠實記錄:S016 為 step 0 加上 safetyWarning 這個真實跨 story 互動,讓 12 個既有測試——2 unit + 10 E2E——的前提過期,逐一新增「先勾選確認框」互動步驟,斷言逐字未動,非測試技術性錯誤亦非實作錯誤);diagnostic-steps.ts/diagnostic-sessions.ts 零異動;審核者獨立以原始 diff 逐一核對這 12 個既有測試的異動皆為純新增、無任何既有斷言被改動或刪除;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1073/1073 unit test,183/183 E2E 全過;另以獨立對抗性突變(移除 stepIndex 變更時的 safetyAcknowledged 重置)複驗,精準命中唯一針對這個保證設計的 E2E 測試,且證實這個行為在 unit 層確實零覆蓋(符合預期,純 E2E 層保證);0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S018 | approved | story/E07-S018-escalation-action | [E07-S018.md](E07-S018.md) | 獨立審核 APPROVE(Escalation action;真正的 mutation(status→ESCALATED),不同於 S014-S017 的唯讀面板/UI gating;新 lastEscalationReason 欄位(不重用 lastSkipReason);不推進 currentStepIndex、不清空既有答案;repeat-guard 用 allow-list(OPEN/IN_PROGRESS)涵蓋 DiagnosticSessionStatus 完整終態;restartDiagnosticSession 同步清空;刻意不 gate 在 S017 安全確認框後(求助動作,非繼續冒險);1 次 FIX 循環(本 story 自己新增的 2 個 E2E 測試 selector 撞名,exact:true 修正,同 S004/S008 先例);maintenance-session.tsx 是 S012 後第一次真正修改;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1089/1089 unit test,185/185 E2E 全過;另以獨立對抗性突變(反射性把 S017 安全確認 gate 也套用到升級按鈕)複驗,同時精準命中 unit 與 E2E 兩層各自專屬的獨立性驗證測試,證實兩層都真正在測這個保證;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
-| E07-S019 | done | story/E07-S019-completion-summary | [E07-S019.md](E07-S019.md) | DEV 完成,待獨立審核。S018 的姊妹能力(相反終態:RESOLVED vs ESCALATED);completeDiagnosticSession(sessionId, summary)幾乎逐字鏡射 escalateDiagnosticSession;新 lastCompletionSummary 欄位;共用 allow-list repeat-guard 這次雙向真正可達(escalate 後 complete 被拒、complete 後 escalate 被拒);restartDiagnosticSession 同步清空;新增 sessionAlreadyTerminal 共用旗標同時控制兩種終態表單的顯示,唯一必要地觸碰 S018 既有程式碼(升級表單顯示條件);0 次 FIX 循環;對抗性複驗證實共用旗標同時肩負自我隱藏與交叉隱藏 |
+| E07-S019 | approved | story/E07-S019-completion-summary | [E07-S019.md](E07-S019.md) | 獨立審核 APPROVE(Completion summary;S018 的姊妹能力(相反終態:RESOLVED vs ESCALATED);completeDiagnosticSession(sessionId, summary)幾乎逐字鏡射 escalateDiagnosticSession;新 lastCompletionSummary 欄位(不重用 lastEscalationReason);不推進 currentStepIndex、不清空既有答案;共用 allow-list repeat-guard 這次雙向真正可達(escalate 後 complete 被拒、complete 後 escalate 被拒,皆有測試);restartDiagnosticSession 同步清空;不 gate 在 S017 安全確認框後(同 S018 理由);新增 sessionAlreadyTerminal 共用旗標同時控制兩種終態表單的顯示,唯一必要地觸碰 S018 既有程式碼(升級表單顯示條件從 !recordedEscalationReason 改為 !sessionAlreadyTerminal,對既有測試零風險);0 次 FIX 循環;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1108/1108 unit test,187/187 E2E 全過;另以獨立對抗性突變、鎖定與 DEV 自己不同的層(後端 repeat-guard 從 allow-list 窄化為只擋 RESOLVED 的 block-list,模擬「加第二個終態動作時忘記一併擋掉另一個」)複驗,精準命中唯一預期的 1 個測試(雙向 guard 的 already-escalated 情境),零波及其他測試,證實這個共用 guard 真正在被測試且範圍精確;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S020 | todo | | | |
 | E07-S021 | todo | | | |
 | E07-S022 | todo | | | |

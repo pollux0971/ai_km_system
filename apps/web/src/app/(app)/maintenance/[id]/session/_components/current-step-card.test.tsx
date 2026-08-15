@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CurrentStepCard from "./current-step-card";
-import { goToPreviousStep, restartDiagnosticSession, selectDecisionOption } from "@/lib/diagnostic-sessions";
+import { goToPreviousStep, restartDiagnosticSession, selectDecisionOption, skipDiagnosticStep } from "@/lib/diagnostic-sessions";
 
 vi.mock("@/lib/diagnostic-sessions", () => ({
   selectDecisionOption: vi.fn(),
   goToPreviousStep: vi.fn(),
   restartDiagnosticSession: vi.fn(),
+  skipDiagnosticStep: vi.fn(),
 }));
 
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
+const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
 
 describe("CurrentStepCard (E07-S007)", () => {
   it("shows the 1-indexed step number and the step's instruction text", () => {
@@ -258,5 +260,97 @@ describe("CurrentStepCard restart action (E07-S011)", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("找不到這個診斷 session。");
     expect(onAdvanced).not.toHaveBeenCalled();
+  });
+});
+
+describe("CurrentStepCard skip-step action (E07-S012)", () => {
+  const stepWithOptions = {
+    stepIndex: 0,
+    instruction: "測試步驟內容",
+    options: [
+      { id: "opt-a", label: "選項甲" },
+      { id: "opt-b", label: "選項乙" },
+    ],
+  };
+  const skippedSession = {
+    id: "session1",
+    maintenanceCaseId: "case1",
+    status: "IN_PROGRESS" as const,
+    currentStepIndex: 1,
+    lastSkipReason: "現場暫時無法安全接近設備",
+    createdAt: "2026-08-15T00:00:00.000Z",
+    updatedAt: "2026-08-15T00:04:00.000Z",
+  };
+
+  beforeEach(() => {
+    mockedSkipDiagnosticStep.mockReset();
+  });
+
+  it("renders a 略過原因 textarea and 跳過此步驟 button alongside the options", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+
+    expect(screen.getByLabelText("略過原因")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "跳過此步驟" })).toBeInTheDocument();
+  });
+
+  it("does not render skip UI when the step has no options (nothing to skip)", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 1, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.queryByLabelText("略過原因")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "跳過此步驟" })).not.toBeInTheDocument();
+  });
+
+  it("keeps 跳過此步驟 disabled until a reason is typed", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "跳過此步驟" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("略過原因"), { target: { value: "現場暫時無法安全接近設備" } });
+
+    expect(screen.getByRole("button", { name: "跳過此步驟" })).not.toBeDisabled();
+  });
+
+  it("stays disabled for a whitespace-only reason", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("略過原因"), { target: { value: "   " } });
+
+    expect(screen.getByRole("button", { name: "跳過此步驟" })).toBeDisabled();
+  });
+
+  it("clicking 跳過此步驟 calls skipDiagnosticStep with the trimmed reason and invokes onAdvanced on success", async () => {
+    mockedSkipDiagnosticStep.mockResolvedValue({ ok: true, value: skippedSession });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={onAdvanced} />);
+    fireEvent.change(screen.getByLabelText("略過原因"), { target: { value: "  現場暫時無法安全接近設備  " } });
+    fireEvent.click(screen.getByRole("button", { name: "跳過此步驟" }));
+
+    expect(mockedSkipDiagnosticStep).toHaveBeenCalledWith("session1", "現場暫時無法安全接近設備");
+    await waitFor(() => expect(onAdvanced).toHaveBeenCalledWith(skippedSession));
+  });
+
+  it("shows an error message and does not call onAdvanced when skipping fails", async () => {
+    mockedSkipDiagnosticStep.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "請填寫略過原因。" } });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={onAdvanced} />);
+    fireEvent.change(screen.getByLabelText("略過原因"), { target: { value: "原因" } });
+    fireEvent.click(screen.getByRole("button", { name: "跳過此步驟" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("請填寫略過原因。");
+    expect(onAdvanced).not.toHaveBeenCalled();
+  });
+
+  it("shows a previously recorded skip reason when the session already has one", () => {
+    render(<CurrentStepCard step={{ stepIndex: 1, instruction: "測試步驟內容" }} recordedSkipReason="現場暫時無法安全接近設備" />);
+
+    expect(screen.getByText("現場暫時無法安全接近設備")).toBeInTheDocument();
+  });
+
+  it("shows nothing extra when there is no recorded skip reason yet", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByText("已略過此步驟", { exact: false })).not.toBeInTheDocument();
   });
 });

@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 11 | 0 | 0 | 0 | 14 |
+| E07 Maintenance Assistant Experience | 25 | 11 | 1 | 0 | 0 | 13 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 94 | 0 | 0 | 1 | 80 |
+| **合計** | **175** | 94 | 1 | 0 | 1 | 79 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -150,7 +150,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S009 | approved | story/E07-S009-free-text-detail | [E07-S009.md](E07-S009.md) | 獨立審核 APPROVE(Free-text detail;比照 `createMaintenanceCase` 既有的「必要選擇+選填自由文字一次提交」先例,`selectDecisionOption` 新增選填 `detail` 參數,不做獨立動作;新增顯示已記錄補充說明(避免寫入黑洞);1 次 FIX 循環(production bug——巢狀 text node 導致 RTL exact-match 找不到元素,已比照既有 `<span>` 慣例修正,非測試錯誤);審核者獨立重跑 typecheck/lint/build 皆 force 全量、995 unit/168 E2E 皆綠(E2E 過程中同一個已知的無關 E05 spec 系統負載瞬斷,再次以隔離重跑確認為環境雜訊);審核者獨立核對 EVIDENCE 自報的操作失誤(複驗後 checkout 未先 add)確認已誠實記錄且完整恢復;另以與 DEV 階段不同的獨立對抗性突變(UI 層永遠帶入第三參數)複驗,證實同時破壞新測試與既有 S008 測試,證明「空白時省略參數」的設計是真正必要而非巧合;0 個 BLOCKER/MAJOR/MINOR) |
 | E07-S010 | approved | story/E07-S010-previous-step-action | [E07-S010.md](E07-S010.md) | 獨立審核 APPROVE(Previous-step action;對稱延伸 S008/S009 資料模型:`goToPreviousStep` 讓 currentStepIndex 退一格並清空 lastSelectedOptionId/lastFreeTextDetail,status 刻意不退回 OPEN;0 次 FIX 循環(IMPLEMENT 階段主動抓到並修正補充說明文字框步驟切換後殘留舊草稿的真實 bug,新增 useEffect 重置,非事後補救);審核者獨立重跑 typecheck/lint/build 皆 force 全量、1004 unit/170 E2E 皆綠(乾淨無 flaky);獨立確認 maintenance-session.tsx 零異動屬實;另以與 DEV 階段不同的獨立對抗性突變(移除 currentStepIndex===0 guard)複驗,恰好 1 個測試精準捕捉;0 個 BLOCKER/MAJOR/MINOR) |
 | E07-S011 | approved | story/E07-S011-restart-diagnostic | [E07-S011.md](E07-S011.md) | 獨立審核 APPROVE(Restart diagnostic;對稱延伸 S008-S010 資料模型:`restartDiagnosticSession` 是 session 層級動作(非步驟層級),重置回 createDiagnosticSession 的確切初始狀態,包括 status 退回 OPEN(與 goToPreviousStep 刻意不動 status 相反);UI 顯示不受步驟位置限制,只要 sessionId 存在即可用;刻意不加確認對話框(E07-S017 是後面獨立 story);0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build 皆 force 全量、1013 unit/172 E2E 皆綠(乾淨無 flaky);獨立確認 maintenance-session.tsx 零異動屬實;另以與 DEV 階段不同的獨立對抗性突變(移除欄位清空邏輯)複驗,恰好 1 個測試精準捕捉;0 個 BLOCKER/MAJOR/MINOR) |
-| E07-S012 | todo | | | |
+| E07-S012 | done | story/E07-S012-skip-step-with-reason | [E07-S012.md](E07-S012.md) | epic 完整標題「Skip-step UX with reason」——`skipDiagnosticStep` 的 reason 必填(與 S009 detail 選填相反),獨立 `lastSkipReason` 欄位(不重用 lastFreeTextDetail,語意不同);advances 但不記錄 lastSelectedOptionId;repeat-guard 同 selectDecisionOption 形狀;0 次 FIX 循環;1028 unit + 174 E2E 全綠;對抗性複驗必填驗證恰好 2 個專屬測試捕捉;maintenance-session.tsx 是 S010/S011 後第一次真正被修改(新增 1 個 prop);待 `/story-review` 獨立審核 |
 | E07-S013 | todo | | | |
 | E07-S014 | todo | | | |
 | E07-S015 | todo | | | |

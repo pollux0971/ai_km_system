@@ -30,17 +30,24 @@ export type DiagnosticSessionStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "ESC
  * recently picked; `undefined` until the first selection), plus, as of
  * E07-S009 "Free-text detail", `lastFreeTextDetail` (optional supplementary
  * text submitted alongside that same selection; `undefined` when none was
- * given). All three are plain, Team-A-owned progress markers — not a guess
- * at E08's real `DecisionSession`/`DecisionEvent` shape (E08-S08/S09, Team
- * B; zero contracts exist yet under contracts/ for either), and not a
- * graph position: `currentStepIndex` only ever advances one flat step at a
- * time via selectDecisionOption below, never branches (see
- * diagnostic-steps.ts's own top doc comment for why branching itself is
- * deliberately out of scope for Team A). Same "grow one field per story,
- * don't reach into a later story's own scope" discipline
- * maintenance-cases.ts's own doc comments already follow across S002-S005
- * — E07-S007 itself deliberately held off adding either field until a
- * story existed that actually changed them.
+ * given), plus, as of E07-S012 "Skip-step UX with reason",
+ * `lastSkipReason` (why the user skipped the step instead of answering
+ * it; `undefined` unless the most recent transition was a skip). A
+ * separate field from `lastFreeTextDetail` — not a reuse of the same
+ * slot — because the two mean different things: one is optional extra
+ * context alongside a real choice, the other is the mandatory
+ * justification for making no choice at all (see skipDiagnosticStep's own
+ * doc comment). All four are plain, Team-A-owned progress markers — not a
+ * guess at E08's real `DecisionSession`/`DecisionEvent` shape (E08-S08/S09,
+ * Team B; zero contracts exist yet under contracts/ for either), and not
+ * a graph position: `currentStepIndex` only ever advances one flat step
+ * at a time via selectDecisionOption/skipDiagnosticStep below, never
+ * branches (see diagnostic-steps.ts's own top doc comment for why
+ * branching itself is deliberately out of scope for Team A). Same "grow
+ * one field per story, don't reach into a later story's own scope"
+ * discipline maintenance-cases.ts's own doc comments already follow
+ * across S002-S005 — E07-S007 itself deliberately held off adding either
+ * field until a story existed that actually changed them.
  */
 export interface DiagnosticSession {
   id: string;
@@ -49,6 +56,7 @@ export interface DiagnosticSession {
   currentStepIndex: number;
   lastSelectedOptionId?: string;
   lastFreeTextDetail?: string;
+  lastSkipReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -296,6 +304,69 @@ export async function restartDiagnosticSession(sessionId: string): Promise<Resul
     status: "OPEN",
     lastSelectedOptionId: undefined,
     lastFreeTextDetail: undefined,
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E07-S012 "Skip-step UX with reason" (epic's own fuller title — the
+ * "with reason" is not decorative: unlike selectDecisionOption's optional
+ * `detail`, `reason` here is mandatory, rejected with VALIDATION_ERROR
+ * when empty/whitespace-only after trim). Advances `currentStepIndex` by
+ * exactly one — same flat, non-branching movement as selectDecisionOption,
+ * never a shadow implementation of Team B's DecisionEdge algorithm (see
+ * diagnostic-steps.ts's own top doc comment) — but records NO option
+ * (`lastSelectedOptionId` stays cleared): a skip is explicitly "no choice
+ * was made", not a disguised third option. Also clears any stale
+ * `lastFreeTextDetail` from a prior real answer, since neither concept
+ * applies to a skip. First successful call flips a fresh "OPEN" session
+ * to "IN_PROGRESS", same rule selectDecisionOption already follows — a
+ * skip is still a real diagnostic action, just one that explicitly
+ * declines to answer.
+ *
+ * Fails closed with NOT_FOUND for an unknown `sessionId` — same
+ * `readStore().find(...)` precedent every other lookup in this file
+ * already follows.
+ *
+ * Fails closed with VALIDATION_ERROR — sharing the code with two other
+ * distinct conditions, same "both are 'this call doesn't make sense right
+ * now'" reasoning selectDecisionOption's own doc comment already gives
+ * for its own two VALIDATION_ERROR cases:
+ *   1. `reason` is empty or whitespace-only — mandatory, unlike
+ *      selectDecisionOption's `detail`.
+ *   2. `session.currentStepIndex` no longer points at a step that HAS
+ *      options — same repeat-guard shape selectDecisionOption's own
+ *      guard follows: nothing to skip once the decision point is already
+ *      behind the session (current-step-card.tsx only renders the skip
+ *      UI when `step.options` is present, so this is structural, not
+ *      just client-hidden).
+ */
+export async function skipDiagnosticStep(sessionId: string, reason: string): Promise<Result<DiagnosticSession, ApiError>> {
+  const sessions = readStore();
+  const session = sessions.find((item) => item.id === sessionId);
+  if (!session) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個診斷 session。" } };
+  }
+
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請填寫略過原因。" } };
+  }
+
+  const currentStep = getCurrentDiagnosticStep(session.currentStepIndex);
+  if (!currentStep.options || currentStep.options.length === 0) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "目前步驟沒有可以略過的選項。" } };
+  }
+
+  const updated: DiagnosticSession = {
+    ...session,
+    currentStepIndex: session.currentStepIndex + 1,
+    lastSelectedOptionId: undefined,
+    lastFreeTextDetail: undefined,
+    lastSkipReason: trimmedReason,
+    status: session.status === "OPEN" ? "IN_PROGRESS" : session.status,
     updatedAt: new Date().toISOString(),
   };
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));

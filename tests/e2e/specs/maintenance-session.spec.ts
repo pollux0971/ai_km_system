@@ -287,3 +287,32 @@ test("E07-S011: 重新開始 is available even on the very first step", async ({
 
   await expect(page.getByRole("button", { name: "重新開始" })).toBeVisible();
 });
+
+test("E07-S012: 跳過此步驟 stays disabled until a reason is typed, then advances and records it", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  const skipButton = page.getByRole("button", { name: "跳過此步驟" });
+  await expect(skipButton).toBeDisabled();
+
+  await page.getByLabel("略過原因").fill("現場暫時無法安全接近設備");
+  await expect(skipButton).toBeEnabled();
+  await skipButton.click();
+
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+  await expect(page.getByText("進行中", { exact: true })).toBeVisible();
+  await expect(page.getByText("現場暫時無法安全接近設備")).toBeVisible();
+});
+
+test("E07-S012: skipping a second time is rejected (nothing left to skip), same repeat-guard shape as selecting an option twice", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+  await page.getByLabel("略過原因").fill("第一次略過原因");
+  await page.getByRole("button", { name: "跳過此步驟" }).click();
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+
+  const sessionsRaw = await page.evaluate(() => window.sessionStorage.getItem("ai-km:mock-diagnostic-sessions"));
+  const sessions = sessionsRaw ? (JSON.parse(sessionsRaw) as { currentStepIndex: number }[]) : [];
+  expect(sessions).toHaveLength(1);
+  expect(sessions[0]?.currentStepIndex).toBe(1);
+});

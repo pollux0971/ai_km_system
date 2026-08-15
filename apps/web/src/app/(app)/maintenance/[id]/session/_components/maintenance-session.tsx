@@ -39,8 +39,12 @@ type State =
  * it's a flat, deliberately non-branching sequence rather than a real
  * decision-tree traversal) plus E07-S009 "Free-text detail" (passing
  * `session.lastFreeTextDetail` down so a recorded note stays visible, not
- * a write-only void). Loading/error/not-found/loaded states mirror
- * KnowledgeDetail/ConversationDetail's own established pattern.
+ * a write-only void) plus E07-S010/S011 (上一步/重新開始, both reusing the
+ * same `sessionId`/`onAdvanced` props unchanged, zero diff to this file)
+ * plus E07-S012 "Skip-step UX with reason" (`session.lastSkipReason`,
+ * same "show the recorded value back" reasoning as S009's own detail).
+ * Loading/error/not-found/loaded states mirror KnowledgeDetail/
+ * ConversationDetail's own established pattern.
  *
  * `handleAdvanced` replaces `session` in-place within the already-narrowed
  * `loaded` state — same "the mutation's own response IS the new truth"
@@ -175,6 +179,7 @@ export default function MaintenanceSession({ id }: { id: string }) {
         step={getCurrentDiagnosticStep(session.currentStepIndex)}
         onAdvanced={handleAdvanced}
         recordedDetail={session.lastFreeTextDetail}
+        recordedSkipReason={session.lastSkipReason}
       />
       <p>
         <Link href="/maintenance">返回維修助手首頁</Link>

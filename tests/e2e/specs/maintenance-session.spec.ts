@@ -231,3 +231,32 @@ test("E07-S009: selecting an option without typing any detail advances normally 
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
   await expect(page.getByText("您的補充說明", { exact: false })).not.toBeVisible();
 });
+
+test("E07-S010: clicking 上一步 returns to the first step, clears the stale choice/detail, and allows choosing again", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByLabel("補充說明").fill("最初的觀察紀錄");
+  await page.getByRole("button", { name: "異常已排除" }).click();
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+
+  await page.getByRole("button", { name: "上一步" }).click();
+
+  await expect(page.getByRole("heading", { name: "步驟 1", level: 2 })).toBeVisible();
+  await expect(page.getByText("最初的觀察紀錄")).not.toBeVisible();
+  await expect(page.getByLabel("補充說明")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "異常已排除" })).toBeVisible();
+
+  // The repeat-guard no longer blocks a fresh selection after going back.
+  await page.getByRole("button", { name: "異常仍然存在" }).click();
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+});
+
+test("E07-S010: no 上一步 button is shown on the first step (nothing to go back to — the VALIDATION_ERROR guard for this case is covered at the unit level)", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+
+  await expect(page.getByRole("button", { name: "上一步" })).not.toBeVisible();
+});

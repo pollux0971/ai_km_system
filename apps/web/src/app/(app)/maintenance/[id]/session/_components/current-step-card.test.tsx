@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CurrentStepCard from "./current-step-card";
-import { selectDecisionOption } from "@/lib/diagnostic-sessions";
+import { goToPreviousStep, selectDecisionOption } from "@/lib/diagnostic-sessions";
 
 vi.mock("@/lib/diagnostic-sessions", () => ({
   selectDecisionOption: vi.fn(),
+  goToPreviousStep: vi.fn(),
 }));
 
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
+const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 
 describe("CurrentStepCard (E07-S007)", () => {
   it("shows the 1-indexed step number and the step's instruction text", () => {
@@ -156,5 +158,54 @@ describe("CurrentStepCard free-text detail (E07-S009)", () => {
     render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
 
     expect(screen.queryByText("您的補充說明", { exact: false })).not.toBeInTheDocument();
+  });
+});
+
+describe("CurrentStepCard previous-step action (E07-S010)", () => {
+  const advancedSession = {
+    id: "session1",
+    maintenanceCaseId: "case1",
+    status: "IN_PROGRESS" as const,
+    currentStepIndex: 0,
+    createdAt: "2026-08-15T00:00:00.000Z",
+    updatedAt: "2026-08-15T00:02:00.000Z",
+  };
+
+  beforeEach(() => {
+    mockedGoToPreviousStep.mockReset();
+  });
+
+  it("renders a 上一步 button when stepIndex is greater than 0", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 1, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "上一步" })).toBeInTheDocument();
+  });
+
+  it("does not render a 上一步 button on the first step", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.queryByRole("button", { name: "上一步" })).not.toBeInTheDocument();
+  });
+
+  it("clicking 上一步 calls goToPreviousStep and invokes onAdvanced with the updated session on success", async () => {
+    mockedGoToPreviousStep.mockResolvedValue({ ok: true, value: advancedSession });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 1, instruction: "測試步驟內容" }} onAdvanced={onAdvanced} />);
+    fireEvent.click(screen.getByRole("button", { name: "上一步" }));
+
+    expect(mockedGoToPreviousStep).toHaveBeenCalledWith("session1");
+    await waitFor(() => expect(onAdvanced).toHaveBeenCalledWith(advancedSession));
+  });
+
+  it("shows an error message and does not call onAdvanced when going back fails", async () => {
+    mockedGoToPreviousStep.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "已經是第一步。" } });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 1, instruction: "測試步驟內容" }} onAdvanced={onAdvanced} />);
+    fireEvent.click(screen.getByRole("button", { name: "上一步" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("已經是第一步。");
+    expect(onAdvanced).not.toHaveBeenCalled();
   });
 });

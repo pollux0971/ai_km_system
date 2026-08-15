@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 9 | 0 | 0 | 0 | 16 |
+| E07 Maintenance Assistant Experience | 25 | 9 | 1 | 0 | 0 | 15 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 92 | 0 | 0 | 1 | 82 |
+| **合計** | **175** | 92 | 1 | 0 | 1 | 81 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -148,7 +148,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S007 | approved | story/E07-S007-current-step-card | [E07-S007.md](E07-S007.md) | 獨立審核 APPROVE(Current-step card;開工前 `/advisor` 分析後自主採納「不 model Team B 決策樹分支」的設計界線,`lib/diagnostic-steps.ts` 新增單一、明確標示模擬(「（模擬步驟）」,同 answer-state.ts 慣例)、不持久化的 `DiagnosticStep`,取代 S006 自己 EVIDENCE 預告的佔位文字;S006 既有 E2E 斷言依其自身 AC 合理取代(同 E05-S020→S029 先例);0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build 皆 force 全量、972 unit/164 E2E 皆綠,另以與 DEV 階段不同的獨立對抗性突變(stepIndex 0→1)複驗,2 個測試跨 2 個檔案精準捕捉,確認 nav-items.ts 的既有安全修正未被觸碰;0 個 BLOCKER/MAJOR/MINOR) |
 | E07-S008 | approved | story/E07-S008-decision-options | [E07-S008.md](E07-S008.md) | 獨立審核 APPROVE(Decision options;守住 S007「不 model 分支」界線,選項終點單一(currentStepIndex 固定前進一格)但選擇誠實記錄(lastSelectedOptionId);首次選擇讓 status OPEN→IN_PROGRESS(訂正 S006/S007 皆誤植為「S007」的預測);1 次 FIX 循環(E2E locator 撞到步驟說明文字本身含「進行中」,同 E07-S004 exact:true 先例,非 production bug);審核者獨立重跑 typecheck/lint/build 皆 force 全量、984 unit/166 E2E 皆綠(E2E 過程中一個無關的 E05 spec 因系統負載(8 核心 load average 13-15)瞬斷,以 3 次隔離重跑+系統負載量測確認為環境雜訊、非退步);另以與 DEV 階段不同的獨立對抗性突變(移除 status flip 邏輯)複驗,恰好 1 個測試精準捕捉;0 個 BLOCKER/MAJOR/MINOR) |
 | E07-S009 | approved | story/E07-S009-free-text-detail | [E07-S009.md](E07-S009.md) | 獨立審核 APPROVE(Free-text detail;比照 `createMaintenanceCase` 既有的「必要選擇+選填自由文字一次提交」先例,`selectDecisionOption` 新增選填 `detail` 參數,不做獨立動作;新增顯示已記錄補充說明(避免寫入黑洞);1 次 FIX 循環(production bug——巢狀 text node 導致 RTL exact-match 找不到元素,已比照既有 `<span>` 慣例修正,非測試錯誤);審核者獨立重跑 typecheck/lint/build 皆 force 全量、995 unit/168 E2E 皆綠(E2E 過程中同一個已知的無關 E05 spec 系統負載瞬斷,再次以隔離重跑確認為環境雜訊);審核者獨立核對 EVIDENCE 自報的操作失誤(複驗後 checkout 未先 add)確認已誠實記錄且完整恢復;另以與 DEV 階段不同的獨立對抗性突變(UI 層永遠帶入第三參數)複驗,證實同時破壞新測試與既有 S008 測試,證明「空白時省略參數」的設計是真正必要而非巧合;0 個 BLOCKER/MAJOR/MINOR) |
-| E07-S010 | todo | | | |
+| E07-S010 | done | story/E07-S010-previous-step-action | [E07-S010.md](E07-S010.md) | 對稱延伸 S008/S009 資料模型:`goToPreviousStep` 讓 currentStepIndex 退一格並清空 lastSelectedOptionId/lastFreeTextDetail,status 刻意不退回 OPEN;0 次 FIX 循環(IMPLEMENT 階段主動抓到並修正補充說明文字框步驟切換後殘留舊草稿的真實 bug,新增 useEffect 重置,非事後補救);1004 unit + 170 E2E 全綠;對抗性複驗清空邏輯恰好 1 個專屬測試捕捉(已記取 S009 教訓,複驗前先 git add);待 `/story-review` 獨立審核 |
 | E07-S011 | todo | | | |
 | E07-S012 | todo | | | |
 | E07-S013 | todo | | | |

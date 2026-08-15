@@ -205,3 +205,55 @@ export async function selectDecisionOption(
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
   return { ok: true, value: updated };
 }
+
+/**
+ * E07-S010 "Previous-step action". Moves `currentStepIndex` back by
+ * exactly one and clears `lastSelectedOptionId`/`lastFreeTextDetail` —
+ * the choice/detail being left behind no longer describes "what's
+ * recorded for the step the session is now showing", so keeping them
+ * around would let a stale answer linger after the user has explicitly
+ * asked to reconsider it. `status` is deliberately left untouched: once a
+ * session has genuinely reached "IN_PROGRESS" (a real diagnostic action
+ * happened), going back to reconsider that action isn't "back to not
+ * started" — same reasoning selectDecisionOption's own doc comment gives
+ * for never downgrading status on an already-advanced session.
+ *
+ * Fails closed with NOT_FOUND for an unknown `sessionId` — same
+ * `readStore().find(...)` precedent every other lookup in this file
+ * already follows.
+ *
+ * Fails closed with VALIDATION_ERROR when `currentStepIndex` is already
+ * 0 — there is no step before the first one; same "reject rather than
+ * silently clamp/no-op" discipline selectDecisionOption's own repeat-
+ * guard already follows. Not reachable through the real UI at all
+ * (current-step-card.tsx only renders the 上一步 button when
+ * `step.stepIndex > 0`), same "structural, not just client-hidden"
+ * precedent selectDecisionOption's own doc comment already cites.
+ *
+ * Going back does NOT re-run any option validation against the step
+ * being returned to — `currentStepIndex - 1` always points at a step
+ * this same session already passed through once, so it is guaranteed to
+ * exist (see diagnostic-steps.ts's own DIAGNOSTIC_STEPS array), unlike
+ * selectDecisionOption's `optionId`, which is arbitrary caller input.
+ */
+export async function goToPreviousStep(sessionId: string): Promise<Result<DiagnosticSession, ApiError>> {
+  const sessions = readStore();
+  const session = sessions.find((item) => item.id === sessionId);
+  if (!session) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個診斷 session。" } };
+  }
+
+  if (session.currentStepIndex === 0) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "已經是第一步。" } };
+  }
+
+  const updated: DiagnosticSession = {
+    ...session,
+    currentStepIndex: session.currentStepIndex - 1,
+    lastSelectedOptionId: undefined,
+    lastFreeTextDetail: undefined,
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
+  return { ok: true, value: updated };
+}

@@ -10,6 +10,7 @@ import {
   renameKnowledgeBaseDocument,
   retryDocumentProcessing,
   unarchiveKnowledgeBaseDocument,
+  updateKnowledgeBaseDocumentVisibleRoles,
 } from "./knowledge-documents";
 
 beforeEach(() => {
@@ -240,6 +241,92 @@ describe("deleteKnowledgeBaseDocument (E05-S026)", () => {
     const archivedView = await listKnowledgeBaseDocuments("kb-sample-3", true);
     expect(activeView.ok && !activeView.value.some((document) => document.id === created.value.id)).toBe(true);
     expect(archivedView.ok && !archivedView.value.some((document) => document.id === created.value.id)).toBe(true);
+  });
+});
+
+describe("updateKnowledgeBaseDocumentVisibleRoles (E05-S027)", () => {
+  it("saves the given role list", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "權限測試.pdf", 100);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseDocumentVisibleRoles("kb-sample-3", created.value.id, ["maintenance_engineer", "knowledge_manager"]);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.id).toBe(created.value.id);
+      expect(updated.value.visibleToRoles).toEqual(["maintenance_engineer", "knowledge_manager"]);
+    }
+  });
+
+  it("accepts an empty role list as a valid, meaningful state (granted to no role), not a validation error", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "權限測試.pdf", 100);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseDocumentVisibleRoles("kb-sample-3", created.value.id, []);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) expect(updated.value.visibleToRoles).toEqual([]);
+  });
+
+  it("is reflected by a subsequent listKnowledgeBaseDocuments() call", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "權限測試.pdf", 100);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await updateKnowledgeBaseDocumentVisibleRoles("kb-sample-3", created.value.id, ["general_user"]);
+    const reloaded = await listKnowledgeBaseDocuments("kb-sample-3");
+
+    expect(reloaded.ok).toBe(true);
+    if (reloaded.ok) expect(reloaded.value.find((document) => document.id === created.value.id)?.visibleToRoles).toEqual(["general_user"]);
+  });
+
+  it("fails closed with NOT_FOUND for a document id that doesn't exist", async () => {
+    const result = await updateKnowledgeBaseDocumentVisibleRoles("kb-sample-3", "this-id-does-not-exist", ["general_user"]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("fails closed with NOT_FOUND when the document exists but belongs to a different knowledge base", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "跨庫測試.pdf", 100);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await updateKnowledgeBaseDocumentVisibleRoles("kb-sample-1", created.value.id, ["general_user"]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("does not disturb the document's name or other fields", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "權限測試.pdf", 12_345);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateKnowledgeBaseDocumentVisibleRoles("kb-sample-3", created.value.id, ["auditor"]);
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.name).toBe("權限測試.pdf");
+      expect(updated.value.sizeBytes).toBe(12_345);
+      expect(updated.value.uploadedAt).toBe(created.value.uploadedAt);
+    }
+  });
+
+  it("does not affect other documents in the same knowledge base", async () => {
+    const untouched = await addKnowledgeBaseDocument("kb-sample-3", "不受影響.pdf", 100);
+    const target = await addKnowledgeBaseDocument("kb-sample-3", "設定權限.pdf", 200);
+    expect(untouched.ok).toBe(true);
+    expect(target.ok).toBe(true);
+    if (!untouched.ok || !target.ok) return;
+
+    await updateKnowledgeBaseDocumentVisibleRoles("kb-sample-3", target.value.id, ["it_administrator"]);
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value.find((document) => document.id === untouched.value.id)?.visibleToRoles).toBeUndefined();
   });
 });
 

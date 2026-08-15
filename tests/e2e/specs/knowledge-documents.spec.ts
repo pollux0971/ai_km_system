@@ -113,6 +113,15 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * document — this test confirms 取消 leaves a document untouched, then
  * confirms deleting one for real removes it from the list AND drops the
  * detail page's own count, without disturbing the remaining documents.
+ *
+ * E05-S027 adds a 文件權限 inline expandable role-checkbox editor
+ * (combining E05-S006's KB-level role-checkbox content with E05-S022's
+ * inline expand/collapse structure) to every document — this test
+ * expands one document's editor, checks a role, reloads via in-app
+ * navigation (away and back), and confirms the checked role survived —
+ * proving it's a real store write, not just local component state — all
+ * without disturbing a sibling document's own (separately empty)
+ * permission editor.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -630,4 +639,34 @@ test("E05-S026: 取消 leaves a document untouched; confirming a delete removes 
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
   await expect(page.getByText("文件:", { exact: false })).toContainText("2 份文件");
+});
+
+test("E05-S027: checking a role on a document's permission editor saves it, persists across a reload, and leaves a sibling document's own editor untouched", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "產品保固政策");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  const targetItem = page.getByText("產品保固條款.pdf").locator("..");
+  await targetItem.getByRole("button", { name: "文件權限" }).click();
+  await expect(targetItem.getByRole("checkbox", { name: "稽核人員" })).not.toBeChecked();
+  await targetItem.getByRole("checkbox", { name: "稽核人員" }).check();
+  await expect(targetItem.getByRole("checkbox", { name: "稽核人員" })).toBeChecked();
+
+  // In-app navigation away and back, never page.goto() — see this file's
+  // own doc comment on why (the mock session lives only in memory, a
+  // hard reload would wipe it).
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  const reloadedTargetItem = page.getByText("產品保固條款.pdf").locator("..");
+  await reloadedTargetItem.getByRole("button", { name: "文件權限" }).click();
+  await expect(reloadedTargetItem.getByRole("checkbox", { name: "稽核人員" })).toBeChecked();
+
+  const siblingItem = page.getByText("理賠申請流程.docx").locator("..");
+  await siblingItem.getByRole("button", { name: "文件權限" }).click();
+  await expect(siblingItem.getByRole("checkbox", { name: "稽核人員" })).not.toBeChecked();
 });

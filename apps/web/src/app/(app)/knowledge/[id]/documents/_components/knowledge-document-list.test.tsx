@@ -12,6 +12,7 @@ import {
   renameKnowledgeBaseDocument,
   retryDocumentProcessing,
   unarchiveKnowledgeBaseDocument,
+  updateKnowledgeBaseDocumentVisibleRoles,
 } from "@/lib/knowledge-documents";
 
 vi.mock("@/lib/knowledge-bases", () => ({
@@ -28,6 +29,7 @@ vi.mock("@/lib/knowledge-documents", () => ({
   archiveKnowledgeBaseDocument: vi.fn(),
   unarchiveKnowledgeBaseDocument: vi.fn(),
   deleteKnowledgeBaseDocument: vi.fn(),
+  updateKnowledgeBaseDocumentVisibleRoles: vi.fn(),
 }));
 
 // E05-S017/S018/S019: this file renders the REAL KnowledgeDocumentUpload
@@ -70,6 +72,7 @@ const mockedRenameKnowledgeBaseDocument = vi.mocked(renameKnowledgeBaseDocument)
 const mockedArchiveKnowledgeBaseDocument = vi.mocked(archiveKnowledgeBaseDocument);
 const mockedUnarchiveKnowledgeBaseDocument = vi.mocked(unarchiveKnowledgeBaseDocument);
 const mockedDeleteKnowledgeBaseDocument = vi.mocked(deleteKnowledgeBaseDocument);
+const mockedUpdateKnowledgeBaseDocumentVisibleRoles = vi.mocked(updateKnowledgeBaseDocumentVisibleRoles);
 
 const sampleKnowledgeBase = {
   id: "kb1",
@@ -89,6 +92,7 @@ beforeEach(() => {
   mockedArchiveKnowledgeBaseDocument.mockReset();
   mockedUnarchiveKnowledgeBaseDocument.mockReset();
   mockedDeleteKnowledgeBaseDocument.mockReset();
+  mockedUpdateKnowledgeBaseDocumentVisibleRoles.mockReset();
 });
 
 describe("KnowledgeDocumentList (E05-S010)", () => {
@@ -868,5 +872,68 @@ describe("KnowledgeDocumentList — delete document confirmation (E05-S026)", ()
 
     await waitFor(() => expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(3, "kb1", true));
     expect(await screen.findByText("尚無已封存的文件。")).toBeInTheDocument();
+  });
+});
+
+describe("KnowledgeDocumentList — document permission editor (E05-S027)", () => {
+  it("shows a 文件權限 control for every document in the list", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "第一份.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "第二份.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("第一份.pdf");
+    expect(screen.getAllByRole("button", { name: "文件權限" })).toHaveLength(2);
+  });
+
+  it("expanding a document's permission editor shows its own already-configured roles, independent of its siblings", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "有權限設定.pdf", sizeBytes: 100, visibleToRoles: ["auditor"], uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "無權限設定.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("有權限設定.pdf");
+
+    const firstItem = screen.getByText("有權限設定.pdf").closest("li")!;
+    fireEvent.click(within(firstItem).getByRole("button", { name: "文件權限" }));
+    expect(within(firstItem).getByRole("checkbox", { name: "稽核人員" })).toBeChecked();
+
+    const secondItem = screen.getByText("無權限設定.pdf").closest("li")!;
+    fireEvent.click(within(secondItem).getByRole("button", { name: "文件權限" }));
+    expect(within(secondItem).getByRole("checkbox", { name: "稽核人員" })).not.toBeChecked();
+  });
+
+  it("saving a permission change does not refetch or otherwise disturb the rest of the list", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "文件.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+    mockedUpdateKnowledgeBaseDocumentVisibleRoles.mockResolvedValue({
+      ok: true,
+      value: { id: "doc1", knowledgeBaseId: "kb1", name: "文件.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z", visibleToRoles: ["general_user"] },
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("文件.pdf");
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "文件權限" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "一般使用者" }));
+
+    await waitFor(() => expect(mockedUpdateKnowledgeBaseDocumentVisibleRoles).toHaveBeenCalledWith("kb1", "doc1", ["general_user"]));
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("文件.pdf")).toBeInTheDocument();
   });
 });

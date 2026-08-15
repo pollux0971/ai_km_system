@@ -14,6 +14,7 @@ import KnowledgeDocumentPreview from "./knowledge-document-preview";
 import KnowledgeDocumentNameEditor from "./knowledge-document-name-editor";
 import KnowledgeDocumentArchiveToggle from "./knowledge-document-archive-toggle";
 import KnowledgeDocumentDeleteButton from "./knowledge-document-delete-button";
+import KnowledgeDocumentPermissionEditor from "./knowledge-document-permission-editor";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
@@ -171,6 +172,25 @@ type State =
  * whichever view the user is currently on (via the same
  * viewingArchivedRef-backed default described above), which is exactly
  * what makes the just-deleted document disappear from it.
+ *
+ * E05-S027 "Document permission editor" adds
+ * KnowledgeDocumentPermissionEditor for EVERY document, in both views —
+ * same "orthogonal to archived state" reasoning as the delete button
+ * right above it. Combines KnowledgePermissionEditor's (S006) role-
+ * checkbox CONTENT with KnowledgeDocumentPreview's (S022) inline
+ * expand/collapse STRUCTURE, rather than a fourth dedicated
+ * /knowledge/[id]/... route: a knowledge base has exactly one
+ * permission set (worth its own route), but this page already renders
+ * a growing list of many documents, each needing an independent editor
+ * — the same "per-document concern lives inline in the list" shape
+ * archive/delete/rename/retry/preview already established. Passes
+ * `document.visibleToRoles` straight through as `initialVisibleToRoles`
+ * — no onSaved/refetch callback, same shape as
+ * KnowledgeDocumentNameEditor's own `initialName` prop (S023): a
+ * permission change never alters which VIEW the document belongs to
+ * (unlike archive/delete) or anything else this list renders about it,
+ * so the editor owns and reflects its own saved state entirely by
+ * itself, exactly like the name editor already does.
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -347,6 +367,12 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
                 documentId={document.id}
                 name={document.name}
                 onDeleted={refetchDocuments}
+              />
+              <br />
+              <KnowledgeDocumentPermissionEditor
+                knowledgeBaseId={id}
+                documentId={document.id}
+                initialVisibleToRoles={document.visibleToRoles}
               />
             </li>
           ))}

@@ -90,6 +90,25 @@ test("E07-S002: creating a maintenance case for a chosen equipment adds it to th
   await expect(page.getByText("錯誤代碼:E305 — 氣壓不足")).toBeVisible();
 });
 
+test("E07-S005: a typed problem description becomes the case's title, replacing the equipment-name fallback", async ({
+  page,
+}) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+
+  await page.getByRole("link", { name: "開始新的維修診斷" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance/new");
+
+  await page.getByLabel("選擇設備").selectOption({ label: "CNC 加工機 2 號" });
+  await page.getByLabel("問題描述(選填)").fill("加工精度異常，尺寸公差超出範圍");
+  await page.getByRole("button", { name: "建立案例" }).click();
+
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+  await expect(page.getByText("加工精度異常，尺寸公差超出範圍")).toBeVisible();
+  await expect(page.getByText("CNC 加工機 2 號", { exact: true })).not.toBeVisible();
+});
+
 test("E07-S003: a maintenance case can still be created with equipment alone, leaving no serial number line", async ({
   page,
 }) => {

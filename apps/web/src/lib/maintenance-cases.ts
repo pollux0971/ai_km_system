@@ -67,6 +67,20 @@ import { ERROR_CODE_OPTIONS } from "./error-codes";
  * createMaintenanceCase's own doc comment) — optionality means
  * "the field may be entirely absent", not "any string is accepted when
  * it IS present".
+ *
+ * E07-S005 "Problem description input" deliberately adds NO new field
+ * — it fulfills the promise this file's own doc comments already made
+ * since S002 ("title starts as the selected equipment's own name...
+ * S005 is free to overwrite it once a real problem description
+ * exists"). `title` itself becomes the problem description when one is
+ * given, exactly the way it already read as one all along: every S001
+ * seed case's own `title` ("生產線 3 號機台異音診斷",
+ * "包裝機感測器故障排除", "空壓機無法啟動") already reads as a short
+ * problem description, not an equipment name — S005 just makes that
+ * genuinely user-authored instead of a placeholder equipment-name
+ * fallback. Same role `title` already plays for a conversation (the
+ * user's own words, not a separate "description" field bolted on
+ * beside it).
  */
 export interface MaintenanceCaseSummary {
   id: string;
@@ -137,14 +151,11 @@ export async function listMaintenanceCases(): Promise<Result<MaintenanceCaseSumm
 
 /**
  * E07-S002 "Equipment selector" / E07-S003 "Serial-number input" /
- * E07-S004 "Error-code search UI". Creates the case with whatever's
- * been entered so far — problem description (S005) is its own later
- * story, same "grow one field per story" shape KnowledgeBaseSummary
- * followed across S006-S016. `title` starts as the selected equipment's
- * own name (the only honest label available before S005 exists) —
- * S005 is free to overwrite it once a real problem description exists,
- * the same way KnowledgeDocumentNameEditor (S023) later became the
- * sole owner of an already-established field's display.
+ * E07-S004 "Error-code search UI" / E07-S005 "Problem description
+ * input". Creates the case with whatever's been entered — this is now
+ * the last field E07's own "grow one field per story" sequence adds to
+ * this form (E07-S006 "Diagnostic session shell" is a different kind
+ * of story, not another field on this one).
  *
  * Rejects an empty OR unrecognized `equipmentId` with VALIDATION_ERROR
  * — same server-validates-too discipline as createKnowledgeBase, even
@@ -162,11 +173,21 @@ export async function listMaintenanceCases(): Promise<Result<MaintenanceCaseSumm
  * rejected with VALIDATION_ERROR, same "optional presence, but no
  * garbage-in when present" contract equipmentId's own always-required
  * validation follows, just relaxed to allow absence.
+ *
+ * `problemDescription` doesn't get its own stored field (see this
+ * file's own MaintenanceCaseSummary doc comment) — when given, its
+ * trimmed text directly BECOMES `title`, replacing the equipment-name
+ * fallback S002 established. Omitting it (or leaving it whitespace-
+ * only) keeps that original fallback exactly as before, so S002's own
+ * already-approved equipment-only flow stays untouched — same
+ * "optional field never breaks the simpler already-working path"
+ * precedent every field since S003 has followed.
  */
 export async function createMaintenanceCase(
   equipmentId: string,
   serialNumber?: string,
   errorCode?: string,
+  problemDescription?: string,
 ): Promise<Result<MaintenanceCaseSummary, ApiError>> {
   const equipment = EQUIPMENT_OPTIONS.find((option) => option.id === equipmentId);
   if (!equipment) {
@@ -180,9 +201,11 @@ export async function createMaintenanceCase(
     return { ok: false, error: { code: "VALIDATION_ERROR", message: "請選擇有效的錯誤代碼。" } };
   }
 
+  const trimmedProblemDescription = problemDescription?.trim();
+
   const maintenanceCase: MaintenanceCaseSummary = {
     id: crypto.randomUUID(),
-    title: equipment.name,
+    title: trimmedProblemDescription || equipment.name,
     updatedAt: new Date().toISOString(),
     equipmentId,
     ...(trimmedSerialNumber ? { serialNumber: trimmedSerialNumber } : {}),

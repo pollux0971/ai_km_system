@@ -11,6 +11,8 @@ import {
   type DiagnosticSession,
   type DiagnosticSessionStatus,
 } from "@/lib/diagnostic-sessions";
+import { getCurrentDiagnosticStep } from "@/lib/diagnostic-steps";
+import CurrentStepCard from "./current-step-card";
 
 const logger = createLogger("web:maintenance-session");
 
@@ -30,13 +32,12 @@ type State =
   | { status: "loaded"; maintenanceCase: MaintenanceCaseSummary; session: DiagnosticSession };
 
 /**
- * E07-S006 "Diagnostic session shell" — the wrapping frame a diagnostic
- * session lives inside, not its step-by-step interior (E07-S007
- * "Current-step card" onward own that, mirroring how E08-S10 "Node
- * Transition" and neighbors are Team B's own later stories on top of
- * E08-S08 "Session Create"/E08-S09 "Session State"). Loading/error/
- * not-found/loaded states mirror KnowledgeDetail/ConversationDetail's
- * own established pattern.
+ * E07-S006 "Diagnostic session shell" (the wrapping frame a diagnostic
+ * session lives inside) plus E07-S007 "Current-step card" (its first
+ * real interior content — see diagnostic-steps.ts's own doc comment for
+ * why it's a single, deliberately non-branching step rather than a real
+ * decision-tree traversal). Loading/error/not-found/loaded states mirror
+ * KnowledgeDetail/ConversationDetail's own established pattern.
  *
  * On mount: loads the case (for display), then looks for an existing
  * session for it via getDiagnosticSessionForCase — if one already
@@ -156,7 +157,7 @@ export default function MaintenanceSession({ id }: { id: string }) {
       <p>
         診斷狀態:<span>{SESSION_STATUS_LABELS[session.status]}</span>
       </p>
-      <p>尚未有診斷步驟。</p>
+      <CurrentStepCard step={getCurrentDiagnosticStep()} />
       <p>
         <Link href="/maintenance">返回維修助手首頁</Link>
       </p>

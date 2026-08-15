@@ -83,8 +83,27 @@ test("E07-S006: creating a case opens its diagnostic session showing the case ti
 
   await expect(page.getByRole("heading", { name: "3 號生產線包裝機", level: 1 })).toBeVisible();
   await expect(page.getByText("待處理")).toBeVisible();
-  await expect(page.getByText("尚未有診斷步驟。")).toBeVisible();
+  // E07-S006's own EVIDENCE (AC #8) pre-announced this exact transition:
+  // "尚未有診斷步驟。" was always documented as a deliberate placeholder,
+  // to be replaced once E07-S007 "Current-step card" landed — same
+  // "later story legitimately supersedes an earlier story's own
+  // placeholder assertion" precedent knowledge-documents.spec.ts's own
+  // E05-S020 -> E05-S029 role="alert" upgrade already established. The
+  // dedicated E07-S007 test below covers the new content in full; this
+  // just confirms the old "no steps yet" copy is genuinely gone.
+  await expect(page.getByText("尚未有診斷步驟。")).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: "步驟 1", level: 2 })).toBeVisible();
   expect(await countStoredSessions(page, caseId)).toBe(1);
+});
+
+test("E07-S007: the diagnostic session shows a current-step card with a real, honestly-labeled-as-simulated instruction", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+
+  await expect(page.getByRole("heading", { name: "步驟 1", level: 2 })).toBeVisible();
+  await expect(page.getByText("請描述目前觀察到的異常現象", { exact: false })).toBeVisible();
+  await expect(page.getByText("模擬步驟", { exact: false })).toBeVisible();
 });
 
 test("E07-S006: revisiting an already-created session resumes it instead of creating a second one", async ({ page }) => {

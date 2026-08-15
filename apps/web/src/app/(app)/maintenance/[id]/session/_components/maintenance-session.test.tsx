@@ -129,4 +129,13 @@ describe("MaintenanceSession (E07-S006)", () => {
 
     expect(await screen.findByRole("link", { name: "返回維修助手首頁" })).toHaveAttribute("href", "/maintenance");
   });
+
+  it("E07-S007: shows the current-step card once a session is loaded", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({ ok: true, value: sampleSession });
+
+    render(<MaintenanceSession id="case1" />);
+
+    expect(await screen.findByRole("heading", { name: "步驟 1", level: 2 })).toBeInTheDocument();
+  });
 });

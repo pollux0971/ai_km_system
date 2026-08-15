@@ -22,13 +22,15 @@ export type DiagnosticSessionStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "ESC
  * contract exists" precedent every other E05/E07 entity in this
  * codebase already follows.
  *
- * Deliberately minimal: `status` and nothing about actual step/node
- * progress yet — E07-S007 "Current-step card" onward (mirroring E08-S10
- * "Node Transition") are their own later stories for real step content,
- * same "grow one field per story, don't reach into a later story's own
- * scope" discipline maintenance-cases.ts's own doc comments already
- * follow across S002-S005. A "shell" is the wrapping frame a session
- * lives inside, not the step-by-step interior S007+ will build.
+ * Deliberately minimal: `status` and nothing else stored here about
+ * step/node progress — E07-S007 "Current-step card" added the first real
+ * step content (lib/diagnostic-steps.ts), but as a pure derivation, not a
+ * field on this type; no `currentStepIndex` lives on DiagnosticSession
+ * itself, since nothing in either story's scope yet changes which step is
+ * current (that's E07-S08 "Decision Options" onward, mirroring E08-S10
+ * "Node Transition"). Same "grow one field per story, don't reach into a
+ * later story's own scope" discipline maintenance-cases.ts's own doc
+ * comments already follow across S002-S005.
  */
 export interface DiagnosticSession {
   id: string;

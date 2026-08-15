@@ -88,3 +88,31 @@ describe("createMaintenanceCase (E07-S002)", () => {
     if (after.ok) expect(after.value[0]).toEqual(created.value);
   });
 });
+
+describe("createMaintenanceCase serialNumber (E07-S003)", () => {
+  it("stores a trimmed serial number when one is given", async () => {
+    const equipment = EQUIPMENT_OPTIONS[2];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must have at least 3 entries");
+
+    const result = await createMaintenanceCase(equipment.id, "  SN-2026-0042  ");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.serialNumber).toBe("SN-2026-0042");
+  });
+
+  it("stays valid — same as E07-S002's own equipment-only flow — when serialNumber is omitted, empty, or whitespace-only", async () => {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+
+    const omitted = await createMaintenanceCase(equipment.id);
+    const empty = await createMaintenanceCase(equipment.id, "");
+    const whitespaceOnly = await createMaintenanceCase(equipment.id, "   ");
+
+    expect(omitted.ok && empty.ok && whitespaceOnly.ok).toBe(true);
+    if (!omitted.ok || !empty.ok || !whitespaceOnly.ok) return;
+    expect(omitted.value.serialNumber).toBeUndefined();
+    expect(empty.value.serialNumber).toBeUndefined();
+    expect(whitespaceOnly.value.serialNumber).toBeUndefined();
+  });
+});

@@ -23,6 +23,12 @@ type State =
  * "don't invent a link to a route that isn't there yet" reasoning
  * KnowledgeList's own S001 doc comment already gives for why its own
  * items stayed unlinked until E05-S005 built the target route.
+ *
+ * E07-S003 "Serial-number input" adds a conditional serial number
+ * line — only rendered when `item.serialNumber` is actually present,
+ * same "field absence means nothing to show, not an empty placeholder"
+ * precedent knowledge-document-list.tsx's own conditional `sizeBytes`
+ * line already establishes.
  */
 export default function MaintenanceCaseList() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -68,6 +74,12 @@ export default function MaintenanceCaseList() {
         <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
           <strong>{item.title}</strong>
           <br />
+          {item.serialNumber && (
+            <>
+              <span>序號:{item.serialNumber}</span>
+              <br />
+            </>
+          )}
           <time dateTime={item.updatedAt}>{new Date(item.updatedAt).toLocaleString("zh-TW")}</time>
         </li>
       ))}

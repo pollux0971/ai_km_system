@@ -47,11 +47,23 @@ const UNSELECTED_VALUE = "";
  * Equipment identifiers are a small fixed-vocabulary selection (the
  * same category as AiModel/Role), not free-form enterprise content, so
  * telemetry includes the actual equipmentId chosen.
+ *
+ * E07-S003 "Serial-number input" adds an optional serial number text
+ * field to this same form (see maintenance-cases.ts's own
+ * MaintenanceCaseSummary doc comment for why it's optional, not
+ * required). Telemetry deliberately excludes the serial number itself
+ * — user-typed free text that could incidentally identify specific
+ * equipment/site details, same "don't log free-form user content"
+ * restraint this codebase already applies to filenames (S011), URLs
+ * (S014), and prompt text (S008); only its presence would be safe to
+ * log and isn't worth a boolean just for that.
  */
 export default function NewMaintenanceCasePage() {
   const router = useRouter();
   const selectId = useId();
+  const serialNumberId = useId();
   const [equipmentId, setEquipmentId] = useState(UNSELECTED_VALUE);
+  const [serialNumber, setSerialNumber] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
 
@@ -62,10 +74,10 @@ export default function NewMaintenanceCasePage() {
     const correlationId = crypto.randomUUID();
     setPending(true);
     setError(false);
-    logger.info("creating maintenance case", { correlationId, equipmentId });
+    logger.info("creating maintenance case", { correlationId, equipmentId, hasSerialNumber: serialNumber.trim().length > 0 });
     trackEvent("maintenance_case_create_attempt", { correlationId, properties: { equipmentId } });
 
-    const result = await createMaintenanceCase(equipmentId);
+    const result = await createMaintenanceCase(equipmentId, serialNumber);
     setPending(false);
 
     if (!result.ok) {
@@ -101,6 +113,17 @@ export default function NewMaintenanceCasePage() {
               </option>
             ))}
           </select>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor={serialNumberId}>設備序號(選填)</label>
+          <br />
+          <input
+            id={serialNumberId}
+            type="text"
+            value={serialNumber}
+            onChange={(event) => setSerialNumber(event.target.value)}
+            disabled={pending}
+          />
         </div>
         <button type="submit" disabled={pending || equipmentId === UNSELECTED_VALUE}>
           建立案例

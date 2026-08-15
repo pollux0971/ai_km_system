@@ -1,0 +1,57 @@
+import { test, expect } from "@playwright/test";
+import { MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD } from "@ai-km/auth-client";
+
+/**
+ * E07-S001 critical flow: the maintenance home route. First story of E07
+ * (Maintenance Assistant Experience) — nav-items.ts's "/maintenance"
+ * entry already existed (added by E01-S006/S009 as an anticipated entry
+ * point, role-gated to maintenance_engineer/super_administrator), so
+ * this is the first time the route it points to actually renders
+ * anything instead of 404ing (see route-guards.spec.ts's own updated
+ * doc comment for the E2E-level consequence of that transition).
+ *
+ * No general_user negative-authorization test here, despite this being
+ * the first real page at this route — attempted and reverted during
+ * DEV. A general_user has no visible "維修助手" link to click (confirmed
+ * by app-shell.spec.ts's own test), and a direct page.goto("/maintenance")
+ * cannot reach RoleGuard's FORBIDDEN render either: the mock AuthClient's
+ * session is an in-memory closure with no cookie/storage backing (see
+ * conversations.spec.ts's own doc comment), so a page.goto() hard reload
+ * wipes it and SessionGate correctly redirects to /login before RoleGuard
+ * ever runs — exactly the same "no legitimate in-app path, and
+ * page.goto() tests the wrong thing" situation citation-open-source.spec.ts's
+ * own doc comment already documents for /citations/[id]'s NOT_FOUND case.
+ * The actual FORBIDDEN-vs-children branching for this exact route is
+ * already covered at the component level by role-guard.test.tsx
+ * ("shows a 403 message instead of children on a role-restricted route
+ * when the user lacks the role", asserted directly against
+ * `renderGuardAs(["general_user"], "/maintenance")").
+ */
+
+async function login(page: import("@playwright/test").Page) {
+  await page.goto("/login");
+  await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);
+  await page.getByLabel("密碼").fill(MOCK_VALID_PASSWORD);
+  await page.getByRole("button", { name: "登入", exact: true }).click();
+  await page.waitForURL((url) => url.pathname === "/");
+}
+
+function sidebarNav(page: import("@playwright/test").Page) {
+  return page.getByRole("navigation", { name: "主導覽" });
+}
+
+test("E07-S001: maintenance home shows the seeded maintenance cases to a maintenance_engineer", async ({ page }) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+
+  await expect(page.getByRole("heading", { name: "維修助手", level: 1 })).toBeVisible();
+  await expect(page.getByText("生產線 3 號機台異音診斷")).toBeVisible();
+  await expect(page.getByText("包裝機感測器故障排除")).toBeVisible();
+  await expect(page.getByText("空壓機無法啟動")).toBeVisible();
+
+  // No per-case links yet — E07-S021 "Case detail" owns the not-yet-built
+  // /maintenance/[id] route (see maintenance-case-list.tsx's own doc
+  // comment for why linking now would be premature).
+  await expect(page.getByRole("main").getByRole("link")).toHaveCount(0);
+});

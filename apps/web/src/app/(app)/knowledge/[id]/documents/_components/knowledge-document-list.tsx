@@ -192,6 +192,26 @@ type State =
  * so the editor owns and reflects its own saved state entirely by
  * itself, exactly like the name editor already does.
  *
+ * E05-S029 "Document state badges" upgrades the S020 "處理失敗"
+ * indicator to `<span role="alert">` and adds a new `<span
+ * role="status">已封存</span>` for archived documents — mirroring
+ * message-thread.tsx's own already-established badge convention
+ * (role="alert" for failure/attention states like "傳送失敗", role=
+ * "status" for benign informational ones like "傳送中…"), which this
+ * indicator never had despite being the same kind of state marker. No
+ * explicit "ready"/normal badge is added for symmetry — that same
+ * precedent never shows one for an ordinarily-settled message either;
+ * badge ABSENCE already means "nothing noteworthy" throughout this
+ * codebase, and inventing a new "就緒" badge would break that
+ * convention rather than follow it. The archived badge is genuinely
+ * redundant with the page-level 已封存文件 view toggle (a document can
+ * only ever be rendered here when its own state matches the current
+ * view, so every item in that view already satisfies `archived ===
+ * true`) — kept anyway for the same reason role="alert"/role="status"
+ * exist at all: explicit, redundant state communication per item, not
+ * relying on a screen reader user to recall an earlier page-level
+ * toggle's pressed state while navigating item by item.
+ *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
  * an unconditional filter, same as listMessages/listKnowledgeBases), so
@@ -336,12 +356,18 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
               <br />
               {document.status === "failed" && (
                 <>
-                  <span>處理失敗</span>
+                  <span role="alert">處理失敗</span>
                   <KnowledgeDocumentRetryButton
                     knowledgeBaseId={id}
                     documentId={document.id}
                     onRetried={refetchDocuments}
                   />
+                  <br />
+                </>
+              )}
+              {document.archived && (
+                <>
+                  <span role="status">已封存</span>
                   <br />
                 </>
               )}

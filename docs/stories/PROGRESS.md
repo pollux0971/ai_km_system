@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 27 | 0 | 0 | 1 | 3 |
+| E05 Knowledge Management Experience | 31 | 28 | 0 | 0 | 1 | 2 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 80 | 0 | 0 | 1 | 94 |
+| **合計** | **175** | 81 | 0 | 0 | 1 | 93 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -131,7 +131,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S026 | approved | story/E05-S026-delete-document-confirmation | [E05-S026.md](E05-S026.md) | 獨立審核 APPROVE(Delete document confirmation;`deleteKnowledgeBaseDocument` 真實移除,鏡射 E03-S025 deleteConversation,跨知識庫防呆+重複刪除冪等皆驗證;`KnowledgeDocumentDeleteButton` 鏡射 DeleteConversation 的 role="alertdialog" 確認流程,但無 cascade(文件無子實體)、無導覽(活在清單項目非詳情頁)、兩個視圖皆顯示(封存與刪除正交);審核者專門分析本 story 是否重演 S025 剛發現的 stale-closure race,確認刪除操作無人工延遲、`onDeleted` 直接沿用已修正的 `refetchDocuments`,結構上排除同類風險;0 個 BLOCKER/MAJOR/MINOR;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/845 unit/149 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
 | E05-S027 | approved | story/E05-S027-document-permission-editor | [E05-S027.md](E05-S027.md) | 獨立審核 APPROVE(Document permission editor;`visibleToRoles?: Role[]` 新增至 `KnowledgeBaseDocument`,直接套用 E05-S006 已核准的「純設定非強制執行」判斷,不重新跑 advisor;`KnowledgeDocumentPermissionEditor` 組合 S006 角色 checkbox 內容模型與 S022 inline 展開/收合結構;審核者專門分析並排除本 story 重演 S025 race condition 的可能(`visibleToRoles` 只有自己的 setter 會變更,單使用者 mock 系統無外部並行修改風險);誠實揭露並經審核者獨立複驗兩則 DEV 階段流程雜訊——背景指令互相干擾導致一次假性 build 失敗與一次假性 E2E 中斷(與程式碼無關,乾淨重跑後確認皆綠)、branch 延遲建立但 main 未受影響(git 歷史複驗確認);0 個 BLOCKER/MAJOR/MINOR;0 次真正 FIX 循環;審核者獨立重跑 typecheck/lint/build/865 unit/150 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
 | E05-S028 | approved | story/E05-S028-kb-usage-stats-thin-slice | [E05-S028.md](E05-S028.md) | 獨立審核 APPROVE(KB usage stats thin slice;本 session 至今唯一無直接既有先例可鏡射的 story,「usage stats」重新誠實解讀為「內容組成統計」(處理失敗/已封存文件數,皆從既有 fetch 聚合)而非「查詢頻率統計」(無任何真實資料來源——`knowledgeScopes` 只連結 5 個固定分類、從未連結真實 KB id,E04/E06 皆未開工);審核者獨立複驗 SOURCE_BASELINE 零命中、E13 全部 17 個 story 標題無重疊、`knowledgeScopes` 全 repo 用法確認侷限於 E03 domain、零 lib 變更(`git diff -- lib/` 為空)、標籤字串碰撞修正腳本可重現;誠實揭露且經審核者複驗兩則流程雜訊——背景指令干擾(同 S027)、branch 延遲建立(連續第 2 次,main 未受影響);0 個 BLOCKER/MAJOR/MINOR;0 次真正 FIX 循環;審核者獨立重跑 typecheck/lint/build/871 unit/151 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
-| E05-S029 | todo | | | |
+| E05-S029 | approved | story/E05-S029-document-state-badges | [E05-S029.md](E05-S029.md) | 獨立審核 APPROVE(Document state badges;既有「處理失敗」指示器升級為 role="alert",新增 role="status" 已封存 badge,鏡射 message-thread.tsx 既有 alert/status 慣例,刻意不加「就緒」badge 以維持「badge 缺席即正常」既有慣例;本 story 觸發本 session 少見的真正 FIX 循環——role="alert" 與既有 S020 E2E 測試的「無 alert 可見」斷言衝突,審核者對抗性還原確認錯誤訊息逐字重現、修正後 diff 為 0;誠實記錄並經審核者複驗一次 PROGRESS.md 手動計數自我修正;0 個 BLOCKER/MAJOR/MINOR;審核者獨立重跑 typecheck/lint/build/875 unit/152 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
 | E05-S030 | todo | | | |
 | E05-S031 | todo | | | |
 

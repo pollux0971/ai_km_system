@@ -122,6 +122,14 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * proving it's a real store write, not just local component state — all
  * without disturbing a sibling document's own (separately empty)
  * permission editor.
+ *
+ * E05-S029 adds role="alert" to the existing 處理失敗 indicator and a
+ * new role="status" 已封存 badge — this test specifically verifies both
+ * resolve as expected roles through Playwright's real Chromium
+ * accessibility tree, not just jsdom's simulation (see message-
+ * content.tsx's own doc comment for a documented case where the two
+ * genuinely disagree on a DPUB-ARIA role, which is exactly the kind of
+ * gap a real-browser E2E check like this one exists to catch).
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -487,8 +495,13 @@ test("E05-S020: a file whose processing is mock-triggered to fail still uploads 
   await expect(page.getByText("損毀報告", { exact: false })).toBeVisible();
   await expect(page.getByText("處理失敗")).toBeVisible();
   // Not the generic "N 個檔案上傳失敗" retry-affordance alert — that
-  // path is only for a rejected addKnowledgeBaseDocument call.
-  await expect(page.getByRole("main").getByRole("alert")).not.toBeVisible();
+  // path is only for a rejected addKnowledgeBaseDocument call. Checked
+  // by its own specific text, not by role="alert" alone — E05-S029 gave
+  // the 處理失敗 indicator itself role="alert" too (a real, legitimate
+  // alert for this exact scenario), so an unscoped getByRole("alert")
+  // would now always find that instead of ever proving the GENERIC
+  // alert's absence.
+  await expect(page.getByText(/個檔案上傳失敗/)).not.toBeVisible();
 
   await page.getByRole("link", { name: "返回知識庫詳情" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
@@ -669,4 +682,31 @@ test("E05-S027: checking a role on a document's permission editor saves it, pers
   const siblingItem = page.getByText("理賠申請流程.docx").locator("..");
   await siblingItem.getByRole("button", { name: "文件權限" }).click();
   await expect(siblingItem.getByRole("checkbox", { name: "稽核人員" })).not.toBeChecked();
+});
+
+test("E05-S029: 處理失敗 resolves as a real role=alert badge and 已封存 resolves as a real role=status badge in Chromium's own accessibility tree", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "人力資源與請假規範");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await page.getByLabel("上傳文件").setInputFiles({
+    name: "損毀報告[模擬:KB_PROCESSING_FAILED].pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("file content"),
+  });
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+  await expect(page.getByText(/上傳中|解析中|索引中/)).not.toBeVisible();
+
+  const failedItem = page.getByText("損毀報告", { exact: false }).locator("..");
+  await expect(failedItem.getByRole("alert")).toHaveText("處理失敗");
+  await expect(failedItem.getByRole("status")).toHaveCount(0);
+
+  await failedItem.getByRole("button", { name: "封存文件" }).click();
+
+  await page.getByRole("button", { name: "已封存文件" }).click();
+  const archivedItem = page.getByText("損毀報告", { exact: false }).locator("..");
+  await expect(archivedItem.getByRole("alert")).toHaveText("處理失敗");
+  await expect(archivedItem.getByRole("status")).toHaveText("已封存");
 });

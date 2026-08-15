@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import {
+  completeDiagnosticSession,
   escalateDiagnosticSession,
   goToPreviousStep,
   restartDiagnosticSession,
@@ -225,6 +226,19 @@ function formatFileSize(bytes: number): string {
  * with `status: "ESCALATED"` (see escalateDiagnosticSession), so there's
  * no need for a separate `sessionStatus` prop just to know whether to hide
  * the escalation UI.
+ *
+ * The 解決此案例 button + 解決摘要 textarea (E07-S019 "Completion summary")
+ * are `escalateDiagnosticSession`'s structural twin for the opposite
+ * terminal outcome — same session-level gating, same shared `pending`/
+ * `error`, same "not gated behind `safetyGateBlocking`" reasoning, same
+ * "own recorded value's presence gates the UI" pattern. The one new
+ * wrinkle: since a session can now reach two DIFFERENT terminal states
+ * from this same component, each action's form is hidden once EITHER
+ * `recordedEscalationReason` OR `recordedCompletionSummary` is set, not
+ * just its own — `sessionAlreadyTerminal` below captures this once,
+ * reused by both, rather than each form only checking its own recorded
+ * value (which would otherwise let a resolved case still show a live
+ * "升級此案例" form, or vice versa).
  */
 export default function CurrentStepCard({
   sessionId,
@@ -235,6 +249,7 @@ export default function CurrentStepCard({
   recordedPhotoFileName,
   recordedPhotoSizeBytes,
   recordedEscalationReason,
+  recordedCompletionSummary,
 }: {
   sessionId?: string;
   step: DiagnosticStep;
@@ -244,6 +259,7 @@ export default function CurrentStepCard({
   recordedPhotoFileName?: string;
   recordedPhotoSizeBytes?: number;
   recordedEscalationReason?: string;
+  recordedCompletionSummary?: string;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -260,12 +276,15 @@ export default function CurrentStepCard({
   const [sopCitation, setSopCitation] = useState<SopCitation | null>(null);
   const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
   const [escalationReason, setEscalationReason] = useState("");
+  const [completionSummary, setCompletionSummary] = useState("");
   const detailFieldId = useId();
   const skipFieldId = useId();
   const photoFieldId = useId();
   const safetyFieldId = useId();
   const escalationFieldId = useId();
+  const completionFieldId = useId();
   const safetyGateBlocking = Boolean(step.safetyWarning) && !safetyAcknowledged;
+  const sessionAlreadyTerminal = Boolean(recordedEscalationReason) || Boolean(recordedCompletionSummary);
 
   useEffect(() => {
     setDetailText("");
@@ -279,6 +298,7 @@ export default function CurrentStepCard({
     setSopCitation(null);
     setSafetyAcknowledged(false);
     setEscalationReason("");
+    setCompletionSummary("");
   }, [step.stepIndex]);
 
   function handleToggleSafetyAcknowledged() {
@@ -425,6 +445,31 @@ export default function CurrentStepCard({
 
     logger.info("diagnostic session escalated", { correlationId, sessionId });
     trackEvent("maintenance_session_escalate_success", { correlationId, properties: { sessionId } });
+    onAdvanced?.(result.value);
+  }
+
+  async function handleComplete() {
+    const trimmedSummary = completionSummary.trim();
+    if (pending || !sessionId || !trimmedSummary) return;
+
+    const correlationId = crypto.randomUUID();
+    setPending(true);
+    setError(null);
+    logger.info("completing diagnostic session", { correlationId, sessionId });
+    trackEvent("maintenance_session_complete_attempt", { correlationId, properties: { sessionId } });
+
+    const result = await completeDiagnosticSession(sessionId, trimmedSummary);
+
+    setPending(false);
+    if (!result.ok) {
+      logger.error("failed to complete diagnostic session", { correlationId, sessionId, code: result.error.code });
+      trackEvent("maintenance_session_complete_failure", { correlationId, properties: { sessionId, code: result.error.code } });
+      setError(result.error.message);
+      return;
+    }
+
+    logger.info("diagnostic session completed", { correlationId, sessionId });
+    trackEvent("maintenance_session_complete_success", { correlationId, properties: { sessionId } });
     onAdvanced?.(result.value);
   }
 
@@ -633,7 +678,7 @@ export default function CurrentStepCard({
           已升級此案例,原因:<span>{recordedEscalationReason}</span>
         </p>
       )}
-      {sessionId && !recordedEscalationReason && (
+      {sessionId && !sessionAlreadyTerminal && (
         <>
           <p>
             <label htmlFor={escalationFieldId}>升級原因</label>
@@ -648,6 +693,30 @@ export default function CurrentStepCard({
           <p>
             <button type="button" onClick={handleEscalate} disabled={pending || !escalationReason.trim()}>
               升級此案例
+            </button>
+          </p>
+        </>
+      )}
+      {recordedCompletionSummary && (
+        <p>
+          已解決此案例,摘要:<span>{recordedCompletionSummary}</span>
+        </p>
+      )}
+      {sessionId && !sessionAlreadyTerminal && (
+        <>
+          <p>
+            <label htmlFor={completionFieldId}>解決摘要</label>
+            <br />
+            <textarea
+              id={completionFieldId}
+              value={completionSummary}
+              onChange={(event) => setCompletionSummary(event.target.value)}
+              disabled={pending}
+            />
+          </p>
+          <p>
+            <button type="button" onClick={handleComplete} disabled={pending || !completionSummary.trim()}>
+              解決此案例
             </button>
           </p>
         </>

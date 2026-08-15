@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CurrentStepCard from "./current-step-card";
 import {
+  completeDiagnosticSession,
   escalateDiagnosticSession,
   goToPreviousStep,
   restartDiagnosticSession,
@@ -17,6 +18,7 @@ vi.mock("@/lib/diagnostic-sessions", () => ({
   restartDiagnosticSession: vi.fn(),
   skipDiagnosticStep: vi.fn(),
   escalateDiagnosticSession: vi.fn(),
+  completeDiagnosticSession: vi.fn(),
 }));
 
 vi.mock("@/lib/diagnostic-explanations", () => ({
@@ -34,6 +36,7 @@ const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
 const mockedExplainDiagnosticStep = vi.mocked(explainDiagnosticStep);
 const mockedGetDiagnosticStepCitation = vi.mocked(getDiagnosticStepCitation);
 const mockedEscalateDiagnosticSession = vi.mocked(escalateDiagnosticSession);
+const mockedCompleteDiagnosticSession = vi.mocked(completeDiagnosticSession);
 
 function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
   const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
@@ -875,5 +878,137 @@ describe("CurrentStepCard escalation action (E07-S018)", () => {
 
     expect(mockedEscalateDiagnosticSession).toHaveBeenCalledWith("session1", "現場情況超出可自行處理範圍");
     await waitFor(() => expect(onAdvanced).toHaveBeenCalledWith(escalatedSession));
+  });
+
+  it("hides the completion UI once the session has already been escalated", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedEscalationReason="現場情況超出可自行處理範圍"
+      />,
+    );
+
+    expect(screen.queryByLabelText("解決摘要")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "解決此案例" })).not.toBeInTheDocument();
+  });
+});
+
+describe("CurrentStepCard completion summary (E07-S019)", () => {
+  const completedSession = {
+    id: "session1",
+    maintenanceCaseId: "case1",
+    status: "RESOLVED" as const,
+    currentStepIndex: 0,
+    lastCompletionSummary: "已更換零件並確認設備恢復正常運作",
+    createdAt: "2026-08-15T00:00:00.000Z",
+    updatedAt: "2026-08-15T00:06:00.000Z",
+  };
+
+  beforeEach(() => {
+    mockedCompleteDiagnosticSession.mockReset();
+  });
+
+  it("renders a 解決此案例 button and 解決摘要 textarea when sessionId is present", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.getByLabelText("解決摘要")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "解決此案例" })).toBeInTheDocument();
+  });
+
+  it("does not render completion UI when sessionId is absent (S007 behavior unchanged)", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("keeps 解決此案例 disabled until a summary is typed", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "解決此案例" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("解決摘要"), { target: { value: "已更換零件並確認設備恢復正常運作" } });
+
+    expect(screen.getByRole("button", { name: "解決此案例" })).not.toBeDisabled();
+  });
+
+  it("stays disabled for a whitespace-only summary", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("解決摘要"), { target: { value: "   " } });
+
+    expect(screen.getByRole("button", { name: "解決此案例" })).toBeDisabled();
+  });
+
+  it("clicking 解決此案例 calls completeDiagnosticSession with the trimmed summary and invokes onAdvanced on success", async () => {
+    mockedCompleteDiagnosticSession.mockResolvedValue({ ok: true, value: completedSession });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={onAdvanced} />);
+    fireEvent.change(screen.getByLabelText("解決摘要"), { target: { value: "  已更換零件並確認設備恢復正常運作  " } });
+    fireEvent.click(screen.getByRole("button", { name: "解決此案例" }));
+
+    expect(mockedCompleteDiagnosticSession).toHaveBeenCalledWith("session1", "已更換零件並確認設備恢復正常運作");
+    await waitFor(() => expect(onAdvanced).toHaveBeenCalledWith(completedSession));
+  });
+
+  it("shows an error message and does not call onAdvanced when completing fails", async () => {
+    mockedCompleteDiagnosticSession.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "請填寫解決摘要。" } });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={onAdvanced} />);
+    fireEvent.change(screen.getByLabelText("解決摘要"), { target: { value: "摘要" } });
+    fireEvent.click(screen.getByRole("button", { name: "解決此案例" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("請填寫解決摘要。");
+    expect(onAdvanced).not.toHaveBeenCalled();
+  });
+
+  it("shows a previously recorded completion summary when the session already has one, and hides the completion UI", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedCompletionSummary="已更換零件並確認設備恢復正常運作"
+      />,
+    );
+
+    expect(screen.getByText("已更換零件並確認設備恢復正常運作")).toBeInTheDocument();
+    expect(screen.queryByLabelText("解決摘要")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "解決此案例" })).not.toBeInTheDocument();
+  });
+
+  it("shows nothing extra when there is no recorded completion summary yet", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByText("已解決此案例", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("completing works even when a high-risk step's safety warning hasn't been acknowledged (E07-S017 gate does not apply)", async () => {
+    mockedCompleteDiagnosticSession.mockResolvedValue({ ok: true, value: completedSession });
+    const onAdvanced = vi.fn();
+    const stepWithWarning = { stepIndex: 0, instruction: "測試步驟內容", safetyWarning: "（模擬警告）測試用的安全警告文字。" };
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithWarning} onAdvanced={onAdvanced} />);
+    fireEvent.change(screen.getByLabelText("解決摘要"), { target: { value: "已更換零件並確認設備恢復正常運作" } });
+
+    expect(screen.getByRole("button", { name: "解決此案例" })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "解決此案例" }));
+
+    expect(mockedCompleteDiagnosticSession).toHaveBeenCalledWith("session1", "已更換零件並確認設備恢復正常運作");
+    await waitFor(() => expect(onAdvanced).toHaveBeenCalledWith(completedSession));
+  });
+
+  it("hides the escalation UI once the session has already been completed", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedCompletionSummary="已更換零件並確認設備恢復正常運作"
+      />,
+    );
+
+    expect(screen.queryByLabelText("升級原因")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "升級此案例" })).not.toBeInTheDocument();
   });
 });

@@ -47,3 +47,18 @@ describe("getCurrentDiagnosticStep(stepIndex) (E07-S008)", () => {
     expect(() => getCurrentDiagnosticStep(99)).toThrow();
   });
 });
+
+describe("getCurrentDiagnosticStep(stepIndex).safetyWarning (E07-S016)", () => {
+  it("step 0 has a real, honestly-labeled safety warning", () => {
+    const step = getCurrentDiagnosticStep(0);
+
+    expect(step.safetyWarning).toBeTruthy();
+    expect(step.safetyWarning).toContain("模擬警告");
+  });
+
+  it("step 1 has no safety warning of its own", () => {
+    const step = getCurrentDiagnosticStep(1);
+
+    expect(step.safetyWarning).toBeUndefined();
+  });
+});

@@ -40,6 +40,27 @@
  * itself needs (see that type's own doc comment) — DIAGNOSTIC_STEPS'
  * actual step CONTENT stays here, looked up by index, so there is nothing
  * tree-shaped to migrate away from when E08's contract lands.
+ *
+ * `safetyWarning` (E07-S016 "Safety warning component") is optional, same
+ * asymmetric-per-step shape `options` already establishes (only step 0 has
+ * one today — describing/approaching potentially-hazardous equipment
+ * carries real risk; step 1's own pure "recorded, continuing" filler
+ * involves no physical interaction, so it gets none). Deliberately a plain
+ * field on `DiagnosticStep` itself, NOT a separate async lookup module the
+ * way diagnostic-explanations.ts/diagnostic-citations.ts (E07-S014/S015)
+ * are: a safety warning is intrinsic, always-known content about the step
+ * itself — same category as `instruction`, not optional exploratory
+ * content a user opts into on demand. current-step-card.tsx renders it
+ * eagerly whenever present, deliberately NOT behind a toggle the way AI
+ * 說明/SOP 引用來源 are — hiding safety information behind a click would be
+ * the wrong UX for something the user must see, not something they might
+ * want to explore. This story does not block interaction on
+ * acknowledging the warning — that's E07-S017 "High-risk confirmation
+ * gate"'s own explicit, separate scope, same "later story owns the
+ * blocking/confirmation behavior" restraint restartDiagnosticSession's own
+ * doc comment already shows for E07-S017. Labeled "（模擬警告）", same
+ * `（模擬X）` convention `instruction`/`ANSWER_STATE_FALLBACK_CONTENT`
+ * already establish.
  */
 export interface DecisionOption {
   id: string;
@@ -50,6 +71,7 @@ export interface DiagnosticStep {
   stepIndex: number;
   instruction: string;
   options?: DecisionOption[];
+  safetyWarning?: string;
 }
 
 const DIAGNOSTIC_STEPS: DiagnosticStep[] = [
@@ -60,6 +82,8 @@ const DIAGNOSTIC_STEPS: DiagnosticStep[] = [
       { id: "resolved", label: "異常已排除" },
       { id: "still-present", label: "異常仍然存在" },
     ],
+    safetyWarning:
+      "（模擬警告）觀察設備時請保持安全距離,避免直接碰觸高溫或帶電部位。如有明顯異常(冒煙、異味、火花),請立即停止並回報,不要自行處理。",
   },
   {
     stepIndex: 1,

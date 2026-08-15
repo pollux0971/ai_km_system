@@ -168,6 +168,17 @@ function formatFileSize(bytes: number): string {
  * from are genuinely different questions with genuinely different answers,
  * same "one story, one distinct capability" granularity every other pair
  * of adjacent E07 stories in this file already follows.
+ *
+ * `step.safetyWarning` (E07-S016 "Safety warning component") is rendered
+ * with `role="alert"`, eagerly and unconditionally whenever present —
+ * deliberately NOT a toggle like AI 說明/SOP 引用來源, and deliberately NOT
+ * gated on `sessionId` either (see diagnostic-steps.ts's own doc comment
+ * for the full reasoning): a safety warning is content the user must see,
+ * not optional content they might choose to explore, so it needs neither a
+ * click to reveal it nor an active session to justify showing it. No local
+ * state of its own — it's a pure, already-known field on `step`, nothing
+ * to fetch or cache. This story does not block the option/skip buttons on
+ * acknowledging the warning; that's E07-S017's own separate scope.
  */
 export default function CurrentStepCard({
   sessionId,
@@ -385,6 +396,11 @@ export default function CurrentStepCard({
     <section>
       <h2>步驟 {step.stepIndex + 1}</h2>
       <p>{step.instruction}</p>
+      {step.safetyWarning && (
+        <p role="alert">
+          安全警告:<span>{step.safetyWarning}</span>
+        </p>
+      )}
       {sessionId && (
         <p>
           <button type="button" onClick={handleToggleExplain}>

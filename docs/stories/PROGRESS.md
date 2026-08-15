@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 23 | 0 | 1 | 1 | 6 |
+| E05 Knowledge Management Experience | 31 | 23 | 1 | 0 | 1 | 6 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 76 | 0 | 1 | 1 | 97 |
+| **合計** | **175** | 76 | 1 | 0 | 1 | 97 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -127,7 +127,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S022 | approved | story/E05-S022-document-preview | [E05-S022.md](E05-S022.md) | 獨立審核 APPROVE(Document preview;架構上這條 story 鏈中最簡單的一個——純 UI 狀態切換,`content` 早已在 `KnowledgeDocumentList` 手中,零新增 fetch、零新增 lib 函式,審核者用 `git diff -- apps/web/src/lib/ \| wc -l` 對整個 lib 目錄複驗確認為 0,是本 session 至今驗證最徹底的一次「零 lib 變更」宣稱;只有文字輸入(S015)文件有真實內容可預覽,檔案/URL 來源誠實顯示「此文件目前無法預覽。」而非假造內容,延續本 story 鏈自 S011 起的一致原則;telemetry 只有單一 view 事件、每次展開都發送(不是只發送一次),鏡射既有 page_view 語意;1 次 FIX 循環——自己新增測試用了會撞到巢狀元素的自訂文字 matcher 導致崩潰,審核者確認這純粹是測試撰寫問題、元件實作行為從未有誤,修正後改用 `querySelector` 直接鎖定元素;審核者獨立重跑 typecheck/lint/build/781 unit/146 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S023 | approved | story/E05-S023-document-metadata-editor | [E05-S023.md](E05-S023.md) | 獨立審核 APPROVE(Document metadata editor;`name` 是 `KnowledgeBaseDocument` 唯一同時符合「中繼資料」與「有意義可編輯」的既有欄位,不發明新欄位;新增 `renameKnowledgeBaseDocument` 與 `KnowledgeDocumentNameEditor`,逐項鏡射已核准的 `RenameConversation`(E03-S024);通用錯誤訊息(而非具體伺服器訊息)的選擇與 S014/S016/S021 顯示具體訊息的判斷表面不同但背後原則一致(client 端已擋掉常見失敗情境 vs. 真正會送達伺服器的情境);開發階段(執行任何 gate 之前)自行發現「用 `<span>` 包裝導致 DOM 多一層巢狀、破壞既有 S022 E2E 測試的 `.locator("..")` 範圍限定」的結構性問題並改用 React Fragment 修正,審核者對抗性複驗——親自把元件還原成 `<span>` 版本重跑既有 E2E 測試,穩定重現 2/2 次逾時失敗,證實修法確實必要而非巧合,還原後 diff 為 0 確認無殘留;審核者獨立重跑 typecheck/lint/build/800 unit/147 E2E 皆綠,force 全量三輪皆 0 cache 全過,PROGRESS.md 逐列手動計數複核一致,與 DEV 階段數字完全一致、無 flaky) |
 | E05-S024 | blocked-team-b | | | 需要 E06-S030「Document version creation」(Team B)提供文件版本建立的真實機制/contract。目前 Team A 完全沒有任何管道能讓一份文件的內容產生第二個真實版本(上傳永遠建立全新文件;S023 的重新命名只改名稱,不算內容版本)。與 S016(資料夾同步)/S006(權限)不同——那兩者即使背後 worker/enforcement 不存在,Team A 自己仍握有真實、誠實的設定資料可以顯示;本 story 若現在動工,唯一能呈現的內容不是捏造版本資料,就是一個「結構上永遠是空的」UI 殼(沒有任何操作能讓它顯示出別的東西),或是偷換成「重新命名紀錄」這種名不符實的替代範圍——三者皆判定不可接受。完整分析見 docs/stories/PENDING_DECISIONS.md。 |
-| E05-S025 | in-progress | story/E05-S025-archive-document-action | | |
+| E05-S025 | done | story/E05-S025-archive-document-action | [E05-S025.md](E05-S025.md) | 待獨立審核 |
 | E05-S026 | todo | | | |
 | E05-S027 | todo | | | |
 | E05-S028 | todo | | | |

@@ -52,17 +52,27 @@ INIT → PLAN → IMPLEMENT → VERIFY ⇄ FIX → SELF-REVIEW → EVIDENCE → 
    记入 EVIDENCE 的 assumptions,若涉及跨 domain → 停止並轉 BLOCKED。
 4. 一個 story 一個 branch:`story/EXX-SYYY-短描述`(從 main 分出)。
 
-## Phase 2 — IMPLEMENT
+## Phase 2 — IMPLEMENT(TDD:先寫測試,再寫最小實作)
 
-1. 最小可上線變更(smallest production-valid change),不順手重構、不擴scope。
-2. 測試與實作同批完成:每條 AC 至少對應一個自動化測試。
-3. 安全鐵律(邊寫邊自查):
+1. **先寫測試,後寫實作**:依 Phase 1 的 AC→測試清單,在動任何實作程式碼之前,
+   先把這個 story 全部要寫的自動化測試(unit/contract/E2E,視 story 性質)寫好。
+   此時測試預期是紅的(實作還不存在或不完整)——這是正常現象,不是要修的錯誤。
+2. **測試內容自此凍結,只增不減**:測試寫好、進入實作之後,測試內容原則上
+   不能修改,只能新增(新發現的情境、SELF-REVIEW 補的測試都算新增,允許),
+   不能刪除既有測試,也不能修改既有測試的斷言/邏輯來配合實作。目標永遠是
+   讓實作符合測試,不是讓測試符合實作。
+   - 唯一例外(狹窄、需誠實記錄):VERIFY/FIX 階段發現某個失敗其實是「測試
+     本身的技術性錯誤」(用錯 assertion API/matcher、selector/文字打錯字、
+     測試步驟的順序邏輯本身有誤),而不是這個測試原本想驗證的行為需要放寬
+     ——見 Phase 4 第 5 點的完整處理方式。
+3. 最小可上線變更(smallest production-valid change),不順手重構、不擴scope。
+4. 安全鐵律(邊寫邊自查):
    - Authorization 先於任何受保護的 retrieval/action。
    - Deny-Wins;未授權資料不得進入 context/citation/export/log/analytics。
    - 前端/BFF 不直連 DB 或 vector store;只透過 `@ai-km/api-client` 的
      typed client 呼叫凍結後的 contract。
    - Secrets 不進 source/fixtures/logs/prompts。
-4. Mock 只能用來解除平行開發阻塞,mock 通過不得標記為 integration 證據。
+5. Mock 只能用來解除平行開發阻塞,mock 通過不得標記為 integration 證據。
 
 ## Phase 3 — VERIFY(gate 執行,順序固定)
 
@@ -87,8 +97,19 @@ L5: E2E critical flow     → story 屬關鍵流程時必跑(tests/e2e)
 2. 循環上限 **5 次**。同一個錯誤連續 2 次以相同方式修不好 → 換診斷路徑
    (加 log、縮小重現、檢查假設),不得重複同樣的修法。
 3. 達上限仍紅 → 轉 BLOCKED,附:每次嘗試的診斷、修法、結果。
-4. 絕對禁止:跳過測試、放寬 assertion、刪測試、`--force`、`|| true`、
-   標記 skip 來讓 gate 變綠。這些行為視同造假。
+4. 絕對禁止:跳過測試、放寬 assertion、刪除既有測試、修改既有測試內容來讓
+   gate 變綠、`--force`、`|| true`、標記 skip。這些行為視同造假。測試只能
+   新增,不能刪除或修改既有內容(見 Phase 2 第 2 點)。
+5. **狹窄例外——測試本身的技術性錯誤**:定位根因後,如果發現失敗不是實作
+   邏輯有問題,而是測試本身寫錯(用錯 assertion API/matcher、selector/文字
+   打錯字、測試步驟的順序邏輯本身有誤——例如自己疊加兩個操作互相抵銷),
+   允許修正該測試。但必須:
+   - 在 EVIDENCE 誠實記錄修正前後差異,以及判斷「是測試錯而非實作錯」的
+     具體理由;
+   - 不得用這個例外掩護「實作其實不符合 AC,把測試改鬆來配合」的情況——
+     對「是測試錯還是實作錯」沒有把握時,預設當作實作錯處理,不修測試;
+   - 這個例外不算違反第 4 點的鐵律,但仍計入本次 FIX 循環次數,且修正後
+     一樣要從 VERIFY 第一個 gate 重跑。
 
 ## Phase 5 — SELF-REVIEW(以審查者身分重看一次)
 
@@ -155,3 +176,8 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
    還原進度,不憑記憶。
 7. **不確定就問 advisor**:實作中遇到規格未明、多種做法難以取捨、或連續
    除錯無進展時,啟動 `/advisor` 流程分析最優解,不得憑感覺猜。
+8. **TDD:測試先於實作,測試內容只增不減**:每個 story 動任何實作程式碼前,
+   先把該 story 的自動化測試寫好(見 Phase 2)。測試寫定後只能新增,不能
+   刪除或修改既有內容——唯一例外是測試本身的技術性錯誤(見 Phase 4 第 5
+   點的窄例外,需誠實記錄,且不得用來掩護「實作不符合 AC」的情況)。目標
+   永遠是讓實作符合測試,不是反過來。

@@ -10,6 +10,7 @@ import KnowledgeDocumentUpload from "./knowledge-document-upload";
 import KnowledgeDocumentUrlImport from "./knowledge-document-url-import";
 import KnowledgeDocumentTextInput from "./knowledge-document-text-input";
 import KnowledgeDocumentRetryButton from "./knowledge-document-retry-button";
+import KnowledgeDocumentPreview from "./knowledge-document-preview";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
@@ -83,6 +84,16 @@ type State =
  * this same `refetchDocuments`, exactly like every other
  * list-changing widget on this page already receives — a successful
  * retry is "the list changed" the same way a new upload is.
+ *
+ * E05-S022 "Document preview" adds KnowledgeDocumentPreview for EVERY
+ * document (not just failed ones), passing `document.content` through
+ * as-is. Needs no new fetch of its own — `content` is already part of
+ * the KnowledgeBaseDocument objects this component already has in
+ * `documents`; it's purely a client-side reveal/hide toggle over data
+ * already in hand. See that component's own doc comment for why only
+ * text-input (S015) documents have real content to show, and why a
+ * file/URL-sourced document gets an honest "cannot be previewed"
+ * message instead of fabricated text.
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -220,6 +231,8 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
                 </>
               )}
               <time dateTime={document.uploadedAt}>{new Date(document.uploadedAt).toLocaleString("zh-TW")}</time>
+              <br />
+              <KnowledgeDocumentPreview knowledgeBaseId={id} documentId={document.id} content={document.content} />
             </li>
           ))}
         </ul>

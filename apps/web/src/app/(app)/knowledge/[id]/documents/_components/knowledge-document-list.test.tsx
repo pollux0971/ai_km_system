@@ -6,9 +6,11 @@ import {
   addKnowledgeBaseDocument,
   addKnowledgeBaseDocumentFromText,
   addKnowledgeBaseDocumentFromUrl,
+  archiveKnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
   renameKnowledgeBaseDocument,
   retryDocumentProcessing,
+  unarchiveKnowledgeBaseDocument,
 } from "@/lib/knowledge-documents";
 
 vi.mock("@/lib/knowledge-bases", () => ({
@@ -22,6 +24,8 @@ vi.mock("@/lib/knowledge-documents", () => ({
   addKnowledgeBaseDocumentFromText: vi.fn(),
   retryDocumentProcessing: vi.fn(),
   renameKnowledgeBaseDocument: vi.fn(),
+  archiveKnowledgeBaseDocument: vi.fn(),
+  unarchiveKnowledgeBaseDocument: vi.fn(),
 }));
 
 // E05-S017/S018/S019: this file renders the REAL KnowledgeDocumentUpload
@@ -61,6 +65,8 @@ const mockedAddKnowledgeBaseDocumentFromUrl = vi.mocked(addKnowledgeBaseDocument
 const mockedAddKnowledgeBaseDocumentFromText = vi.mocked(addKnowledgeBaseDocumentFromText);
 const mockedRetryDocumentProcessing = vi.mocked(retryDocumentProcessing);
 const mockedRenameKnowledgeBaseDocument = vi.mocked(renameKnowledgeBaseDocument);
+const mockedArchiveKnowledgeBaseDocument = vi.mocked(archiveKnowledgeBaseDocument);
+const mockedUnarchiveKnowledgeBaseDocument = vi.mocked(unarchiveKnowledgeBaseDocument);
 
 const sampleKnowledgeBase = {
   id: "kb1",
@@ -77,6 +83,8 @@ beforeEach(() => {
   mockedAddKnowledgeBaseDocumentFromText.mockReset();
   mockedRetryDocumentProcessing.mockReset();
   mockedRenameKnowledgeBaseDocument.mockReset();
+  mockedArchiveKnowledgeBaseDocument.mockReset();
+  mockedUnarchiveKnowledgeBaseDocument.mockReset();
 });
 
 describe("KnowledgeDocumentList (E05-S010)", () => {
@@ -210,7 +218,7 @@ describe("KnowledgeDocumentList (E05-S010)", () => {
     render(<KnowledgeDocumentList id="kb-sample-2" />);
     await screen.findByText("這個知識庫尚無文件。");
 
-    expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledWith("kb-sample-2");
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledWith("kb-sample-2", false);
   });
 
   it("shows the E05-S011 upload widget once loaded", async () => {
@@ -509,5 +517,256 @@ describe("KnowledgeDocumentList — document metadata editor (E05-S023)", () => 
     expect(await screen.findByText("新名稱.pdf")).toBeInTheDocument();
     expect(screen.queryByText("舊名稱.pdf")).not.toBeInTheDocument();
     expect(screen.getByText("不受影響.pdf")).toBeInTheDocument();
+  });
+});
+
+describe("KnowledgeDocumentList — archive document action (E05-S025)", () => {
+  it("shows the 作用中文件/已封存文件 view switch, defaulting to the active view pressed", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    expect(screen.getByRole("button", { name: "作用中文件" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "已封存文件" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("calls listKnowledgeBaseDocuments with the matching archived flag on mount and on each view switch", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(1, "kb1", false);
+
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+    await waitFor(() => expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(2, "kb1", true));
+
+    fireEvent.click(screen.getByRole("button", { name: "作用中文件" }));
+    await waitFor(() => expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(3, "kb1", false));
+  });
+
+  it("hides the upload/URL import/text input widgets while viewing archived documents", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByLabelText("上傳文件");
+
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+
+    await waitFor(() => expect(screen.queryByLabelText("上傳文件")).not.toBeInTheDocument());
+    expect(screen.queryByLabelText("從網址匯入")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("標題")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "作用中文件" }));
+    expect(await screen.findByLabelText("上傳文件")).toBeInTheDocument();
+  });
+
+  it("shows a distinct 尚無已封存的文件 empty state when viewing archived with zero results", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+
+    expect(await screen.findByText("尚無已封存的文件。")).toBeInTheDocument();
+    expect(screen.queryByText("這個知識庫尚無文件。")).not.toBeInTheDocument();
+  });
+
+  it("shows a 封存文件 button for every document in the active view", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "第一份.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "第二份.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("第一份.pdf");
+    expect(screen.getAllByRole("button", { name: "封存文件" })).toHaveLength(2);
+  });
+
+  it("archiving a document removes it from the active view once the list refreshes, leaving the others", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          { id: "doc1", knowledgeBaseId: "kb1", name: "要封存的.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+          { id: "doc2", knowledgeBaseId: "kb1", name: "保留的.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [{ id: "doc2", knowledgeBaseId: "kb1", name: "保留的.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+      });
+    mockedArchiveKnowledgeBaseDocument.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "doc1",
+        knowledgeBaseId: "kb1",
+        name: "要封存的.pdf",
+        sizeBytes: 100,
+        archived: true,
+        uploadedAt: "2026-08-15T00:00:00.000Z",
+      },
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("要封存的.pdf");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "封存文件" })[0]!);
+
+    await waitFor(() => expect(screen.queryByText("要封存的.pdf")).not.toBeInTheDocument());
+    expect(screen.getByText("保留的.pdf")).toBeInTheDocument();
+    expect(mockedArchiveKnowledgeBaseDocument).toHaveBeenCalledWith("kb1", "doc1");
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(2, "kb1", false);
+  });
+
+  it("shows a 取消封存 button (not 封存文件) for documents shown in the archived view", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "doc1",
+            knowledgeBaseId: "kb1",
+            name: "已封存的.pdf",
+            sizeBytes: 100,
+            archived: true,
+            uploadedAt: "2026-08-15T00:00:00.000Z",
+          },
+        ],
+      });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+
+    expect(await screen.findByText("已封存的.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消封存" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "封存文件" })).not.toBeInTheDocument();
+  });
+
+  it("unarchiving a document removes it from the archived view once the list refreshes", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "doc1",
+            knowledgeBaseId: "kb1",
+            name: "已封存的.pdf",
+            sizeBytes: 100,
+            archived: true,
+            uploadedAt: "2026-08-15T00:00:00.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, value: [] });
+    mockedUnarchiveKnowledgeBaseDocument.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "doc1",
+        knowledgeBaseId: "kb1",
+        name: "已封存的.pdf",
+        sizeBytes: 100,
+        archived: false,
+        uploadedAt: "2026-08-15T00:00:00.000Z",
+      },
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+    await screen.findByText("已封存的.pdf");
+
+    fireEvent.click(screen.getByRole("button", { name: "取消封存" }));
+
+    expect(await screen.findByText("尚無已封存的文件。")).toBeInTheDocument();
+    expect(mockedUnarchiveKnowledgeBaseDocument).toHaveBeenCalledWith("kb1", "doc1");
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(3, "kb1", true);
+  });
+
+  it("a stale in-flight upload started before a view switch refreshes the CURRENTLY-viewed view on completion, not the view active when it started", async () => {
+    // Regression test: KnowledgeDocumentUpload is hidden (unmounted) while
+    // viewingArchived is true, but its own async upload sequence has no
+    // unmount guard and still calls onUploaded when it finishes. Before
+    // refetchDocuments' default read a ref, a slow upload started on the
+    // active view that finished AFTER the user switched to the archived
+    // view would silently overwrite the now-displayed archived list with
+    // the active one, while the view-switch buttons still claimed 已封存文件
+    // was selected.
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "existing-archived",
+            knowledgeBaseId: "kb1",
+            name: "既有已封存.pdf",
+            sizeBytes: 50,
+            archived: true,
+            uploadedAt: "2026-08-15T00:00:00.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "existing-archived",
+            knowledgeBaseId: "kb1",
+            name: "既有已封存.pdf",
+            sizeBytes: 50,
+            archived: true,
+            uploadedAt: "2026-08-15T00:00:00.000Z",
+          },
+        ],
+      });
+    let resolveAdd!: (value: Awaited<ReturnType<typeof addKnowledgeBaseDocument>>) => void;
+    mockedAddKnowledgeBaseDocument.mockReturnValue(new Promise((resolve) => (resolveAdd = resolve)));
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("這個知識庫尚無文件。");
+
+    const file = new File([new Uint8Array(100)], "上傳中的檔案.pdf");
+    fireEvent.change(screen.getByLabelText("上傳文件"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "上傳" }));
+
+    // Switch views WHILE the upload's addKnowledgeBaseDocument call is
+    // still pending — this unmounts KnowledgeDocumentUpload.
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+    await screen.findByText("既有已封存.pdf");
+    expect(screen.queryByLabelText("上傳文件")).not.toBeInTheDocument();
+
+    // Now let the stale, in-flight upload complete.
+    resolveAdd({
+      ok: true,
+      value: { id: "new-doc", knowledgeBaseId: "kb1", name: "上傳中的檔案.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+    });
+
+    // The stale upload's own onUploaded fires and refetches — it must
+    // reflect the CURRENTLY-viewed (archived) list, not silently
+    // overwrite it with the active view the upload started under.
+    await waitFor(() => expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledTimes(3));
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenNthCalledWith(3, "kb1", true);
+    expect(screen.getByText("既有已封存.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("上傳中的檔案.pdf")).not.toBeInTheDocument();
   });
 });

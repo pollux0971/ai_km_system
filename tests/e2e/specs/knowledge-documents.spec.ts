@@ -99,6 +99,14 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * seed document and confirms the new name persists across a page
  * reload (proving it's a real store write, not just local component
  * state).
+ *
+ * E05-S025 adds a 作用中文件/已封存文件 view switch (mirroring E03-S026's
+ * ConversationList split) plus a per-document 封存文件/取消封存 toggle —
+ * this test archives a pre-seeded document, confirms it vanishes from
+ * the active view while its siblings stay put, confirms it reappears
+ * under 已封存文件 (and the siblings don't), then unarchives it and
+ * confirms it returns to 作用中文件 — a real round trip through the
+ * mock store, not just a one-way check.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -542,4 +550,50 @@ test("E05-S023: renaming a document updates its displayed name and persists acro
   await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
 
   await expect(page.getByText("2026 年保固條款")).toBeVisible();
+});
+
+test("E05-S025: archiving a document removes it from the active view and the detail page's count, shows it under 已封存文件, and unarchiving restores both", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "產品保固政策");
+  await expect(page.getByText("文件:", { exact: false })).toContainText("3 份文件");
+
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  const activeDocItem = page.getByText("產品保固條款.pdf").locator("..");
+  await activeDocItem.getByRole("button", { name: "封存文件" }).click();
+
+  await expect(page.getByText("產品保固條款.pdf")).toHaveCount(0);
+  // The other pre-seeded documents in the active view are untouched.
+  await expect(page.getByText("理賠申請流程.docx")).toBeVisible();
+  await expect(page.getByText("常見保固問題 FAQ.pdf")).toBeVisible();
+
+  // The detail page's own "N 份文件" headline is a SEPARATE fetch
+  // (knowledge-detail.tsx's own listKnowledgeBaseDocuments(id) call, no
+  // code change of its own this story) — this hop proves archiving
+  // genuinely ripples into it via the new default `archived = false`
+  // parameter, not just within the documents list page itself.
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("2 份文件");
+
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await page.getByRole("button", { name: "已封存文件" }).click();
+  await expect(page.getByText("產品保固條款.pdf")).toBeVisible();
+  await expect(page.getByText("理賠申請流程.docx")).not.toBeVisible();
+
+  const archivedDocItem = page.getByText("產品保固條款.pdf").locator("..");
+  await archivedDocItem.getByRole("button", { name: "取消封存" }).click();
+  await expect(page.getByText("產品保固條款.pdf")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "作用中文件" }).click();
+  await expect(page.getByText("產品保固條款.pdf")).toBeVisible();
+  await expect(page.getByText("理賠申請流程.docx")).toBeVisible();
+
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await expect(page.getByText("文件:", { exact: false })).toContainText("3 份文件");
 });

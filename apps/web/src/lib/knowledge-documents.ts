@@ -82,6 +82,16 @@ import { getKnowledgeBase } from "./knowledge-bases";
  */
 export type DocumentProcessingStatus = "ready" | "failed";
 
+/**
+ * `archived` is optional as of E05-S025 "Archive document action" —
+ * same "absence means not-yet-set, the common/default case" reasoning
+ * every other optional field on this type already follows, and the
+ * exact same shape ConversationSummary.archived (E03-S026) already
+ * established: every pre-S025 fixture and every existing document
+ * simply omits it, and every read site treats an absent value as
+ * `false` (not archived) via `?? false` — making it required would
+ * force a mechanical, behavior-unrelated update to every one of those.
+ */
 export interface KnowledgeBaseDocument {
   id: string;
   knowledgeBaseId: string;
@@ -89,6 +99,7 @@ export interface KnowledgeBaseDocument {
   sizeBytes?: number;
   content?: string;
   status?: DocumentProcessingStatus;
+  archived?: boolean;
   uploadedAt: string;
 }
 
@@ -168,9 +179,26 @@ function writeStore(items: KnowledgeBaseDocument[]): void {
  * yields an empty array here rather than a second redundant existence
  * check. Never returns another knowledge base's documents — filtered
  * strictly by `knowledgeBaseId`, verified by a dedicated test.
+ *
+ * E05-S025 "Archive document action" adds `archived` as a SECOND
+ * filter dimension, applied alongside `knowledgeBaseId` — `false` (the
+ * default) selects the normal active list every pre-S025 call site
+ * (including knowledge-detail.tsx's own document-count summary, which
+ * now correctly excludes archived documents from that headline figure
+ * without any change to its own call site) already expects unchanged;
+ * `true` selects only archived documents. This is a SWITCH between two
+ * mutually-exclusive views, not an "also include archived" toggle
+ * merged into one list — same design listConversations (E03-S026)
+ * already established for the identical shape of problem.
  */
-export async function listKnowledgeBaseDocuments(knowledgeBaseId: string): Promise<Result<KnowledgeBaseDocument[], ApiError>> {
-  return { ok: true, value: readStore().filter((document) => document.knowledgeBaseId === knowledgeBaseId) };
+export async function listKnowledgeBaseDocuments(
+  knowledgeBaseId: string,
+  archived = false,
+): Promise<Result<KnowledgeBaseDocument[], ApiError>> {
+  return {
+    ok: true,
+    value: readStore().filter((document) => document.knowledgeBaseId === knowledgeBaseId && (document.archived ?? false) === archived),
+  };
 }
 
 /**
@@ -338,6 +366,52 @@ export async function renameKnowledgeBaseDocument(
   }
 
   const updated: KnowledgeBaseDocument = { ...existing, name: trimmedName };
+  writeStore(store.map((document) => (document.id === documentId ? updated : document)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E05-S025 "Archive document action". Closely mirrors
+ * archiveConversation/unarchiveConversation (E03-S026) — two separate
+ * functions rather than one toggle taking a boolean, same reasoning:
+ * each is its own distinct, independently-named user action ("封存" vs
+ * "取消封存"), not one generic "set this flag" operation. Reversible —
+ * archiving is a visibility/view-filter change, not a destructive one
+ * (the document, its content, its status are all untouched); the exact
+ * opposite action always undoes it, same "archive/unarchive is one
+ * capability with two directions" shape as its conversation precedent.
+ *
+ * Fails closed with NOT_FOUND if the document doesn't exist, OR exists
+ * but belongs to a different knowledge base — same cross-KB-safe check
+ * retryDocumentProcessing/renameKnowledgeBaseDocument already
+ * established for a targeted-by-id document mutation.
+ */
+export async function archiveKnowledgeBaseDocument(
+  knowledgeBaseId: string,
+  documentId: string,
+): Promise<Result<KnowledgeBaseDocument, ApiError>> {
+  const store = readStore();
+  const existing = store.find((document) => document.id === documentId && document.knowledgeBaseId === knowledgeBaseId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } };
+  }
+
+  const updated: KnowledgeBaseDocument = { ...existing, archived: true };
+  writeStore(store.map((document) => (document.id === documentId ? updated : document)));
+  return { ok: true, value: updated };
+}
+
+export async function unarchiveKnowledgeBaseDocument(
+  knowledgeBaseId: string,
+  documentId: string,
+): Promise<Result<KnowledgeBaseDocument, ApiError>> {
+  const store = readStore();
+  const existing = store.find((document) => document.id === documentId && document.knowledgeBaseId === knowledgeBaseId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } };
+  }
+
+  const updated: KnowledgeBaseDocument = { ...existing, archived: false };
   writeStore(store.map((document) => (document.id === documentId ? updated : document)));
   return { ok: true, value: updated };
 }

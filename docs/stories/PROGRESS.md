@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 15 | 0 | 0 | 0 | 10 |
+| E07 Maintenance Assistant Experience | 25 | 15 | 0 | 1 | 0 | 9 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 98 | 0 | 0 | 1 | 76 |
+| **合計** | **175** | 98 | 0 | 1 | 1 | 75 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -154,7 +154,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S013 | approved | story/E07-S013-photo-upload | [E07-S013.md](E07-S013.md) | 獨立審核 APPROVE(Photo upload;/advisor 判定 photo 綁定 selectDecisionOption——bundled,同 S009 detail 先例,不擴及 skipDiagnosticStep,同 S012 對 detail 展現的克制;metadata-only 資料模型(lastPhotoFileName/lastPhotoSizeBytes),同 knowledge-documents.ts/messages.ts 既有 mock 先例;`goToPreviousStep`/`restartDiagnosticSession`/`skipDiagnosticStep` 三者的既有欄位清空邏輯延伸到新欄位;0 次 FIX 循環;過程中一個無關的 E05 flaky spec(knowledge-ui-e2e.spec.ts)瞬斷,以既有隔離重跑協定確認為系統負載雜訊(3 次失敗點各不相同)、非 regression;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,82/82 檔案 1042/1042 unit test,176/176 E2E 全過;另以與 DEV 階段不同層級的獨立對抗性突變(UI 呼叫參數形狀,而非 DEV 驗證的資料層清空邏輯)複驗,恰好命中 5 個既有 S008/S009 測試、新增測試零受影響;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S014 | approved | story/E07-S014-ai-explain-step-panel | [E07-S014.md](E07-S014.md) | 獨立審核 APPROVE(AI explain-step panel;既有 mock-AI 內容先例研究(未走正式 /advisor 對話,完成同等權威查詢+程式碼先例研究)判定 explainDiagnosticStep 為新 lib/diagnostic-explanations.ts 模組、async+Result 但無 artificial delay(同大多數 lib/*.ts,非 E03 streaming 那種完整演出);UI 面板 gated 在 sessionId(非 step.options,因任何步驟皆可說明);獨立 pending/error 狀態,不與既有 mutation 共用;`explanation` 短路已載入內容避免重複打;1 次 FIX 循環(typecheck,測試型別標註問題,非邏輯錯誤);maintenance-session.tsx/diagnostic-sessions.ts/diagnostic-steps.ts 零異動(能力自足,不寫入 session 欄位);審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,83/83 檔案 1052/1052 unit test,178/178 E2E 全過;另以與 DEV 階段不同的獨立對抗性突變(sessionId gating 而非 DEV 驗證的 refetch-guard)複驗,恰好命中 2 個測試——其中一個是 S007 自己的凍結測試,獨立證實這條 gating 對更早的 story 也是真正必要而非巧合;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S015 | approved | story/E07-S015-sop-citation-component | [E07-S015.md](E07-S015.md) | 獨立審核 APPROVE(SOP citation component;既有引用系統先例研究(E03 的 [N] 標記機制 vs S014 的 toggle 面板機制)判定比照 S014,不比照 E03——step-level 關係非 sub-string-level;新型別 SopCitation(title/section/snippet,不重用 CitationSource 的 file/page,snippet 的「（模擬片段）」標示逐字沿用 citations.ts 既有慣例);獨立 sopOpen/sopPending/sopError/sopCitation 狀態,不與 explain 面板共用;0 次 FIX 循環;maintenance-session.tsx/diagnostic-sessions.ts/lib/citations.ts 零異動;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1062/1062 unit test,180/180 E2E 全過;另以獨立對抗性突變(SOP 按鈕的 sessionId gating)複驗,精準命中 3 個測試(含 S007 與 S014 各自的凍結測試),證實這個 gating 對更早的 story 也持續必要;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
-| E07-S016 | todo | | | |
+| E07-S016 | in-progress | story/E07-S016-safety-warning-component | | |
 | E07-S017 | todo | | | |
 | E07-S018 | todo | | | |
 | E07-S019 | todo | | | |

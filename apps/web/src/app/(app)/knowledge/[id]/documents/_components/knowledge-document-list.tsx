@@ -11,6 +11,7 @@ import KnowledgeDocumentUrlImport from "./knowledge-document-url-import";
 import KnowledgeDocumentTextInput from "./knowledge-document-text-input";
 import KnowledgeDocumentRetryButton from "./knowledge-document-retry-button";
 import KnowledgeDocumentPreview from "./knowledge-document-preview";
+import KnowledgeDocumentNameEditor from "./knowledge-document-name-editor";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
@@ -94,6 +95,15 @@ type State =
  * text-input (S015) documents have real content to show, and why a
  * file/URL-sourced document gets an honest "cannot be previewed"
  * message instead of fabricated text.
+ *
+ * E05-S023 "Document metadata editor" replaces the plain
+ * `<strong>{document.name}</strong>` this list has rendered since S010
+ * with KnowledgeDocumentNameEditor, which OWNS that same display
+ * outright (mirroring RenameConversation's own "own the element, don't
+ * bolt an edit affordance next to a separately-rendered static value"
+ * structure) — it renders its own name display in both its view and
+ * edit states, this component doesn't render `document.name` directly
+ * anywhere else anymore.
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -211,7 +221,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
           {documents.map((document) => (
             <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
-              <strong>{document.name}</strong>
+              <KnowledgeDocumentNameEditor knowledgeBaseId={id} documentId={document.id} initialName={document.name} />
               <br />
               {document.status === "failed" && (
                 <>

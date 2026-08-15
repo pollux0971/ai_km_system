@@ -5,6 +5,7 @@ import {
   addKnowledgeBaseDocumentFromUrl,
   listKnowledgeBaseDocuments,
   MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER,
+  renameKnowledgeBaseDocument,
   retryDocumentProcessing,
 } from "./knowledge-documents";
 
@@ -275,6 +276,82 @@ describe("retryDocumentProcessing (E05-S021)", () => {
     const other = listed.value.find((document) => document.id === untouched.value.id);
     expect(other?.status).toBeUndefined();
     expect(other?.name).toBe("不受影響.pdf");
+  });
+});
+
+describe("renameKnowledgeBaseDocument (E05-S023)", () => {
+  it("renames a document to the trimmed new name", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "舊名稱.pdf", 500);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const renamed = await renameKnowledgeBaseDocument("kb-sample-3", created.value.id, "  新名稱.pdf  ");
+
+    expect(renamed.ok).toBe(true);
+    if (renamed.ok) expect(renamed.value.name).toBe("新名稱.pdf");
+  });
+
+  it("returns VALIDATION_ERROR for an empty or whitespace-only name, without disturbing the existing name", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "原始名稱.pdf", 500);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await renameKnowledgeBaseDocument("kb-sample-3", created.value.id, "   ");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value.find((document) => document.id === created.value.id)?.name).toBe("原始名稱.pdf");
+  });
+
+  it("returns NOT_FOUND for a document id that doesn't exist", async () => {
+    const result = await renameKnowledgeBaseDocument("kb-sample-3", "this-id-does-not-exist", "新名稱.pdf");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns NOT_FOUND when the document exists but belongs to a different knowledge base", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "跨庫測試.pdf", 500);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await renameKnowledgeBaseDocument("kb-sample-1", created.value.id, "新名稱.pdf");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("does not disturb the document's other fields", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "原始名稱.pdf", 12_345);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const renamed = await renameKnowledgeBaseDocument("kb-sample-3", created.value.id, "新名稱.pdf");
+
+    expect(renamed.ok).toBe(true);
+    if (renamed.ok) {
+      expect(renamed.value.id).toBe(created.value.id);
+      expect(renamed.value.sizeBytes).toBe(12_345);
+      expect(renamed.value.uploadedAt).toBe(created.value.uploadedAt);
+    }
+  });
+
+  it("does not affect other documents in the same knowledge base", async () => {
+    const untouched = await addKnowledgeBaseDocument("kb-sample-3", "不受影響.pdf", 100);
+    const toRename = await addKnowledgeBaseDocument("kb-sample-3", "待重新命名.pdf", 200);
+    expect(untouched.ok).toBe(true);
+    expect(toRename.ok).toBe(true);
+    if (!untouched.ok || !toRename.ok) return;
+
+    await renameKnowledgeBaseDocument("kb-sample-3", toRename.value.id, "已重新命名.pdf");
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value.find((document) => document.id === untouched.value.id)?.name).toBe("不受影響.pdf");
   });
 });
 

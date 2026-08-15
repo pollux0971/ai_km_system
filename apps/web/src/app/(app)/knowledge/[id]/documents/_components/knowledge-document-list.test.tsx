@@ -7,6 +7,7 @@ import {
   addKnowledgeBaseDocumentFromText,
   addKnowledgeBaseDocumentFromUrl,
   listKnowledgeBaseDocuments,
+  renameKnowledgeBaseDocument,
   retryDocumentProcessing,
 } from "@/lib/knowledge-documents";
 
@@ -20,6 +21,7 @@ vi.mock("@/lib/knowledge-documents", () => ({
   addKnowledgeBaseDocumentFromUrl: vi.fn(),
   addKnowledgeBaseDocumentFromText: vi.fn(),
   retryDocumentProcessing: vi.fn(),
+  renameKnowledgeBaseDocument: vi.fn(),
 }));
 
 // E05-S017/S018/S019: this file renders the REAL KnowledgeDocumentUpload
@@ -58,6 +60,7 @@ const mockedAddKnowledgeBaseDocument = vi.mocked(addKnowledgeBaseDocument);
 const mockedAddKnowledgeBaseDocumentFromUrl = vi.mocked(addKnowledgeBaseDocumentFromUrl);
 const mockedAddKnowledgeBaseDocumentFromText = vi.mocked(addKnowledgeBaseDocumentFromText);
 const mockedRetryDocumentProcessing = vi.mocked(retryDocumentProcessing);
+const mockedRenameKnowledgeBaseDocument = vi.mocked(renameKnowledgeBaseDocument);
 
 const sampleKnowledgeBase = {
   id: "kb1",
@@ -73,6 +76,7 @@ beforeEach(() => {
   mockedAddKnowledgeBaseDocumentFromUrl.mockReset();
   mockedAddKnowledgeBaseDocumentFromText.mockReset();
   mockedRetryDocumentProcessing.mockReset();
+  mockedRenameKnowledgeBaseDocument.mockReset();
 });
 
 describe("KnowledgeDocumentList (E05-S010)", () => {
@@ -461,5 +465,49 @@ describe("KnowledgeDocumentList — document preview (E05-S022)", () => {
     fireEvent.click(screen.getByRole("button", { name: "預覽" }));
 
     expect(screen.getByText("此文件目前無法預覽。")).toBeInTheDocument();
+  });
+});
+
+describe("KnowledgeDocumentList — document metadata editor (E05-S023)", () => {
+  it("shows a 重新命名 control for every document in the list", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "第一份.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "第二份.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("第一份.pdf");
+    expect(screen.getAllByRole("button", { name: "重新命名" })).toHaveLength(2);
+  });
+
+  it("renaming a document updates its displayed name in place, without disturbing the others", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "舊名稱.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "不受影響.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+      ],
+    });
+    mockedRenameKnowledgeBaseDocument.mockResolvedValue({
+      ok: true,
+      value: { id: "doc1", knowledgeBaseId: "kb1", name: "新名稱.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("舊名稱.pdf");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "重新命名" })[0]!);
+    fireEvent.change(screen.getByLabelText("文件名稱"), { target: { value: "新名稱.pdf" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存" }));
+
+    expect(await screen.findByText("新名稱.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("舊名稱.pdf")).not.toBeInTheDocument();
+    expect(screen.getByText("不受影響.pdf")).toBeInTheDocument();
   });
 });

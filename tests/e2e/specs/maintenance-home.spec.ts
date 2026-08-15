@@ -26,6 +26,11 @@ import { MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD } from "@ai-km/auth-clie
  * ("shows a 403 message instead of children on a role-restricted route
  * when the user lacks the role", asserted directly against
  * `renderGuardAs(["general_user"], "/maintenance")").
+ *
+ * E07-S002 "Equipment selector" adds the second test below — the
+ * "開始新的維修診斷" entry link this story's own doc comment above
+ * originally noted as deliberately absent, now built, plus the create
+ * flow it leads to.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -50,8 +55,29 @@ test("E07-S001: maintenance home shows the seeded maintenance cases to a mainten
   await expect(page.getByText("包裝機感測器故障排除")).toBeVisible();
   await expect(page.getByText("空壓機無法啟動")).toBeVisible();
 
-  // No per-case links yet — E07-S021 "Case detail" owns the not-yet-built
-  // /maintenance/[id] route (see maintenance-case-list.tsx's own doc
-  // comment for why linking now would be premature).
-  await expect(page.getByRole("main").getByRole("link")).toHaveCount(0);
+  // The one entry link E07-S002 added — but still no per-case links.
+  // E07-S021 "Case detail" owns the not-yet-built /maintenance/[id]
+  // route (see maintenance-case-list.tsx's own doc comment for why
+  // linking each item now would be premature). Scoped via `main` — an
+  // unscoped getByRole("list") also matches the sidebar's own nav <ul>
+  // (首頁/對話/知識庫/維修助手, 4 links), which isn't what this is about.
+  await expect(page.getByRole("link", { name: "開始新的維修診斷" })).toHaveAttribute("href", "/maintenance/new");
+  await expect(page.getByRole("main").getByRole("list").getByRole("link")).toHaveCount(0);
+});
+
+test("E07-S002: creating a maintenance case for a chosen equipment adds it to the home list", async ({ page }) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+
+  await page.getByRole("link", { name: "開始新的維修診斷" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance/new");
+
+  await expect(page.getByRole("button", { name: "建立案例" })).toBeDisabled();
+  await page.getByLabel("選擇設備").selectOption({ label: "空壓機 A" });
+  await expect(page.getByRole("button", { name: "建立案例" })).toBeEnabled();
+  await page.getByRole("button", { name: "建立案例" }).click();
+
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+  await expect(page.getByText("空壓機 A")).toBeVisible();
 });

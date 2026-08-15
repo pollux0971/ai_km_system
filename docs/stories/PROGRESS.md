@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 12 | 1 | 0 | 0 | 12 |
+| E07 Maintenance Assistant Experience | 25 | 13 | 0 | 0 | 0 | 12 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 95 | 1 | 0 | 1 | 78 |
+| **合計** | **175** | 96 | 0 | 0 | 1 | 78 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -151,7 +151,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S010 | approved | story/E07-S010-previous-step-action | [E07-S010.md](E07-S010.md) | 獨立審核 APPROVE(Previous-step action;對稱延伸 S008/S009 資料模型:`goToPreviousStep` 讓 currentStepIndex 退一格並清空 lastSelectedOptionId/lastFreeTextDetail,status 刻意不退回 OPEN;0 次 FIX 循環(IMPLEMENT 階段主動抓到並修正補充說明文字框步驟切換後殘留舊草稿的真實 bug,新增 useEffect 重置,非事後補救);審核者獨立重跑 typecheck/lint/build 皆 force 全量、1004 unit/170 E2E 皆綠(乾淨無 flaky);獨立確認 maintenance-session.tsx 零異動屬實;另以與 DEV 階段不同的獨立對抗性突變(移除 currentStepIndex===0 guard)複驗,恰好 1 個測試精準捕捉;0 個 BLOCKER/MAJOR/MINOR) |
 | E07-S011 | approved | story/E07-S011-restart-diagnostic | [E07-S011.md](E07-S011.md) | 獨立審核 APPROVE(Restart diagnostic;對稱延伸 S008-S010 資料模型:`restartDiagnosticSession` 是 session 層級動作(非步驟層級),重置回 createDiagnosticSession 的確切初始狀態,包括 status 退回 OPEN(與 goToPreviousStep 刻意不動 status 相反);UI 顯示不受步驟位置限制,只要 sessionId 存在即可用;刻意不加確認對話框(E07-S017 是後面獨立 story);0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build 皆 force 全量、1013 unit/172 E2E 皆綠(乾淨無 flaky);獨立確認 maintenance-session.tsx 零異動屬實;另以與 DEV 階段不同的獨立對抗性突變(移除欄位清空邏輯)複驗,恰好 1 個測試精準捕捉;0 個 BLOCKER/MAJOR/MINOR) |
 | E07-S012 | approved | story/E07-S012-skip-step-with-reason | [E07-S012.md](E07-S012.md) | 獨立審核 APPROVE(Skip-step UX with reason;epic 完整標題「with reason」——`skipDiagnosticStep` 的 reason 必填(與 S009 detail 選填相反),獨立 `lastSkipReason` 欄位(不重用 lastFreeTextDetail,語意不同);advances 但不記錄 lastSelectedOptionId;repeat-guard 同 selectDecisionOption 形狀;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build 皆 force 全量、1028 unit/174 E2E 皆綠;另以與 DEV 階段不同的獨立對抗性突變(移除 repeat-guard)複驗,首次出現一個無關 mocked-dependency 測試檔的可疑第三個失敗,重跑同一突變第二次確認只有 2 個目標測試失敗、第三個未重現,證實為系統負載瞬斷而非真實交互;0 個 BLOCKER/MAJOR/MINOR) |
-| E07-S013 | done | story/E07-S013-photo-upload | [E07-S013.md](E07-S013.md) | DEV 完成,待獨立審核。/advisor 判定 photo 綁定 selectDecisionOption(bundled,同 S009 detail 先例)、metadata-only(name/sizeBytes,同 knowledge-documents.ts/messages.ts 先例);0 次 FIX 循環;唯一插曲為與本 story 無關的既有 knowledge-ui-e2e.spec.ts flaky spec(系統負載,已用既有隔離重跑協定確認非 regression) |
+| E07-S013 | approved | story/E07-S013-photo-upload | [E07-S013.md](E07-S013.md) | 獨立審核 APPROVE(Photo upload;/advisor 判定 photo 綁定 selectDecisionOption——bundled,同 S009 detail 先例,不擴及 skipDiagnosticStep,同 S012 對 detail 展現的克制;metadata-only 資料模型(lastPhotoFileName/lastPhotoSizeBytes),同 knowledge-documents.ts/messages.ts 既有 mock 先例;`goToPreviousStep`/`restartDiagnosticSession`/`skipDiagnosticStep` 三者的既有欄位清空邏輯延伸到新欄位;0 次 FIX 循環;過程中一個無關的 E05 flaky spec(knowledge-ui-e2e.spec.ts)瞬斷,以既有隔離重跑協定確認為系統負載雜訊(3 次失敗點各不相同)、非 regression;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,82/82 檔案 1042/1042 unit test,176/176 E2E 全過;另以與 DEV 階段不同層級的獨立對抗性突變(UI 呼叫參數形狀,而非 DEV 驗證的資料層清空邏輯)複驗,恰好命中 5 個既有 S008/S009 測試、新增測試零受影響;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S014 | todo | | | |
 | E07-S015 | todo | | | |
 | E07-S016 | todo | | | |

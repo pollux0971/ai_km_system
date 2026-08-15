@@ -234,6 +234,109 @@ describe("KnowledgeDetail (E05-S005)", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("shows 0 份 for both 處理失敗文件 and 已封存文件 when the knowledge base has no documents", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const failedSummary = await screen.findByText("處理失敗文件數:", { exact: false });
+    expect(failedSummary).toHaveTextContent("0 份");
+    const archivedSummary = await screen.findByText("已封存文件數:", { exact: false });
+    expect(archivedSummary).toHaveTextContent("0 份");
+  });
+
+  it("counts only status:failed documents from the active view for 處理失敗文件, ignoring ready ones", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockImplementation(async (_id, archived = false) =>
+      archived
+        ? { ok: true, value: [] }
+        : {
+            ok: true,
+            value: [
+              { id: "doc1", knowledgeBaseId: "kb1", name: "a.pdf", status: "failed", uploadedAt: "2026-08-10T00:00:00.000Z" },
+              { id: "doc2", knowledgeBaseId: "kb1", name: "b.pdf", status: "failed", uploadedAt: "2026-08-11T00:00:00.000Z" },
+              { id: "doc3", knowledgeBaseId: "kb1", name: "c.pdf", uploadedAt: "2026-08-12T00:00:00.000Z" },
+            ],
+          },
+    );
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const failedSummary = await screen.findByText("處理失敗文件數:", { exact: false });
+    expect(failedSummary).toHaveTextContent("2 份");
+  });
+
+  it("counts documents from the archived view (not the active one) for 已封存文件", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockImplementation(async (_id, archived = false) =>
+      archived
+        ? {
+            ok: true,
+            value: [
+              { id: "doc1", knowledgeBaseId: "kb1", name: "a.pdf", archived: true, uploadedAt: "2026-08-10T00:00:00.000Z" },
+              { id: "doc2", knowledgeBaseId: "kb1", name: "b.pdf", archived: true, uploadedAt: "2026-08-11T00:00:00.000Z" },
+              { id: "doc3", knowledgeBaseId: "kb1", name: "c.pdf", archived: true, uploadedAt: "2026-08-12T00:00:00.000Z" },
+            ],
+          }
+        : { ok: true, value: [{ id: "doc4", knowledgeBaseId: "kb1", name: "d.pdf", uploadedAt: "2026-08-13T00:00:00.000Z" }] },
+    );
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const archivedSummary = await screen.findByText("已封存文件數:", { exact: false });
+    expect(archivedSummary).toHaveTextContent("3 份");
+    const documentSummary = await screen.findByText("文件:", { exact: false });
+    expect(documentSummary).toHaveTextContent("1 份文件");
+  });
+
+  it("calls listKnowledgeBaseDocuments for both the active and archived views", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDetail id="kb1" />);
+    await screen.findByText("文件:", { exact: false });
+
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledWith("kb1");
+    expect(mockedListKnowledgeBaseDocuments).toHaveBeenCalledWith("kb1", true);
+  });
+
+  it("degrades only 已封存文件 to a － placeholder when just the archived-view fetch fails, leaving the active-view counts intact", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockImplementation(async (_id, archived = false) =>
+      archived
+        ? { ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } }
+        : { ok: true, value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "a.pdf", status: "failed", uploadedAt: "2026-08-10T00:00:00.000Z" }] },
+    );
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const documentSummary = await screen.findByText("文件:", { exact: false });
+    expect(documentSummary).toHaveTextContent("1 份文件");
+    const failedSummary = await screen.findByText("處理失敗文件數:", { exact: false });
+    expect(failedSummary).toHaveTextContent("1 份");
+    const archivedSummary = await screen.findByText("已封存文件數:", { exact: false });
+    expect(archivedSummary).toHaveTextContent("－");
+  });
+
+  it("degrades 文件 and 處理失敗文件 together to － when just the active-view fetch fails, leaving 已封存文件 intact", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockImplementation(async (_id, archived = false) =>
+      archived
+        ? { ok: true, value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "a.pdf", archived: true, uploadedAt: "2026-08-10T00:00:00.000Z" }] }
+        : { ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } },
+    );
+
+    render(<KnowledgeDetail id="kb1" />);
+
+    const documentSummary = await screen.findByText("文件:", { exact: false });
+    expect(documentSummary).toHaveTextContent("－");
+    const failedSummary = await screen.findByText("處理失敗文件數:", { exact: false });
+    expect(failedSummary).toHaveTextContent("－");
+    const archivedSummary = await screen.findByText("已封存文件數:", { exact: false });
+    expect(archivedSummary).toHaveTextContent("1 份");
+  });
+
   it("does not call listKnowledgeBaseDocuments when the knowledge base itself is not found", async () => {
     mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: null });
 

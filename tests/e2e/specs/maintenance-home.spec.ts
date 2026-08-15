@@ -167,3 +167,13 @@ test("E07-S020: 查看維修歷史 leads to the maintenance history route", asyn
 
   await page.waitForURL((url) => url.pathname === "/maintenance/history");
 });
+
+test("E07-S022: 查看維修報表 leads to the maintenance report route", async ({ page }) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+
+  await page.getByRole("link", { name: "查看維修報表" }).click();
+
+  await page.waitForURL((url) => url.pathname === "/maintenance/report");
+});

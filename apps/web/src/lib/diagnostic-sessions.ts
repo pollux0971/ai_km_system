@@ -257,3 +257,47 @@ export async function goToPreviousStep(sessionId: string): Promise<Result<Diagno
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
   return { ok: true, value: updated };
 }
+
+/**
+ * E07-S011 "Restart diagnostic". A session-level action, not a step-level
+ * one like goToPreviousStep/selectDecisionOption — it resets the entire
+ * session back to the exact state createDiagnosticSession itself produces
+ * (`currentStepIndex` 0, `status` "OPEN", both `lastSelectedOptionId`/
+ * `lastFreeTextDetail` cleared), unlike goToPreviousStep, which only ever
+ * moves one step and deliberately leaves `status` alone (see that
+ * function's own doc comment). Restart's whole point is "forget what
+ * happened, start over" — status genuinely does return to "not yet
+ * progressed" here, the one case in this file where that's correct.
+ *
+ * No `currentStepIndex === 0` guard the way goToPreviousStep has one —
+ * restarting an already-fresh session is a harmless no-op success, not an
+ * error; unlike "go back past the first step" (which has no valid target
+ * to move to), "start over" is always a coherent request regardless of
+ * where the session currently is. Deliberately no confirmation-dialog
+ * requirement here: this is Team A mock local state, not an irreversible
+ * business action, and E07-S017 "Confirmation" is its own later story for
+ * whichever action actually needs one — adding a confirmation step here
+ * would be reaching into that story's own scope.
+ *
+ * Fails closed with NOT_FOUND for an unknown `sessionId` — same
+ * `readStore().find(...)` precedent every other lookup in this file
+ * already follows.
+ */
+export async function restartDiagnosticSession(sessionId: string): Promise<Result<DiagnosticSession, ApiError>> {
+  const sessions = readStore();
+  const session = sessions.find((item) => item.id === sessionId);
+  if (!session) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個診斷 session。" } };
+  }
+
+  const updated: DiagnosticSession = {
+    ...session,
+    currentStepIndex: 0,
+    status: "OPEN",
+    lastSelectedOptionId: undefined,
+    lastFreeTextDetail: undefined,
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
+  return { ok: true, value: updated };
+}

@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 8 | 1 | 0 | 0 | 16 |
+| E07 Maintenance Assistant Experience | 25 | 9 | 0 | 0 | 0 | 16 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 91 | 1 | 0 | 1 | 82 |
+| **合計** | **175** | 92 | 0 | 0 | 1 | 82 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -147,7 +147,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S006 | approved | story/E07-S006-diagnostic-session-shell | [E07-S006.md](E07-S006.md) | 獨立審核 APPROVE(Diagnostic session shell,`/maintenance/[id]/session` 殼——讀案例、取得或建立 session、顯示狀態,尚無真正診斷步驟(S007 起才有);`DiagnosticSessionStatus` 五值逐字取自 SOURCE_BASELINE E08 Session State;resume-not-duplicate 為核心能力,兩段式 fetch(先查後建)而非 upsert;`NewMaintenanceCasePage` 重導目標從 `/maintenance` 改為新 session。**SELF-REVIEW 抓到真實 Security AC 缺口**:`nav-items.ts` 的 `rolesRequiredFor` 只做完全相等比對,導致本 story 新路由(與 S002 既有的 `/maintenance/new`)完全沒有角色限制,任何登入使用者皆可繞過 `/maintenance` 本身的 maintenance_engineer 限制;修正為前綴比對(該檔案自己 doc comment 早已預告的擴充點),同時發現的 returnUrl round trip 技巧讓 S001 當初判斷不可行的 negative-authorization E2E 測試變得可行;審核者對抗性還原此修正,三層(2 個單元+1 個 E2E)逐字重現預期失敗,證實缺口與修法皆真實;另對抗性突變 resume 檢查邏輯,證實 5 個測試(含 4 個原本沒設 mock 回傳值的)會連鎖失敗,confirm resume 防護比表面更紮實;兩處還原後 diff 皆為 0。強制單獨重跑 typecheck/lint/build(0 cached)20/20+20/20+12/12,獨立全量重跑 966 unit+163 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
 | E07-S007 | approved | story/E07-S007-current-step-card | [E07-S007.md](E07-S007.md) | 獨立審核 APPROVE(Current-step card;開工前 `/advisor` 分析後自主採納「不 model Team B 決策樹分支」的設計界線,`lib/diagnostic-steps.ts` 新增單一、明確標示模擬(「（模擬步驟）」,同 answer-state.ts 慣例)、不持久化的 `DiagnosticStep`,取代 S006 自己 EVIDENCE 預告的佔位文字;S006 既有 E2E 斷言依其自身 AC 合理取代(同 E05-S020→S029 先例);0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build 皆 force 全量、972 unit/164 E2E 皆綠,另以與 DEV 階段不同的獨立對抗性突變(stepIndex 0→1)複驗,2 個測試跨 2 個檔案精準捕捉,確認 nav-items.ts 的既有安全修正未被觸碰;0 個 BLOCKER/MAJOR/MINOR) |
 | E07-S008 | approved | story/E07-S008-decision-options | [E07-S008.md](E07-S008.md) | 獨立審核 APPROVE(Decision options;守住 S007「不 model 分支」界線,選項終點單一(currentStepIndex 固定前進一格)但選擇誠實記錄(lastSelectedOptionId);首次選擇讓 status OPEN→IN_PROGRESS(訂正 S006/S007 皆誤植為「S007」的預測);1 次 FIX 循環(E2E locator 撞到步驟說明文字本身含「進行中」,同 E07-S004 exact:true 先例,非 production bug);審核者獨立重跑 typecheck/lint/build 皆 force 全量、984 unit/166 E2E 皆綠(E2E 過程中一個無關的 E05 spec 因系統負載(8 核心 load average 13-15)瞬斷,以 3 次隔離重跑+系統負載量測確認為環境雜訊、非退步);另以與 DEV 階段不同的獨立對抗性突變(移除 status flip 邏輯)複驗,恰好 1 個測試精準捕捉;0 個 BLOCKER/MAJOR/MINOR) |
-| E07-S009 | done | story/E07-S009-free-text-detail | [E07-S009.md](E07-S009.md) | 開工前 `/advisor` 分析後自主採納:比照 `createMaintenanceCase` 既有的「必要選擇+選填自由文字一次提交」先例,`selectDecisionOption` 新增選填 `detail` 參數,不做獨立動作;新增顯示已記錄補充說明(避免寫入黑洞);1 次 FIX 循環(production bug——巢狀 text node 導致 RTL exact-match 找不到元素,已比照既有 `<span>` 慣例修正,非測試錯誤);995 unit + 168 E2E 全綠;對抗性複驗 trim/absence-means-not-set guard 恰好 2 個專屬測試捕捉;過程中一次操作失誤(複驗後 checkout 未先 add,清空真實變更)已誠實記錄並以 typecheck/lint cache-hit + 995/995 雙重確認完整恢復;待 `/story-review` 獨立審核 |
+| E07-S009 | approved | story/E07-S009-free-text-detail | [E07-S009.md](E07-S009.md) | 獨立審核 APPROVE(Free-text detail;比照 `createMaintenanceCase` 既有的「必要選擇+選填自由文字一次提交」先例,`selectDecisionOption` 新增選填 `detail` 參數,不做獨立動作;新增顯示已記錄補充說明(避免寫入黑洞);1 次 FIX 循環(production bug——巢狀 text node 導致 RTL exact-match 找不到元素,已比照既有 `<span>` 慣例修正,非測試錯誤);審核者獨立重跑 typecheck/lint/build 皆 force 全量、995 unit/168 E2E 皆綠(E2E 過程中同一個已知的無關 E05 spec 系統負載瞬斷,再次以隔離重跑確認為環境雜訊);審核者獨立核對 EVIDENCE 自報的操作失誤(複驗後 checkout 未先 add)確認已誠實記錄且完整恢復;另以與 DEV 階段不同的獨立對抗性突變(UI 層永遠帶入第三參數)複驗,證實同時破壞新測試與既有 S008 測試,證明「空白時省略參數」的設計是真正必要而非巧合;0 個 BLOCKER/MAJOR/MINOR) |
 | E07-S010 | todo | | | |
 | E07-S011 | todo | | | |
 | E07-S012 | todo | | | |

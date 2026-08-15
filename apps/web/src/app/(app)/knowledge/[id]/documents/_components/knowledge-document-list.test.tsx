@@ -1007,3 +1007,171 @@ describe("KnowledgeDocumentList — document state badges (E05-S029)", () => {
     expect(screen.getByText("已封存")).toBeInTheDocument();
   });
 });
+
+describe("KnowledgeDocumentList — bulk document selection/actions (E05-S030)", () => {
+  const twoDocuments = [
+    { id: "doc1", knowledgeBaseId: "kb1", name: "第一份.pdf", sizeBytes: 100, uploadedAt: "2026-08-15T00:00:00.000Z" },
+    { id: "doc2", knowledgeBaseId: "kb1", name: "第二份.pdf", sizeBytes: 200, uploadedAt: "2026-08-15T00:00:00.000Z" },
+  ];
+
+  it("shows a selection checkbox for every document, and a 全選 checkbox", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("第一份.pdf");
+    expect(screen.getByRole("checkbox", { name: "選取 第一份.pdf" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "選取 第二份.pdf" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "全選" })).toBeInTheDocument();
+  });
+
+  it("does not show the bulk actions toolbar until at least one document is selected", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+    expect(screen.queryByRole("group", { name: "批次操作" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第一份.pdf" }));
+
+    expect(await screen.findByRole("group", { name: "批次操作" })).toHaveTextContent("已選擇 1 份文件");
+  });
+
+  it("checking 全選 selects every document; unchecking it clears the selection", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "全選" }));
+    expect(screen.getByRole("checkbox", { name: "選取 第一份.pdf" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "選取 第二份.pdf" })).toBeChecked();
+    expect(await screen.findByRole("group", { name: "批次操作" })).toHaveTextContent("已選擇 2 份文件");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "全選" }));
+    expect(screen.getByRole("checkbox", { name: "選取 第一份.pdf" })).not.toBeChecked();
+    expect(screen.queryByRole("group", { name: "批次操作" })).not.toBeInTheDocument();
+  });
+
+  it("全選 becomes checked once every document is individually checked", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第一份.pdf" }));
+    expect(screen.getByRole("checkbox", { name: "全選" })).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第二份.pdf" }));
+    expect(screen.getByRole("checkbox", { name: "全選" })).toBeChecked();
+  });
+
+  it("switching views clears the current selection", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第一份.pdf" }));
+    await screen.findByRole("group", { name: "批次操作" });
+
+    fireEvent.click(screen.getByRole("button", { name: "已封存文件" }));
+
+    await waitFor(() => expect(screen.queryByRole("group", { name: "批次操作" })).not.toBeInTheDocument());
+  });
+
+  it("a successful bulk archive clears the selection and refreshes the active view", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: twoDocuments })
+      .mockResolvedValueOnce({ ok: true, value: [twoDocuments[1]!] });
+    mockedArchiveKnowledgeBaseDocument.mockResolvedValue({
+      ok: true,
+      value: { ...twoDocuments[0]!, archived: true },
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第一份.pdf" }));
+    await screen.findByRole("group", { name: "批次操作" });
+
+    fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
+
+    await waitFor(() => expect(screen.queryByText("第一份.pdf")).not.toBeInTheDocument());
+    expect(screen.getByText("第二份.pdf")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "批次操作" })).not.toBeInTheDocument();
+    expect(mockedArchiveKnowledgeBaseDocument).toHaveBeenCalledWith("kb1", "doc1");
+  });
+
+  it("disables every selection checkbox while a bulk action is in flight, preventing the toolbar from unmounting mid-operation", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+    let resolveArchive!: (value: Awaited<ReturnType<typeof archiveKnowledgeBaseDocument>>) => void;
+    mockedArchiveKnowledgeBaseDocument.mockReturnValue(new Promise((resolve) => (resolveArchive = resolve)));
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第一份.pdf" }));
+    await screen.findByRole("group", { name: "批次操作" });
+
+    fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
+
+    // Regression test: before onPendingChange existed, nothing stopped
+    // unchecking every box mid-operation, which would unmount the
+    // toolbar while its own loop was still awaiting a later item and
+    // let a fresh selection start a second, overlapping bulk action.
+    expect(screen.getByRole("checkbox", { name: "選取 第一份.pdf" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "選取 第二份.pdf" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "全選" })).toBeDisabled();
+
+    resolveArchive({ ok: true, value: { ...twoDocuments[0]!, archived: true } });
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "選取 第二份.pdf" })).not.toBeDisabled());
+  });
+
+  it("disables the view-switch buttons while a bulk action is in flight, since switching views also clears the selection", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+    let resolveArchive!: (value: Awaited<ReturnType<typeof archiveKnowledgeBaseDocument>>) => void;
+    mockedArchiveKnowledgeBaseDocument.mockReturnValue(new Promise((resolve) => (resolveArchive = resolve)));
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第一份.pdf" }));
+    await screen.findByRole("group", { name: "批次操作" });
+
+    fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
+
+    // Regression test: handleViewChange clears selectedIds
+    // unconditionally, so switching views is a second path to the same
+    // mid-operation unmount the checkbox guard alone doesn't cover.
+    expect(screen.getByRole("button", { name: "作用中文件" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "已封存文件" })).toBeDisabled();
+
+    resolveArchive({ ok: true, value: { ...twoDocuments[0]!, archived: true } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "已封存文件" })).not.toBeDisabled());
+  });
+
+  it("a successful bulk delete removes the selected documents and clears the selection", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments
+      .mockResolvedValueOnce({ ok: true, value: twoDocuments })
+      .mockResolvedValueOnce({ ok: true, value: [] });
+    mockedDeleteKnowledgeBaseDocument.mockResolvedValue({ ok: true, value: undefined });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+    fireEvent.click(screen.getByRole("checkbox", { name: "全選" }));
+    await screen.findByRole("group", { name: "批次操作" });
+
+    fireEvent.click(screen.getByRole("button", { name: "刪除所選文件" }));
+    fireEvent.click(screen.getByRole("button", { name: "確認刪除" }));
+
+    await waitFor(() => expect(mockedDeleteKnowledgeBaseDocument).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("這個知識庫尚無文件。")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "批次操作" })).not.toBeInTheDocument();
+  });
+});

@@ -130,6 +130,14 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * content.tsx's own doc comment for a documented case where the two
  * genuinely disagree on a DPUB-ARIA role, which is exactly the kind of
  * gap a real-browser E2E check like this one exists to catch).
+ *
+ * E05-S030 adds a selection checkbox per document, a 全選 checkbox, and
+ * a batch-actions toolbar (bulk archive/unarchive, bulk delete with its
+ * own role="alertdialog" confirmation) — this test selects two of the
+ * three seeded documents via 全選-then-uncheck-one, bulk-archives them,
+ * confirms both moved to 已封存文件 leaving only the third in the active
+ * view, then bulk-deletes from within the archived view and confirms
+ * both are gone for good.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -709,4 +717,40 @@ test("E05-S029: 處理失敗 resolves as a real role=alert badge and 已封存 r
   const archivedItem = page.getByText("損毀報告", { exact: false }).locator("..");
   await expect(archivedItem.getByRole("alert")).toHaveText("處理失敗");
   await expect(archivedItem.getByRole("status")).toHaveText("已封存");
+});
+
+test("E05-S030: selecting several documents and bulk-archiving moves them together, then bulk-deleting from the archived view removes them for good", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "產品保固政策");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await page.getByRole("checkbox", { name: "全選" }).check();
+  await page.getByRole("checkbox", { name: "選取 常見保固問題 FAQ.pdf" }).uncheck();
+  await expect(page.getByRole("group", { name: "批次操作" })).toContainText("已選擇 2 份文件");
+
+  await page.getByRole("button", { name: "封存所選文件" }).click();
+
+  await expect(page.getByText("產品保固條款.pdf")).toHaveCount(0);
+  await expect(page.getByText("理賠申請流程.docx")).toHaveCount(0);
+  await expect(page.getByText("常見保固問題 FAQ.pdf")).toBeVisible();
+  await expect(page.getByRole("group", { name: "批次操作" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "已封存文件" }).click();
+  await expect(page.getByText("產品保固條款.pdf")).toBeVisible();
+  await expect(page.getByText("理賠申請流程.docx")).toBeVisible();
+
+  await page.getByRole("checkbox", { name: "全選" }).check();
+  await expect(page.getByRole("group", { name: "批次操作" })).toContainText("已選擇 2 份文件");
+  await page.getByRole("button", { name: "刪除所選文件" }).click();
+  await expect(page.getByRole("alertdialog", { name: "確認刪除 2 份文件" })).toBeVisible();
+  await page.getByRole("button", { name: "確認刪除" }).click();
+
+  await expect(page.getByText("尚無已封存的文件。")).toBeVisible();
+
+  await page.getByRole("button", { name: "作用中文件" }).click();
+  await expect(page.getByText("常見保固問題 FAQ.pdf")).toBeVisible();
+  await expect(page.getByText("產品保固條款.pdf")).toHaveCount(0);
+  await expect(page.getByText("理賠申請流程.docx")).toHaveCount(0);
 });

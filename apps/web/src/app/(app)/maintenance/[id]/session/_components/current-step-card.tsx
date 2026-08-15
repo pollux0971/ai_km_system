@@ -11,6 +11,7 @@ import {
   type DiagnosticSession,
 } from "@/lib/diagnostic-sessions";
 import { explainDiagnosticStep } from "@/lib/diagnostic-explanations";
+import { getDiagnosticStepCitation, type SopCitation } from "@/lib/diagnostic-citations";
 import type { DiagnosticStep } from "@/lib/diagnostic-steps";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -151,6 +152,22 @@ function formatFileSize(bytes: number): string {
  * `explainError`/`explanation` all cleared) on `step.stepIndex` change,
  * same trigger and reasoning as `detailText`/`skipReason`/`photoFile`'s
  * own reset above.
+ *
+ * The SOP 引用來源 toggle button (E07-S015 "SOP citation component") is a
+ * structural twin of the AI 說明 button immediately above it — same
+ * `sessionId`-only gating (required for the same S007 zero-buttons-test
+ * reason), same fully independent `sopPending`/`sopError`/`sopCitation`
+ * state (not shared with `pending`/`error` NOR with `explainPending`/
+ * `explainError` — the two panels are not mutually exclusive with each
+ * other either; a user can plausibly want both open at once, see
+ * diagnostic-citations.ts's own doc comment for why this mirrors S014's
+ * mechanics rather than message-content.tsx's `[N]`-marker mechanics), same
+ * short-circuit-once-loaded caching, same reset-on-`step.stepIndex`-change.
+ * Deliberately a SEPARATE toggle from AI 說明 rather than one combined
+ * panel — explaining WHY a step matters and citing WHERE its SOP comes
+ * from are genuinely different questions with genuinely different answers,
+ * same "one story, one distinct capability" granularity every other pair
+ * of adjacent E07 stories in this file already follows.
  */
 export default function CurrentStepCard({
   sessionId,
@@ -178,6 +195,10 @@ export default function CurrentStepCard({
   const [explainPending, setExplainPending] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [sopOpen, setSopOpen] = useState(false);
+  const [sopPending, setSopPending] = useState(false);
+  const [sopError, setSopError] = useState<string | null>(null);
+  const [sopCitation, setSopCitation] = useState<SopCitation | null>(null);
   const detailFieldId = useId();
   const skipFieldId = useId();
   const photoFieldId = useId();
@@ -189,6 +210,9 @@ export default function CurrentStepCard({
     setExplainOpen(false);
     setExplainError(null);
     setExplanation(null);
+    setSopOpen(false);
+    setSopError(null);
+    setSopCitation(null);
   }, [step.stepIndex]);
 
   async function handleSelect(optionId: string) {
@@ -331,6 +355,32 @@ export default function CurrentStepCard({
     setExplanation(result.value);
   }
 
+  async function handleToggleSopCitation() {
+    const opening = !sopOpen;
+    setSopOpen(opening);
+    if (!opening || sopCitation !== null || sopPending) return;
+
+    const correlationId = crypto.randomUUID();
+    setSopPending(true);
+    setSopError(null);
+    logger.info("loading SOP citation", { correlationId, stepIndex: step.stepIndex });
+    trackEvent("maintenance_session_sop_citation_attempt", { correlationId, properties: { stepIndex: step.stepIndex } });
+
+    const result = await getDiagnosticStepCitation(step.stepIndex);
+
+    setSopPending(false);
+    if (!result.ok) {
+      logger.error("failed to load SOP citation", { correlationId, stepIndex: step.stepIndex, code: result.error.code });
+      trackEvent("maintenance_session_sop_citation_failure", { correlationId, properties: { stepIndex: step.stepIndex, code: result.error.code } });
+      setSopError(result.error.message);
+      return;
+    }
+
+    logger.info("SOP citation loaded", { correlationId, stepIndex: step.stepIndex });
+    trackEvent("maintenance_session_sop_citation_success", { correlationId, properties: { stepIndex: step.stepIndex } });
+    setSopCitation(result.value);
+  }
+
   return (
     <section>
       <h2>步驟 {step.stepIndex + 1}</h2>
@@ -347,6 +397,20 @@ export default function CurrentStepCard({
       {explainOpen && explanation && (
         <p>
           <span>{explanation}</span>
+        </p>
+      )}
+      {sessionId && (
+        <p>
+          <button type="button" onClick={handleToggleSopCitation}>
+            {sopOpen ? "收合 SOP 引用來源" : "SOP 引用來源"}
+          </button>
+        </p>
+      )}
+      {sopOpen && sopPending && <LoadingIndicator />}
+      {sopOpen && sopError && <ErrorMessage message={sopError} />}
+      {sopOpen && sopCitation && (
+        <p>
+          <span>{sopCitation.title}</span>（<span>{sopCitation.section}</span>）:<span>{sopCitation.snippet}</span>
         </p>
       )}
       {recordedDetail && (

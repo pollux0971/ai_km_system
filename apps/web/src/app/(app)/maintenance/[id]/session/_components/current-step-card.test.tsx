@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CurrentStepCard from "./current-step-card";
 import { goToPreviousStep, restartDiagnosticSession, selectDecisionOption, skipDiagnosticStep } from "@/lib/diagnostic-sessions";
 import { explainDiagnosticStep } from "@/lib/diagnostic-explanations";
+import { getDiagnosticStepCitation } from "@/lib/diagnostic-citations";
 
 vi.mock("@/lib/diagnostic-sessions", () => ({
   selectDecisionOption: vi.fn(),
@@ -15,11 +16,16 @@ vi.mock("@/lib/diagnostic-explanations", () => ({
   explainDiagnosticStep: vi.fn(),
 }));
 
+vi.mock("@/lib/diagnostic-citations", () => ({
+  getDiagnosticStepCitation: vi.fn(),
+}));
+
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
 const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
 const mockedExplainDiagnosticStep = vi.mocked(explainDiagnosticStep);
+const mockedGetDiagnosticStepCitation = vi.mocked(getDiagnosticStepCitation);
 
 function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
   const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
@@ -556,5 +562,102 @@ describe("CurrentStepCard AI explain-step panel (E07-S014)", () => {
 
     expect(screen.getByRole("button", { name: "AI 說明" })).not.toBeDisabled();
     resolveSelect({ ok: true, value: { id: "session1", maintenanceCaseId: "case1", status: "IN_PROGRESS", currentStepIndex: 1, createdAt: "", updatedAt: "" } });
+  });
+});
+
+describe("CurrentStepCard SOP citation component (E07-S015)", () => {
+  const sampleCitation = {
+    id: "sop-diag-01",
+    title: "（模擬 SOP）設備異常初步診斷標準作業程序",
+    section: "第 2 節：異常現象記錄",
+    snippet: "（模擬片段）操作人員應於發現異常時，記錄觀察到的聲音、燈號與錯誤訊息，作為後續判斷依據。",
+  };
+
+  beforeEach(() => {
+    mockedGetDiagnosticStepCitation.mockReset();
+  });
+
+  it("renders a SOP 引用來源 button when sessionId is present", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "SOP 引用來源" })).toBeInTheDocument();
+  });
+
+  it("does not render a SOP 引用來源 button when sessionId is absent (S007 behavior unchanged)", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("clicking SOP 引用來源 shows a loading indicator, then the citation once resolved", async () => {
+    let resolveCitation: (value: Awaited<ReturnType<typeof getDiagnosticStepCitation>>) => void = () => {};
+    mockedGetDiagnosticStepCitation.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCitation = resolve;
+      }),
+    );
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "SOP 引用來源" }));
+
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+
+    resolveCitation({ ok: true, value: sampleCitation });
+
+    expect(await screen.findByText(sampleCitation.title, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(sampleCitation.snippet, { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("clicking SOP 引用來源 a second time collapses the panel", async () => {
+    mockedGetDiagnosticStepCitation.mockResolvedValue({ ok: true, value: sampleCitation });
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "SOP 引用來源" }));
+    expect(await screen.findByText(sampleCitation.title, { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "收合 SOP 引用來源" }));
+
+    expect(screen.queryByText(sampleCitation.title, { exact: false })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "SOP 引用來源" })).toBeInTheDocument();
+  });
+
+  it("re-opening an already-loaded citation does not call getDiagnosticStepCitation a second time", async () => {
+    mockedGetDiagnosticStepCitation.mockResolvedValue({ ok: true, value: sampleCitation });
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "SOP 引用來源" }));
+    await screen.findByText(sampleCitation.title, { exact: false });
+    fireEvent.click(screen.getByRole("button", { name: "收合 SOP 引用來源" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "SOP 引用來源" }));
+
+    expect(await screen.findByText(sampleCitation.title, { exact: false })).toBeInTheDocument();
+    expect(mockedGetDiagnosticStepCitation).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an error message when loading the citation fails", async () => {
+    mockedGetDiagnosticStepCitation.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個步驟的 SOP 引用來源。" } });
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "SOP 引用來源" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("找不到這個步驟的 SOP 引用來源。");
+  });
+
+  it("operates independently from the AI 說明 panel — opening one does not affect the other", async () => {
+    mockedExplainDiagnosticStep.mockResolvedValue({ ok: true, value: "（模擬說明）這是測試用的說明文字。" });
+    mockedGetDiagnosticStepCitation.mockResolvedValue({ ok: true, value: sampleCitation });
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "AI 說明" }));
+    expect(await screen.findByText("（模擬說明）這是測試用的說明文字。")).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "SOP 引用來源" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "SOP 引用來源" }));
+    expect(await screen.findByText(sampleCitation.title, { exact: false })).toBeInTheDocument();
+
+    expect(screen.getByText("（模擬說明）這是測試用的說明文字。")).toBeInTheDocument();
+    expect(mockedExplainDiagnosticStep).toHaveBeenCalledTimes(1);
   });
 });

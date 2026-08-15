@@ -27,12 +27,14 @@ export type DiagnosticSessionStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "ESC
  * (which lib/diagnostic-steps.ts content this session is currently
  * showing — always 0 for a fresh session, see createDiagnosticSession's
  * own doc comment) and `lastSelectedOptionId` (which option the user most
- * recently picked; `undefined` until the first selection). Both are
- * plain, Team-A-owned progress markers — not a guess at E08's real
- * `DecisionSession`/`DecisionEvent` shape (E08-S08/S09, Team B; zero
- * contracts exist yet under contracts/ for either), and not a graph
- * position: `currentStepIndex` only ever advances one flat step at a time
- * via selectDecisionOption below, never branches (see
+ * recently picked; `undefined` until the first selection), plus, as of
+ * E07-S009 "Free-text detail", `lastFreeTextDetail` (optional supplementary
+ * text submitted alongside that same selection; `undefined` when none was
+ * given). All three are plain, Team-A-owned progress markers — not a guess
+ * at E08's real `DecisionSession`/`DecisionEvent` shape (E08-S08/S09, Team
+ * B; zero contracts exist yet under contracts/ for either), and not a
+ * graph position: `currentStepIndex` only ever advances one flat step at a
+ * time via selectDecisionOption below, never branches (see
  * diagnostic-steps.ts's own top doc comment for why branching itself is
  * deliberately out of scope for Team A). Same "grow one field per story,
  * don't reach into a later story's own scope" discipline
@@ -46,6 +48,7 @@ export interface DiagnosticSession {
   status: DiagnosticSessionStatus;
   currentStepIndex: number;
   lastSelectedOptionId?: string;
+  lastFreeTextDetail?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -161,8 +164,23 @@ export async function createDiagnosticSession(maintenanceCaseId: string): Promis
  *      of the same guarantee, not reachable through the real UI at all,
  *      same "structural, not just client-hidden" precedent role-guard.tsx
  *      already establishes for authorization.
+ *
+ * `detail` (E07-S009 "Free-text detail") is optional supplementary text
+ * submitted alongside the choice — same "required choice + optional free
+ * text, one submission" shape createMaintenanceCase already establishes
+ * for equipmentId + problemDescription, rather than a second independent
+ * action. Trimmed; whitespace-only or omitted both mean "no detail given"
+ * (`lastFreeTextDetail` stays `undefined`), same "absence means not-set"
+ * precedent createMaintenanceCase's own serialNumber handling already
+ * follows. Explicitly overwrites any previous value on every call (not
+ * merged/appended) — `lastFreeTextDetail`, like `lastSelectedOptionId`,
+ * reflects only the most recent selection.
  */
-export async function selectDecisionOption(sessionId: string, optionId: string): Promise<Result<DiagnosticSession, ApiError>> {
+export async function selectDecisionOption(
+  sessionId: string,
+  optionId: string,
+  detail?: string,
+): Promise<Result<DiagnosticSession, ApiError>> {
   const sessions = readStore();
   const session = sessions.find((item) => item.id === sessionId);
   if (!session) {
@@ -175,10 +193,12 @@ export async function selectDecisionOption(sessionId: string, optionId: string):
     return { ok: false, error: { code: "VALIDATION_ERROR", message: "目前步驟沒有這個選項。" } };
   }
 
+  const trimmedDetail = detail?.trim();
   const updated: DiagnosticSession = {
     ...session,
     currentStepIndex: session.currentStepIndex + 1,
     lastSelectedOptionId: optionId,
+    lastFreeTextDetail: trimmedDetail || undefined,
     status: session.status === "OPEN" ? "IN_PROGRESS" : session.status,
     updatedAt: new Date().toISOString(),
   };

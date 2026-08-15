@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage } from "@ai-km/ui";
 import { selectDecisionOption, type DiagnosticSession } from "@/lib/diagnostic-sessions";
@@ -10,13 +10,14 @@ import { trackEvent } from "@/lib/telemetry";
 const logger = createLogger("web:current-step-card");
 
 /**
- * E07-S007 "Current-step card" / E07-S008 "Decision options".
- * `sessionId`/`onAdvanced` are optional — S007's own existing tests
- * render a step with no `options` and never need either (see
- * diagnostic-steps.ts's own doc comment: only step 0 has options today),
- * same "the interactive path only turns on when there's something to be
- * interactive about" shape KnowledgeDocumentRetryButton's own conditional
- * rendering follows for a document that isn't currently failed.
+ * E07-S007 "Current-step card" / E07-S008 "Decision options" / E07-S009
+ * "Free-text detail". `sessionId`/`onAdvanced` are optional — S007's own
+ * existing tests render a step with no `options` and never need either
+ * (see diagnostic-steps.ts's own doc comment: only step 0 has options
+ * today), same "the interactive path only turns on when there's something
+ * to be interactive about" shape KnowledgeDocumentRetryButton's own
+ * conditional rendering follows for a document that isn't currently
+ * failed.
  *
  * Owns its own selection mutation (calls selectDecisionOption directly)
  * rather than delegating the click up to maintenance-session.tsx —
@@ -27,29 +28,58 @@ const logger = createLogger("web:current-step-card");
  * signal) since there is no separate refetch — the mutation's own
  * response IS the new truth, same shape createDiagnosticSession's own
  * caller (maintenance-session.tsx) already follows for its result.
+ *
+ * The free-text textarea (E07-S009) only renders alongside real options —
+ * same "required choice + optional free text, one submission" shape
+ * maintenance-cases.ts's own createMaintenanceCase already establishes for
+ * equipmentId + problemDescription (see selectDecisionOption's own doc
+ * comment), not a second independent action. The trimmed value is passed
+ * as `handleSelect`'s third argument ONLY when non-empty — omitted
+ * entirely (not passed as `""`/`undefined`) when blank, so a click with no
+ * typed detail calls selectDecisionOption with the exact same 2-argument
+ * shape E07-S008's own existing test already locks in, needing no change
+ * there. `recordedDetail` (session.lastFreeTextDetail, passed down by
+ * maintenance-session.tsx) is shown back once set — an input with no
+ * visible effect anywhere would be a write-only void, not a real
+ * capability (Functional AC 8).
+ *
+ * Telemetry/log calls carry `hasDetail` (a boolean) never the detail TEXT
+ * itself — same "don't log enterprise/user-authored content" restraint
+ * knowledge-document-retry-button.tsx's own doc comment already follows
+ * for document names.
  */
 export default function CurrentStepCard({
   sessionId,
   step,
   onAdvanced,
+  recordedDetail,
 }: {
   sessionId?: string;
   step: DiagnosticStep;
   onAdvanced?: (session: DiagnosticSession) => void;
+  recordedDetail?: string;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailText, setDetailText] = useState("");
+  const detailFieldId = useId();
 
   async function handleSelect(optionId: string) {
     if (pending || !sessionId) return;
 
+    const trimmedDetail = detailText.trim();
     const correlationId = crypto.randomUUID();
     setPending(true);
     setError(null);
-    logger.info("selecting diagnostic decision option", { correlationId, sessionId, optionId });
-    trackEvent("maintenance_session_option_select_attempt", { correlationId, properties: { sessionId, optionId } });
+    logger.info("selecting diagnostic decision option", { correlationId, sessionId, optionId, hasDetail: Boolean(trimmedDetail) });
+    trackEvent("maintenance_session_option_select_attempt", {
+      correlationId,
+      properties: { sessionId, optionId, hasDetail: Boolean(trimmedDetail) },
+    });
 
-    const result = await selectDecisionOption(sessionId, optionId);
+    const result = trimmedDetail
+      ? await selectDecisionOption(sessionId, optionId, trimmedDetail)
+      : await selectDecisionOption(sessionId, optionId);
 
     setPending(false);
     if (!result.ok) {
@@ -71,14 +101,31 @@ export default function CurrentStepCard({
     <section>
       <h2>步驟 {step.stepIndex + 1}</h2>
       <p>{step.instruction}</p>
-      {step.options && step.options.length > 0 && (
+      {recordedDetail && (
         <p>
-          {step.options.map((option) => (
-            <button key={option.id} type="button" onClick={() => handleSelect(option.id)} disabled={pending} style={{ marginRight: 8 }}>
-              {option.label}
-            </button>
-          ))}
+          您的補充說明:<span>{recordedDetail}</span>
         </p>
+      )}
+      {step.options && step.options.length > 0 && (
+        <>
+          <p>
+            <label htmlFor={detailFieldId}>補充說明</label>
+            <br />
+            <textarea
+              id={detailFieldId}
+              value={detailText}
+              onChange={(event) => setDetailText(event.target.value)}
+              disabled={pending}
+            />
+          </p>
+          <p>
+            {step.options.map((option) => (
+              <button key={option.id} type="button" onClick={() => handleSelect(option.id)} disabled={pending} style={{ marginRight: 8 }}>
+                {option.label}
+              </button>
+            ))}
+          </p>
+        </>
       )}
       {error && <ErrorMessage message={error} />}
     </section>

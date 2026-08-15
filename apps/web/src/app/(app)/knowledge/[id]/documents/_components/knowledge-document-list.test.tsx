@@ -1107,6 +1107,31 @@ describe("KnowledgeDocumentList — bulk document selection/actions (E05-S030)",
     expect(mockedArchiveKnowledgeBaseDocument).toHaveBeenCalledWith("kb1", "doc1");
   });
 
+  it("disables every selection checkbox while a bulk action is in flight, preventing the toolbar from unmounting mid-operation", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+    let resolveArchive!: (value: Awaited<ReturnType<typeof archiveKnowledgeBaseDocument>>) => void;
+    mockedArchiveKnowledgeBaseDocument.mockReturnValue(new Promise((resolve) => (resolveArchive = resolve)));
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第一份.pdf" }));
+    await screen.findByRole("group", { name: "批次操作" });
+
+    fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
+
+    // Regression test: before onPendingChange existed, nothing stopped
+    // unchecking every box mid-operation, which would unmount the
+    // toolbar while its own loop was still awaiting a later item and
+    // let a fresh selection start a second, overlapping bulk action.
+    expect(screen.getByRole("checkbox", { name: "選取 第一份.pdf" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "選取 第二份.pdf" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "全選" })).toBeDisabled();
+
+    resolveArchive({ ok: true, value: { ...twoDocuments[0]!, archived: true } });
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "選取 第二份.pdf" })).not.toBeDisabled());
+  });
+
   it("a successful bulk delete removes the selected documents and clears the selection", async () => {
     mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
     mockedListKnowledgeBaseDocuments

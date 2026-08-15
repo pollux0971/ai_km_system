@@ -232,7 +232,14 @@ type State =
  * that component's own doc comment for why it loops over the existing
  * single-item archive/unarchive/delete functions instead, the same
  * "S012 already established this exact shape of problem in this exact
- * codebase" reasoning.
+ * codebase" reasoning. `bulkActionPending` (fed by
+ * KnowledgeDocumentBulkActions' own `onPendingChange`) disables every
+ * selection checkbox for the duration of a bulk action — without it,
+ * unchecking every box mid-operation would unmount the toolbar (it
+ * only renders while `selectedIds.size > 0`) while its own
+ * archive/unarchive/delete loop is still awaiting a later item, and a
+ * fresh selection could then start a second, genuinely overlapping
+ * bulk operation before the first one's loop finishes.
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -254,6 +261,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
   const viewingArchivedRef = useRef(viewingArchived);
   viewingArchivedRef.current = viewingArchived;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActionPending, setBulkActionPending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -398,6 +406,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
           <label>
             <input
               type="checkbox"
+              disabled={bulkActionPending}
               checked={documents.every((document) => selectedIds.has(document.id))}
               onChange={(event) => handleSelectAllChange(event.target.checked, documents.map((document) => document.id))}
             />
@@ -412,6 +421,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
           documentIds={Array.from(selectedIds)}
           viewingArchived={viewingArchived}
           onCompleted={handleBulkActionsCompleted}
+          onPendingChange={setBulkActionPending}
         />
       )}
 
@@ -422,6 +432,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
               <input
                 type="checkbox"
                 aria-label={`選取 ${document.name}`}
+                disabled={bulkActionPending}
                 checked={selectedIds.has(document.id)}
                 onChange={(event) => toggleSelected(document.id, event.target.checked)}
               />

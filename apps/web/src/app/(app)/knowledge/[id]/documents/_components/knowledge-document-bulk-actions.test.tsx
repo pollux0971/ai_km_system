@@ -33,14 +33,14 @@ beforeEach(() => {
 
 describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
   it("shows the selected count and the 封存所選文件 label while viewing the active view", () => {
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
 
     expect(screen.getByText("已選擇 2 份文件")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "封存所選文件" })).toBeInTheDocument();
   });
 
   it("shows the 取消封存所選文件 label while viewing the archived view", () => {
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1"]} viewingArchived={true} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1"]} viewingArchived={true} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "取消封存所選文件" })).toBeInTheDocument();
   });
@@ -48,7 +48,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
   it("bulk archiving calls archiveKnowledgeBaseDocument (not unarchive) for every selected id, then calls onCompleted", async () => {
     mockedArchive.mockImplementation(async (_kb, docId) => archiveOk(docId));
     const onCompleted = vi.fn();
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2", "doc3"]} viewingArchived={false} onCompleted={onCompleted} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2", "doc3"]} viewingArchived={false} onCompleted={onCompleted} onPendingChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
 
@@ -62,7 +62,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
 
   it("bulk unarchiving calls unarchiveKnowledgeBaseDocument (not archive) for every selected id", async () => {
     mockedUnarchive.mockImplementation(async (_kb, docId) => archiveOk(docId));
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={true} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={true} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "取消封存所選文件" }));
 
@@ -76,7 +76,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
       .mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } })
       .mockResolvedValueOnce(archiveOk("doc3"));
     const onCompleted = vi.fn();
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2", "doc3"]} viewingArchived={false} onCompleted={onCompleted} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2", "doc3"]} viewingArchived={false} onCompleted={onCompleted} onPendingChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
 
@@ -87,7 +87,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
   it("a total archive failure shows the failed count and does NOT call onCompleted, since nothing changed", async () => {
     mockedArchive.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } });
     const onCompleted = vi.fn();
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={onCompleted} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={onCompleted} onPendingChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
 
@@ -99,7 +99,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
   it("disables both action buttons while a bulk archive is in flight", async () => {
     let resolveFirst!: (value: Awaited<ReturnType<typeof archiveKnowledgeBaseDocument>>) => void;
     mockedArchive.mockReturnValueOnce(new Promise((resolve) => (resolveFirst = resolve)));
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
 
@@ -111,9 +111,37 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
     await waitFor(() => expect(mockedArchive).toHaveBeenCalledTimes(2));
   });
 
+  it("reports pending true when a bulk archive starts and false once it settles, via onPendingChange", async () => {
+    mockedArchive.mockImplementation(async (_kb, docId) => archiveOk(docId));
+    const onPendingChange = vi.fn();
+    render(
+      <KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} onPendingChange={onPendingChange} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
+
+    expect(onPendingChange).toHaveBeenNthCalledWith(1, true);
+    await waitFor(() => expect(onPendingChange).toHaveBeenNthCalledWith(2, false));
+  });
+
+  it("reports pending true then false for a bulk delete too, across the confirm step", async () => {
+    mockedDelete.mockResolvedValue(deleteOk);
+    const onPendingChange = vi.fn();
+    render(
+      <KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1"]} viewingArchived={false} onCompleted={vi.fn()} onPendingChange={onPendingChange} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "刪除所選文件" }));
+    expect(onPendingChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "確認刪除" }));
+
+    expect(onPendingChange).toHaveBeenNthCalledWith(1, true);
+    await waitFor(() => expect(onPendingChange).toHaveBeenNthCalledWith(2, false));
+  });
+
   it("emits bulk archive attempt/success telemetry sharing a correlation id, with the selected count", async () => {
     mockedArchive.mockImplementation(async (_kb, docId) => archiveOk(docId));
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
     await waitFor(() => expect(mockedArchive).toHaveBeenCalledTimes(2));
@@ -131,7 +159,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
 
   it("emits bulk unarchive telemetry (not archive) when toggling from the archived view", async () => {
     mockedUnarchive.mockImplementation(async (_kb, docId) => archiveOk(docId));
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1"]} viewingArchived={true} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1"]} viewingArchived={true} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "取消封存所選文件" }));
     await waitFor(() => expect(mockedUnarchive).toHaveBeenCalled());
@@ -141,7 +169,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
   });
 
   it("clicking 刪除所選文件 shows a confirmation naming the selected count, without deleting anything yet", () => {
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "刪除所選文件" }));
 
@@ -151,7 +179,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
   });
 
   it("取消 dismisses the bulk delete confirmation without calling deleteKnowledgeBaseDocument", () => {
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1"]} viewingArchived={false} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1"]} viewingArchived={false} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "刪除所選文件" }));
 
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
@@ -163,7 +191,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
   it("確認刪除 calls deleteKnowledgeBaseDocument for every selected id, closes the dialog, and calls onCompleted on full success", async () => {
     mockedDelete.mockResolvedValue(deleteOk);
     const onCompleted = vi.fn();
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={onCompleted} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={onCompleted} onPendingChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "刪除所選文件" }));
 
     fireEvent.click(screen.getByRole("button", { name: "確認刪除" }));
@@ -180,7 +208,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
       .mockResolvedValueOnce(deleteOk)
       .mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } });
     const onCompleted = vi.fn();
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={onCompleted} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={onCompleted} onPendingChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "刪除所選文件" }));
     fireEvent.click(screen.getByRole("button", { name: "確認刪除" }));
 
@@ -192,7 +220,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
   it("a total bulk delete failure closes the dialog, shows the failed count, and does NOT call onCompleted", async () => {
     mockedDelete.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } });
     const onCompleted = vi.fn();
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={onCompleted} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={onCompleted} onPendingChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "刪除所選文件" }));
     fireEvent.click(screen.getByRole("button", { name: "確認刪除" }));
 
@@ -203,7 +231,7 @@ describe("KnowledgeDocumentBulkActions (E05-S030)", () => {
 
   it("emits bulk delete attempt/success telemetry sharing a correlation id, with the selected count", async () => {
     mockedDelete.mockResolvedValue(deleteOk);
-    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} />);
+    render(<KnowledgeDocumentBulkActions knowledgeBaseId="kb1" documentIds={["doc1", "doc2"]} viewingArchived={false} onCompleted={vi.fn()} onPendingChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "刪除所選文件" }));
     fireEvent.click(screen.getByRole("button", { name: "確認刪除" }));
 

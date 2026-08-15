@@ -50,17 +50,34 @@ const logger = createLogger("web:knowledge-document-bulk-actions");
  * that makes sense for a batch the way it does for one document) — the
  * failure count renders as its own standalone message outside the
  * dialog instead, so it stays visible after the dialog itself closes.
+ *
+ * `onPendingChange` mirrors this component's own `pending` state up to
+ * the parent, which uses it to disable every selection checkbox
+ * (per-document and 全選) for the duration. Without this, nothing stops
+ * a user from unchecking every box mid-operation — this toolbar only
+ * renders while `selectedIds.size > 0`, so an empty selection unmounts
+ * it while its own archive/unarchive/delete loop is still awaiting a
+ * later item, and a fresh selection could then start a SECOND,
+ * genuinely overlapping bulk operation before the first one's loop
+ * finishes. Disabling selection input for the duration closes this at
+ * its root — the same "disabled while pending physically prevents a
+ * second one from racing the first" reasoning
+ * KnowledgePermissionEditor's own fieldset already uses, just lifted
+ * one level because the thing that needs disabling (the checkboxes)
+ * lives in the parent, not in this component itself.
  */
 export default function KnowledgeDocumentBulkActions({
   knowledgeBaseId,
   documentIds,
   viewingArchived,
   onCompleted,
+  onPendingChange,
 }: {
   knowledgeBaseId: string;
   documentIds: string[];
   viewingArchived: boolean;
   onCompleted: () => void;
+  onPendingChange: (pending: boolean) => void;
 }) {
   const [pending, setPending] = useState(false);
   const [archiveFailedCount, setArchiveFailedCount] = useState(0);
@@ -72,6 +89,7 @@ export default function KnowledgeDocumentBulkActions({
 
     const correlationId = crypto.randomUUID();
     setPending(true);
+    onPendingChange(true);
     setArchiveFailedCount(0);
     logger.info(viewingArchived ? "bulk unarchiving documents" : "bulk archiving documents", {
       correlationId,
@@ -92,6 +110,7 @@ export default function KnowledgeDocumentBulkActions({
     }
 
     setPending(false);
+    onPendingChange(false);
     setArchiveFailedCount(failedCount);
     const anySucceeded = failedCount < documentIds.length;
 
@@ -127,6 +146,7 @@ export default function KnowledgeDocumentBulkActions({
 
     const correlationId = crypto.randomUUID();
     setPending(true);
+    onPendingChange(true);
     setDeleteFailedCount(0);
     logger.info("bulk deleting documents", { correlationId, knowledgeBaseId, documentIds });
     trackEvent("knowledge_base_document_bulk_delete_attempt", { correlationId, properties: { knowledgeBaseId, count: documentIds.length } });
@@ -138,6 +158,7 @@ export default function KnowledgeDocumentBulkActions({
     }
 
     setPending(false);
+    onPendingChange(false);
     setIsConfirmingDelete(false);
     setDeleteFailedCount(failedCount);
     const anySucceeded = failedCount < documentIds.length;

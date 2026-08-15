@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import MaintenanceSession from "./maintenance-session";
 import { getMaintenanceCase } from "@/lib/maintenance-cases";
 import {
+  completeDiagnosticSession,
   createDiagnosticSession,
   escalateDiagnosticSession,
   getDiagnosticSessionForCase,
@@ -25,6 +26,7 @@ vi.mock("@/lib/diagnostic-sessions", () => ({
   restartDiagnosticSession: vi.fn(),
   skipDiagnosticStep: vi.fn(),
   escalateDiagnosticSession: vi.fn(),
+  completeDiagnosticSession: vi.fn(),
 }));
 
 const mockedGetMaintenanceCase = vi.mocked(getMaintenanceCase);
@@ -35,6 +37,7 @@ const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
 const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
 const mockedEscalateDiagnosticSession = vi.mocked(escalateDiagnosticSession);
+const mockedCompleteDiagnosticSession = vi.mocked(completeDiagnosticSession);
 
 const sampleCase = {
   id: "case1",
@@ -60,6 +63,7 @@ beforeEach(() => {
   mockedRestartDiagnosticSession.mockReset();
   mockedSkipDiagnosticStep.mockReset();
   mockedEscalateDiagnosticSession.mockReset();
+  mockedCompleteDiagnosticSession.mockReset();
 });
 
 describe("MaintenanceSession (E07-S006)", () => {
@@ -283,5 +287,17 @@ describe("MaintenanceSession (E07-S006)", () => {
     render(<MaintenanceSession id="case1" />);
 
     expect(await screen.findByText("現場情況超出可自行處理範圍")).toBeInTheDocument();
+  });
+
+  it("E07-S019: shows a previously recorded completion summary when the session already has one", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleSession, status: "RESOLVED" as const, lastCompletionSummary: "已更換零件並確認設備恢復正常運作" },
+    });
+
+    render(<MaintenanceSession id="case1" />);
+
+    expect(await screen.findByText("已更換零件並確認設備恢復正常運作")).toBeInTheDocument();
   });
 });

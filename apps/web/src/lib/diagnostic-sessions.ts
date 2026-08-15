@@ -60,7 +60,13 @@ export type DiagnosticSessionStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "ESC
  * "grow one field per story, don't reach into a later story's own scope"
  * discipline maintenance-cases.ts's own doc comments already follow across
  * S002-S005 — E07-S007 itself deliberately held off adding either field
- * until a story existed that actually changed them.
+ * until a story existed that actually changed them. Plus, as of E07-S019
+ * "Completion summary", `lastCompletionSummary` — `lastEscalationReason`'s
+ * sibling for the OPPOSITE terminal outcome (resolving the case vs. handing
+ * it off), same "two mean different things, separate fields" reasoning,
+ * and same "mandatory justification, preserves the existing answer trail"
+ * shape as escalateDiagnosticSession (see completeDiagnosticSession's own
+ * doc comment).
  */
 export interface DiagnosticSession {
   id: string;
@@ -73,6 +79,7 @@ export interface DiagnosticSession {
   lastPhotoFileName?: string;
   lastPhotoSizeBytes?: number;
   lastEscalationReason?: string;
+  lastCompletionSummary?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -311,7 +318,8 @@ export async function goToPreviousStep(sessionId: string): Promise<Result<Diagno
  * session back to the exact state createDiagnosticSession itself produces
  * (`currentStepIndex` 0, `status` "OPEN", `lastSelectedOptionId`/
  * `lastFreeTextDetail`/`lastPhotoFileName`/`lastPhotoSizeBytes` (E07-S013)/
- * `lastEscalationReason` (E07-S018) all cleared), unlike goToPreviousStep, which only ever
+ * `lastEscalationReason` (E07-S018)/`lastCompletionSummary` (E07-S019) all
+ * cleared), unlike goToPreviousStep, which only ever
  * moves one step and deliberately leaves `status` alone (see that
  * function's own doc comment). Restart's whole point is "forget what
  * happened, start over" — status genuinely does return to "not yet
@@ -347,6 +355,7 @@ export async function restartDiagnosticSession(sessionId: string): Promise<Resul
     lastPhotoFileName: undefined,
     lastPhotoSizeBytes: undefined,
     lastEscalationReason: undefined,
+    lastCompletionSummary: undefined,
     updatedAt: new Date().toISOString(),
   };
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
@@ -485,6 +494,68 @@ export async function escalateDiagnosticSession(sessionId: string, reason: strin
     ...session,
     status: "ESCALATED",
     lastEscalationReason: trimmedReason,
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E07-S019 "Completion summary". `escalateDiagnosticSession`'s sibling for
+ * the opposite terminal outcome — resolving the case instead of handing it
+ * off — so it deliberately mirrors that function's own shape almost
+ * exactly: session-level, does NOT advance `currentStepIndex`, does NOT
+ * touch `lastSelectedOptionId`/`lastFreeTextDetail`/`lastPhotoFileName`/
+ * `lastPhotoSizeBytes` (whoever reviews a resolved case needs the full
+ * answer trail, same reasoning as an escalated one), `summary` is
+ * mandatory (same real-world precedent as a technician documenting what
+ * was found/done before closing a case — not just symmetry with `reason`
+ * for its own sake), stored in its own `lastCompletionSummary` field (same
+ * "two mean different things" reasoning `lastEscalationReason` itself
+ * already gives for not reusing `lastSkipReason`).
+ *
+ * Fails closed with NOT_FOUND for an unknown `sessionId` — same
+ * `readStore().find(...)` precedent every other lookup in this file
+ * already follows.
+ *
+ * Fails closed with VALIDATION_ERROR for the same two-cause shape
+ * escalateDiagnosticSession's own doc comment describes:
+ *   1. `summary` is empty or whitespace-only — mandatory.
+ *   2. `session.status` isn't "OPEN" or "IN_PROGRESS" — same allow-list
+ *      (not a narrower block-list) covering `DiagnosticSessionStatus`'s
+ *      full pinned shape. This one guard now symmetrically protects BOTH
+ *      terminal actions from each other too: an already-escalated session
+ *      can't be completed, and (escalateDiagnosticSession's own guard)
+ *      an already-resolved session can't be escalated — genuinely
+ *      reachable and tested in both directions, unlike the
+ *      RESOLVED/CANCELLED-from-nothing-else branches which still remain
+ *      structurally unreachable through this file's own functions alone.
+ *
+ * Deliberately NOT gated behind E07-S017's safety-acknowledgment checkbox
+ * client-side, same reasoning as escalateDiagnosticSession — completing a
+ * case is wrapping up, not proceeding further into whatever risk a step's
+ * warning described.
+ */
+export async function completeDiagnosticSession(sessionId: string, summary: string): Promise<Result<DiagnosticSession, ApiError>> {
+  const sessions = readStore();
+  const session = sessions.find((item) => item.id === sessionId);
+  if (!session) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個診斷 session。" } };
+  }
+
+  const trimmedSummary = summary.trim();
+  if (!trimmedSummary) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請填寫解決摘要。" } };
+  }
+
+  if (session.status !== "OPEN" && session.status !== "IN_PROGRESS") {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "目前狀態無法將此案例標記為已解決。" } };
+  }
+
+  const updated: DiagnosticSession = {
+    ...session,
+    status: "RESOLVED",
+    lastCompletionSummary: trimmedSummary,
     updatedAt: new Date().toISOString(),
   };
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));

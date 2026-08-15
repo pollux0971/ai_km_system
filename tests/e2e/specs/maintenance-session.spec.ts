@@ -506,3 +506,31 @@ test("E07-S018: 升級此案例 works even when a high-risk step's safety warnin
   // fix E07-S004's own EVIDENCE already documents for exact:true.
   await expect(page.getByText("已升級", { exact: true })).toBeVisible();
 });
+
+test("E07-S019: typing a summary and clicking 解決此案例 marks the case resolved, hides the action UI, and shows the recorded summary", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByLabel("解決摘要").fill("已更換零件並確認設備恢復正常運作");
+  await page.getByRole("button", { name: "解決此案例" }).click();
+
+  // exact:true — same accidental-collision reasoning as the escalation
+  // test above, this time against "已解決此案例" vs the status span.
+  await expect(page.getByText("已解決", { exact: true })).toBeVisible();
+  await expect(page.getByText("已更換零件並確認設備恢復正常運作")).toBeVisible();
+  await expect(page.getByRole("button", { name: "解決此案例" })).not.toBeVisible();
+});
+
+test("E07-S019: 解決此案例 works even when a high-risk step's safety warning hasn't been acknowledged yet", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  // Deliberately do NOT check 我已閱讀並了解上述安全警告 or select an option
+  // first — E07-S019's own gate (completion) is independent of E07-S017's
+  // safety-confirmation gate, same reasoning as E07-S018's own equivalent
+  // test, see current-step-card.tsx's own doc comment.
+  await page.getByLabel("解決摘要").fill("已更換零件並確認設備恢復正常運作");
+  await page.getByRole("button", { name: "解決此案例" }).click();
+
+  await expect(page.getByText("已解決", { exact: true })).toBeVisible();
+});

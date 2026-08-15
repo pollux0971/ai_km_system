@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  completeDiagnosticSession,
   createDiagnosticSession,
   escalateDiagnosticSession,
   getDiagnosticSessionForCase,
@@ -651,5 +652,118 @@ describe("restartDiagnosticSession escalation interaction (E07-S018)", () => {
     if (!result.ok) return;
     expect(result.value.status).toBe("OPEN");
     expect(result.value.lastEscalationReason).toBeUndefined();
+  });
+});
+
+describe("completeDiagnosticSession (E07-S019)", () => {
+  async function createSession() {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    return session.value;
+  }
+
+  it("sets status to RESOLVED and records the trimmed summary, without advancing currentStepIndex or touching prior answers", async () => {
+    const session = await createSession();
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+    const advanced = await selectDecisionOption(session.id, firstOption.id, "現場有明顯異音");
+    expect(advanced.ok).toBe(true);
+    if (!advanced.ok) return;
+
+    const result = await completeDiagnosticSession(session.id, "  已更換零件並確認設備恢復正常運作  ");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("RESOLVED");
+    expect(result.value.lastCompletionSummary).toBe("已更換零件並確認設備恢復正常運作");
+    expect(result.value.currentStepIndex).toBe(advanced.value.currentStepIndex);
+    expect(result.value.lastSelectedOptionId).toBe(firstOption.id);
+    expect(result.value.lastFreeTextDetail).toBe("現場有明顯異音");
+
+    const refetched = await getDiagnosticSessionForCase(session.maintenanceCaseId);
+    expect(refetched.ok).toBe(true);
+    if (refetched.ok) expect(refetched.value).toEqual(result.value);
+  });
+
+  it("fails with NOT_FOUND for an unknown sessionId, with no store side effect", async () => {
+    const result = await completeDiagnosticSession("not-a-real-session-id", "摘要");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("fails with VALIDATION_ERROR for an empty summary, and leaves the session untouched", async () => {
+    const session = await createSession();
+
+    const result = await completeDiagnosticSession(session.id, "");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const after = await getDiagnosticSessionForCase(session.maintenanceCaseId);
+    expect(after.ok).toBe(true);
+    if (after.ok) expect(after.value).toEqual(session);
+  });
+
+  it("fails with VALIDATION_ERROR for a whitespace-only summary", async () => {
+    const session = await createSession();
+
+    const result = await completeDiagnosticSession(session.id, "   ");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("fails with VALIDATION_ERROR when completing an already-resolved session (repeat-guard)", async () => {
+    const session = await createSession();
+    const first = await completeDiagnosticSession(session.id, "第一次完成摘要");
+    expect(first.ok).toBe(true);
+
+    const second = await completeDiagnosticSession(session.id, "第二次完成摘要");
+
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.error.code).toBe("VALIDATION_ERROR");
+    if (first.ok) {
+      const after = await getDiagnosticSessionForCase(session.maintenanceCaseId);
+      expect(after.ok).toBe(true);
+      if (after.ok) expect(after.value).toEqual(first.value);
+    }
+  });
+
+  it("fails with VALIDATION_ERROR when completing an already-escalated session — the same allow-list guard protects both terminal actions symmetrically", async () => {
+    const session = await createSession();
+    const escalated = await escalateDiagnosticSession(session.id, "現場情況超出可自行處理範圍");
+    expect(escalated.ok).toBe(true);
+
+    const result = await completeDiagnosticSession(session.id, "完成摘要");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+describe("restartDiagnosticSession completion interaction (E07-S019)", () => {
+  it("also clears a previous completion summary when restarting", async () => {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    const completed = await completeDiagnosticSession(session.value.id, "已更換零件並確認設備恢復正常運作");
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) return;
+    expect(completed.value.status).toBe("RESOLVED");
+
+    const result = await restartDiagnosticSession(session.value.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("OPEN");
+    expect(result.value.lastCompletionSummary).toBeUndefined();
   });
 });

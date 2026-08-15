@@ -27,12 +27,12 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
-| E05 Knowledge Management Experience | 31 | 29 | 1 | 0 | 1 | 0 |
+| E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 82 | 1 | 0 | 1 | 91 |
+| **合計** | **175** | 83 | 0 | 0 | 1 | 91 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -133,7 +133,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E05-S028 | approved | story/E05-S028-kb-usage-stats-thin-slice | [E05-S028.md](E05-S028.md) | 獨立審核 APPROVE(KB usage stats thin slice;本 session 至今唯一無直接既有先例可鏡射的 story,「usage stats」重新誠實解讀為「內容組成統計」(處理失敗/已封存文件數,皆從既有 fetch 聚合)而非「查詢頻率統計」(無任何真實資料來源——`knowledgeScopes` 只連結 5 個固定分類、從未連結真實 KB id,E04/E06 皆未開工);審核者獨立複驗 SOURCE_BASELINE 零命中、E13 全部 17 個 story 標題無重疊、`knowledgeScopes` 全 repo 用法確認侷限於 E03 domain、零 lib 變更(`git diff -- lib/` 為空)、標籤字串碰撞修正腳本可重現;誠實揭露且經審核者複驗兩則流程雜訊——背景指令干擾(同 S027)、branch 延遲建立(連續第 2 次,main 未受影響);0 個 BLOCKER/MAJOR/MINOR;0 次真正 FIX 循環;審核者獨立重跑 typecheck/lint/build/871 unit/151 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
 | E05-S029 | approved | story/E05-S029-document-state-badges | [E05-S029.md](E05-S029.md) | 獨立審核 APPROVE(Document state badges;既有「處理失敗」指示器升級為 role="alert",新增 role="status" 已封存 badge,鏡射 message-thread.tsx 既有 alert/status 慣例,刻意不加「就緒」badge 以維持「badge 缺席即正常」既有慣例;本 story 觸發本 session 少見的真正 FIX 循環——role="alert" 與既有 S020 E2E 測試的「無 alert 可見」斷言衝突,審核者對抗性還原確認錯誤訊息逐字重現、修正後 diff 為 0;誠實記錄並經審核者複驗一次 PROGRESS.md 手動計數自我修正;0 個 BLOCKER/MAJOR/MINOR;審核者獨立重跑 typecheck/lint/build/875 unit/152 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
 | E05-S030 | approved | story/E05-S030-bulk-document-selection-actions | [E05-S030.md](E05-S030.md) | 獨立審核 APPROVE(Bulk document selection/actions;本 codebase 首個多選/批次操作 UI,選取機制從零設計,批次動作沿用 S012 已建立的循環呼叫既有單筆函式解法,零新增 lib 函式;DEV 階段自我審視分兩輪抓到並修正兩條會清空 selectedIds、讓批次工具列在非同步迴圈進行中被 unmount 的競態路徑(checkbox、視圖切換按鈕);審核者窮舉 grep 全部 setSelectedIds 呼叫點確認無第三條未關閉路徑,對第二個修正做對抗性還原複驗、確認錯誤重現、還原後 diff 為 0;0 個 BLOCKER/MAJOR/MINOR;0 次傳統定義的 FIX 循環(皆為 gate 從未見紅時的主動自我審視);審核者獨立重跑 typecheck/lint/build/901 unit/153 E2E 皆綠,force 全量兩輪皆 0 cache 全過且數字一致,PROGRESS.md 逐列手動計數複核一致) |
-| E05-S031 | done | story/E05-S031-knowledge-ui-e2e | [E05-S031.md](E05-S031.md) | Knowledge UI E2E,E05 收尾 story(鏡射 E03-S033),零原始碼變更,純測試;Explore agent 徹底 audit 既有 11 個 spec/46 個測試找出組合缺口後,2 個新 E2E 測試涵蓋「全新 KB 一次設定 5 項+3 種來源新增文件+重新命名/權限/批次封存/刪除全部同時正確且 reload 後仍正確」與「驗證失敗/取消刪除/禁用選項三個獨立被拒動作不污染同 KB 其他已設定欄位」;過程中誠實發現兩則既有行為(非本 story bug):`KnowledgeDocumentNameEditor` 重新命名刻意不 refetch 父層,選取 checkbox 短暫顯示舊名稱;Next.js route announcer 本身也是 role="alert",需 scope 到 main 才不衝突;2 次 FIX 循環(對應上述兩則發現),第三輪起 typecheck/lint/155 E2E/build 全綠 |
+| E05-S031 | approved | story/E05-S031-knowledge-ui-e2e | [E05-S031.md](E05-S031.md) | 獨立審核 APPROVE(Knowledge UI E2E,**E05 epic 至此全部完成**(僅剩 S024 blocked-team-b);零原始碼變更的純測試收尾 story,鏡射 E03-S033;2 個新 E2E 測試涵蓋「全新 KB 一次設定 5 項+3 種來源新增文件+重新命名/權限/批次封存/刪除全部同時正確且 reload 後仍正確」與「驗證失敗/取消刪除/禁用選項三個獨立被拒動作不污染同 KB 其他已設定欄位」;審核者對抗性還原兩則 DEV 階段發現(checkbox 用重新命名前的舊檔名——`KnowledgeDocumentNameEditor` 刻意不 refetch 父層、Next.js route announcer 同為 role="alert" 需 scope 到 main)皆逐字重現錯誤、還原後 diff 為 0;強制繞快取重跑 typecheck/lint/build 時發現三者合併執行會自我干擾(`.next/types` 競態,同類 S027 根因),改逐一單獨驗證確認非真實缺陷,20/20+20/20+12/12 皆過;審核者獨立重跑全量 155 E2E 亦全綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
 
 ## E07 Maintenance Assistant Experience(25)
 

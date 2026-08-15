@@ -300,6 +300,49 @@ export async function retryDocumentProcessing(
 }
 
 /**
+ * E05-S023 "Document metadata editor". `name` is the only field on
+ * KnowledgeBaseDocument that is both genuinely metadata (descriptive,
+ * not the content/bytes/processing-state itself) and meaningfully
+ * user-editable after the fact — `sizeBytes`/`content`/`status`/
+ * `uploadedAt` are each either derived, system-managed, or an
+ * immutable historical fact, none of them something a "metadata
+ * editor" would let a user change. Renaming a document (e.g. fixing a
+ * typo in an uploaded file's original name, or giving a typed-in text
+ * document a clearer title after the fact) is the entirety of what
+ * this story's own title asks for; inventing additional metadata
+ * fields (tags, descriptions, categories) that don't exist anywhere in
+ * this codebase yet would be reaching past what SOURCE_BASELINE's own
+ * bare title supports.
+ *
+ * Trims and rejects an empty name with VALIDATION_ERROR — same
+ * server-side-validates-too discipline as renameConversation()
+ * (E03-S024). Fails closed with NOT_FOUND if the document doesn't
+ * exist, OR exists but belongs to a different knowledge base — same
+ * cross-KB-safe check retryDocumentProcessing (E05-S021) already
+ * established for a targeted-by-id document mutation.
+ */
+export async function renameKnowledgeBaseDocument(
+  knowledgeBaseId: string,
+  documentId: string,
+  name: string,
+): Promise<Result<KnowledgeBaseDocument, ApiError>> {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "文件名稱不得為空。" } };
+  }
+
+  const store = readStore();
+  const existing = store.find((document) => document.id === documentId && document.knowledgeBaseId === knowledgeBaseId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } };
+  }
+
+  const updated: KnowledgeBaseDocument = { ...existing, name: trimmedName };
+  writeStore(store.map((document) => (document.id === documentId ? updated : document)));
+  return { ok: true, value: updated };
+}
+
+/**
  * E05-S014 "URL import". A separate function from
  * addKnowledgeBaseDocument, not an overload sharing its `name`
  * parameter — a URL needs its OWN validation (must actually parse as a

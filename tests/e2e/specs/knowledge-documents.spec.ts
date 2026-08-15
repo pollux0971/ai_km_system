@@ -93,6 +93,12 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * (S015) and confirms its exact content shows on preview, then confirms
  * a file-sourced seed document (no stored content) honestly shows
  * 此文件目前無法預覽 instead of fabricated text.
+ *
+ * E05-S023 adds a 重新命名 control (mirroring E03-S024's
+ * RenameConversation shape) to every document — this test renames a
+ * seed document and confirms the new name persists across a page
+ * reload (proving it's a real store write, not just local component
+ * state).
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -510,4 +516,30 @@ test("E05-S022: previewing a text-sourced document shows its real content; a fil
   const textDocItem = page.getByText("保固延伸說明").locator("..");
   await textDocItem.getByRole("button", { name: "預覽" }).click();
   await expect(textDocItem.getByText("延長保固需於購買後 30 天內申請。")).toBeVisible();
+});
+
+test("E05-S023: renaming a document updates its displayed name and persists across leaving and returning to the list", async ({ page }) => {
+  await openKnowledgeDetail(page, "產品保固政策");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  const docItem = page.getByText("產品保固條款.pdf").locator("..");
+  await docItem.getByRole("button", { name: "重新命名" }).click();
+  await page.getByLabel("文件名稱").fill("2026 年保固條款");
+  await page.getByRole("button", { name: "儲存" }).click();
+
+  await expect(page.getByText("2026 年保固條款")).toBeVisible();
+  await expect(page.getByText("產品保固條款.pdf")).toHaveCount(0);
+  // The other pre-seeded documents in the same list are untouched.
+  await expect(page.getByText("理賠申請流程.docx")).toBeVisible();
+
+  // In-app navigation away and back, never page.goto() — see this
+  // file's own doc comment on why (the mock session lives only in
+  // memory, a hard reload would wipe it).
+  await page.getByRole("link", { name: "返回知識庫詳情" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  await expect(page.getByText("2026 年保固條款")).toBeVisible();
 });

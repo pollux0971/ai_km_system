@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CurrentStepCard from "./current-step-card";
 import { goToPreviousStep, restartDiagnosticSession, selectDecisionOption, skipDiagnosticStep } from "@/lib/diagnostic-sessions";
+import { explainDiagnosticStep } from "@/lib/diagnostic-explanations";
 
 vi.mock("@/lib/diagnostic-sessions", () => ({
   selectDecisionOption: vi.fn(),
@@ -10,10 +11,15 @@ vi.mock("@/lib/diagnostic-sessions", () => ({
   skipDiagnosticStep: vi.fn(),
 }));
 
+vi.mock("@/lib/diagnostic-explanations", () => ({
+  explainDiagnosticStep: vi.fn(),
+}));
+
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
 const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
+const mockedExplainDiagnosticStep = vi.mocked(explainDiagnosticStep);
 
 function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
   const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
@@ -457,5 +463,98 @@ describe("CurrentStepCard photo upload (E07-S013)", () => {
     render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
 
     expect(screen.queryByText("已附加照片", { exact: false })).not.toBeInTheDocument();
+  });
+});
+
+describe("CurrentStepCard AI explain-step panel (E07-S014)", () => {
+  beforeEach(() => {
+    mockedExplainDiagnosticStep.mockReset();
+  });
+
+  it("renders an AI 說明 button when sessionId is present", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "AI 說明" })).toBeInTheDocument();
+  });
+
+  it("does not render an AI 說明 button when sessionId is absent (S007 behavior unchanged)", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("clicking AI 說明 shows a loading indicator, then the explanation once resolved", async () => {
+    let resolveExplain: (value: { ok: true; value: string }) => void = () => {};
+    mockedExplainDiagnosticStep.mockReturnValue(
+      new Promise((resolve) => {
+        resolveExplain = resolve;
+      }),
+    );
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "AI 說明" }));
+
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+
+    resolveExplain({ ok: true, value: "（模擬說明）這是測試用的說明文字。" });
+
+    expect(await screen.findByText("（模擬說明）這是測試用的說明文字。")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("clicking AI 說明 a second time collapses the panel", async () => {
+    mockedExplainDiagnosticStep.mockResolvedValue({ ok: true, value: "（模擬說明）這是測試用的說明文字。" });
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "AI 說明" }));
+    expect(await screen.findByText("（模擬說明）這是測試用的說明文字。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "收合 AI 說明" }));
+
+    expect(screen.queryByText("（模擬說明）這是測試用的說明文字。")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AI 說明" })).toBeInTheDocument();
+  });
+
+  it("re-opening an already-loaded explanation does not call explainDiagnosticStep a second time", async () => {
+    mockedExplainDiagnosticStep.mockResolvedValue({ ok: true, value: "（模擬說明）這是測試用的說明文字。" });
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "AI 說明" }));
+    await screen.findByText("（模擬說明）這是測試用的說明文字。");
+    fireEvent.click(screen.getByRole("button", { name: "收合 AI 說明" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "AI 說明" }));
+
+    expect(await screen.findByText("（模擬說明）這是測試用的說明文字。")).toBeInTheDocument();
+    expect(mockedExplainDiagnosticStep).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an error message when loading the explanation fails", async () => {
+    mockedExplainDiagnosticStep.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個步驟的說明。" } });
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "AI 說明" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("找不到這個步驟的說明。");
+  });
+
+  it("does not disable the explain button while an unrelated mutation (option selection) is pending", async () => {
+    let resolveSelect: (value: Awaited<ReturnType<typeof selectDecisionOption>>) => void = () => {};
+    mockedSelectDecisionOption.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSelect = resolve;
+      }),
+    );
+    const stepWithOptions = {
+      stepIndex: 0,
+      instruction: "測試步驟內容",
+      options: [{ id: "opt-a", label: "選項甲" }],
+    };
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "選項甲" }));
+
+    expect(screen.getByRole("button", { name: "AI 說明" })).not.toBeDisabled();
+    resolveSelect({ ok: true, value: { id: "session1", maintenanceCaseId: "case1", status: "IN_PROGRESS", currentStepIndex: 1, createdAt: "", updatedAt: "" } });
   });
 });

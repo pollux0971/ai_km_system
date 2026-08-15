@@ -362,3 +362,22 @@ test("E07-S013: clicking 上一步 after attaching a photo clears the selection,
   await expect(page.getByRole("heading", { name: "步驟 1", level: 2 })).toBeVisible();
   await expect(page.getByText("現場照片.jpg", { exact: false })).not.toBeVisible();
 });
+
+test("E07-S014: opening AI 說明 shows an honestly-labeled simulated explanation for the current step", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByRole("button", { name: "AI 說明" }).click();
+
+  await expect(page.getByText("模擬說明", { exact: false })).toBeVisible();
+});
+
+test("E07-S014: collapsing AI 說明 hides the explanation again", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByRole("button", { name: "AI 說明" }).click();
+  await expect(page.getByText("模擬說明", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "收合 AI 說明" }).click();
+
+  await expect(page.getByText("模擬說明", { exact: false })).not.toBeVisible();
+});

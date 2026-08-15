@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import { createLogger } from "@ai-km/logger";
-import { ErrorMessage } from "@ai-km/ui";
+import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import {
   goToPreviousStep,
   restartDiagnosticSession,
@@ -10,6 +10,7 @@ import {
   skipDiagnosticStep,
   type DiagnosticSession,
 } from "@/lib/diagnostic-sessions";
+import { explainDiagnosticStep } from "@/lib/diagnostic-explanations";
 import type { DiagnosticStep } from "@/lib/diagnostic-steps";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -119,6 +120,37 @@ function formatFileSize(bytes: number): string {
  * lastPhotoSizeBytes, passed down by maintenance-session.tsx) are shown
  * back once set, same "an input with no visible effect anywhere would be a
  * write-only void" reasoning `recordedDetail` above already gives.
+ *
+ * The AI 說明 toggle button (E07-S014 "AI explain-step panel") is gated on
+ * `sessionId` alone — same "the interactive path only turns on when
+ * there's something to be interactive about" reasoning this file's own top
+ * doc comment already gives, and specifically NOT gated on `step.options`
+ * the way 補充說明/附加照片/略過原因 are: explaining a step is meaningful on
+ * every step, not just ones with a decision to make (unlike those three,
+ * which have nothing to attach to on a step with no options). Gating on
+ * `sessionId` is required, not just thematically consistent — S007's own
+ * existing "renders no option buttons when the step has no options" test
+ * asserts zero buttons total on a `sessionId`-less render, so an
+ * unconditionally-rendered explain button would break that frozen
+ * assertion.
+ *
+ * Deliberately uses its OWN `explainPending`/`explainError` state rather
+ * than sharing `pending`/`error` with select/back/restart/skip — unlike
+ * those four (genuinely mutually exclusive mutations on the same session,
+ * see this file's own reasoning above for why THEY share one pair),
+ * reading an explanation is not a mutation at all; sharing state would
+ * wrongly disable the option/skip/restart buttons (all gated on the shared
+ * `pending`) while a user is simply reading, a real UX regression this
+ * story does not introduce.
+ *
+ * `explanation` short-circuits `handleToggleExplain` once already loaded —
+ * re-opening a step's panel after collapsing it shows the cached text
+ * instead of calling `explainDiagnosticStep` again, since the content is
+ * static per-`stepIndex` and re-fetching would be pure waste, not a
+ * refresh of anything that could have changed. Reset (`explainOpen`/
+ * `explainError`/`explanation` all cleared) on `step.stepIndex` change,
+ * same trigger and reasoning as `detailText`/`skipReason`/`photoFile`'s
+ * own reset above.
  */
 export default function CurrentStepCard({
   sessionId,
@@ -142,6 +174,10 @@ export default function CurrentStepCard({
   const [detailText, setDetailText] = useState("");
   const [skipReason, setSkipReason] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [explainOpen, setExplainOpen] = useState(false);
+  const [explainPending, setExplainPending] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState<string | null>(null);
   const detailFieldId = useId();
   const skipFieldId = useId();
   const photoFieldId = useId();
@@ -150,6 +186,9 @@ export default function CurrentStepCard({
     setDetailText("");
     setSkipReason("");
     setPhotoFile(null);
+    setExplainOpen(false);
+    setExplainError(null);
+    setExplanation(null);
   }, [step.stepIndex]);
 
   async function handleSelect(optionId: string) {
@@ -266,10 +305,50 @@ export default function CurrentStepCard({
     onAdvanced?.(result.value);
   }
 
+  async function handleToggleExplain() {
+    const opening = !explainOpen;
+    setExplainOpen(opening);
+    if (!opening || explanation !== null || explainPending) return;
+
+    const correlationId = crypto.randomUUID();
+    setExplainPending(true);
+    setExplainError(null);
+    logger.info("loading AI step explanation", { correlationId, stepIndex: step.stepIndex });
+    trackEvent("maintenance_session_explain_step_attempt", { correlationId, properties: { stepIndex: step.stepIndex } });
+
+    const result = await explainDiagnosticStep(step.stepIndex);
+
+    setExplainPending(false);
+    if (!result.ok) {
+      logger.error("failed to load AI step explanation", { correlationId, stepIndex: step.stepIndex, code: result.error.code });
+      trackEvent("maintenance_session_explain_step_failure", { correlationId, properties: { stepIndex: step.stepIndex, code: result.error.code } });
+      setExplainError(result.error.message);
+      return;
+    }
+
+    logger.info("AI step explanation loaded", { correlationId, stepIndex: step.stepIndex });
+    trackEvent("maintenance_session_explain_step_success", { correlationId, properties: { stepIndex: step.stepIndex } });
+    setExplanation(result.value);
+  }
+
   return (
     <section>
       <h2>步驟 {step.stepIndex + 1}</h2>
       <p>{step.instruction}</p>
+      {sessionId && (
+        <p>
+          <button type="button" onClick={handleToggleExplain}>
+            {explainOpen ? "收合 AI 說明" : "AI 說明"}
+          </button>
+        </p>
+      )}
+      {explainOpen && explainPending && <LoadingIndicator />}
+      {explainOpen && explainError && <ErrorMessage message={explainError} />}
+      {explainOpen && explanation && (
+        <p>
+          <span>{explanation}</span>
+        </p>
+      )}
       {recordedDetail && (
         <p>
           您的補充說明:<span>{recordedDetail}</span>

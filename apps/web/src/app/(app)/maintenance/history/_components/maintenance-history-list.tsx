@@ -51,9 +51,17 @@ type State = { status: "loading" } | { status: "error" } | { status: "loaded"; i
  * created it but never opened its diagnostic session) renders no status
  * line at all, same "absence means nothing to show" precedent this
  * whole codebase already follows for every other optional field.
- * RESOLVED additionally shows `lastCompletionSummary` (E07-S019),
- * ESCALATED additionally shows `lastEscalationReason` (E07-S018) — both
- * already-recorded values, simply surfaced here, never re-derived.
+ * RESOLVED additionally shows `摘要:` + `lastCompletionSummary`
+ * (E07-S019), ESCALATED additionally shows `原因:` +
+ * `lastEscalationReason` (E07-S018) — both already-recorded values,
+ * simply surfaced here, never re-derived. Each gets its own label
+ * (unlike this file's first draft, which rendered both as bare,
+ * unlabeled spans) — same "recorded value gets a distinguishing label,
+ * not a bare span" precedent current-step-card.tsx's own "已升級此案例,
+ * 原因:"/"已解決此案例,摘要:" already establishes; without a label, a
+ * completion summary and an escalation reason are visually
+ * indistinguishable free text, and (worse) a field-mixup bug between
+ * the two would render identically either way.
  *
  * If ANY per-case session lookup fails, the whole page shows the error
  * state rather than a partially-enriched list — same "partial success
@@ -152,13 +160,13 @@ export default function MaintenanceHistoryList() {
           )}
           {item.completionSummary && (
             <>
-              <span>{item.completionSummary}</span>
+              <span>摘要:{item.completionSummary}</span>
               <br />
             </>
           )}
           {item.escalationReason && (
             <>
-              <span>{item.escalationReason}</span>
+              <span>原因:{item.escalationReason}</span>
               <br />
             </>
           )}

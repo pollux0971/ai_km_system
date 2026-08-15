@@ -119,7 +119,7 @@ describe("MaintenanceHistoryList status labels (E07-S020)", () => {
     render(<MaintenanceHistoryList />);
 
     expect(await screen.findByText("狀態:已解決")).toBeInTheDocument();
-    expect(await screen.findByText("已更換零件並確認設備恢復正常運作")).toBeInTheDocument();
+    expect(await screen.findByText("摘要:已更換零件並確認設備恢復正常運作")).toBeInTheDocument();
   });
 
   it("shows 已升級 plus the recorded escalation reason for an ESCALATED session", async () => {
@@ -132,7 +132,7 @@ describe("MaintenanceHistoryList status labels (E07-S020)", () => {
     render(<MaintenanceHistoryList />);
 
     expect(await screen.findByText("狀態:已升級")).toBeInTheDocument();
-    expect(await screen.findByText("現場情況超出可自行處理範圍")).toBeInTheDocument();
+    expect(await screen.findByText("原因:現場情況超出可自行處理範圍")).toBeInTheDocument();
   });
 
   it("shows multiple cases each with their own independently-resolved status", async () => {
@@ -147,6 +147,19 @@ describe("MaintenanceHistoryList status labels (E07-S020)", () => {
 
     expect(await screen.findByText("狀態:進行中")).toBeInTheDocument();
     expect(await screen.findByText("狀態:已解決")).toBeInTheDocument();
-    expect(await screen.findByText("已排除故障")).toBeInTheDocument();
+    expect(await screen.findByText("摘要:已排除故障")).toBeInTheDocument();
+  });
+
+  it("does not let a completion summary and an escalation reason substitute for each other (field-mixup guard)", async () => {
+    mockedListMaintenanceCases.mockResolvedValue({ ok: true, value: [case1] });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({
+      ok: true,
+      value: session({ status: "RESOLVED", lastCompletionSummary: "已更換零件並確認設備恢復正常運作" }),
+    });
+
+    render(<MaintenanceHistoryList />);
+    await screen.findByText("摘要:已更換零件並確認設備恢復正常運作");
+
+    expect(screen.queryByText(/^原因:/)).not.toBeInTheDocument();
   });
 });

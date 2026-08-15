@@ -6,13 +6,23 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * and the unauthenticated-404 case (smoke.spec.ts, since E01-S001) are
  * already covered — this file covers what's net-new: 404 combined with an
  * authenticated session, and the 403 guard's fail-closed-by-absence
- * behavior for a role-restricted route that has no page yet
- * (/knowledge, /maintenance, /erp are E05/E07/E09's own first stories —
- * this repo doesn't get ahead of them). The 403 guard's actual deny
- * rendering (once such a page exists) is covered at the component level
- * in apps/web/src/app/(app)/_components/role-guard.test.tsx and
+ * behavior for a role-restricted route that has no page yet (/knowledge,
+ * /maintenance, /erp are E05/E07/E09's own first stories — this repo
+ * doesn't get ahead of them). The 403 guard's actual deny rendering (once
+ * such a page exists) is covered at the component level in
+ * apps/web/src/app/(app)/_components/role-guard.test.tsx and
  * apps/web/src/app/(app)/layout.test.tsx — there is no real restricted
  * page today to exercise that render in a full browser.
+ *
+ * This file always used /maintenance as its sole "no page yet" example
+ * (confirmed via `git log` — this is the first update since its E01-S017
+ * creation; /knowledge was never actually used here despite being named
+ * in the paragraph above for context). E07-S001 built the real
+ * /maintenance page, so the example below moves to /erp (E09 hasn't
+ * started) — the only role-restricted nav entry still genuinely
+ * page-less. Once E09-S001 ships its own first /erp page, this test will
+ * have no remaining role-restricted-but-unbuilt route left to target and
+ * should be removed rather than moved again.
  */
 
 async function loginAsGeneralUser(page: import("@playwright/test").Page) {
@@ -35,12 +45,12 @@ test("E01-S017: an authenticated user hitting an unknown route still falls throu
   await expect(page.getByRole("navigation", { name: "主導覽" })).not.toBeVisible();
 });
 
-test("E01-S017: a role-restricted route with no page built yet (/maintenance) safely falls through to not-found for a user without that role, not an error", async ({
+test("E01-S017: a role-restricted route with no page built yet (/erp) safely falls through to not-found for a user without that role, not an error", async ({
   page,
 }) => {
   await loginAsGeneralUser(page);
 
-  await page.goto("/maintenance");
+  await page.goto("/erp");
 
   await expect(page.getByRole("heading", { name: "頁面不存在" })).toBeVisible();
 });

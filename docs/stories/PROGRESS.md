@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 0 | 0 | 0 | 0 | 25 |
+| E07 Maintenance Assistant Experience | 25 | 1 | 0 | 0 | 0 | 24 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 83 | 0 | 0 | 1 | 91 |
+| **合計** | **175** | 84 | 0 | 0 | 1 | 90 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -139,7 +139,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E07-S001 | todo | | | |
+| E07-S001 | approved | story/E07-S001-maintenance-home | [E07-S001.md](E07-S001.md) | 獨立審核 APPROVE(Maintenance home,E07 第一個 story,`/maintenance` route 第一次真正渲染內容,沿用既有 RoleGuard 零額外授權接線;唯讀最近維修案例清單,鏡射 KnowledgeList(E05-S001)形狀,`MaintenanceCaseSummary` 刻意只留 id/title/updatedAt 不搶後續 story 欄位範圍,刻意不加開始新診斷/案例項目連結(對應路由 S002/S021 尚未建立);開發中誠實撞見一則架構限制——mock AuthClient session 是無 storage 支撐的記憶體 closure,page.goto() 會清空它,導致一則嘗試中的 general_user 負向 E2E 測試測到 session 過期重導而非真正 403,與 citation-open-source.spec.ts 既有記載的同類情況一致,移除該測試並完整記錄;同時更新 route-guards.spec.ts(/maintenance → /erp);審核者獨立重寫同一個對抗性測試親自執行,逐字重現 EVIDENCE 宣稱的 /login 重導,證實移除決策站得住腳而非偷懶;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 909 unit+156 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
 | E07-S002 | todo | | | |
 | E07-S003 | todo | | | |
 | E07-S004 | todo | | | |

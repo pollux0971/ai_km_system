@@ -1132,6 +1132,29 @@ describe("KnowledgeDocumentList — bulk document selection/actions (E05-S030)",
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "選取 第二份.pdf" })).not.toBeDisabled());
   });
 
+  it("disables the view-switch buttons while a bulk action is in flight, since switching views also clears the selection", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: twoDocuments });
+    let resolveArchive!: (value: Awaited<ReturnType<typeof archiveKnowledgeBaseDocument>>) => void;
+    mockedArchiveKnowledgeBaseDocument.mockReturnValue(new Promise((resolve) => (resolveArchive = resolve)));
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("第一份.pdf");
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 第一份.pdf" }));
+    await screen.findByRole("group", { name: "批次操作" });
+
+    fireEvent.click(screen.getByRole("button", { name: "封存所選文件" }));
+
+    // Regression test: handleViewChange clears selectedIds
+    // unconditionally, so switching views is a second path to the same
+    // mid-operation unmount the checkbox guard alone doesn't cover.
+    expect(screen.getByRole("button", { name: "作用中文件" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "已封存文件" })).toBeDisabled();
+
+    resolveArchive({ ok: true, value: { ...twoDocuments[0]!, archived: true } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "已封存文件" })).not.toBeDisabled());
+  });
+
   it("a successful bulk delete removes the selected documents and clears the selection", async () => {
     mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
     mockedListKnowledgeBaseDocuments

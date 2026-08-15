@@ -234,12 +234,16 @@ type State =
  * "S012 already established this exact shape of problem in this exact
  * codebase" reasoning. `bulkActionPending` (fed by
  * KnowledgeDocumentBulkActions' own `onPendingChange`) disables every
- * selection checkbox for the duration of a bulk action — without it,
- * unchecking every box mid-operation would unmount the toolbar (it
- * only renders while `selectedIds.size > 0`) while its own
+ * selection checkbox AND the view-switch buttons for the duration of a
+ * bulk action — without it, either unchecking every box or switching
+ * views mid-operation would clear `selectedIds` and unmount the
+ * toolbar (it only renders while `selectedIds.size > 0`) while its own
  * archive/unarchive/delete loop is still awaiting a later item, and a
  * fresh selection could then start a second, genuinely overlapping
- * bulk operation before the first one's loop finishes.
+ * bulk operation before the first one's loop finishes. Both paths lead
+ * to the exact same underlying gap — `handleViewChange` clears
+ * `selectedIds` unconditionally too, not just the checkboxes' own
+ * onChange handlers — so both needed the same guard.
  *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
@@ -381,10 +385,10 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
       <h1>{knowledgeBase.name} — 文件列表</h1>
 
       <div role="group" aria-label="文件檢視" style={{ marginBottom: 16 }}>
-        <button type="button" aria-pressed={!viewingArchived} onClick={() => handleViewChange(false)}>
+        <button type="button" aria-pressed={!viewingArchived} disabled={bulkActionPending} onClick={() => handleViewChange(false)}>
           作用中文件
         </button>
-        <button type="button" aria-pressed={viewingArchived} onClick={() => handleViewChange(true)}>
+        <button type="button" aria-pressed={viewingArchived} disabled={bulkActionPending} onClick={() => handleViewChange(true)}>
           已封存文件
         </button>
       </div>

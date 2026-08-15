@@ -15,6 +15,7 @@ import KnowledgeDocumentNameEditor from "./knowledge-document-name-editor";
 import KnowledgeDocumentArchiveToggle from "./knowledge-document-archive-toggle";
 import KnowledgeDocumentDeleteButton from "./knowledge-document-delete-button";
 import KnowledgeDocumentPermissionEditor from "./knowledge-document-permission-editor";
+import KnowledgeDocumentBulkActions from "./knowledge-document-bulk-actions";
 import { formatFileSize } from "./format-file-size";
 
 const logger = createLogger("web:knowledge-document-list");
@@ -212,6 +213,27 @@ type State =
  * relying on a screen reader user to recall an earlier page-level
  * toggle's pressed state while navigating item by item.
  *
+ * E05-S030 "Bulk document selection/actions" adds
+ * `selectedIds` (a `Set<string>`, scoped to the CURRENT view — no
+ * cross-view selection, since a selected id from the other view isn't
+ * even rendered here to act on) plus a checkbox per document and a
+ * 全選 checkbox for the whole visible list. No indeterminate tri-state
+ * on 全選 — checked only when every visible document is selected,
+ * unchecked otherwise — same "MVP 可以簡化視覺" latitude every other
+ * story in this arc has already used where a full tri-state would add
+ * real complexity for a purely cosmetic partial-selection distinction.
+ * `handleViewChange` and a successful bulk action both clear
+ * `selectedIds` entirely: a selected id can silently stop existing in
+ * the new view (or the whole selection can go stale the moment a bulk
+ * action changes what's visible), so carrying stale ids forward would
+ * risk a bulk action silently targeting fewer documents than the
+ * (also now-stale) selection count still displayed. KnowledgeDocument
+ * BulkActions itself needs no new lib function for either action — see
+ * that component's own doc comment for why it loops over the existing
+ * single-item archive/unarchive/delete functions instead, the same
+ * "S012 already established this exact shape of problem in this exact
+ * codebase" reasoning.
+ *
  * One shared "error" status covers a failure from EITHER fetch — mock
  * listKnowledgeBaseDocuments() never actually returns `ok: false` (it's
  * an unconditional filter, same as listMessages/listKnowledgeBases), so
@@ -231,6 +253,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
   const [viewingArchived, setViewingArchived] = useState(false);
   const viewingArchivedRef = useRef(viewingArchived);
   viewingArchivedRef.current = viewingArchived;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -294,7 +317,29 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
   function handleViewChange(archived: boolean) {
     if (archived === viewingArchived) return;
     setViewingArchived(archived);
+    setSelectedIds(new Set());
     refetchDocuments(archived);
+  }
+
+  function toggleSelected(documentId: string, checked: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(documentId);
+      } else {
+        next.delete(documentId);
+      }
+      return next;
+    });
+  }
+
+  function handleSelectAllChange(checked: boolean, visibleIds: string[]) {
+    setSelectedIds(checked ? new Set(visibleIds) : new Set());
+  }
+
+  function handleBulkActionsCompleted() {
+    setSelectedIds(new Set());
+    refetchDocuments();
   }
 
   if (state.status === "loading") {
@@ -349,9 +394,37 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
       )}
 
       {documents.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={documents.every((document) => selectedIds.has(document.id))}
+              onChange={(event) => handleSelectAllChange(event.target.checked, documents.map((document) => document.id))}
+            />
+            全選
+          </label>
+        </div>
+      )}
+
+      {selectedIds.size > 0 && (
+        <KnowledgeDocumentBulkActions
+          knowledgeBaseId={id}
+          documentIds={Array.from(selectedIds)}
+          viewingArchived={viewingArchived}
+          onCompleted={handleBulkActionsCompleted}
+        />
+      )}
+
+      {documents.length > 0 && (
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
           {documents.map((document) => (
             <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+              <input
+                type="checkbox"
+                aria-label={`選取 ${document.name}`}
+                checked={selectedIds.has(document.id)}
+                onChange={(event) => toggleSelected(document.id, event.target.checked)}
+              />
               <KnowledgeDocumentNameEditor knowledgeBaseId={id} documentId={document.id} initialName={document.name} />
               <br />
               {document.status === "failed" && (

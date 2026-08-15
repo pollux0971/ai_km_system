@@ -15,7 +15,13 @@ type State =
   | { status: "loading" }
   | { status: "error" }
   | { status: "not-found" }
-  | { status: "loaded"; knowledgeBase: KnowledgeBaseSummary; documentCount: number | null };
+  | {
+      status: "loaded";
+      knowledgeBase: KnowledgeBaseSummary;
+      documentCount: number | null;
+      failedDocumentCount: number | null;
+      archivedDocumentCount: number | null;
+    };
 
 /**
  * E05-S005 "KB detail page". KnowledgeList (E05-S001) deliberately left
@@ -87,11 +93,32 @@ type State =
  * not the full setting" restraint `boundPrompt`'s own summary already
  * applies (the path is visible in full on the dedicated editor route).
  *
- * Otherwise only shows the fields KnowledgeBaseSummary currently has
- * (name/description/updatedAt) — no usage stats. That's its own later,
- * separate story (S28); this page's job is establishing the detail
- * route itself with what data exists today, not reaching ahead into
- * its scope.
+ * E05-S028 "KB usage stats thin slice" adds two more aggregate counts —
+ * `failedDocumentCount` and `archivedDocumentCount` — the "usage stats"
+ * S010's own doc comment above deliberately deferred. No query/search/
+ * view tracking exists anywhere in this codebase (E04 RAG & Conversation
+ * Intelligence and E06 Knowledge Ingestion are both Team B, not built),
+ * and ConversationSummary.knowledgeScopes (E03-S003/S004) links a
+ * conversation to one of 5 fixed CATEGORY labels ("company"/
+ * "department"/"project"/"private"/"qna" — lib/knowledge-scopes.ts),
+ * never to a specific KnowledgeBaseSummary.id; that file's own doc
+ * comment confirms this split is permanent, not a temporary placeholder
+ * waiting to be linked once "real" KBs exist. So "how many conversations
+ * used this KB" or "how many times was it queried" cannot be honestly
+ * computed by Team A today at all — inventing either would be exactly
+ * the "以 mock 假裝 production path 已完成" DEVELOPMENT_POLICY forbids.
+ * The two counts added here are instead genuinely real, honestly
+ * computable TODAY from data this page already has a fetch for: how
+ * much of this KB's own content needs attention (failed) or is put away
+ * (archived) — a content-composition reading of "usage stats", not a
+ * query-frequency one, chosen because it is the only reading with any
+ * real data behind it. `failedDocumentCount` is derived from the
+ * already-fetched active-view documents (S020's `status === "failed"`,
+ * no new fetch needed); `archivedDocumentCount` needs one more fetch
+ * (S025's `archived = true` view) run in parallel with the active one.
+ * Each degrades to its own independent "－" on a fetch failure, same
+ * `documentCount` precedent above — a failure of one doesn't blank out
+ * the others or the page.
  */
 export default function KnowledgeDetail({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -117,18 +144,25 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       }
 
       const knowledgeBase = result.value;
-      const documentsResult = await listKnowledgeBaseDocuments(id);
+      const [documentsResult, archivedDocumentsResult] = await Promise.all([
+        listKnowledgeBaseDocuments(id),
+        listKnowledgeBaseDocuments(id, true),
+      ]);
       if (cancelled) return;
+
+      const documentCount = documentsResult.ok ? documentsResult.value.length : null;
+      const failedDocumentCount = documentsResult.ok ? documentsResult.value.filter((document) => document.status === "failed").length : null;
+      const archivedDocumentCount = archivedDocumentsResult.ok ? archivedDocumentsResult.value.length : null;
 
       if (!documentsResult.ok) {
         logger.error("failed to load document count", { correlationId, id, code: documentsResult.error.code });
-        logger.info("knowledge base detail loaded", { correlationId, id });
-        setState({ status: "loaded", knowledgeBase, documentCount: null });
-        return;
+      }
+      if (!archivedDocumentsResult.ok) {
+        logger.error("failed to load archived document count", { correlationId, id, code: archivedDocumentsResult.error.code });
       }
 
-      logger.info("knowledge base detail loaded", { correlationId, id, documentCount: documentsResult.value.length });
-      setState({ status: "loaded", knowledgeBase, documentCount: documentsResult.value.length });
+      logger.info("knowledge base detail loaded", { correlationId, id, documentCount, failedDocumentCount, archivedDocumentCount });
+      setState({ status: "loaded", knowledgeBase, documentCount, failedDocumentCount, archivedDocumentCount });
     });
 
     return () => {
@@ -160,11 +194,13 @@ export default function KnowledgeDetail({ id }: { id: string }) {
     );
   }
 
-  const { knowledgeBase, documentCount } = state;
+  const { knowledgeBase, documentCount, failedDocumentCount, archivedDocumentCount } = state;
   const boundModelLabel = knowledgeBase.boundModel
     ? (AI_MODELS.find((option) => option.id === knowledgeBase.boundModel)?.label ?? knowledgeBase.boundModel)
     : "尚未綁定";
   const documentCountLabel = documentCount === null ? "－" : documentCount === 0 ? "尚無文件" : `${documentCount} 份文件`;
+  const failedDocumentCountLabel = failedDocumentCount === null ? "－" : `${failedDocumentCount} 份`;
+  const archivedDocumentCountLabel = archivedDocumentCount === null ? "－" : `${archivedDocumentCount} 份`;
   const folderSyncLabel = !knowledgeBase.folderSyncPath ? "尚未設定" : knowledgeBase.folderSyncEnabled ? "已啟用" : "已停用";
 
   return (
@@ -196,6 +232,12 @@ export default function KnowledgeDetail({ id }: { id: string }) {
       </p>
       <p>
         文件:<span>{documentCountLabel}</span>
+      </p>
+      <p>
+        處理失敗文件數:<span>{failedDocumentCountLabel}</span>
+      </p>
+      <p>
+        已封存文件數:<span>{archivedDocumentCountLabel}</span>
       </p>
       <p>
         資料夾同步:<span>{folderSyncLabel}</span>

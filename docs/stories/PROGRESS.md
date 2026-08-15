@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 20 | 0 | 0 | 0 | 5 |
+| E07 Maintenance Assistant Experience | 25 | 20 | 1 | 0 | 0 | 4 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 103 | 0 | 0 | 1 | 71 |
+| **合計** | **175** | 103 | 1 | 0 | 1 | 70 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -159,7 +159,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S018 | approved | story/E07-S018-escalation-action | [E07-S018.md](E07-S018.md) | 獨立審核 APPROVE(Escalation action;真正的 mutation(status→ESCALATED),不同於 S014-S017 的唯讀面板/UI gating;新 lastEscalationReason 欄位(不重用 lastSkipReason);不推進 currentStepIndex、不清空既有答案;repeat-guard 用 allow-list(OPEN/IN_PROGRESS)涵蓋 DiagnosticSessionStatus 完整終態;restartDiagnosticSession 同步清空;刻意不 gate 在 S017 安全確認框後(求助動作,非繼續冒險);1 次 FIX 循環(本 story 自己新增的 2 個 E2E 測試 selector 撞名,exact:true 修正,同 S004/S008 先例);maintenance-session.tsx 是 S012 後第一次真正修改;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1089/1089 unit test,185/185 E2E 全過;另以獨立對抗性突變(反射性把 S017 安全確認 gate 也套用到升級按鈕)複驗,同時精準命中 unit 與 E2E 兩層各自專屬的獨立性驗證測試,證實兩層都真正在測這個保證;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S019 | approved | story/E07-S019-completion-summary | [E07-S019.md](E07-S019.md) | 獨立審核 APPROVE(Completion summary;S018 的姊妹能力(相反終態:RESOLVED vs ESCALATED);completeDiagnosticSession(sessionId, summary)幾乎逐字鏡射 escalateDiagnosticSession;新 lastCompletionSummary 欄位(不重用 lastEscalationReason);不推進 currentStepIndex、不清空既有答案;共用 allow-list repeat-guard 這次雙向真正可達(escalate 後 complete 被拒、complete 後 escalate 被拒,皆有測試);restartDiagnosticSession 同步清空;不 gate 在 S017 安全確認框後(同 S018 理由);新增 sessionAlreadyTerminal 共用旗標同時控制兩種終態表單的顯示,唯一必要地觸碰 S018 既有程式碼(升級表單顯示條件從 !recordedEscalationReason 改為 !sessionAlreadyTerminal,對既有測試零風險);0 次 FIX 循環;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1108/1108 unit test,187/187 E2E 全過;另以獨立對抗性突變、鎖定與 DEV 自己不同的層(後端 repeat-guard 從 allow-list 窄化為只擋 RESOLVED 的 block-list,模擬「加第二個終態動作時忘記一併擋掉另一個」)複驗,精準命中唯一預期的 1 個測試(雙向 guard 的 already-escalated 情境),零波及其他測試,證實這個共用 guard 真正在被測試且範圍精確;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S020 | approved | story/E07-S020-maintenance-history | [E07-S020.md](E07-S020.md) | 獨立審核 APPROVE(Maintenance history;第一個跨案例、獨立路由的新頁面(/maintenance/history),不是 S001 home 的延伸;跨 epic 前例排除分頁解讀(E03-S22 完整標題是「history pagination」,E07 全 25 story 無 pagination story);新增價值是狀態(透過 getDiagnosticSessionForCase 逐案例查詢),不是 metadata;零新 lib 函式、零新 contract,完全重用 listMaintenanceCases + getDiagnosticSessionForCase;任一案例查詢失敗 → 整頁 fail-closed(對抗性複驗證實拿掉會誤顯示「尚無維修歷史」而非 error);首頁新增「查看維修歷史」連結(同 S002 前例);nav-items.ts 零異動(prefix-matching 自動繼承);獨立審核發現 1 個 MAJOR 缺口並當場修正:completionSummary/escalationReason 兩欄位原本渲染成無標籤裸 span,欄位互換 bug 對任何測試完全不可見(互換後文字仍會顯示,只是透過另一分支)——補上「摘要:」/「原因:」標籤(同 current-step-card.tsx 既有前例)+ 新增 field-mixup regression test,對抗性複驗確認修正後精準命中 4 個預期失敗;最終 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,85/85 檔案 1123/1123 unit test,191/191 E2E 全過;PROGRESS.md 逐列計數複核一致)
-| E07-S021 | todo | | | |
+| E07-S021 | done | story/E07-S021-case-detail | [E07-S021.md](E07-S021.md) | DEV 完成,待獨立審核。新路由 /maintenance/[id](S001/S020 兩個既有元件的 doc comment 都點名等這個 story);唯讀,不是第二個互動 stepper,同 KnowledgeDetail 前例;完全重用 getMaintenanceCase + getDiagnosticSessionForCase,零新 lib 函式;任一讀取失敗 → 整頁 fail-closed(選擇 maintenance-session.tsx 前例而非 KnowledgeDetail 的降級前例,對抗性複驗證實必要);刻意不顯示 currentStepIndex/lastSelectedOptionId(扁平資料模型無法誠實重建歷史);刻意不 retrofit MaintenanceCaseList/MaintenanceHistoryList 為連結——兩者既有測試斷言零連結,翻轉真假值不合 STORY_WORKFLOW 測試凍結規則的既有窄例外,已完整記錄於 EVIDENCE 獨立一節,自行採納保守可回退選項,不阻塞;0 次 FIX 循環(2 個測試撰寫階段的技術性修正已記錄,不計入)
 | E07-S022 | todo | | | |
 | E07-S023 | todo | | | |
 | E07-S024 | todo | | | |

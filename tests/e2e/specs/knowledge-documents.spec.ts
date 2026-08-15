@@ -86,6 +86,13 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * confirms clicking it (real timing again, reusing the same 解析中/
  * 索引中 delay primitives) genuinely clears the failed state: the
  * document keeps its name/size, but 處理失敗 and 重試 both disappear.
+ *
+ * E05-S022 adds a 預覽 toggle to every document — no real fetch, purely
+ * a client-side reveal of the KnowledgeBaseDocument's own already-
+ * loaded `content`. This test types real text via KnowledgeDocumentTextInput
+ * (S015) and confirms its exact content shows on preview, then confirms
+ * a file-sourced seed document (no stored content) honestly shows
+ * 此文件目前無法預覽 instead of fabricated text.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -480,4 +487,27 @@ test("E05-S021: retrying a processing-failed document clears its 處理失敗 st
   await expect(page.getByRole("button", { name: "重試" })).not.toBeVisible();
   // The document itself — name, still in the list — survives the retry.
   await expect(page.getByText("待重試報告", { exact: false })).toBeVisible();
+});
+
+test("E05-S022: previewing a text-sourced document shows its real content; a file-sourced one honestly shows it cannot be previewed", async ({
+  page,
+}) => {
+  await openKnowledgeDetail(page, "產品保固政策");
+  await page.getByRole("link", { name: "文件列表" }).click();
+  await page.waitForURL((url) => /^\/knowledge\/.+\/documents$/.test(url.pathname));
+
+  // 產品保固條款.pdf is a pre-seeded, file-sourced document — never has
+  // real content (see addKnowledgeBaseDocument's own doc comment).
+  const fileDocItem = page.getByText("產品保固條款.pdf").locator("..");
+  await fileDocItem.getByRole("button", { name: "預覽" }).click();
+  await expect(fileDocItem.getByText("此文件目前無法預覽。")).toBeVisible();
+
+  await page.getByLabel("標題").fill("保固延伸說明");
+  await page.getByLabel("內容").fill("延長保固需於購買後 30 天內申請。");
+  await page.getByRole("button", { name: "新增" }).click();
+  await expect(page.getByText("保固延伸說明")).toBeVisible();
+
+  const textDocItem = page.getByText("保固延伸說明").locator("..");
+  await textDocItem.getByRole("button", { name: "預覽" }).click();
+  await expect(textDocItem.getByText("延長保固需於購買後 30 天內申請。")).toBeVisible();
 });

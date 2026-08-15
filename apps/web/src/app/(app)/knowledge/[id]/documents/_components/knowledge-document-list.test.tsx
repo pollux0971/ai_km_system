@@ -426,3 +426,40 @@ describe("KnowledgeDocumentList — retry processing action (E05-S021)", () => {
     expect(screen.queryByRole("button", { name: "重試" })).not.toBeInTheDocument();
   });
 });
+
+describe("KnowledgeDocumentList — document preview (E05-S022)", () => {
+  it("shows a 預覽 toggle for every document, and expanding a text-sourced one reveals its real stored content", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "doc1", knowledgeBaseId: "kb1", name: "上傳的檔案.pdf", sizeBytes: 500, uploadedAt: "2026-08-15T00:00:00.000Z" },
+        { id: "doc2", knowledgeBaseId: "kb1", name: "打的知識", content: "這是真實輸入的內容。", sizeBytes: 60, uploadedAt: "2026-08-15T00:00:00.000Z" },
+      ],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("上傳的檔案.pdf");
+    const previewButtons = screen.getAllByRole("button", { name: "預覽" });
+    expect(previewButtons).toHaveLength(2);
+
+    fireEvent.click(previewButtons[1]!);
+    expect(screen.getByText("這是真實輸入的內容。")).toBeInTheDocument();
+  });
+
+  it("shows an honest 無法預覽 message for a file-sourced document with no stored content", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({
+      ok: true,
+      value: [{ id: "doc1", knowledgeBaseId: "kb1", name: "上傳的檔案.pdf", sizeBytes: 500, uploadedAt: "2026-08-15T00:00:00.000Z" }],
+    });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+    await screen.findByText("上傳的檔案.pdf");
+
+    fireEvent.click(screen.getByRole("button", { name: "預覽" }));
+
+    expect(screen.getByText("此文件目前無法預覽。")).toBeInTheDocument();
+  });
+});

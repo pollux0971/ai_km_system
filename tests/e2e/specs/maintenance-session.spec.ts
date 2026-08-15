@@ -381,3 +381,23 @@ test("E07-S014: collapsing AI 說明 hides the explanation again", async ({ page
 
   await expect(page.getByText("模擬說明", { exact: false })).not.toBeVisible();
 });
+
+test("E07-S015: opening SOP 引用來源 shows an honestly-labeled SOP citation for the current step", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByRole("button", { name: "SOP 引用來源" }).click();
+
+  await expect(page.getByText("模擬 SOP", { exact: false })).toBeVisible();
+  await expect(page.getByText("模擬片段", { exact: false })).toBeVisible();
+});
+
+test("E07-S015: collapsing SOP 引用來源 hides the citation again", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByRole("button", { name: "SOP 引用來源" }).click();
+  await expect(page.getByText("模擬 SOP", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "收合 SOP 引用來源" }).click();
+
+  await expect(page.getByText("模擬 SOP", { exact: false })).not.toBeVisible();
+});

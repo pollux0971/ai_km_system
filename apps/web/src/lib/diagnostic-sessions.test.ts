@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createDiagnosticSession,
+  escalateDiagnosticSession,
   getDiagnosticSessionForCase,
   goToPreviousStep,
   restartDiagnosticSession,
@@ -548,5 +549,107 @@ describe("skipDiagnosticStep (E07-S012)", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+describe("escalateDiagnosticSession (E07-S018)", () => {
+  async function createSession() {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    return session.value;
+  }
+
+  it("sets status to ESCALATED and records the trimmed reason, without advancing currentStepIndex or touching prior answers", async () => {
+    const session = await createSession();
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+    const advanced = await selectDecisionOption(session.id, firstOption.id, "現場有明顯異音");
+    expect(advanced.ok).toBe(true);
+    if (!advanced.ok) return;
+
+    const result = await escalateDiagnosticSession(session.id, "  現場情況超出可自行處理範圍  ");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("ESCALATED");
+    expect(result.value.lastEscalationReason).toBe("現場情況超出可自行處理範圍");
+    expect(result.value.currentStepIndex).toBe(advanced.value.currentStepIndex);
+    expect(result.value.lastSelectedOptionId).toBe(firstOption.id);
+    expect(result.value.lastFreeTextDetail).toBe("現場有明顯異音");
+
+    const refetched = await getDiagnosticSessionForCase(session.maintenanceCaseId);
+    expect(refetched.ok).toBe(true);
+    if (refetched.ok) expect(refetched.value).toEqual(result.value);
+  });
+
+  it("fails with NOT_FOUND for an unknown sessionId, with no store side effect", async () => {
+    const result = await escalateDiagnosticSession("not-a-real-session-id", "原因");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("fails with VALIDATION_ERROR for an empty reason, and leaves the session untouched", async () => {
+    const session = await createSession();
+
+    const result = await escalateDiagnosticSession(session.id, "");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const after = await getDiagnosticSessionForCase(session.maintenanceCaseId);
+    expect(after.ok).toBe(true);
+    if (after.ok) expect(after.value).toEqual(session);
+  });
+
+  it("fails with VALIDATION_ERROR for a whitespace-only reason", async () => {
+    const session = await createSession();
+
+    const result = await escalateDiagnosticSession(session.id, "   ");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("fails with VALIDATION_ERROR when escalating an already-escalated session (repeat-guard)", async () => {
+    const session = await createSession();
+    const first = await escalateDiagnosticSession(session.id, "第一次升級原因");
+    expect(first.ok).toBe(true);
+
+    const second = await escalateDiagnosticSession(session.id, "第二次升級原因");
+
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.error.code).toBe("VALIDATION_ERROR");
+    if (first.ok) {
+      const after = await getDiagnosticSessionForCase(session.maintenanceCaseId);
+      expect(after.ok).toBe(true);
+      if (after.ok) expect(after.value).toEqual(first.value);
+    }
+  });
+});
+
+describe("restartDiagnosticSession escalation interaction (E07-S018)", () => {
+  it("also clears a previous escalation when restarting", async () => {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    const escalated = await escalateDiagnosticSession(session.value.id, "現場情況超出可自行處理範圍");
+    expect(escalated.ok).toBe(true);
+    if (!escalated.ok) return;
+    expect(escalated.value.status).toBe("ESCALATED");
+
+    const result = await restartDiagnosticSession(session.value.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("OPEN");
+    expect(result.value.lastEscalationReason).toBeUndefined();
   });
 });

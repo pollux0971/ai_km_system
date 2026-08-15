@@ -44,18 +44,23 @@ export type DiagnosticSessionStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "ESC
  * knowledge-documents.ts's own `KnowledgeBaseDocument` (`name`/`sizeBytes`)
  * and lib/messages.ts's own `attachmentNames` already establish; the real
  * `File` only ever lives transiently in current-step-card.tsx's own
- * component state, same as FileAttachmentPicker's own `File[]` props. All
- * six are plain, Team-A-owned progress markers — not a guess at E08's real
- * `DecisionSession`/`DecisionEvent` shape (E08-S08/S09, Team B; zero
- * contracts exist yet under contracts/ for either), and not a graph
- * position: `currentStepIndex` only ever advances one flat step at a time
- * via selectDecisionOption/skipDiagnosticStep below, never branches (see
- * diagnostic-steps.ts's own top doc comment for why branching itself is
- * deliberately out of scope for Team A). Same "grow one field per story,
- * don't reach into a later story's own scope" discipline
- * maintenance-cases.ts's own doc comments already follow across S002-S005
- * — E07-S007 itself deliberately held off adding either field until a
- * story existed that actually changed them.
+ * component state, same as FileAttachmentPicker's own `File[]` props. Plus,
+ * as of E07-S018 "Escalation action", `lastEscalationReason` (the mandatory
+ * justification for escalating the whole case; `undefined` unless the
+ * session has been escalated) — a separate field from `lastSkipReason` for
+ * the same reason that one is separate from `lastFreeTextDetail`: they mean
+ * different things (skipping one step vs. abandoning the guided flow
+ * entirely for the whole case). All eight are plain, Team-A-owned progress
+ * markers — not a guess at E08's real `DecisionSession`/`DecisionEvent`
+ * shape (E08-S08/S09, Team B; zero contracts exist yet under contracts/ for
+ * either), and not a graph position: `currentStepIndex` only ever advances
+ * one flat step at a time via selectDecisionOption/skipDiagnosticStep
+ * below, never branches (see diagnostic-steps.ts's own top doc comment for
+ * why branching itself is deliberately out of scope for Team A). Same
+ * "grow one field per story, don't reach into a later story's own scope"
+ * discipline maintenance-cases.ts's own doc comments already follow across
+ * S002-S005 — E07-S007 itself deliberately held off adding either field
+ * until a story existed that actually changed them.
  */
 export interface DiagnosticSession {
   id: string;
@@ -67,6 +72,7 @@ export interface DiagnosticSession {
   lastSkipReason?: string;
   lastPhotoFileName?: string;
   lastPhotoSizeBytes?: number;
+  lastEscalationReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -304,8 +310,8 @@ export async function goToPreviousStep(sessionId: string): Promise<Result<Diagno
  * one like goToPreviousStep/selectDecisionOption — it resets the entire
  * session back to the exact state createDiagnosticSession itself produces
  * (`currentStepIndex` 0, `status` "OPEN", `lastSelectedOptionId`/
- * `lastFreeTextDetail`/`lastPhotoFileName`/`lastPhotoSizeBytes` (E07-S013)
- * all cleared), unlike goToPreviousStep, which only ever
+ * `lastFreeTextDetail`/`lastPhotoFileName`/`lastPhotoSizeBytes` (E07-S013)/
+ * `lastEscalationReason` (E07-S018) all cleared), unlike goToPreviousStep, which only ever
  * moves one step and deliberately leaves `status` alone (see that
  * function's own doc comment). Restart's whole point is "forget what
  * happened, start over" — status genuinely does return to "not yet
@@ -340,6 +346,7 @@ export async function restartDiagnosticSession(sessionId: string): Promise<Resul
     lastFreeTextDetail: undefined,
     lastPhotoFileName: undefined,
     lastPhotoSizeBytes: undefined,
+    lastEscalationReason: undefined,
     updatedAt: new Date().toISOString(),
   };
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
@@ -409,6 +416,75 @@ export async function skipDiagnosticStep(sessionId: string, reason: string): Pro
     lastPhotoSizeBytes: undefined,
     lastSkipReason: trimmedReason,
     status: session.status === "OPEN" ? "IN_PROGRESS" : session.status,
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E07-S018 "Escalation action". A session-level action, not a step-level
+ * one — abandoning the guided flow for the whole case, not answering or
+ * skipping any particular step, so unlike selectDecisionOption/
+ * skipDiagnosticStep it deliberately does NOT advance `currentStepIndex`,
+ * and unlike restartDiagnosticSession it deliberately does NOT touch
+ * `lastSelectedOptionId`/`lastFreeTextDetail`/`lastPhotoFileName`/
+ * `lastPhotoSizeBytes` — whoever picks up an escalated case needs the
+ * existing answer trail intact, not wiped. `reason` is mandatory (same
+ * `VALIDATION_ERROR` on empty/whitespace-only pattern skipDiagnosticStep's
+ * own `reason` already establishes) and stored in its own
+ * `lastEscalationReason` field, not reused from `lastSkipReason` — same
+ * "two mean different things" reasoning DiagnosticSession's own doc
+ * comment already gives for lastSkipReason vs. lastFreeTextDetail.
+ *
+ * Fails closed with NOT_FOUND for an unknown `sessionId` — same
+ * `readStore().find(...)` precedent every other lookup in this file
+ * already follows.
+ *
+ * Fails closed with VALIDATION_ERROR for two distinct conditions sharing
+ * the code, same "both are 'this call doesn't make sense right now'"
+ * reasoning every other multi-cause VALIDATION_ERROR in this file already
+ * gives:
+ *   1. `reason` is empty or whitespace-only — mandatory, same shape as
+ *      skipDiagnosticStep's own `reason`.
+ *   2. `session.status` isn't "OPEN" or "IN_PROGRESS" — an allow-list, not
+ *      a narrower "reject only if already ESCALATED" block-list, so it
+ *      correctly covers every other terminal status this file's own
+ *      `DiagnosticSessionStatus` type defines (RESOLVED, CANCELLED), not
+ *      just the one this story's own functions can produce today. Repeat
+ *      escalation (ESCALATED -> ESCALATED) is the one sub-case reachable
+ *      through this file's own current functions, same repeat-guard shape
+ *      selectDecisionOption/skipDiagnosticStep's own guards already follow;
+ *      RESOLVED/CANCELLED are currently unreachable (nothing in this file
+ *      sets them yet) but the guard is written for the type's full,
+ *      pinned shape regardless, not just today's reachable subset.
+ *
+ * Deliberately NOT gated behind E07-S017's safety-acknowledgment checkbox
+ * client-side (see current-step-card.tsx's own doc comment) — escalating
+ * is how a user asks for help with a risk, not a way of proceeding further
+ * into it, so requiring "acknowledge the danger" first would be exactly
+ * backwards for this specific action.
+ */
+export async function escalateDiagnosticSession(sessionId: string, reason: string): Promise<Result<DiagnosticSession, ApiError>> {
+  const sessions = readStore();
+  const session = sessions.find((item) => item.id === sessionId);
+  if (!session) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個診斷 session。" } };
+  }
+
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請填寫升級原因。" } };
+  }
+
+  if (session.status !== "OPEN" && session.status !== "IN_PROGRESS") {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "目前狀態無法升級此案例。" } };
+  }
+
+  const updated: DiagnosticSession = {
+    ...session,
+    status: "ESCALATED",
+    lastEscalationReason: trimmedReason,
     updatedAt: new Date().toISOString(),
   };
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));

@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CurrentStepCard from "./current-step-card";
-import { goToPreviousStep, restartDiagnosticSession, selectDecisionOption, skipDiagnosticStep } from "@/lib/diagnostic-sessions";
+import {
+  escalateDiagnosticSession,
+  goToPreviousStep,
+  restartDiagnosticSession,
+  selectDecisionOption,
+  skipDiagnosticStep,
+} from "@/lib/diagnostic-sessions";
 import { explainDiagnosticStep } from "@/lib/diagnostic-explanations";
 import { getDiagnosticStepCitation } from "@/lib/diagnostic-citations";
 
@@ -10,6 +16,7 @@ vi.mock("@/lib/diagnostic-sessions", () => ({
   goToPreviousStep: vi.fn(),
   restartDiagnosticSession: vi.fn(),
   skipDiagnosticStep: vi.fn(),
+  escalateDiagnosticSession: vi.fn(),
 }));
 
 vi.mock("@/lib/diagnostic-explanations", () => ({
@@ -26,6 +33,7 @@ const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
 const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
 const mockedExplainDiagnosticStep = vi.mocked(explainDiagnosticStep);
 const mockedGetDiagnosticStepCitation = vi.mocked(getDiagnosticStepCitation);
+const mockedEscalateDiagnosticSession = vi.mocked(escalateDiagnosticSession);
 
 function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
   const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
@@ -761,5 +769,111 @@ describe("CurrentStepCard high-risk confirmation gate (E07-S017)", () => {
     fireEvent.click(screen.getByRole("button", { name: "選項甲" }));
 
     expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", "opt-a");
+  });
+});
+
+describe("CurrentStepCard escalation action (E07-S018)", () => {
+  const escalatedSession = {
+    id: "session1",
+    maintenanceCaseId: "case1",
+    status: "ESCALATED" as const,
+    currentStepIndex: 0,
+    lastEscalationReason: "現場情況超出可自行處理範圍",
+    createdAt: "2026-08-15T00:00:00.000Z",
+    updatedAt: "2026-08-15T00:05:00.000Z",
+  };
+
+  beforeEach(() => {
+    mockedEscalateDiagnosticSession.mockReset();
+  });
+
+  it("renders an 升級此案例 button and 升級原因 textarea when sessionId is present", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.getByLabelText("升級原因")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "升級此案例" })).toBeInTheDocument();
+  });
+
+  it("does not render escalation UI when sessionId is absent (S007 behavior unchanged)", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("keeps 升級此案例 disabled until a reason is typed", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "升級此案例" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("升級原因"), { target: { value: "現場情況超出可自行處理範圍" } });
+
+    expect(screen.getByRole("button", { name: "升級此案例" })).not.toBeDisabled();
+  });
+
+  it("stays disabled for a whitespace-only reason", () => {
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("升級原因"), { target: { value: "   " } });
+
+    expect(screen.getByRole("button", { name: "升級此案例" })).toBeDisabled();
+  });
+
+  it("clicking 升級此案例 calls escalateDiagnosticSession with the trimmed reason and invokes onAdvanced on success", async () => {
+    mockedEscalateDiagnosticSession.mockResolvedValue({ ok: true, value: escalatedSession });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={onAdvanced} />);
+    fireEvent.change(screen.getByLabelText("升級原因"), { target: { value: "  現場情況超出可自行處理範圍  " } });
+    fireEvent.click(screen.getByRole("button", { name: "升級此案例" }));
+
+    expect(mockedEscalateDiagnosticSession).toHaveBeenCalledWith("session1", "現場情況超出可自行處理範圍");
+    await waitFor(() => expect(onAdvanced).toHaveBeenCalledWith(escalatedSession));
+  });
+
+  it("shows an error message and does not call onAdvanced when escalating fails", async () => {
+    mockedEscalateDiagnosticSession.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "請填寫升級原因。" } });
+    const onAdvanced = vi.fn();
+
+    render(<CurrentStepCard sessionId="session1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} onAdvanced={onAdvanced} />);
+    fireEvent.change(screen.getByLabelText("升級原因"), { target: { value: "原因" } });
+    fireEvent.click(screen.getByRole("button", { name: "升級此案例" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("請填寫升級原因。");
+    expect(onAdvanced).not.toHaveBeenCalled();
+  });
+
+  it("shows a previously recorded escalation reason when the session already has one, and hides the escalation UI", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedEscalationReason="現場情況超出可自行處理範圍"
+      />,
+    );
+
+    expect(screen.getByText("現場情況超出可自行處理範圍")).toBeInTheDocument();
+    expect(screen.queryByLabelText("升級原因")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "升級此案例" })).not.toBeInTheDocument();
+  });
+
+  it("shows nothing extra when there is no recorded escalation yet", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByText("已升級此案例", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("escalating works even when a high-risk step's safety warning hasn't been acknowledged (E07-S017 gate does not apply)", async () => {
+    mockedEscalateDiagnosticSession.mockResolvedValue({ ok: true, value: escalatedSession });
+    const onAdvanced = vi.fn();
+    const stepWithWarning = { stepIndex: 0, instruction: "測試步驟內容", safetyWarning: "（模擬警告）測試用的安全警告文字。" };
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithWarning} onAdvanced={onAdvanced} />);
+    fireEvent.change(screen.getByLabelText("升級原因"), { target: { value: "現場情況超出可自行處理範圍" } });
+
+    expect(screen.getByRole("button", { name: "升級此案例" })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "升級此案例" }));
+
+    expect(mockedEscalateDiagnosticSession).toHaveBeenCalledWith("session1", "現場情況超出可自行處理範圍");
+    await waitFor(() => expect(onAdvanced).toHaveBeenCalledWith(escalatedSession));
   });
 });

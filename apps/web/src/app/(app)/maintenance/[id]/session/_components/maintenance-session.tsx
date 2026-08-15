@@ -44,7 +44,8 @@ type State =
  * plus E07-S012 "Skip-step UX with reason" (`session.lastSkipReason`,
  * same "show the recorded value back" reasoning as S009's own detail)
  * plus E07-S013 "Photo upload" (`session.lastPhotoFileName`/
- * `lastPhotoSizeBytes`, same reasoning again).
+ * `lastPhotoSizeBytes`, same reasoning again) plus E07-S018 "Escalation
+ * action" (`session.lastEscalationReason`, same reasoning again).
  * Loading/error/not-found/loaded states mirror KnowledgeDetail/
  * ConversationDetail's own established pattern.
  *
@@ -184,6 +185,7 @@ export default function MaintenanceSession({ id }: { id: string }) {
         recordedSkipReason={session.lastSkipReason}
         recordedPhotoFileName={session.lastPhotoFileName}
         recordedPhotoSizeBytes={session.lastPhotoSizeBytes}
+        recordedEscalationReason={session.lastEscalationReason}
       />
       <p>
         <Link href="/maintenance">返回維修助手首頁</Link>

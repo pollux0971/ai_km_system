@@ -14,6 +14,11 @@ import MaintenanceCaseList from "./_components/maintenance-case-list";
  * to /maintenance/new — the capability E07-S001 deliberately deferred
  * to its own separate story, same relationship knowledge/page.tsx
  * (E05-S001) already has with knowledge/new/page.tsx (E05-S003).
+ *
+ * E07-S020 "Maintenance history" adds the second entry link,
+ * "查看維修歷史", to /maintenance/history — same relationship, a second
+ * sub-route this page deliberately deferred until the story that
+ * actually owns it existed.
  */
 export default function MaintenancePage() {
   return (
@@ -21,6 +26,9 @@ export default function MaintenancePage() {
       <h1>維修助手</h1>
       <p>
         <Link href="/maintenance/new">開始新的維修診斷</Link>
+      </p>
+      <p>
+        <Link href="/maintenance/history">查看維修歷史</Link>
       </p>
       <MaintenanceCaseList />
     </main>

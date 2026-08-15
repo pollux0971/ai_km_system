@@ -16,6 +16,20 @@ import { trackEvent } from "@/lib/telemetry";
 const logger = createLogger("web:current-step-card");
 
 /**
+ * Module-private, same "duplicate this small formatter per domain rather
+ * than share cross-vertical" precedent knowledge/[id]/documents/
+ * format-file-size.ts's own doc comment already establishes against
+ * conversations/[id]/_components/file-attachment-picker.tsx's own
+ * module-private copy — a third independent copy for E07, not a new
+ * cross-vertical import.
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
  * E07-S007 "Current-step card" / E07-S008 "Decision options" / E07-S009
  * "Free-text detail". `sessionId`/`onAdvanced` are optional — S007's own
  * existing tests render a step with no `options` and never need either
@@ -86,6 +100,25 @@ const logger = createLogger("web:current-step-card");
  * non-empty — a client-side reflection of the server's own mandatory-
  * reason validation (see skipDiagnosticStep's own doc comment), not a
  * replacement for it.
+ *
+ * The 附加照片 file input (E07-S013 "Photo upload") only renders alongside
+ * real options, same visibility condition as 補充說明/略過原因 — bundled
+ * into the same one-submission shape as 補充說明 (see selectDecisionOption's
+ * own doc comment for why this story chose bundled over a standalone
+ * upload action), not the skip path. `accept="image/*"` is a picker HINT,
+ * not an enforced restriction — same "no invented type/size restriction"
+ * restraint FileAttachmentPicker's own doc comment already establishes,
+ * fully overridable by the user's own OS file dialog. The selected `File`
+ * lives only in this component's own `photoFile` state until submission
+ * (never persisted here) — an explicit "已選擇" preview (name + formatted
+ * size + a 移除相片 button to correct a wrong pick) is rendered manually
+ * rather than relying on native file-input chrome, same
+ * FileAttachmentPicker precedent, since native chrome varies by browser,
+ * shows no size, and isn't reliably queryable by Playwright/RTL either way.
+ * `recordedPhotoFileName`/`recordedPhotoSizeBytes` (session.lastPhotoFileName/
+ * lastPhotoSizeBytes, passed down by maintenance-session.tsx) are shown
+ * back once set, same "an input with no visible effect anywhere would be a
+ * write-only void" reasoning `recordedDetail` above already gives.
  */
 export default function CurrentStepCard({
   sessionId,
@@ -93,23 +126,30 @@ export default function CurrentStepCard({
   onAdvanced,
   recordedDetail,
   recordedSkipReason,
+  recordedPhotoFileName,
+  recordedPhotoSizeBytes,
 }: {
   sessionId?: string;
   step: DiagnosticStep;
   onAdvanced?: (session: DiagnosticSession) => void;
   recordedDetail?: string;
   recordedSkipReason?: string;
+  recordedPhotoFileName?: string;
+  recordedPhotoSizeBytes?: number;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailText, setDetailText] = useState("");
   const [skipReason, setSkipReason] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const detailFieldId = useId();
   const skipFieldId = useId();
+  const photoFieldId = useId();
 
   useEffect(() => {
     setDetailText("");
     setSkipReason("");
+    setPhotoFile(null);
   }, [step.stepIndex]);
 
   async function handleSelect(optionId: string) {
@@ -119,15 +159,23 @@ export default function CurrentStepCard({
     const correlationId = crypto.randomUUID();
     setPending(true);
     setError(null);
-    logger.info("selecting diagnostic decision option", { correlationId, sessionId, optionId, hasDetail: Boolean(trimmedDetail) });
+    logger.info("selecting diagnostic decision option", {
+      correlationId,
+      sessionId,
+      optionId,
+      hasDetail: Boolean(trimmedDetail),
+      hasPhoto: Boolean(photoFile),
+    });
     trackEvent("maintenance_session_option_select_attempt", {
       correlationId,
-      properties: { sessionId, optionId, hasDetail: Boolean(trimmedDetail) },
+      properties: { sessionId, optionId, hasDetail: Boolean(trimmedDetail), hasPhoto: Boolean(photoFile) },
     });
 
-    const result = trimmedDetail
-      ? await selectDecisionOption(sessionId, optionId, trimmedDetail)
-      : await selectDecisionOption(sessionId, optionId);
+    const result = photoFile
+      ? await selectDecisionOption(sessionId, optionId, trimmedDetail || undefined, photoFile)
+      : trimmedDetail
+        ? await selectDecisionOption(sessionId, optionId, trimmedDetail)
+        : await selectDecisionOption(sessionId, optionId);
 
     setPending(false);
     if (!result.ok) {
@@ -232,6 +280,12 @@ export default function CurrentStepCard({
           已略過此步驟,原因:<span>{recordedSkipReason}</span>
         </p>
       )}
+      {recordedPhotoFileName && (
+        <p>
+          已附加照片:<span>{recordedPhotoFileName}</span>
+          {typeof recordedPhotoSizeBytes === "number" && <>({formatFileSize(recordedPhotoSizeBytes)})</>}
+        </p>
+      )}
       {step.options && step.options.length > 0 && (
         <>
           <p>
@@ -244,6 +298,32 @@ export default function CurrentStepCard({
               disabled={pending}
             />
           </p>
+          <p>
+            <label htmlFor={photoFieldId}>附加照片</label>
+            <br />
+            <input
+              id={photoFieldId}
+              type="file"
+              accept="image/*"
+              disabled={pending}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) setPhotoFile(file);
+                // Reset so selecting the exact same file again (e.g. after
+                // removing it) still fires onChange — same reasoning
+                // FileAttachmentPicker's own onChange handler already gives.
+                event.target.value = "";
+              }}
+            />
+          </p>
+          {photoFile && (
+            <p>
+              已選擇:<span>{photoFile.name}</span>({formatFileSize(photoFile.size)})
+              <button type="button" onClick={() => setPhotoFile(null)} disabled={pending}>
+                移除相片
+              </button>
+            </p>
+          )}
           <p>
             {step.options.map((option) => (
               <button key={option.id} type="button" onClick={() => handleSelect(option.id)} disabled={pending} style={{ marginRight: 8 }}>

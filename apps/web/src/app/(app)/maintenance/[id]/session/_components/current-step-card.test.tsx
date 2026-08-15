@@ -15,6 +15,12 @@ const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
 const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
 
+function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
+  const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
+  Object.defineProperty(file, "size", { value: sizeBytes });
+  return file;
+}
+
 describe("CurrentStepCard (E07-S007)", () => {
   it("shows the 1-indexed step number and the step's instruction text", () => {
     render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
@@ -352,5 +358,104 @@ describe("CurrentStepCard skip-step action (E07-S012)", () => {
     render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
 
     expect(screen.queryByText("已略過此步驟", { exact: false })).not.toBeInTheDocument();
+  });
+});
+
+describe("CurrentStepCard photo upload (E07-S013)", () => {
+  const stepWithOptions = {
+    stepIndex: 0,
+    instruction: "測試步驟內容",
+    options: [
+      { id: "opt-a", label: "選項甲" },
+      { id: "opt-b", label: "選項乙" },
+    ],
+  };
+  const advancedSession = {
+    id: "session1",
+    maintenanceCaseId: "case1",
+    status: "IN_PROGRESS" as const,
+    currentStepIndex: 1,
+    createdAt: "2026-08-15T00:00:00.000Z",
+    updatedAt: "2026-08-15T00:01:00.000Z",
+  };
+
+  beforeEach(() => {
+    mockedSelectDecisionOption.mockReset();
+  });
+
+  it("renders a file input for attaching a photo alongside the options", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+
+    expect(screen.getByLabelText("附加照片")).toBeInTheDocument();
+  });
+
+  it("does not render a photo input when the step has no options (nothing to attach it alongside)", () => {
+    render(<CurrentStepCard step={{ stepIndex: 1, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByLabelText("附加照片")).not.toBeInTheDocument();
+  });
+
+  it("shows the selected photo's name and formatted size once chosen", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("附加照片"), { target: { files: [makePhoto("現場照片.jpg", 2_500_000)] } });
+
+    expect(screen.getByText("現場照片.jpg", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("2.4 MB", { exact: false })).toBeInTheDocument();
+  });
+
+  it("clicking 移除相片 clears the selected photo", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+    fireEvent.change(screen.getByLabelText("附加照片"), { target: { files: [makePhoto("現場照片.jpg", 1024)] } });
+    expect(screen.getByText("現場照片.jpg", { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "移除相片" }));
+
+    expect(screen.queryByText("現場照片.jpg", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("passes the selected photo as a fourth argument when selecting an option, with detail omitted as undefined", async () => {
+    mockedSelectDecisionOption.mockResolvedValue({ ok: true, value: { ...advancedSession, lastPhotoFileName: "現場照片.jpg", lastPhotoSizeBytes: 1024 } });
+    const photo = makePhoto("現場照片.jpg", 1024);
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+    fireEvent.change(screen.getByLabelText("附加照片"), { target: { files: [photo] } });
+    fireEvent.click(screen.getByRole("button", { name: "選項甲" }));
+
+    expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", "opt-a", undefined, photo);
+  });
+
+  it("passes both the trimmed detail and the selected photo together when both are provided", async () => {
+    mockedSelectDecisionOption.mockResolvedValue({
+      ok: true,
+      value: { ...advancedSession, lastFreeTextDetail: "面板顯示錯誤代碼 E12", lastPhotoFileName: "錯誤代碼.png", lastPhotoSizeBytes: 2048 },
+    });
+    const photo = makePhoto("錯誤代碼.png", 2048, "image/png");
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+    fireEvent.change(screen.getByLabelText("補充說明"), { target: { value: "面板顯示錯誤代碼 E12" } });
+    fireEvent.change(screen.getByLabelText("附加照片"), { target: { files: [photo] } });
+    fireEvent.click(screen.getByRole("button", { name: "選項甲" }));
+
+    expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", "opt-a", "面板顯示錯誤代碼 E12", photo);
+  });
+
+  it("shows a previously recorded photo when the session already has one", () => {
+    render(
+      <CurrentStepCard
+        step={{ stepIndex: 1, instruction: "測試步驟內容" }}
+        recordedPhotoFileName="現場照片.jpg"
+        recordedPhotoSizeBytes={2_500_000}
+      />,
+    );
+
+    expect(screen.getByText("現場照片.jpg", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("2.4 MB", { exact: false })).toBeInTheDocument();
+  });
+
+  it("shows nothing extra when there is no recorded photo yet", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByText("已附加照片", { exact: false })).not.toBeInTheDocument();
   });
 });

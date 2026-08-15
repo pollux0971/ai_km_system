@@ -3,7 +3,13 @@
 import { useEffect, useId, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage } from "@ai-km/ui";
-import { goToPreviousStep, restartDiagnosticSession, selectDecisionOption, type DiagnosticSession } from "@/lib/diagnostic-sessions";
+import {
+  goToPreviousStep,
+  restartDiagnosticSession,
+  selectDecisionOption,
+  skipDiagnosticStep,
+  type DiagnosticSession,
+} from "@/lib/diagnostic-sessions";
 import type { DiagnosticStep } from "@/lib/diagnostic-steps";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -71,25 +77,39 @@ const logger = createLogger("web:current-step-card");
  * comment), so it renders whenever `sessionId` is present, including on
  * the very first step. No confirmation dialog: this resets Team A mock
  * local state, not an irreversible business action.
+ *
+ * The 略過原因 textarea + 跳過此步驟 button (E07-S012 "Skip-step UX with
+ * reason") only render alongside real options, same visibility condition
+ * as 補充說明 — nothing to skip on a step with no decision to make. Unlike
+ * 補充說明 (optional, so the option buttons stay enabled either way), the
+ * skip button itself stays `disabled` until `skipReason.trim()` is
+ * non-empty — a client-side reflection of the server's own mandatory-
+ * reason validation (see skipDiagnosticStep's own doc comment), not a
+ * replacement for it.
  */
 export default function CurrentStepCard({
   sessionId,
   step,
   onAdvanced,
   recordedDetail,
+  recordedSkipReason,
 }: {
   sessionId?: string;
   step: DiagnosticStep;
   onAdvanced?: (session: DiagnosticSession) => void;
   recordedDetail?: string;
+  recordedSkipReason?: string;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailText, setDetailText] = useState("");
+  const [skipReason, setSkipReason] = useState("");
   const detailFieldId = useId();
+  const skipFieldId = useId();
 
   useEffect(() => {
     setDetailText("");
+    setSkipReason("");
   }, [step.stepIndex]);
 
   async function handleSelect(optionId: string) {
@@ -173,6 +193,31 @@ export default function CurrentStepCard({
     onAdvanced?.(result.value);
   }
 
+  async function handleSkip() {
+    const trimmedReason = skipReason.trim();
+    if (pending || !sessionId || !trimmedReason) return;
+
+    const correlationId = crypto.randomUUID();
+    setPending(true);
+    setError(null);
+    logger.info("skipping diagnostic step", { correlationId, sessionId });
+    trackEvent("maintenance_session_skip_attempt", { correlationId, properties: { sessionId } });
+
+    const result = await skipDiagnosticStep(sessionId, trimmedReason);
+
+    setPending(false);
+    if (!result.ok) {
+      logger.error("failed to skip diagnostic step", { correlationId, sessionId, code: result.error.code });
+      trackEvent("maintenance_session_skip_failure", { correlationId, properties: { sessionId, code: result.error.code } });
+      setError(result.error.message);
+      return;
+    }
+
+    logger.info("diagnostic step skipped", { correlationId, sessionId });
+    trackEvent("maintenance_session_skip_success", { correlationId, properties: { sessionId } });
+    onAdvanced?.(result.value);
+  }
+
   return (
     <section>
       <h2>步驟 {step.stepIndex + 1}</h2>
@@ -180,6 +225,11 @@ export default function CurrentStepCard({
       {recordedDetail && (
         <p>
           您的補充說明:<span>{recordedDetail}</span>
+        </p>
+      )}
+      {recordedSkipReason && (
+        <p>
+          已略過此步驟,原因:<span>{recordedSkipReason}</span>
         </p>
       )}
       {step.options && step.options.length > 0 && (
@@ -200,6 +250,21 @@ export default function CurrentStepCard({
                 {option.label}
               </button>
             ))}
+          </p>
+          <p>
+            <label htmlFor={skipFieldId}>略過原因</label>
+            <br />
+            <textarea
+              id={skipFieldId}
+              value={skipReason}
+              onChange={(event) => setSkipReason(event.target.value)}
+              disabled={pending}
+            />
+          </p>
+          <p>
+            <button type="button" onClick={handleSkip} disabled={pending || !skipReason.trim()}>
+              跳過此步驟
+            </button>
           </p>
         </>
       )}

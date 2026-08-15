@@ -8,6 +8,7 @@ import {
   goToPreviousStep,
   restartDiagnosticSession,
   selectDecisionOption,
+  skipDiagnosticStep,
 } from "@/lib/diagnostic-sessions";
 import { getCurrentDiagnosticStep } from "@/lib/diagnostic-steps";
 
@@ -21,6 +22,7 @@ vi.mock("@/lib/diagnostic-sessions", () => ({
   selectDecisionOption: vi.fn(),
   goToPreviousStep: vi.fn(),
   restartDiagnosticSession: vi.fn(),
+  skipDiagnosticStep: vi.fn(),
 }));
 
 const mockedGetMaintenanceCase = vi.mocked(getMaintenanceCase);
@@ -29,6 +31,7 @@ const mockedCreateDiagnosticSession = vi.mocked(createDiagnosticSession);
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
+const mockedSkipDiagnosticStep = vi.mocked(skipDiagnosticStep);
 
 const sampleCase = {
   id: "case1",
@@ -52,6 +55,7 @@ beforeEach(() => {
   mockedSelectDecisionOption.mockReset();
   mockedGoToPreviousStep.mockReset();
   mockedRestartDiagnosticSession.mockReset();
+  mockedSkipDiagnosticStep.mockReset();
 });
 
 describe("MaintenanceSession (E07-S006)", () => {
@@ -221,5 +225,25 @@ describe("MaintenanceSession (E07-S006)", () => {
     expect(mockedRestartDiagnosticSession).toHaveBeenCalledWith("session1");
     expect(await screen.findByRole("heading", { name: "步驟 1", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("待處理")).toBeInTheDocument();
+  });
+
+  it("E07-S012: typing a reason and clicking 跳過此步驟 advances the session and shows the recorded reason", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({ ok: true, value: sampleSession });
+    const skippedSession = {
+      ...sampleSession,
+      status: "IN_PROGRESS" as const,
+      currentStepIndex: 1,
+      lastSkipReason: "現場暫時無法安全接近設備",
+    };
+    mockedSkipDiagnosticStep.mockResolvedValue({ ok: true, value: skippedSession });
+
+    render(<MaintenanceSession id="case1" />);
+    fireEvent.change(await screen.findByLabelText("略過原因"), { target: { value: "現場暫時無法安全接近設備" } });
+    fireEvent.click(screen.getByRole("button", { name: "跳過此步驟" }));
+
+    expect(mockedSkipDiagnosticStep).toHaveBeenCalledWith("session1", "現場暫時無法安全接近設備");
+    expect(await screen.findByRole("heading", { name: "步驟 2", level: 2 })).toBeInTheDocument();
+    expect(screen.getByText("現場暫時無法安全接近設備")).toBeInTheDocument();
   });
 });

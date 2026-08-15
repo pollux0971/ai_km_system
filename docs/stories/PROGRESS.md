@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 4 | 1 | 0 | 0 | 20 |
+| E07 Maintenance Assistant Experience | 25 | 5 | 0 | 0 | 0 | 20 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 87 | 1 | 0 | 1 | 86 |
+| **合計** | **175** | 88 | 0 | 0 | 1 | 86 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -143,7 +143,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S002 | approved | story/E07-S002-equipment-selector | [E07-S002.md](E07-S002.md) | 獨立審核 APPROVE(Equipment selector,補上 S001 留白的「開始新的維修診斷」進入點;`/maintenance/new` 目前只有設備選擇一個欄位,判斷為 S002-S005 陸續為同一張表單加欄位的第一步(鏡射 E05-S011→S015);`equipment.ts` 為純前端固定清單(SOURCE_BASELINE 明確將 Equipment/EquipmentModel 列為 E08-S01/S02 責任);`MaintenanceCaseSummary` 新增 `equipmentId`,存 id 查表顯示,鏡射 boundModel 對 AI_MODELS 的形狀;開發中發現 getByRole("list") 未 scope 會連到側邊欄自己的導覽清單(4 個連結),修正為透過 main 先排除側邊欄;審核者對抗性還原此修正,逐字重現 Received: 4,證實修法必要;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 921 unit+157 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
 | E07-S003 | approved | story/E07-S003-serial-number-input | [E07-S003.md](E07-S003.md) | 獨立審核 APPROVE(Serial-number input,延續 S002 共用表單設計加一個選填欄位;`serialNumber` 選填而非必填,避免回頭破壞 S002 已審核通過的「僅設備即可建立案例」能力;無格式驗證(SOURCE_BASELINE 未定義序號格式);清單有序號才顯示;telemetry 刻意不含序號本身;第一輪 gate 即全綠,零 FIX 循環;審核者對抗性注入「序號必填」假 bug,證實 3 個測試立即失敗(含 S002 自己原有的測試),確認這個屬性有雙層保護,還原後 diff 為 0;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 928 unit+158 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
 | E07-S004 | approved | story/E07-S004-error-code-search-ui | [E07-S004.md](E07-S004.md) | 獨立審核 APPROVE(Error-code search UI,延續 S002-S003 共用表單設計加第三個欄位;與 S002 純選擇器不同,建立真正的搜尋窄化(文字框即時依代碼/描述關鍵字過濾 select 選項),因為 story 標題明確寫「search」而非「selector」;`errorCode` 選填但有值須驗證(參照 ERROR_CODE_OPTIONS 固定清單),與 serialNumber 完全不驗證不同;搜尋窄化後若已選代碼被篩掉會自動清空;開發中發現 Playwright getByLabel 預設子字串比對、Testing Library getByLabelText 預設精確比對造成同一字串單元測試過、E2E 逾時,修正為 exact:true;審核者對抗性還原此修正,逐字重現同一逾時失敗,還原後 diff 為 0;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 940 unit+159 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
-| E07-S005 | done | story/E07-S005-problem-description-input | [E07-S005.md](E07-S005.md) | Problem description input,S002-S005 共用表單系列最後一個欄位;刻意不新增儲存欄位,直接讓既有 `title` 被問題描述文字取代(兌現這個檔案自 S002 起就寫下的承諾——S001 seed 資料標題本來就已經讀起來像問題描述,不是設備名稱);省略時保留原本的設備名稱 fallback,不破壞已審核通過的 S002 equipment-only 流程;無格式/長度驗證(SOURCE_BASELINE 未定義);telemetry 完全不含描述文字本身;`maintenance-case-list.tsx` 零變更(title 早已無條件顯示);本次 session 第二個零 FIX 循環的 E07 story,typecheck/lint/946 unit/160 E2E/build 全綠 |
+| E07-S005 | approved | story/E07-S005-problem-description-input | [E07-S005.md](E07-S005.md) | 獨立審核 APPROVE(Problem description input,S002-S005 共用表單系列最後一個欄位;刻意不新增儲存欄位,直接讓既有 `title` 被問題描述文字取代(兌現這個檔案自 S002 起就寫下的承諾);省略時保留設備名稱 fallback,不破壞 S002 equipment-only 流程;`maintenance-case-list.tsx` 零變更;零 FIX 循環;審核者對抗性突變 `title` 運算子(`\|\|` → `??`),立即抓到空字串不再 fallback 的失敗,同時證實原本選用 `\|\|` 是刻意正確的選擇,還原後 diff 為 0;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 946 unit+160 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致;E07 至此完成 S001-S005,共用表單系列結束) |
 | E07-S006 | todo | | | |
 | E07-S007 | todo | | | |
 | E07-S008 | todo | | | |

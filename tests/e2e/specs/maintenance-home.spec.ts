@@ -99,7 +99,13 @@ test("E07-S002: creating a maintenance case for a chosen equipment adds it to th
   // "搜尋錯誤代碼(選填)" contains "錯誤代碼(選填)" as a substring.
   await page.getByLabel("錯誤代碼(選填)", { exact: true }).selectOption({ label: "E305 — 氣壓不足" });
   await submitAndReturnToList(page);
-  await expect(page.getByText("空壓機 A")).toBeVisible();
+  // exact: true — E07-S024's own ContinueDiagnosisPrompt now legitimately
+  // shows this same case's title again (prefixed "繼續診斷:", see that
+  // component's own doc comment), so the bare title alone no longer
+  // resolves uniquely; this still asserts the exact same thing (the
+  // title is visible in the plain case list), same disambiguation class
+  // E07-S004/E07-S008/E07-S018 already established.
+  await expect(page.getByText("空壓機 A", { exact: true })).toBeVisible();
   await expect(page.getByText("序號:SN-2026-0042")).toBeVisible();
   await expect(page.getByText("錯誤代碼:E305 — 氣壓不足")).toBeVisible();
 });
@@ -117,7 +123,9 @@ test("E07-S005: a typed problem description becomes the case's title, replacing 
   await page.getByLabel("選擇設備").selectOption({ label: "CNC 加工機 2 號" });
   await page.getByLabel("問題描述(選填)").fill("加工精度異常，尺寸公差超出範圍");
   await submitAndReturnToList(page);
-  await expect(page.getByText("加工精度異常，尺寸公差超出範圍")).toBeVisible();
+  // exact: true — same E07-S024 ContinueDiagnosisPrompt disambiguation
+  // reasoning as E07-S002's own equivalent fix above.
+  await expect(page.getByText("加工精度異常，尺寸公差超出範圍", { exact: true })).toBeVisible();
   await expect(page.getByText("CNC 加工機 2 號", { exact: true })).not.toBeVisible();
 });
 
@@ -176,4 +184,32 @@ test("E07-S022: 查看維修報表 leads to the maintenance report route", async
   await page.getByRole("link", { name: "查看維修報表" }).click();
 
   await page.waitForURL((url) => url.pathname === "/maintenance/report");
+});
+
+test("E07-S024: creating a case shows a 繼續進行中的診斷 prompt back on the home page, linking straight back into its session", async ({
+  page,
+}) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+  await expect(page.getByRole("heading", { name: "繼續進行中的診斷" })).not.toBeVisible();
+
+  await page.getByRole("link", { name: "開始新的維修診斷" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance/new");
+  await page.getByLabel("選擇設備").selectOption({ label: "空壓機 A" });
+  await page.getByRole("button", { name: "建立案例" }).click();
+  await page.waitForURL((url) => /^\/maintenance\/[^/]+\/session$/.test(url.pathname));
+  const caseId = new URL(page.url()).pathname.split("/")[2];
+
+  await page.getByRole("link", { name: "返回維修助手首頁" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+
+  await expect(page.getByRole("heading", { name: "繼續進行中的診斷" })).toBeVisible();
+  const resumeLink = page.getByRole("link", { name: /空壓機 A/ });
+  await expect(resumeLink).toBeVisible();
+  await expect(resumeLink).toHaveAttribute("href", `/maintenance/${caseId}/session`);
+
+  await resumeLink.click();
+  await page.waitForURL((url) => url.pathname === `/maintenance/${caseId}/session`);
+  await expect(page.getByRole("heading", { name: "空壓機 A", level: 1 })).toBeVisible();
 });

@@ -401,3 +401,9 @@ test("E07-S015: collapsing SOP 引用來源 hides the citation again", async ({ 
 
   await expect(page.getByText("模擬 SOP", { exact: false })).not.toBeVisible();
 });
+
+test("E07-S016: the first step's safety warning displays automatically, honestly labeled, without clicking anything", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  await expect(page.getByRole("alert").filter({ hasText: "模擬警告" })).toBeVisible();
+});

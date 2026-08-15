@@ -661,3 +661,29 @@ describe("CurrentStepCard SOP citation component (E07-S015)", () => {
     expect(mockedExplainDiagnosticStep).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("CurrentStepCard safety warning component (E07-S016)", () => {
+  it("shows the step's safety warning when present", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容", safetyWarning: "（模擬警告）測試用的安全警告文字。" }}
+        onAdvanced={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("（模擬警告）測試用的安全警告文字。");
+  });
+
+  it("shows nothing extra when the step has no safety warning", () => {
+    render(<CurrentStepCard step={{ stepIndex: 1, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("renders even when sessionId is absent — safety information isn't gated behind an active session", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容", safetyWarning: "（模擬警告）測試用的安全警告文字。" }} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("（模擬警告）測試用的安全警告文字。");
+  });
+});

@@ -3,10 +3,12 @@ import {
   addKnowledgeBaseDocument,
   addKnowledgeBaseDocumentFromText,
   addKnowledgeBaseDocumentFromUrl,
+  archiveKnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
   MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER,
   renameKnowledgeBaseDocument,
   retryDocumentProcessing,
+  unarchiveKnowledgeBaseDocument,
 } from "./knowledge-documents";
 
 beforeEach(() => {
@@ -64,6 +66,105 @@ describe("listKnowledgeBaseDocuments (E05-S010)", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.every((document) => document.knowledgeBaseId === "kb-sample-1")).toBe(true);
+  });
+
+  it("defaults to excluding archived documents, and archived:true selects only archived ones (E05-S025)", async () => {
+    const active = await addKnowledgeBaseDocument("kb-sample-3", "作用中文件.pdf", 100);
+    const toArchive = await addKnowledgeBaseDocument("kb-sample-3", "待封存文件.pdf", 200);
+    expect(active.ok).toBe(true);
+    expect(toArchive.ok).toBe(true);
+    if (!active.ok || !toArchive.ok) return;
+    await archiveKnowledgeBaseDocument("kb-sample-3", toArchive.value.id);
+
+    const activeView = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(activeView.ok).toBe(true);
+    if (activeView.ok) {
+      expect(activeView.value.some((document) => document.id === active.value.id)).toBe(true);
+      expect(activeView.value.some((document) => document.id === toArchive.value.id)).toBe(false);
+    }
+
+    const archivedView = await listKnowledgeBaseDocuments("kb-sample-3", true);
+    expect(archivedView.ok).toBe(true);
+    if (archivedView.ok) {
+      expect(archivedView.value.some((document) => document.id === toArchive.value.id)).toBe(true);
+      expect(archivedView.value.some((document) => document.id === active.value.id)).toBe(false);
+    }
+  });
+});
+
+describe("archiveKnowledgeBaseDocument / unarchiveKnowledgeBaseDocument (E05-S025)", () => {
+  it("archiveKnowledgeBaseDocument sets archived:true", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "文件.pdf", 500);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const archived = await archiveKnowledgeBaseDocument("kb-sample-3", created.value.id);
+
+    expect(archived.ok).toBe(true);
+    if (archived.ok) expect(archived.value.archived).toBe(true);
+  });
+
+  it("unarchiveKnowledgeBaseDocument sets archived:false", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "文件.pdf", 500);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveKnowledgeBaseDocument("kb-sample-3", created.value.id);
+
+    const unarchived = await unarchiveKnowledgeBaseDocument("kb-sample-3", created.value.id);
+
+    expect(unarchived.ok).toBe(true);
+    if (unarchived.ok) expect(unarchived.value.archived).toBe(false);
+  });
+
+  it("both fail with NOT_FOUND for a document id that doesn't exist", async () => {
+    const archiveResult = await archiveKnowledgeBaseDocument("kb-sample-3", "this-id-does-not-exist");
+    const unarchiveResult = await unarchiveKnowledgeBaseDocument("kb-sample-3", "this-id-does-not-exist");
+
+    expect(archiveResult.ok).toBe(false);
+    if (!archiveResult.ok) expect(archiveResult.error.code).toBe("NOT_FOUND");
+    expect(unarchiveResult.ok).toBe(false);
+    if (!unarchiveResult.ok) expect(unarchiveResult.error.code).toBe("NOT_FOUND");
+  });
+
+  it("both fail with NOT_FOUND when the document exists but belongs to a different knowledge base", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "跨庫測試.pdf", 500);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await archiveKnowledgeBaseDocument("kb-sample-1", created.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("does not disturb the document's other fields", async () => {
+    const created = await addKnowledgeBaseDocument("kb-sample-3", "文件.pdf", 12_345);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const archived = await archiveKnowledgeBaseDocument("kb-sample-3", created.value.id);
+
+    expect(archived.ok).toBe(true);
+    if (archived.ok) {
+      expect(archived.value.id).toBe(created.value.id);
+      expect(archived.value.name).toBe("文件.pdf");
+      expect(archived.value.sizeBytes).toBe(12_345);
+      expect(archived.value.uploadedAt).toBe(created.value.uploadedAt);
+    }
+  });
+
+  it("does not affect other documents in the same knowledge base", async () => {
+    const untouched = await addKnowledgeBaseDocument("kb-sample-3", "不受影響.pdf", 100);
+    const toArchive = await addKnowledgeBaseDocument("kb-sample-3", "待封存.pdf", 200);
+    expect(untouched.ok).toBe(true);
+    expect(toArchive.ok).toBe(true);
+    if (!untouched.ok || !toArchive.ok) return;
+
+    await archiveKnowledgeBaseDocument("kb-sample-3", toArchive.value.id);
+
+    const listed = await listKnowledgeBaseDocuments("kb-sample-3");
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.value.find((document) => document.id === untouched.value.id)?.archived).toBeUndefined();
   });
 });
 

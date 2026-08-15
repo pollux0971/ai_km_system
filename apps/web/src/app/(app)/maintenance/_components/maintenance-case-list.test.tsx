@@ -88,3 +88,28 @@ describe("MaintenanceCaseList serialNumber (E07-S003)", () => {
     expect(screen.queryByText(/^序號:/)).not.toBeInTheDocument();
   });
 });
+
+describe("MaintenanceCaseList errorCode (E07-S004)", () => {
+  it("shows the error code resolved to its own description when the case has one", async () => {
+    mockedListMaintenanceCases.mockResolvedValue({
+      ok: true,
+      value: [{ id: "case1", title: "測試維修案例", updatedAt: "2026-08-14T06:30:00.000Z", errorCode: "E101" }],
+    });
+
+    render(<MaintenanceCaseList />);
+
+    expect(await screen.findByText("錯誤代碼:E101 — 馬達過熱")).toBeInTheDocument();
+  });
+
+  it("shows no error code line when the case doesn't have one", async () => {
+    mockedListMaintenanceCases.mockResolvedValue({
+      ok: true,
+      value: [{ id: "case1", title: "測試維修案例", updatedAt: "2026-08-14T06:30:00.000Z" }],
+    });
+
+    render(<MaintenanceCaseList />);
+    await screen.findByText("測試維修案例");
+
+    expect(screen.queryByText(/^錯誤代碼:/)).not.toBeInTheDocument();
+  });
+});

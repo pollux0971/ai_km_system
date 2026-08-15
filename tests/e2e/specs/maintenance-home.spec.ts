@@ -77,11 +77,17 @@ test("E07-S002: creating a maintenance case for a chosen equipment adds it to th
   await page.getByLabel("選擇設備").selectOption({ label: "空壓機 A" });
   await expect(page.getByRole("button", { name: "建立案例" })).toBeEnabled();
   await page.getByLabel("設備序號(選填)").fill("SN-2026-0042");
+  // exact: true — Playwright's getByLabel substring-matches by default
+  // (unlike Testing Library's own getByLabelText, which is exact by
+  // default — why the equivalent unit test never hit this), and
+  // "搜尋錯誤代碼(選填)" contains "錯誤代碼(選填)" as a substring.
+  await page.getByLabel("錯誤代碼(選填)", { exact: true }).selectOption({ label: "E305 — 氣壓不足" });
   await page.getByRole("button", { name: "建立案例" }).click();
 
   await page.waitForURL((url) => url.pathname === "/maintenance");
   await expect(page.getByText("空壓機 A")).toBeVisible();
   await expect(page.getByText("序號:SN-2026-0042")).toBeVisible();
+  await expect(page.getByText("錯誤代碼:E305 — 氣壓不足")).toBeVisible();
 });
 
 test("E07-S003: a maintenance case can still be created with equipment alone, leaving no serial number line", async ({
@@ -100,4 +106,25 @@ test("E07-S003: a maintenance case can still be created with equipment alone, le
   await page.waitForURL((url) => url.pathname === "/maintenance");
   const newCaseItem = page.getByText("傳送帶馬達").locator("..");
   await expect(newCaseItem.getByText(/^序號:/)).toHaveCount(0);
+});
+
+test("E07-S004: searching narrows the error code dropdown, and an unmatched query shows a distinct 查無符合 message", async ({
+  page,
+}) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+
+  await page.getByRole("link", { name: "開始新的維修診斷" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance/new");
+
+  const errorCodeSelect = page.getByLabel("錯誤代碼(選填)", { exact: true });
+  await expect(errorCodeSelect.getByRole("option", { name: "E410 — 通訊逾時" })).toBeAttached();
+
+  await page.getByLabel("搜尋錯誤代碼(選填)").fill("過熱");
+  await expect(errorCodeSelect.getByRole("option", { name: "E101 — 馬達過熱" })).toBeAttached();
+  await expect(errorCodeSelect.getByRole("option", { name: "E410 — 通訊逾時" })).not.toBeAttached();
+
+  await page.getByLabel("搜尋錯誤代碼(選填)").fill("不存在的關鍵字");
+  await expect(page.getByText("查無符合「不存在的關鍵字」的錯誤代碼。")).toBeVisible();
 });

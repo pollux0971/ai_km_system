@@ -1,5 +1,6 @@
 import type { ApiError, Result } from "@ai-km/types";
 import { EQUIPMENT_OPTIONS } from "./equipment";
+import { ERROR_CODE_OPTIONS } from "./error-codes";
 
 /**
  * E07-S001 "Maintenance home". A maintenance case's recent-list summary —
@@ -54,6 +55,18 @@ import { EQUIPMENT_OPTIONS } from "./equipment";
  * validation beyond trimming — SOURCE_BASELINE names no real serial
  * number format anywhere, and inventing one would be exactly the kind
  * of unrequested constraint the Anti-hallucination Guard forbids.
+ *
+ * E07-S004 "Error-code search UI" adds `errorCode` — optional for the
+ * same "don't retroactively break an already-approved simpler flow"
+ * reason as serialNumber, but unlike serialNumber it references
+ * ERROR_CODE_OPTIONS by its own `code` value rather than accepting
+ * arbitrary free text — same "reference a fixed list, validate against
+ * it, resolve display text by lookup" shape `equipmentId` already
+ * established, just applied to a second fixed-vocabulary list. A
+ * present-but-unrecognized errorCode is still rejected (see
+ * createMaintenanceCase's own doc comment) — optionality means
+ * "the field may be entirely absent", not "any string is accepted when
+ * it IS present".
  */
 export interface MaintenanceCaseSummary {
   id: string;
@@ -61,6 +74,7 @@ export interface MaintenanceCaseSummary {
   updatedAt: string;
   equipmentId?: string;
   serialNumber?: string;
+  errorCode?: string;
 }
 
 /**
@@ -122,9 +136,9 @@ export async function listMaintenanceCases(): Promise<Result<MaintenanceCaseSumm
 }
 
 /**
- * E07-S002 "Equipment selector" / E07-S003 "Serial-number input".
- * Creates the case with whatever's been entered so far — error code
- * (S004) and problem description (S005) are each their own later
+ * E07-S002 "Equipment selector" / E07-S003 "Serial-number input" /
+ * E07-S004 "Error-code search UI". Creates the case with whatever's
+ * been entered so far — problem description (S005) is its own later
  * story, same "grow one field per story" shape KnowledgeBaseSummary
  * followed across S006-S016. `title` starts as the selected equipment's
  * own name (the only honest label available before S005 exists) —
@@ -136,16 +150,23 @@ export async function listMaintenanceCases(): Promise<Result<MaintenanceCaseSumm
  * — same server-validates-too discipline as createKnowledgeBase, even
  * though the `<select>` this is called from only ever offers real
  * EQUIPMENT_OPTIONS ids. Fails closed rather than trusting a bypassed
- * client to have picked a real one. `serialNumber` is optional (see
- * this file's own MaintenanceCaseSummary doc comment) — trimmed, and
- * only stored when genuinely non-empty, same "absence means
- * not-yet-set" precedent addKnowledgeBaseDocumentFromText's own
+ * client to have picked a real one. `serialNumber` is optional free
+ * text (see this file's own MaintenanceCaseSummary doc comment) —
+ * trimmed, and only stored when genuinely non-empty, same "absence
+ * means not-yet-set" precedent addKnowledgeBaseDocumentFromText's own
  * `sizeBytes` doc comment already establishes for an optional field
- * that shouldn't be stored as an empty string.
+ * that shouldn't be stored as an empty string. `errorCode` is also
+ * optional, but — unlike serialNumber — validated against
+ * ERROR_CODE_OPTIONS when present: an empty/omitted value is fine (the
+ * field simply isn't set yet), but a non-empty, unrecognized one is
+ * rejected with VALIDATION_ERROR, same "optional presence, but no
+ * garbage-in when present" contract equipmentId's own always-required
+ * validation follows, just relaxed to allow absence.
  */
 export async function createMaintenanceCase(
   equipmentId: string,
   serialNumber?: string,
+  errorCode?: string,
 ): Promise<Result<MaintenanceCaseSummary, ApiError>> {
   const equipment = EQUIPMENT_OPTIONS.find((option) => option.id === equipmentId);
   if (!equipment) {
@@ -154,12 +175,18 @@ export async function createMaintenanceCase(
 
   const trimmedSerialNumber = serialNumber?.trim();
 
+  const trimmedErrorCode = errorCode?.trim();
+  if (trimmedErrorCode && !ERROR_CODE_OPTIONS.some((option) => option.code === trimmedErrorCode)) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請選擇有效的錯誤代碼。" } };
+  }
+
   const maintenanceCase: MaintenanceCaseSummary = {
     id: crypto.randomUUID(),
     title: equipment.name,
     updatedAt: new Date().toISOString(),
     equipmentId,
     ...(trimmedSerialNumber ? { serialNumber: trimmedSerialNumber } : {}),
+    ...(trimmedErrorCode ? { errorCode: trimmedErrorCode } : {}),
   };
   writeStore([maintenanceCase, ...readStore()]);
   return { ok: true, value: maintenanceCase };

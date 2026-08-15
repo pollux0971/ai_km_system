@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import NewMaintenanceCasePage from "./page";
 import { createMaintenanceCase } from "@/lib/maintenance-cases";
 import { EQUIPMENT_OPTIONS } from "@/lib/equipment";
+import { ERROR_CODE_OPTIONS } from "@/lib/error-codes";
 import { trackEvent } from "@/lib/telemetry";
 
 const { mockReplace, mockRefresh, mockRouter } = vi.hoisted(() => {
@@ -72,7 +73,7 @@ describe("NewMaintenanceCasePage (E07-S002)", () => {
     expect(screen.getByRole("link", { name: "取消" })).toHaveAttribute("href", "/maintenance");
   });
 
-  it("submits the selected equipmentId with an empty serial number, then redirects to /maintenance and refreshes the router cache", async () => {
+  it("submits the selected equipmentId with an empty serial number and no error code, then redirects to /maintenance and refreshes the router cache", async () => {
     mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
 
     render(<NewMaintenanceCasePage />);
@@ -80,7 +81,7 @@ describe("NewMaintenanceCasePage (E07-S002)", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/maintenance"));
-    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "");
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "", "");
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
@@ -170,7 +171,7 @@ describe("NewMaintenanceCasePage serialNumber field (E07-S003)", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalled());
-    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "SN-2026-0042");
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "SN-2026-0042", "");
   });
 
   it("never includes the serial number itself in telemetry properties", async () => {
@@ -187,5 +188,80 @@ describe("NewMaintenanceCasePage serialNumber field (E07-S003)", () => {
       const properties = (call as [string, { properties?: Record<string, unknown> }])[1]?.properties;
       expect(JSON.stringify(properties ?? {})).not.toContain("SN-2026-0042");
     }
+  });
+});
+
+describe("NewMaintenanceCasePage error code search (E07-S004)", () => {
+  it("lists every ERROR_CODE_OPTIONS entry unfiltered when the search query is empty", () => {
+    render(<NewMaintenanceCasePage />);
+
+    for (const option of ERROR_CODE_OPTIONS) {
+      expect(screen.getByRole("option", { name: `${option.code} — ${option.description}` })).toBeInTheDocument();
+    }
+  });
+
+  it("narrows the error code options to only those matching the typed query (by code or description)", () => {
+    render(<NewMaintenanceCasePage />);
+
+    fireEvent.change(screen.getByLabelText("搜尋錯誤代碼(選填)"), { target: { value: "過熱" } });
+
+    expect(screen.getByRole("option", { name: "E101 — 馬達過熱" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "E202 — 感測器讀值異常" })).not.toBeInTheDocument();
+  });
+
+  it("shows a distinct 查無符合 message when the query matches no error code", () => {
+    render(<NewMaintenanceCasePage />);
+
+    fireEvent.change(screen.getByLabelText("搜尋錯誤代碼(選填)"), { target: { value: "不存在的代碼" } });
+
+    expect(screen.getByText("查無符合「不存在的代碼」的錯誤代碼。")).toBeInTheDocument();
+  });
+
+  it("clears an already-selected error code once the query narrows past it, rather than leaving a hidden selection", () => {
+    render(<NewMaintenanceCasePage />);
+
+    fireEvent.change(screen.getByLabelText("錯誤代碼(選填)"), { target: { value: "E101" } });
+    expect(screen.getByLabelText("錯誤代碼(選填)")).toHaveValue("E101");
+
+    fireEvent.change(screen.getByLabelText("搜尋錯誤代碼(選填)"), { target: { value: "E202" } });
+
+    expect(screen.getByLabelText("錯誤代碼(選填)")).toHaveValue("");
+  });
+
+  it("keeps an already-selected error code when the query is cleared back to empty", () => {
+    render(<NewMaintenanceCasePage />);
+
+    fireEvent.change(screen.getByLabelText("搜尋錯誤代碼(選填)"), { target: { value: "過熱" } });
+    fireEvent.change(screen.getByLabelText("錯誤代碼(選填)"), { target: { value: "E101" } });
+    fireEvent.change(screen.getByLabelText("搜尋錯誤代碼(選填)"), { target: { value: "" } });
+
+    expect(screen.getByLabelText("錯誤代碼(選填)")).toHaveValue("E101");
+  });
+
+  it("submits the selected errorCode alongside equipmentId and serialNumber", async () => {
+    mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+
+    render(<NewMaintenanceCasePage />);
+    fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
+    fireEvent.change(screen.getByLabelText("錯誤代碼(選填)"), { target: { value: "E202" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "", "E202");
+  });
+
+  it("includes the selected errorCode in telemetry properties (a fixed-vocabulary value, unlike serialNumber)", async () => {
+    mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+
+    render(<NewMaintenanceCasePage />);
+    fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
+    fireEvent.change(screen.getByLabelText("錯誤代碼(選填)"), { target: { value: "E305" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+
+    const successCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "maintenance_case_create_success");
+    expect(successCall).toBeDefined();
+    expect((successCall as [string, { properties: { errorCode?: string } }])[1].properties.errorCode).toBe("E305");
   });
 });

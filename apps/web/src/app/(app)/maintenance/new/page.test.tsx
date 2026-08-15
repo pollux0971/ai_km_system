@@ -72,7 +72,7 @@ describe("NewMaintenanceCasePage (E07-S002)", () => {
     expect(screen.getByRole("link", { name: "取消" })).toHaveAttribute("href", "/maintenance");
   });
 
-  it("submits the selected equipmentId, then redirects to /maintenance and refreshes the router cache", async () => {
+  it("submits the selected equipmentId with an empty serial number, then redirects to /maintenance and refreshes the router cache", async () => {
     mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
 
     render(<NewMaintenanceCasePage />);
@@ -80,7 +80,7 @@ describe("NewMaintenanceCasePage (E07-S002)", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/maintenance"));
-    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id);
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "");
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
@@ -149,5 +149,43 @@ describe("NewMaintenanceCasePage (E07-S002)", () => {
     const failureCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "maintenance_case_create_failure");
     expect(failureCall).toBeDefined();
     expect((failureCall as [string, { properties: { code: string } }])[1].properties.code).toBe("SERVICE_UNAVAILABLE");
+  });
+});
+
+describe("NewMaintenanceCasePage serialNumber field (E07-S003)", () => {
+  it("renders the optional serial number field, starting empty, submit still enabled by equipment alone", () => {
+    render(<NewMaintenanceCasePage />);
+
+    expect(screen.getByLabelText("設備序號(選填)")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
+    expect(screen.getByRole("button", { name: "建立案例" })).toBeEnabled();
+  });
+
+  it("submits the typed serial number alongside the selected equipmentId", async () => {
+    mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+
+    render(<NewMaintenanceCasePage />);
+    fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
+    fireEvent.change(screen.getByLabelText("設備序號(選填)"), { target: { value: "SN-2026-0042" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "SN-2026-0042");
+  });
+
+  it("never includes the serial number itself in telemetry properties", async () => {
+    mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+
+    render(<NewMaintenanceCasePage />);
+    fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
+    fireEvent.change(screen.getByLabelText("設備序號(選填)"), { target: { value: "SN-2026-0042" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+
+    for (const call of mockedTrackEvent.mock.calls) {
+      const properties = (call as [string, { properties?: Record<string, unknown> }])[1]?.properties;
+      expect(JSON.stringify(properties ?? {})).not.toContain("SN-2026-0042");
+    }
   });
 });

@@ -76,8 +76,28 @@ test("E07-S002: creating a maintenance case for a chosen equipment adds it to th
   await expect(page.getByRole("button", { name: "建立案例" })).toBeDisabled();
   await page.getByLabel("選擇設備").selectOption({ label: "空壓機 A" });
   await expect(page.getByRole("button", { name: "建立案例" })).toBeEnabled();
+  await page.getByLabel("設備序號(選填)").fill("SN-2026-0042");
   await page.getByRole("button", { name: "建立案例" }).click();
 
   await page.waitForURL((url) => url.pathname === "/maintenance");
   await expect(page.getByText("空壓機 A")).toBeVisible();
+  await expect(page.getByText("序號:SN-2026-0042")).toBeVisible();
+});
+
+test("E07-S003: a maintenance case can still be created with equipment alone, leaving no serial number line", async ({
+  page,
+}) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+
+  await page.getByRole("link", { name: "開始新的維修診斷" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance/new");
+
+  await page.getByLabel("選擇設備").selectOption({ label: "傳送帶馬達" });
+  await page.getByRole("button", { name: "建立案例" }).click();
+
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+  const newCaseItem = page.getByText("傳送帶馬達").locator("..");
+  await expect(newCaseItem.getByText(/^序號:/)).toHaveCount(0);
 });

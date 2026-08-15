@@ -40,12 +40,27 @@ import { EQUIPMENT_OPTIONS } from "./equipment";
  * denormalized name snapshot — same shape `boundModel` already uses for
  * AI_MODELS, so a case's equipment display name is always derived by
  * lookup, never allowed to drift from the source list.
+ *
+ * E07-S003 "Serial-number input" adds `serialNumber` — also optional,
+ * for the same reason and by the same precedent: S002's own EVIDENCE
+ * already documented equipment selection alone as "a complete closed
+ * loop, not a half-finished feature" (select → create → appears in the
+ * list). Making serial number REQUIRED now would retroactively break
+ * that already-reviewed, already-approved capability — same
+ * "growing set of independently-optional fields on one entity" shape
+ * KnowledgeBaseSummary's visibleToRoles/members/boundPrompt/boundModel/
+ * folderSyncPath all follow (S003-created-a-KB-with-just-a-name stayed
+ * valid through every later field S006-S016 added). No format
+ * validation beyond trimming — SOURCE_BASELINE names no real serial
+ * number format anywhere, and inventing one would be exactly the kind
+ * of unrequested constraint the Anti-hallucination Guard forbids.
  */
 export interface MaintenanceCaseSummary {
   id: string;
   title: string;
   updatedAt: string;
   equipmentId?: string;
+  serialNumber?: string;
 }
 
 /**
@@ -107,10 +122,10 @@ export async function listMaintenanceCases(): Promise<Result<MaintenanceCaseSumm
 }
 
 /**
- * E07-S002 "Equipment selector". Creates the minimal viable case: an
- * equipment selection and nothing else yet — serial number (S003),
- * error code (S004), and problem description (S005) are each their own
- * later story, same "grow one field per story" shape KnowledgeBaseSummary
+ * E07-S002 "Equipment selector" / E07-S003 "Serial-number input".
+ * Creates the case with whatever's been entered so far — error code
+ * (S004) and problem description (S005) are each their own later
+ * story, same "grow one field per story" shape KnowledgeBaseSummary
  * followed across S006-S016. `title` starts as the selected equipment's
  * own name (the only honest label available before S005 exists) —
  * S005 is free to overwrite it once a real problem description exists,
@@ -121,19 +136,30 @@ export async function listMaintenanceCases(): Promise<Result<MaintenanceCaseSumm
  * — same server-validates-too discipline as createKnowledgeBase, even
  * though the `<select>` this is called from only ever offers real
  * EQUIPMENT_OPTIONS ids. Fails closed rather than trusting a bypassed
- * client to have picked a real one.
+ * client to have picked a real one. `serialNumber` is optional (see
+ * this file's own MaintenanceCaseSummary doc comment) — trimmed, and
+ * only stored when genuinely non-empty, same "absence means
+ * not-yet-set" precedent addKnowledgeBaseDocumentFromText's own
+ * `sizeBytes` doc comment already establishes for an optional field
+ * that shouldn't be stored as an empty string.
  */
-export async function createMaintenanceCase(equipmentId: string): Promise<Result<MaintenanceCaseSummary, ApiError>> {
+export async function createMaintenanceCase(
+  equipmentId: string,
+  serialNumber?: string,
+): Promise<Result<MaintenanceCaseSummary, ApiError>> {
   const equipment = EQUIPMENT_OPTIONS.find((option) => option.id === equipmentId);
   if (!equipment) {
     return { ok: false, error: { code: "VALIDATION_ERROR", message: "請選擇設備。" } };
   }
+
+  const trimmedSerialNumber = serialNumber?.trim();
 
   const maintenanceCase: MaintenanceCaseSummary = {
     id: crypto.randomUUID(),
     title: equipment.name,
     updatedAt: new Date().toISOString(),
     equipmentId,
+    ...(trimmedSerialNumber ? { serialNumber: trimmedSerialNumber } : {}),
   };
   writeStore([maintenanceCase, ...readStore()]);
   return { ok: true, value: maintenanceCase };

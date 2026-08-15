@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import MaintenanceSession from "./maintenance-session";
 import { getMaintenanceCase } from "@/lib/maintenance-cases";
-import { createDiagnosticSession, getDiagnosticSessionForCase, selectDecisionOption } from "@/lib/diagnostic-sessions";
+import { createDiagnosticSession, getDiagnosticSessionForCase, goToPreviousStep, selectDecisionOption } from "@/lib/diagnostic-sessions";
 import { getCurrentDiagnosticStep } from "@/lib/diagnostic-steps";
 
 vi.mock("@/lib/maintenance-cases", () => ({
@@ -13,12 +13,14 @@ vi.mock("@/lib/diagnostic-sessions", () => ({
   getDiagnosticSessionForCase: vi.fn(),
   createDiagnosticSession: vi.fn(),
   selectDecisionOption: vi.fn(),
+  goToPreviousStep: vi.fn(),
 }));
 
 const mockedGetMaintenanceCase = vi.mocked(getMaintenanceCase);
 const mockedGetDiagnosticSessionForCase = vi.mocked(getDiagnosticSessionForCase);
 const mockedCreateDiagnosticSession = vi.mocked(createDiagnosticSession);
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
+const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 
 const sampleCase = {
   id: "case1",
@@ -40,6 +42,7 @@ beforeEach(() => {
   mockedGetDiagnosticSessionForCase.mockReset();
   mockedCreateDiagnosticSession.mockReset();
   mockedSelectDecisionOption.mockReset();
+  mockedGoToPreviousStep.mockReset();
 });
 
 describe("MaintenanceSession (E07-S006)", () => {
@@ -176,5 +179,21 @@ describe("MaintenanceSession (E07-S006)", () => {
     render(<MaintenanceSession id="case1" />);
 
     expect(await screen.findByText("現場有明顯異音")).toBeInTheDocument();
+  });
+
+  it("E07-S010: clicking 上一步 returns to the previous step's content", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleSession, currentStepIndex: 1, status: "IN_PROGRESS" as const },
+    });
+    mockedGoToPreviousStep.mockResolvedValue({ ok: true, value: { ...sampleSession, status: "IN_PROGRESS" as const } });
+
+    render(<MaintenanceSession id="case1" />);
+    const backButton = await screen.findByRole("button", { name: "上一步" });
+    fireEvent.click(backButton);
+
+    expect(mockedGoToPreviousStep).toHaveBeenCalledWith("session1");
+    expect(await screen.findByRole("heading", { name: "步驟 1", level: 2 })).toBeInTheDocument();
   });
 });

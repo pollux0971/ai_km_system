@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDiagnosticSession, getDiagnosticSessionForCase, selectDecisionOption } from "./diagnostic-sessions";
+import { createDiagnosticSession, getDiagnosticSessionForCase, goToPreviousStep, selectDecisionOption } from "./diagnostic-sessions";
 import { createMaintenanceCase } from "./maintenance-cases";
 import { EQUIPMENT_OPTIONS } from "./equipment";
 import { getCurrentDiagnosticStep } from "./diagnostic-steps";
@@ -175,5 +175,84 @@ describe("selectDecisionOption free-text detail (E07-S009)", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.lastFreeTextDetail).toBeUndefined();
+  });
+});
+
+describe("goToPreviousStep (E07-S010)", () => {
+  async function createAdvancedSession(detail?: string) {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+    const advanced = await selectDecisionOption(session.value.id, firstOption.id, detail);
+    if (!advanced.ok) throw new Error("failed to advance diagnostic session fixture");
+    return advanced.value;
+  }
+
+  it("decrements currentStepIndex and clears the stale option/detail from the step being left, while keeping status", async () => {
+    const session = await createAdvancedSession("現場有明顯異音");
+    expect(session.currentStepIndex).toBe(1);
+    expect(session.status).toBe("IN_PROGRESS");
+    expect(session.lastSelectedOptionId).toBeTruthy();
+    expect(session.lastFreeTextDetail).toBeTruthy();
+
+    const result = await goToPreviousStep(session.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.currentStepIndex).toBe(0);
+    expect(result.value.status).toBe("IN_PROGRESS");
+    expect(result.value.lastSelectedOptionId).toBeUndefined();
+    expect(result.value.lastFreeTextDetail).toBeUndefined();
+
+    const refetched = await getDiagnosticSessionForCase(session.maintenanceCaseId);
+    expect(refetched.ok).toBe(true);
+    if (refetched.ok) expect(refetched.value).toEqual(result.value);
+  });
+
+  it("fails with NOT_FOUND for an unknown sessionId", async () => {
+    const result = await goToPreviousStep("not-a-real-session-id");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("fails with VALIDATION_ERROR when already at the first step, with no side effect", async () => {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    expect(session.value.currentStepIndex).toBe(0);
+
+    const result = await goToPreviousStep(session.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const after = await getDiagnosticSessionForCase(session.value.maintenanceCaseId);
+    expect(after.ok).toBe(true);
+    if (after.ok) expect(after.value).toEqual(session.value);
+  });
+
+  it("allows selecting an option again after going back — the repeat-guard no longer blocks it", async () => {
+    const session = await createAdvancedSession();
+    const back = await goToPreviousStep(session.id);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+
+    const secondOption = getCurrentDiagnosticStep(0).options?.[1];
+    if (!secondOption) throw new Error("step 0 must have at least 2 options");
+    const reselected = await selectDecisionOption(session.id, secondOption.id);
+
+    expect(reselected.ok).toBe(true);
+    if (!reselected.ok) return;
+    expect(reselected.value.currentStepIndex).toBe(1);
+    expect(reselected.value.lastSelectedOptionId).toBe(secondOption.id);
   });
 });

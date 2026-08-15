@@ -1,9 +1,9 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage } from "@ai-km/ui";
-import { selectDecisionOption, type DiagnosticSession } from "@/lib/diagnostic-sessions";
+import { goToPreviousStep, selectDecisionOption, type DiagnosticSession } from "@/lib/diagnostic-sessions";
 import type { DiagnosticStep } from "@/lib/diagnostic-steps";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -47,6 +47,23 @@ const logger = createLogger("web:current-step-card");
  * itself — same "don't log enterprise/user-authored content" restraint
  * knowledge-document-retry-button.tsx's own doc comment already follows
  * for document names.
+ *
+ * The 上一步 button (E07-S010 "Previous-step action") only renders when
+ * `step.stepIndex > 0` — there is no step before the first one, same
+ * "the interactive path only turns on when there's something to be
+ * interactive about" reasoning this file's own top doc comment already
+ * gives for `sessionId`/`onAdvanced`. Shares `pending`/`error` state with
+ * option selection (see handleSelect) rather than its own — the two
+ * actions are mutually exclusive on the same step at the same time, and
+ * reusing the same state avoids a second, independent pending/error pair
+ * for what is structurally the same "one mutation in flight" concern.
+ *
+ * `detailText` resets whenever `step.stepIndex` changes (forward via a
+ * successful selection, or backward via 上一步) — this same component
+ * instance stays mounted across a step transition (maintenance-session.tsx
+ * re-renders it with new props, it doesn't unmount/remount), so without
+ * this the textarea would keep showing a stale, already-submitted-or-
+ * abandoned draft after the session has moved to a different step.
  */
 export default function CurrentStepCard({
   sessionId,
@@ -63,6 +80,10 @@ export default function CurrentStepCard({
   const [error, setError] = useState<string | null>(null);
   const [detailText, setDetailText] = useState("");
   const detailFieldId = useId();
+
+  useEffect(() => {
+    setDetailText("");
+  }, [step.stepIndex]);
 
   async function handleSelect(optionId: string) {
     if (pending || !sessionId) return;
@@ -97,6 +118,30 @@ export default function CurrentStepCard({
     onAdvanced?.(result.value);
   }
 
+  async function handleGoBack() {
+    if (pending || !sessionId) return;
+
+    const correlationId = crypto.randomUUID();
+    setPending(true);
+    setError(null);
+    logger.info("going to previous diagnostic step", { correlationId, sessionId });
+    trackEvent("maintenance_session_go_back_attempt", { correlationId, properties: { sessionId } });
+
+    const result = await goToPreviousStep(sessionId);
+
+    setPending(false);
+    if (!result.ok) {
+      logger.error("failed to go to previous diagnostic step", { correlationId, sessionId, code: result.error.code });
+      trackEvent("maintenance_session_go_back_failure", { correlationId, properties: { sessionId, code: result.error.code } });
+      setError(result.error.message);
+      return;
+    }
+
+    logger.info("returned to previous diagnostic step", { correlationId, sessionId });
+    trackEvent("maintenance_session_go_back_success", { correlationId, properties: { sessionId } });
+    onAdvanced?.(result.value);
+  }
+
   return (
     <section>
       <h2>步驟 {step.stepIndex + 1}</h2>
@@ -126,6 +171,13 @@ export default function CurrentStepCard({
             ))}
           </p>
         </>
+      )}
+      {step.stepIndex > 0 && (
+        <p>
+          <button type="button" onClick={handleGoBack} disabled={pending}>
+            上一步
+          </button>
+        </p>
       )}
       {error && <ErrorMessage message={error} />}
     </section>

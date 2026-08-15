@@ -78,6 +78,17 @@ const UNSELECTED_VALUE = "";
  * shape as `equipmentId` when present (see createMaintenanceCase's own
  * doc comment) — errorCode is never required, matching S003's own
  * precedent for not breaking the already-approved equipment-only flow.
+ *
+ * E07-S005 "Problem description input" adds the last field this
+ * form's own S002-S005 sequence grows — a plain textarea, not a new
+ * stored field: its trimmed text becomes `title` directly (see
+ * createMaintenanceCase's own doc comment for the full reasoning).
+ * Same submit-based, not instant-apply, shape S008's own prompt editor
+ * already established for multi-line free-form text a user actively
+ * composes. Telemetry excludes it entirely — free-form text describing
+ * a real operational problem is exactly the kind of content
+ * serialNumber's own doc comment already restrains logging for, only
+ * more so here.
  */
 export default function NewMaintenanceCasePage() {
   const router = useRouter();
@@ -85,10 +96,12 @@ export default function NewMaintenanceCasePage() {
   const serialNumberId = useId();
   const errorCodeQueryId = useId();
   const errorCodeSelectId = useId();
+  const problemDescriptionId = useId();
   const [equipmentId, setEquipmentId] = useState(UNSELECTED_VALUE);
   const [serialNumber, setSerialNumber] = useState("");
   const [errorCodeQuery, setErrorCodeQuery] = useState("");
   const [errorCode, setErrorCode] = useState(UNSELECTED_VALUE);
+  const [problemDescription, setProblemDescription] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
 
@@ -125,10 +138,11 @@ export default function NewMaintenanceCasePage() {
       equipmentId,
       hasSerialNumber: serialNumber.trim().length > 0,
       errorCode: errorCode || undefined,
+      hasProblemDescription: problemDescription.trim().length > 0,
     });
     trackEvent("maintenance_case_create_attempt", { correlationId, properties: { equipmentId, errorCode: errorCode || undefined } });
 
-    const result = await createMaintenanceCase(equipmentId, serialNumber, errorCode);
+    const result = await createMaintenanceCase(equipmentId, serialNumber, errorCode, problemDescription);
     setPending(false);
 
     if (!result.ok) {
@@ -209,6 +223,18 @@ export default function NewMaintenanceCasePage() {
           {filteredErrorCodeOptions.length === 0 && (
             <p style={{ marginTop: 4 }}>查無符合「{errorCodeQuery.trim()}」的錯誤代碼。</p>
           )}
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor={problemDescriptionId}>問題描述(選填)</label>
+          <br />
+          <textarea
+            id={problemDescriptionId}
+            value={problemDescription}
+            onChange={(event) => setProblemDescription(event.target.value)}
+            disabled={pending}
+            rows={4}
+            style={{ width: "100%", maxWidth: 480 }}
+          />
         </div>
         <button type="submit" disabled={pending || equipmentId === UNSELECTED_VALUE}>
           建立案例

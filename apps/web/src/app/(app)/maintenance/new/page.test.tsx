@@ -73,7 +73,7 @@ describe("NewMaintenanceCasePage (E07-S002)", () => {
     expect(screen.getByRole("link", { name: "取消" })).toHaveAttribute("href", "/maintenance");
   });
 
-  it("submits the selected equipmentId with an empty serial number and no error code, then redirects to /maintenance and refreshes the router cache", async () => {
+  it("submits the selected equipmentId with an empty serial number, no error code, and no problem description, then redirects to /maintenance and refreshes the router cache", async () => {
     mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
 
     render(<NewMaintenanceCasePage />);
@@ -81,7 +81,7 @@ describe("NewMaintenanceCasePage (E07-S002)", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/maintenance"));
-    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "", "");
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "", "", "");
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
@@ -171,7 +171,7 @@ describe("NewMaintenanceCasePage serialNumber field (E07-S003)", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalled());
-    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "SN-2026-0042", "");
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "SN-2026-0042", "", "");
   });
 
   it("never includes the serial number itself in telemetry properties", async () => {
@@ -247,7 +247,7 @@ describe("NewMaintenanceCasePage error code search (E07-S004)", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalled());
-    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "", "E202");
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "", "E202", "");
   });
 
   it("includes the selected errorCode in telemetry properties (a fixed-vocabulary value, unlike serialNumber)", async () => {
@@ -263,5 +263,43 @@ describe("NewMaintenanceCasePage error code search (E07-S004)", () => {
     const successCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "maintenance_case_create_success");
     expect(successCall).toBeDefined();
     expect((successCall as [string, { properties: { errorCode?: string } }])[1].properties.errorCode).toBe("E305");
+  });
+});
+
+describe("NewMaintenanceCasePage problem description field (E07-S005)", () => {
+  it("renders the optional problem description textarea, starting empty, submit still enabled by equipment alone", () => {
+    render(<NewMaintenanceCasePage />);
+
+    expect(screen.getByLabelText("問題描述(選填)")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
+    expect(screen.getByRole("button", { name: "建立案例" })).toBeEnabled();
+  });
+
+  it("submits the typed problem description alongside the other fields", async () => {
+    mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+
+    render(<NewMaintenanceCasePage />);
+    fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
+    fireEvent.change(screen.getByLabelText("問題描述(選填)"), { target: { value: "異常震動且伴隨高頻噪音" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(mockedCreateMaintenanceCase).toHaveBeenCalledWith(firstEquipment.id, "", "", "異常震動且伴隨高頻噪音");
+  });
+
+  it("never includes the problem description itself in telemetry properties", async () => {
+    mockedCreateMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+
+    render(<NewMaintenanceCasePage />);
+    fireEvent.change(screen.getByLabelText("選擇設備"), { target: { value: firstEquipment.id } });
+    fireEvent.change(screen.getByLabelText("問題描述(選填)"), { target: { value: "異常震動且伴隨高頻噪音" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立案例" }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+
+    for (const call of mockedTrackEvent.mock.calls) {
+      const properties = (call as [string, { properties?: Record<string, unknown> }])[1]?.properties;
+      expect(JSON.stringify(properties ?? {})).not.toContain("異常震動且伴隨高頻噪音");
+    }
   });
 });

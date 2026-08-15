@@ -165,3 +165,42 @@ describe("createMaintenanceCase errorCode (E07-S004)", () => {
     if (after.ok) expect(after.value).toEqual(before.value);
   });
 });
+
+describe("createMaintenanceCase problemDescription (E07-S005)", () => {
+  it("uses the trimmed problem description as the case's title when one is given", async () => {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+
+    const result = await createMaintenanceCase(equipment.id, undefined, undefined, "  異常震動且伴隨高頻噪音  ");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.title).toBe("異常震動且伴隨高頻噪音");
+  });
+
+  it("stays valid — same as E07-S002's own equipment-only flow — falling back to the equipment name when problemDescription is omitted, empty, or whitespace-only", async () => {
+    const equipment = EQUIPMENT_OPTIONS[1];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must have at least 2 entries");
+
+    const omitted = await createMaintenanceCase(equipment.id);
+    const empty = await createMaintenanceCase(equipment.id, undefined, undefined, "");
+    const whitespaceOnly = await createMaintenanceCase(equipment.id, undefined, undefined, "   ");
+
+    expect(omitted.ok && empty.ok && whitespaceOnly.ok).toBe(true);
+    if (!omitted.ok || !empty.ok || !whitespaceOnly.ok) return;
+    expect(omitted.value.title).toBe(equipment.name);
+    expect(empty.value.title).toBe(equipment.name);
+    expect(whitespaceOnly.value.title).toBe(equipment.name);
+  });
+
+  it("does not add a separate problemDescription field to the stored case — the text becomes title directly", async () => {
+    const equipment = EQUIPMENT_OPTIONS[2];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must have at least 3 entries");
+
+    const result = await createMaintenanceCase(equipment.id, undefined, undefined, "感測器讀值飄移");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).not.toHaveProperty("problemDescription");
+  });
+});

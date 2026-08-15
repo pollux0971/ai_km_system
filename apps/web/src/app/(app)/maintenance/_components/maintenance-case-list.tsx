@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { listMaintenanceCases, type MaintenanceCaseSummary } from "@/lib/maintenance-cases";
+import { ERROR_CODE_OPTIONS } from "@/lib/error-codes";
 
 const logger = createLogger("web:maintenance-case-list");
 
@@ -29,6 +30,12 @@ type State =
  * same "field absence means nothing to show, not an empty placeholder"
  * precedent knowledge-document-list.tsx's own conditional `sizeBytes`
  * line already establishes.
+ *
+ * E07-S004 "Error-code search UI" adds the same shape of conditional
+ * line for `item.errorCode` — resolved to its own description via
+ * ERROR_CODE_OPTIONS lookup, same "store the id, resolve the label by
+ * lookup" precedent `equipmentId`/`boundModel` already established, so
+ * this line can never drift from ERROR_CODE_OPTIONS' own wording.
  */
 export default function MaintenanceCaseList() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -77,6 +84,18 @@ export default function MaintenanceCaseList() {
           {item.serialNumber && (
             <>
               <span>序號:{item.serialNumber}</span>
+              <br />
+            </>
+          )}
+          {item.errorCode && (
+            <>
+              <span>
+                錯誤代碼:{item.errorCode}
+                {(() => {
+                  const description = ERROR_CODE_OPTIONS.find((option) => option.code === item.errorCode)?.description;
+                  return description ? ` — ${description}` : "";
+                })()}
+              </span>
               <br />
             </>
           )}

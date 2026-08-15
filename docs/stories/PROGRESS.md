@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 3 | 0 | 0 | 0 | 22 |
+| E07 Maintenance Assistant Experience | 25 | 4 | 0 | 0 | 0 | 21 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 86 | 0 | 0 | 1 | 88 |
+| **合計** | **175** | 87 | 0 | 0 | 1 | 87 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -142,7 +142,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S001 | approved | story/E07-S001-maintenance-home | [E07-S001.md](E07-S001.md) | 獨立審核 APPROVE(Maintenance home,E07 第一個 story,`/maintenance` route 第一次真正渲染內容,沿用既有 RoleGuard 零額外授權接線;唯讀最近維修案例清單,鏡射 KnowledgeList(E05-S001)形狀,`MaintenanceCaseSummary` 刻意只留 id/title/updatedAt 不搶後續 story 欄位範圍,刻意不加開始新診斷/案例項目連結(對應路由 S002/S021 尚未建立);開發中誠實撞見一則架構限制——mock AuthClient session 是無 storage 支撐的記憶體 closure,page.goto() 會清空它,導致一則嘗試中的 general_user 負向 E2E 測試測到 session 過期重導而非真正 403,與 citation-open-source.spec.ts 既有記載的同類情況一致,移除該測試並完整記錄;同時更新 route-guards.spec.ts(/maintenance → /erp);審核者獨立重寫同一個對抗性測試親自執行,逐字重現 EVIDENCE 宣稱的 /login 重導,證實移除決策站得住腳而非偷懶;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 909 unit+156 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
 | E07-S002 | approved | story/E07-S002-equipment-selector | [E07-S002.md](E07-S002.md) | 獨立審核 APPROVE(Equipment selector,補上 S001 留白的「開始新的維修診斷」進入點;`/maintenance/new` 目前只有設備選擇一個欄位,判斷為 S002-S005 陸續為同一張表單加欄位的第一步(鏡射 E05-S011→S015);`equipment.ts` 為純前端固定清單(SOURCE_BASELINE 明確將 Equipment/EquipmentModel 列為 E08-S01/S02 責任);`MaintenanceCaseSummary` 新增 `equipmentId`,存 id 查表顯示,鏡射 boundModel 對 AI_MODELS 的形狀;開發中發現 getByRole("list") 未 scope 會連到側邊欄自己的導覽清單(4 個連結),修正為透過 main 先排除側邊欄;審核者對抗性還原此修正,逐字重現 Received: 4,證實修法必要;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 921 unit+157 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
 | E07-S003 | approved | story/E07-S003-serial-number-input | [E07-S003.md](E07-S003.md) | 獨立審核 APPROVE(Serial-number input,延續 S002 共用表單設計加一個選填欄位;`serialNumber` 選填而非必填,避免回頭破壞 S002 已審核通過的「僅設備即可建立案例」能力;無格式驗證(SOURCE_BASELINE 未定義序號格式);清單有序號才顯示;telemetry 刻意不含序號本身;第一輪 gate 即全綠,零 FIX 循環;審核者對抗性注入「序號必填」假 bug,證實 3 個測試立即失敗(含 S002 自己原有的測試),確認這個屬性有雙層保護,還原後 diff 為 0;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 928 unit+158 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
-| E07-S004 | todo | | | |
+| E07-S004 | approved | story/E07-S004-error-code-search-ui | [E07-S004.md](E07-S004.md) | 獨立審核 APPROVE(Error-code search UI,延續 S002-S003 共用表單設計加第三個欄位;與 S002 純選擇器不同,建立真正的搜尋窄化(文字框即時依代碼/描述關鍵字過濾 select 選項),因為 story 標題明確寫「search」而非「selector」;`errorCode` 選填但有值須驗證(參照 ERROR_CODE_OPTIONS 固定清單),與 serialNumber 完全不驗證不同;搜尋窄化後若已選代碼被篩掉會自動清空;開發中發現 Playwright getByLabel 預設子字串比對、Testing Library getByLabelText 預設精確比對造成同一字串單元測試過、E2E 逾時,修正為 exact:true;審核者對抗性還原此修正,逐字重現同一逾時失敗,還原後 diff 為 0;強制單獨重跑 typecheck/lint/build 20/20+20/20+12/12,獨立全量重跑 940 unit+159 E2E 皆綠;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列手動計數複核一致) |
 | E07-S005 | todo | | | |
 | E07-S006 | todo | | | |
 | E07-S007 | todo | | | |

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMaintenanceCase, listMaintenanceCases } from "./maintenance-cases";
 import { EQUIPMENT_OPTIONS } from "./equipment";
+import { ERROR_CODE_OPTIONS } from "./error-codes";
 
 describe("listMaintenanceCases (E07-S001)", () => {
   it("resolves with a non-empty list of maintenance case summaries", async () => {
@@ -114,5 +115,53 @@ describe("createMaintenanceCase serialNumber (E07-S003)", () => {
     expect(omitted.value.serialNumber).toBeUndefined();
     expect(empty.value.serialNumber).toBeUndefined();
     expect(whitespaceOnly.value.serialNumber).toBeUndefined();
+  });
+});
+
+describe("createMaintenanceCase errorCode (E07-S004)", () => {
+  it("stores a recognized error code when one is given", async () => {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    const errorCodeOption = ERROR_CODE_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    if (!errorCodeOption) throw new Error("ERROR_CODE_OPTIONS must not be empty");
+
+    const result = await createMaintenanceCase(equipment.id, undefined, errorCodeOption.code);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.errorCode).toBe(errorCodeOption.code);
+  });
+
+  it("stays valid — same as E07-S002's own equipment-only flow — when errorCode is omitted, empty, or whitespace-only", async () => {
+    const equipment = EQUIPMENT_OPTIONS[1];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must have at least 2 entries");
+
+    const omitted = await createMaintenanceCase(equipment.id);
+    const empty = await createMaintenanceCase(equipment.id, undefined, "");
+    const whitespaceOnly = await createMaintenanceCase(equipment.id, undefined, "   ");
+
+    expect(omitted.ok && empty.ok && whitespaceOnly.ok).toBe(true);
+    if (!omitted.ok || !empty.ok || !whitespaceOnly.ok) return;
+    expect(omitted.value.errorCode).toBeUndefined();
+    expect(empty.value.errorCode).toBeUndefined();
+    expect(whitespaceOnly.value.errorCode).toBeUndefined();
+  });
+
+  it("fails with VALIDATION_ERROR for a non-empty but unrecognized error code, with no side effect on the store", async () => {
+    const equipment = EQUIPMENT_OPTIONS[2];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must have at least 3 entries");
+
+    const before = await listMaintenanceCases();
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+
+    const result = await createMaintenanceCase(equipment.id, undefined, "NOT-A-REAL-CODE");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const after = await listMaintenanceCases();
+    expect(after.ok).toBe(true);
+    if (after.ok) expect(after.value).toEqual(before.value);
   });
 });

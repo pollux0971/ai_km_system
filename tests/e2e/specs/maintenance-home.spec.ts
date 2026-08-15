@@ -157,3 +157,13 @@ test("E07-S004: searching narrows the error code dropdown, and an unmatched quer
   await page.getByLabel("搜尋錯誤代碼(選填)").fill("不存在的關鍵字");
   await expect(page.getByText("查無符合「不存在的關鍵字」的錯誤代碼。")).toBeVisible();
 });
+
+test("E07-S020: 查看維修歷史 leads to the maintenance history route", async ({ page }) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "維修助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/maintenance");
+
+  await page.getByRole("link", { name: "查看維修歷史" }).click();
+
+  await page.waitForURL((url) => url.pathname === "/maintenance/history");
+});

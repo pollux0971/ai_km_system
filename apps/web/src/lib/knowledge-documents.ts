@@ -1,4 +1,5 @@
 import type { ApiError, Result } from "@ai-km/types";
+import type { Role } from "@ai-km/permissions";
 import { getKnowledgeBase } from "./knowledge-bases";
 
 /**
@@ -100,6 +101,19 @@ export interface KnowledgeBaseDocument {
   content?: string;
   status?: DocumentProcessingStatus;
   archived?: boolean;
+  /**
+   * E05-S027 "Document permission editor". Same shape and same "absence
+   * means not-yet-configured, distinct from an explicit empty list"
+   * reasoning as KnowledgeBaseSummary.visibleToRoles (E05-S006) — an
+   * empty array is a meaningful, deliberate "granted to no role" state,
+   * not the same thing as "nobody has set this yet". A document-level
+   * override sitting alongside the KB-level `visibleToRoles`, not a
+   * replacement for it — same "role-based access, per-entity selection"
+   * model, just narrowed to one document instead of the whole KB, the
+   * same way a document can be individually archived/renamed/deleted
+   * without that action needing to go through the KB itself.
+   */
+  visibleToRoles?: Role[];
   uploadedAt: string;
 }
 
@@ -446,6 +460,46 @@ export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, docum
 
   writeStore(store.filter((document) => document.id !== documentId));
   return { ok: true, value: undefined };
+}
+
+/**
+ * E05-S027 "Document permission editor". Mirrors
+ * updateKnowledgeBaseVisibleRoles (E05-S006) — takes the complete new
+ * role list (not one add/remove at a time), same "caller reports what's
+ * checked now, never diffs against the previous selection itself"
+ * reasoning; no VALIDATION_ERROR branch, since an empty array is a
+ * meaningful, valid state (deliberately granted to no role), not an
+ * invalid one. NOT_FOUND fail-closed covers both a missing document and
+ * one that exists but belongs to a different knowledge base, same
+ * cross-KB-safe check every other targeted-by-id document mutation in
+ * this file already uses.
+ *
+ * Same "setting only, no real enforcement point" caveat as
+ * updateKnowledgeBaseVisibleRoles's own doc comment: nothing in this
+ * codebase yet performs real per-user document retrieval that this
+ * would gate (E06 Knowledge Ingestion doesn't exist). This document-
+ * level override sits ALONGSIDE the KB-level `visibleToRoles`, not in
+ * place of it — this function only ever reads/writes this one
+ * document's own field, never touches the parent KnowledgeBaseSummary.
+ * `visibleToRoles` values are plain fixed-vocabulary role identifiers,
+ * not enterprise content, so — same as the KB-level function — this
+ * module's UI caller may include them directly in telemetry; this
+ * function itself does no logging.
+ */
+export async function updateKnowledgeBaseDocumentVisibleRoles(
+  knowledgeBaseId: string,
+  documentId: string,
+  visibleToRoles: Role[],
+): Promise<Result<KnowledgeBaseDocument, ApiError>> {
+  const store = readStore();
+  const existing = store.find((document) => document.id === documentId && document.knowledgeBaseId === knowledgeBaseId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } };
+  }
+
+  const updated: KnowledgeBaseDocument = { ...existing, visibleToRoles };
+  writeStore(store.map((document) => (document.id === documentId ? updated : document)));
+  return { ok: true, value: updated };
 }
 
 /**

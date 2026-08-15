@@ -185,6 +185,66 @@ describe("selectDecisionOption free-text detail (E07-S009)", () => {
   });
 });
 
+describe("selectDecisionOption photo upload (E07-S013)", () => {
+  function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
+    const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
+    Object.defineProperty(file, "size", { value: sizeBytes });
+    return file;
+  }
+
+  async function createSession() {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    return session.value;
+  }
+
+  it("stores the photo's name and size alongside the chosen option", async () => {
+    const session = await createSession();
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+    const photo = makePhoto("現場照片.jpg", 204_800);
+
+    const result = await selectDecisionOption(session.id, firstOption.id, undefined, photo);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastPhotoFileName).toBe("現場照片.jpg");
+    expect(result.value.lastPhotoSizeBytes).toBe(204_800);
+  });
+
+  it("leaves lastPhotoFileName/lastPhotoSizeBytes unset when no photo argument is given at all", async () => {
+    const session = await createSession();
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+
+    const result = await selectDecisionOption(session.id, firstOption.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastPhotoFileName).toBeUndefined();
+    expect(result.value.lastPhotoSizeBytes).toBeUndefined();
+  });
+
+  it("stores both the detail and the photo together when both are given", async () => {
+    const session = await createSession();
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+    const photo = makePhoto("錯誤代碼.png", 51_200, "image/png");
+
+    const result = await selectDecisionOption(session.id, firstOption.id, "面板顯示錯誤代碼 E12", photo);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastFreeTextDetail).toBe("面板顯示錯誤代碼 E12");
+    expect(result.value.lastPhotoFileName).toBe("錯誤代碼.png");
+    expect(result.value.lastPhotoSizeBytes).toBe(51_200);
+  });
+});
+
 describe("goToPreviousStep (E07-S010)", () => {
   async function createAdvancedSession(detail?: string) {
     const equipment = EQUIPMENT_OPTIONS[0];
@@ -264,6 +324,36 @@ describe("goToPreviousStep (E07-S010)", () => {
   });
 });
 
+describe("goToPreviousStep photo upload interaction (E07-S013)", () => {
+  function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
+    const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
+    Object.defineProperty(file, "size", { value: sizeBytes });
+    return file;
+  }
+
+  it("also clears a previously attached photo when going back to reconsider the step", async () => {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+    const advanced = await selectDecisionOption(session.value.id, firstOption.id, undefined, makePhoto("現場照片.jpg", 1024));
+    expect(advanced.ok).toBe(true);
+    if (!advanced.ok) return;
+    expect(advanced.value.lastPhotoFileName).toBe("現場照片.jpg");
+
+    const result = await goToPreviousStep(session.value.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastPhotoFileName).toBeUndefined();
+    expect(result.value.lastPhotoSizeBytes).toBeUndefined();
+  });
+});
+
 describe("restartDiagnosticSession (E07-S011)", () => {
   async function createAdvancedSession() {
     const equipment = EQUIPMENT_OPTIONS[0];
@@ -339,6 +429,36 @@ describe("restartDiagnosticSession (E07-S011)", () => {
     if (!reselected.ok) return;
     expect(reselected.value.currentStepIndex).toBe(1);
     expect(reselected.value.lastSelectedOptionId).toBe(secondOption.id);
+  });
+});
+
+describe("restartDiagnosticSession photo upload interaction (E07-S013)", () => {
+  function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
+    const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
+    Object.defineProperty(file, "size", { value: sizeBytes });
+    return file;
+  }
+
+  it("also clears a previously attached photo on restart", async () => {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+    const advanced = await selectDecisionOption(session.value.id, firstOption.id, undefined, makePhoto("現場照片.jpg", 1024));
+    expect(advanced.ok).toBe(true);
+    if (!advanced.ok) return;
+    expect(advanced.value.lastPhotoFileName).toBe("現場照片.jpg");
+
+    const result = await restartDiagnosticSession(session.value.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastPhotoFileName).toBeUndefined();
+    expect(result.value.lastPhotoSizeBytes).toBeUndefined();
   });
 });
 

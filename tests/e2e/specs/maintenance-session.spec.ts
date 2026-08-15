@@ -316,3 +316,49 @@ test("E07-S012: skipping a second time is rejected (nothing left to skip), same 
   expect(sessions).toHaveLength(1);
   expect(sessions[0]?.currentStepIndex).toBe(1);
 });
+
+test("E07-S013: attaching a photo before selecting an option records its name, and it stays visible after advancing and reloading", async ({
+  page,
+}) => {
+  const caseId = await createCase(page, "空壓機 A");
+
+  await page.getByLabel("附加照片").setInputFiles({
+    name: "現場照片.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from("fake photo content"),
+  });
+  await page.getByRole("button", { name: "異常已排除" }).click();
+
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+  await expect(page.getByText("現場照片.jpg", { exact: false })).toBeVisible();
+
+  const sessionPath = `/maintenance/${caseId}/session`;
+  await page.goto(sessionPath);
+  await page.waitForURL((url) => url.pathname === "/login");
+  await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);
+  await page.getByLabel("密碼").fill(MOCK_VALID_PASSWORD);
+  await page.getByRole("button", { name: "登入", exact: true }).click();
+  await page.waitForURL((url) => url.pathname === sessionPath);
+
+  await expect(page.getByText("現場照片.jpg", { exact: false })).toBeVisible();
+});
+
+test("E07-S013: clicking 上一步 after attaching a photo clears the selection, same as the existing choice/detail clearing", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByLabel("附加照片").setInputFiles({
+    name: "現場照片.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from("fake photo content"),
+  });
+  await page.getByRole("button", { name: "異常已排除" }).click();
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+  await expect(page.getByText("現場照片.jpg", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "上一步" }).click();
+
+  await expect(page.getByRole("heading", { name: "步驟 1", level: 2 })).toBeVisible();
+  await expect(page.getByText("現場照片.jpg", { exact: false })).not.toBeVisible();
+});

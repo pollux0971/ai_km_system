@@ -246,4 +246,16 @@ describe("MaintenanceSession (E07-S006)", () => {
     expect(await screen.findByRole("heading", { name: "步驟 2", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("現場暫時無法安全接近設備")).toBeInTheDocument();
   });
+
+  it("E07-S013: shows a previously recorded photo attachment when the session already has one", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleSession, currentStepIndex: 1, lastPhotoFileName: "現場照片.jpg", lastPhotoSizeBytes: 2_500_000 },
+    });
+
+    render(<MaintenanceSession id="case1" />);
+
+    expect(await screen.findByText("現場照片.jpg", { exact: false })).toBeInTheDocument();
+  });
 });

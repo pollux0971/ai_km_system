@@ -42,7 +42,9 @@ type State =
  * a write-only void) plus E07-S010/S011 (上一步/重新開始, both reusing the
  * same `sessionId`/`onAdvanced` props unchanged, zero diff to this file)
  * plus E07-S012 "Skip-step UX with reason" (`session.lastSkipReason`,
- * same "show the recorded value back" reasoning as S009's own detail).
+ * same "show the recorded value back" reasoning as S009's own detail)
+ * plus E07-S013 "Photo upload" (`session.lastPhotoFileName`/
+ * `lastPhotoSizeBytes`, same reasoning again).
  * Loading/error/not-found/loaded states mirror KnowledgeDetail/
  * ConversationDetail's own established pattern.
  *
@@ -180,6 +182,8 @@ export default function MaintenanceSession({ id }: { id: string }) {
         onAdvanced={handleAdvanced}
         recordedDetail={session.lastFreeTextDetail}
         recordedSkipReason={session.lastSkipReason}
+        recordedPhotoFileName={session.lastPhotoFileName}
+        recordedPhotoSizeBytes={session.lastPhotoSizeBytes}
       />
       <p>
         <Link href="/maintenance">返回維修助手首頁</Link>

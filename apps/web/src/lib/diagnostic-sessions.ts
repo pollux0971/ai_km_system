@@ -37,17 +37,25 @@ export type DiagnosticSessionStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "ESC
  * slot — because the two mean different things: one is optional extra
  * context alongside a real choice, the other is the mandatory
  * justification for making no choice at all (see skipDiagnosticStep's own
- * doc comment). All four are plain, Team-A-owned progress markers — not a
- * guess at E08's real `DecisionSession`/`DecisionEvent` shape (E08-S08/S09,
- * Team B; zero contracts exist yet under contracts/ for either), and not
- * a graph position: `currentStepIndex` only ever advances one flat step
- * at a time via selectDecisionOption/skipDiagnosticStep below, never
- * branches (see diagnostic-steps.ts's own top doc comment for why
- * branching itself is deliberately out of scope for Team A). Same "grow
- * one field per story, don't reach into a later story's own scope"
- * discipline maintenance-cases.ts's own doc comments already follow
- * across S002-S005 — E07-S007 itself deliberately held off adding either
- * field until a story existed that actually changed them.
+ * doc comment). Plus, as of E07-S013 "Photo upload", `lastPhotoFileName`/
+ * `lastPhotoSizeBytes` (metadata for a photo attached alongside that same
+ * selection; both `undefined` when none was given) — name/size only, same
+ * "honest mock, metadata-only, no real file bytes persisted" convention
+ * knowledge-documents.ts's own `KnowledgeBaseDocument` (`name`/`sizeBytes`)
+ * and lib/messages.ts's own `attachmentNames` already establish; the real
+ * `File` only ever lives transiently in current-step-card.tsx's own
+ * component state, same as FileAttachmentPicker's own `File[]` props. All
+ * six are plain, Team-A-owned progress markers — not a guess at E08's real
+ * `DecisionSession`/`DecisionEvent` shape (E08-S08/S09, Team B; zero
+ * contracts exist yet under contracts/ for either), and not a graph
+ * position: `currentStepIndex` only ever advances one flat step at a time
+ * via selectDecisionOption/skipDiagnosticStep below, never branches (see
+ * diagnostic-steps.ts's own top doc comment for why branching itself is
+ * deliberately out of scope for Team A). Same "grow one field per story,
+ * don't reach into a later story's own scope" discipline
+ * maintenance-cases.ts's own doc comments already follow across S002-S005
+ * — E07-S007 itself deliberately held off adding either field until a
+ * story existed that actually changed them.
  */
 export interface DiagnosticSession {
   id: string;
@@ -57,6 +65,8 @@ export interface DiagnosticSession {
   lastSelectedOptionId?: string;
   lastFreeTextDetail?: string;
   lastSkipReason?: string;
+  lastPhotoFileName?: string;
+  lastPhotoSizeBytes?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -183,11 +193,27 @@ export async function createDiagnosticSession(maintenanceCaseId: string): Promis
  * follows. Explicitly overwrites any previous value on every call (not
  * merged/appended) — `lastFreeTextDetail`, like `lastSelectedOptionId`,
  * reflects only the most recent selection.
+ *
+ * `photo` (E07-S013 "Photo upload") is an optional `File` submitted
+ * alongside the same choice — bundled here rather than a standalone
+ * `uploadDiagnosticPhoto(sessionId, ...)` action, per /advisor analysis for
+ * this story: a photo is evidence FOR a specific answer, same "one
+ * submission" shape as `detail` above, not a session-level action like
+ * restartDiagnosticSession. Deliberately NOT extended to skipDiagnosticStep
+ * — same restraint that function's own `reason` (mandatory, unlike this
+ * optional `detail`) already shows by never gaining a `detail` parameter of
+ * its own either; a skip has nothing to attach photographic evidence to.
+ * Only `name`/`size` metadata is persisted (`lastPhotoFileName`/
+ * `lastPhotoSizeBytes`), never the File's bytes — same metadata-only
+ * convention `DiagnosticSession`'s own doc comment cites. Like `detail`,
+ * explicitly overwrites (via `photo?.name`/`photo?.size`, both `undefined`
+ * when `photo` is omitted) rather than merges on every call.
  */
 export async function selectDecisionOption(
   sessionId: string,
   optionId: string,
   detail?: string,
+  photo?: File,
 ): Promise<Result<DiagnosticSession, ApiError>> {
   const sessions = readStore();
   const session = sessions.find((item) => item.id === sessionId);
@@ -207,6 +233,8 @@ export async function selectDecisionOption(
     currentStepIndex: session.currentStepIndex + 1,
     lastSelectedOptionId: optionId,
     lastFreeTextDetail: trimmedDetail || undefined,
+    lastPhotoFileName: photo?.name,
+    lastPhotoSizeBytes: photo?.size,
     status: session.status === "OPEN" ? "IN_PROGRESS" : session.status,
     updatedAt: new Date().toISOString(),
   };
@@ -216,11 +244,14 @@ export async function selectDecisionOption(
 
 /**
  * E07-S010 "Previous-step action". Moves `currentStepIndex` back by
- * exactly one and clears `lastSelectedOptionId`/`lastFreeTextDetail` —
- * the choice/detail being left behind no longer describes "what's
- * recorded for the step the session is now showing", so keeping them
- * around would let a stale answer linger after the user has explicitly
- * asked to reconsider it. `status` is deliberately left untouched: once a
+ * exactly one and clears `lastSelectedOptionId`/`lastFreeTextDetail`
+ * (plus, as of E07-S013 "Photo upload", `lastPhotoFileName`/
+ * `lastPhotoSizeBytes` — same reasoning, a stale photo attachment is just
+ * as much "what's recorded for the step being left" as the detail text
+ * next to it) — the choice/detail/photo being left behind no longer
+ * describes "what's recorded for the step the session is now showing", so
+ * keeping them around would let a stale answer linger after the user has
+ * explicitly asked to reconsider it. `status` is deliberately left untouched: once a
  * session has genuinely reached "IN_PROGRESS" (a real diagnostic action
  * happened), going back to reconsider that action isn't "back to not
  * started" — same reasoning selectDecisionOption's own doc comment gives
@@ -260,6 +291,8 @@ export async function goToPreviousStep(sessionId: string): Promise<Result<Diagno
     currentStepIndex: session.currentStepIndex - 1,
     lastSelectedOptionId: undefined,
     lastFreeTextDetail: undefined,
+    lastPhotoFileName: undefined,
+    lastPhotoSizeBytes: undefined,
     updatedAt: new Date().toISOString(),
   };
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
@@ -270,8 +303,9 @@ export async function goToPreviousStep(sessionId: string): Promise<Result<Diagno
  * E07-S011 "Restart diagnostic". A session-level action, not a step-level
  * one like goToPreviousStep/selectDecisionOption — it resets the entire
  * session back to the exact state createDiagnosticSession itself produces
- * (`currentStepIndex` 0, `status` "OPEN", both `lastSelectedOptionId`/
- * `lastFreeTextDetail` cleared), unlike goToPreviousStep, which only ever
+ * (`currentStepIndex` 0, `status` "OPEN", `lastSelectedOptionId`/
+ * `lastFreeTextDetail`/`lastPhotoFileName`/`lastPhotoSizeBytes` (E07-S013)
+ * all cleared), unlike goToPreviousStep, which only ever
  * moves one step and deliberately leaves `status` alone (see that
  * function's own doc comment). Restart's whole point is "forget what
  * happened, start over" — status genuinely does return to "not yet
@@ -304,6 +338,8 @@ export async function restartDiagnosticSession(sessionId: string): Promise<Resul
     status: "OPEN",
     lastSelectedOptionId: undefined,
     lastFreeTextDetail: undefined,
+    lastPhotoFileName: undefined,
+    lastPhotoSizeBytes: undefined,
     updatedAt: new Date().toISOString(),
   };
   writeStore(sessions.map((item) => (item.id === sessionId ? updated : item)));
@@ -320,8 +356,12 @@ export async function restartDiagnosticSession(sessionId: string): Promise<Resul
  * diagnostic-steps.ts's own top doc comment) — but records NO option
  * (`lastSelectedOptionId` stays cleared): a skip is explicitly "no choice
  * was made", not a disguised third option. Also clears any stale
- * `lastFreeTextDetail` from a prior real answer, since neither concept
- * applies to a skip. First successful call flips a fresh "OPEN" session
+ * `lastFreeTextDetail`/`lastPhotoFileName`/`lastPhotoSizeBytes` (E07-S013)
+ * from a prior real answer, since neither concept applies to a skip — not
+ * independently reachable in today's 2-step model (same "not reachable,
+ * but proves the field-clearing logic itself is unconditional" caveat this
+ * file's own existing test for `lastFreeTextDetail` already notes), but
+ * kept unconditional here for the same reason. First successful call flips a fresh "OPEN" session
  * to "IN_PROGRESS", same rule selectDecisionOption already follows — a
  * skip is still a real diagnostic action, just one that explicitly
  * declines to answer.
@@ -365,6 +405,8 @@ export async function skipDiagnosticStep(sessionId: string, reason: string): Pro
     currentStepIndex: session.currentStepIndex + 1,
     lastSelectedOptionId: undefined,
     lastFreeTextDetail: undefined,
+    lastPhotoFileName: undefined,
+    lastPhotoSizeBytes: undefined,
     lastSkipReason: trimmedReason,
     status: session.status === "OPEN" ? "IN_PROGRESS" : session.status,
     updatedAt: new Date().toISOString(),

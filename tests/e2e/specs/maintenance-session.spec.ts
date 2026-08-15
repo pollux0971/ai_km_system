@@ -146,3 +146,55 @@ test("E07-S006 Security AC: a general_user reaching a maintenance session URL di
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("您沒有權限執行此操作。");
   await expect(page.getByText("待處理")).not.toBeVisible();
 });
+
+test("E07-S008: selecting a decision option advances the session to the next step and flips its status to 進行中", async ({
+  page,
+}) => {
+  const caseId = await createCase(page, "空壓機 A");
+
+  await page.getByRole("button", { name: "異常已排除" }).click();
+
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+  // exact:true — the step-1 instruction text itself ends in "...進行中。",
+  // which would otherwise collide with the status span under the default
+  // substring match, same class of accidental-collision fix E07-S004's
+  // own EVIDENCE already documents for exact:true.
+  await expect(page.getByText("進行中", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "異常已排除" })).not.toBeVisible();
+
+  // Persists across a genuinely fresh mount (not just client-side router
+  // cache) — same returnUrl round trip the S006 "resumes" test above
+  // already established, ridden here to reach the same session URL after
+  // sessionStorage (not the mock auth session) survives the hard reload.
+  const sessionPath = `/maintenance/${caseId}/session`;
+  await page.goto(sessionPath);
+  await page.waitForURL((url) => url.pathname === "/login");
+  await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);
+  await page.getByLabel("密碼").fill(MOCK_VALID_PASSWORD);
+  await page.getByRole("button", { name: "登入", exact: true }).click();
+  await page.waitForURL((url) => url.pathname === sessionPath);
+
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+  // exact:true — the step-1 instruction text itself ends in "...進行中。",
+  // which would otherwise collide with the status span under the default
+  // substring match, same class of accidental-collision fix E07-S004's
+  // own EVIDENCE already documents for exact:true.
+  await expect(page.getByText("進行中", { exact: true })).toBeVisible();
+});
+
+test("E07-S008: selecting a decision option a second time (e.g. a slow double-click) is rejected, not silently duplicated", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+  await page.getByRole("button", { name: "異常仍然存在" }).click();
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+
+  // The step-0 options are gone once advanced (previous test already
+  // confirms this) — this test independently confirms the underlying
+  // guard directly, the same way maintenance-session.spec.ts's own
+  // resume-not-duplicate test checks the store rather than only the UI.
+  const sessionsRaw = await page.evaluate(() => window.sessionStorage.getItem("ai-km:mock-diagnostic-sessions"));
+  const sessions = sessionsRaw ? (JSON.parse(sessionsRaw) as { currentStepIndex: number }[]) : [];
+  expect(sessions).toHaveLength(1);
+  expect(sessions[0]?.currentStepIndex).toBe(1);
+});

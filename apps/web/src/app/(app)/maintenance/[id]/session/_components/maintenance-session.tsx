@@ -33,11 +33,18 @@ type State =
 
 /**
  * E07-S006 "Diagnostic session shell" (the wrapping frame a diagnostic
- * session lives inside) plus E07-S007 "Current-step card" (its first
- * real interior content — see diagnostic-steps.ts's own doc comment for
- * why it's a single, deliberately non-branching step rather than a real
+ * session lives inside) plus E07-S007 "Current-step card" (its first real
+ * interior content) plus E07-S008 "Decision options" (letting a session
+ * genuinely advance — see diagnostic-steps.ts's own doc comment for why
+ * it's a flat, deliberately non-branching sequence rather than a real
  * decision-tree traversal). Loading/error/not-found/loaded states mirror
  * KnowledgeDetail/ConversationDetail's own established pattern.
+ *
+ * `handleAdvanced` replaces `session` in-place within the already-narrowed
+ * `loaded` state — same "the mutation's own response IS the new truth"
+ * reasoning current-step-card.tsx's own doc comment describes, mirroring
+ * how RenameConversation/KnowledgeDocumentNameEditor update their parent's
+ * held copy directly rather than triggering a full refetch.
  *
  * On mount: loads the case (for display), then looks for an existing
  * session for it via getDiagnosticSessionForCase — if one already
@@ -151,13 +158,17 @@ export default function MaintenanceSession({ id }: { id: string }) {
 
   const { maintenanceCase, session } = state;
 
+  function handleAdvanced(updated: DiagnosticSession) {
+    setState({ status: "loaded", maintenanceCase, session: updated });
+  }
+
   return (
     <main style={{ padding: 32 }}>
       <h1>{maintenanceCase.title}</h1>
       <p>
         診斷狀態:<span>{SESSION_STATUS_LABELS[session.status]}</span>
       </p>
-      <CurrentStepCard step={getCurrentDiagnosticStep()} />
+      <CurrentStepCard sessionId={session.id} step={getCurrentDiagnosticStep(session.currentStepIndex)} onAdvanced={handleAdvanced} />
       <p>
         <Link href="/maintenance">返回維修助手首頁</Link>
       </p>

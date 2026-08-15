@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import MaintenanceSession from "./maintenance-session";
 import { getMaintenanceCase } from "@/lib/maintenance-cases";
-import { createDiagnosticSession, getDiagnosticSessionForCase } from "@/lib/diagnostic-sessions";
+import { createDiagnosticSession, getDiagnosticSessionForCase, selectDecisionOption } from "@/lib/diagnostic-sessions";
+import { getCurrentDiagnosticStep } from "@/lib/diagnostic-steps";
 
 vi.mock("@/lib/maintenance-cases", () => ({
   getMaintenanceCase: vi.fn(),
@@ -11,11 +12,13 @@ vi.mock("@/lib/maintenance-cases", () => ({
 vi.mock("@/lib/diagnostic-sessions", () => ({
   getDiagnosticSessionForCase: vi.fn(),
   createDiagnosticSession: vi.fn(),
+  selectDecisionOption: vi.fn(),
 }));
 
 const mockedGetMaintenanceCase = vi.mocked(getMaintenanceCase);
 const mockedGetDiagnosticSessionForCase = vi.mocked(getDiagnosticSessionForCase);
 const mockedCreateDiagnosticSession = vi.mocked(createDiagnosticSession);
+const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 
 const sampleCase = {
   id: "case1",
@@ -27,6 +30,7 @@ const sampleSession = {
   id: "session1",
   maintenanceCaseId: "case1",
   status: "OPEN" as const,
+  currentStepIndex: 0,
   createdAt: "2026-08-15T00:00:00.000Z",
   updatedAt: "2026-08-15T00:00:00.000Z",
 };
@@ -35,6 +39,7 @@ beforeEach(() => {
   mockedGetMaintenanceCase.mockReset();
   mockedGetDiagnosticSessionForCase.mockReset();
   mockedCreateDiagnosticSession.mockReset();
+  mockedSelectDecisionOption.mockReset();
 });
 
 describe("MaintenanceSession (E07-S006)", () => {
@@ -137,5 +142,27 @@ describe("MaintenanceSession (E07-S006)", () => {
     render(<MaintenanceSession id="case1" />);
 
     expect(await screen.findByRole("heading", { name: "步驟 1", level: 2 })).toBeInTheDocument();
+  });
+
+  it("E07-S008: selecting a decision option advances the session and updates the displayed status and step", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({ ok: true, value: sampleSession });
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+    const advancedSession = {
+      ...sampleSession,
+      status: "IN_PROGRESS" as const,
+      currentStepIndex: 1,
+      lastSelectedOptionId: firstOption.id,
+    };
+    mockedSelectDecisionOption.mockResolvedValue({ ok: true, value: advancedSession });
+
+    render(<MaintenanceSession id="case1" />);
+    const optionButton = await screen.findByRole("button", { name: firstOption.label });
+    fireEvent.click(optionButton);
+
+    expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", firstOption.id);
+    expect(await screen.findByRole("heading", { name: "步驟 2", level: 2 })).toBeInTheDocument();
+    expect(screen.getByText("進行中")).toBeInTheDocument();
   });
 });

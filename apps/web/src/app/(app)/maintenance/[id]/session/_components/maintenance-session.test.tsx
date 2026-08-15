@@ -174,7 +174,12 @@ describe("MaintenanceSession (E07-S006)", () => {
     mockedSelectDecisionOption.mockResolvedValue({ ok: true, value: advancedSession });
 
     render(<MaintenanceSession id="case1" />);
-    const optionButton = await screen.findByRole("button", { name: firstOption.label });
+    // E07-S017: step 0 now carries a safetyWarning (E07-S016), gating its
+    // option/skip buttons behind this checkbox — see current-step-card.tsx's
+    // own doc comment. Added here (not a modified assertion) because the
+    // real step 0 this test renders now requires it.
+    fireEvent.click(await screen.findByLabelText("我已閱讀並了解上述安全警告"));
+    const optionButton = screen.getByRole("button", { name: firstOption.label });
     fireEvent.click(optionButton);
 
     expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", firstOption.id);
@@ -239,7 +244,12 @@ describe("MaintenanceSession (E07-S006)", () => {
     mockedSkipDiagnosticStep.mockResolvedValue({ ok: true, value: skippedSession });
 
     render(<MaintenanceSession id="case1" />);
-    fireEvent.change(await screen.findByLabelText("略過原因"), { target: { value: "現場暫時無法安全接近設備" } });
+    // E07-S017: step 0 now carries a safetyWarning (E07-S016), gating its
+    // option/skip buttons behind this checkbox — see current-step-card.tsx's
+    // own doc comment. Added here (not a modified assertion) because the
+    // real step 0 this test renders now requires it.
+    fireEvent.click(await screen.findByLabelText("我已閱讀並了解上述安全警告"));
+    fireEvent.change(screen.getByLabelText("略過原因"), { target: { value: "現場暫時無法安全接近設備" } });
     fireEvent.click(screen.getByRole("button", { name: "跳過此步驟" }));
 
     expect(mockedSkipDiagnosticStep).toHaveBeenCalledWith("session1", "現場暫時無法安全接近設備");

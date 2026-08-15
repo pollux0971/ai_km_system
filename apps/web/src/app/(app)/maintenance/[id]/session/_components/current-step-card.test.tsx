@@ -687,3 +687,79 @@ describe("CurrentStepCard safety warning component (E07-S016)", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("（模擬警告）測試用的安全警告文字。");
   });
 });
+
+describe("CurrentStepCard high-risk confirmation gate (E07-S017)", () => {
+  const stepWithWarningAndOptions = {
+    stepIndex: 0,
+    instruction: "測試步驟內容",
+    safetyWarning: "（模擬警告）測試用的安全警告文字。",
+    options: [
+      { id: "opt-a", label: "選項甲" },
+      { id: "opt-b", label: "選項乙" },
+    ],
+  };
+
+  beforeEach(() => {
+    mockedSelectDecisionOption.mockReset();
+    mockedSkipDiagnosticStep.mockReset();
+  });
+
+  it("renders a confirmation checkbox when the step has a safety warning", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithWarningAndOptions} onAdvanced={() => {}} />);
+
+    expect(screen.getByLabelText("我已閱讀並了解上述安全警告")).toBeInTheDocument();
+  });
+
+  it("does not render a confirmation checkbox when the step has no safety warning", () => {
+    const stepWithOptionsOnly = { stepIndex: 0, instruction: "測試步驟內容", options: stepWithWarningAndOptions.options };
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptionsOnly} onAdvanced={() => {}} />);
+
+    expect(screen.queryByLabelText("我已閱讀並了解上述安全警告")).not.toBeInTheDocument();
+  });
+
+  it("keeps the option buttons disabled until the confirmation checkbox is checked", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithWarningAndOptions} onAdvanced={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "選項甲" })).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("我已閱讀並了解上述安全警告"));
+
+    expect(screen.getByRole("button", { name: "選項甲" })).not.toBeDisabled();
+  });
+
+  it("keeps the skip button disabled until the confirmation checkbox is checked, even with a reason typed", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithWarningAndOptions} onAdvanced={() => {}} />);
+    fireEvent.change(screen.getByLabelText("略過原因"), { target: { value: "現場暫時無法安全接近設備" } });
+
+    expect(screen.getByRole("button", { name: "跳過此步驟" })).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("我已閱讀並了解上述安全警告"));
+
+    expect(screen.getByRole("button", { name: "跳過此步驟" })).not.toBeDisabled();
+  });
+
+  it("unchecking the confirmation checkbox re-disables the option buttons", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithWarningAndOptions} onAdvanced={() => {}} />);
+    const checkbox = screen.getByLabelText("我已閱讀並了解上述安全警告");
+    fireEvent.click(checkbox);
+    expect(screen.getByRole("button", { name: "選項甲" })).not.toBeDisabled();
+
+    fireEvent.click(checkbox);
+
+    expect(screen.getByRole("button", { name: "選項甲" })).toBeDisabled();
+  });
+
+  it("clicking a now-enabled option button after confirming still calls selectDecisionOption normally", async () => {
+    mockedSelectDecisionOption.mockResolvedValue({
+      ok: true,
+      value: { id: "session1", maintenanceCaseId: "case1", status: "IN_PROGRESS", currentStepIndex: 1, lastSelectedOptionId: "opt-a", createdAt: "", updatedAt: "" },
+    });
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithWarningAndOptions} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByLabelText("我已閱讀並了解上述安全警告"));
+    fireEvent.click(screen.getByRole("button", { name: "選項甲" }));
+
+    expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", "opt-a");
+  });
+});

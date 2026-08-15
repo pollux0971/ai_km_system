@@ -179,6 +179,31 @@ function formatFileSize(bytes: number): string {
  * state of its own — it's a pure, already-known field on `step`, nothing
  * to fetch or cache. This story does not block the option/skip buttons on
  * acknowledging the warning; that's E07-S017's own separate scope.
+ *
+ * The 我已閱讀並了解上述安全警告 checkbox (E07-S017 "High-risk confirmation
+ * gate") reuses `step.safetyWarning`'s own presence as the "this step is
+ * high-risk" signal, rather than inventing a second, separate flag that
+ * could drift out of sync with it — a step that needs confirming is
+ * exactly a step with a warning to confirm, one concept, not two. Gates
+ * the option buttons AND 跳過此步驟 (both mean "proceeding past this step")
+ * via `safetyGateBlocking`, computed once and reused across both; does
+ * NOT gate 上一步/重新開始 (retreating/resetting, not proceeding into risk)
+ * nor AI 說明/SOP 引用來源 (reading more information should never be
+ * blocked). `handleSelect`/`handleSkip` both also early-return on
+ * `safetyGateBlocking` — real HTML `disabled` already prevents the click
+ * from firing at all, but the extra guard matches this file's own general
+ * habit of layering a defensive check even when the outer one is already
+ * sufficient (see e.g. `goToPreviousStep`'s client+server pair for a
+ * bigger version of the same instinct, though this one is UI-only: there
+ * is no real authorization boundary being enforced here, no server-side
+ * mirror of this guard exists or is warranted — same "UI hiding is UX
+ * only" scoping this codebase already reserves for genuine permission
+ * checks, not extended to this purely local safety nudge). Pure local
+ * `safetyAcknowledged` boolean, reversible (unchecking re-blocks), reset
+ * on `step.stepIndex` change same as every other transient UI state
+ * above — returning to a high-risk step (上一步/重新開始) must require
+ * re-acknowledging it, not silently carry over a stale confirmation from
+ * before.
  */
 export default function CurrentStepCard({
   sessionId,
@@ -210,9 +235,12 @@ export default function CurrentStepCard({
   const [sopPending, setSopPending] = useState(false);
   const [sopError, setSopError] = useState<string | null>(null);
   const [sopCitation, setSopCitation] = useState<SopCitation | null>(null);
+  const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
   const detailFieldId = useId();
   const skipFieldId = useId();
   const photoFieldId = useId();
+  const safetyFieldId = useId();
+  const safetyGateBlocking = Boolean(step.safetyWarning) && !safetyAcknowledged;
 
   useEffect(() => {
     setDetailText("");
@@ -224,10 +252,19 @@ export default function CurrentStepCard({
     setSopOpen(false);
     setSopError(null);
     setSopCitation(null);
+    setSafetyAcknowledged(false);
   }, [step.stepIndex]);
 
+  function handleToggleSafetyAcknowledged() {
+    const next = !safetyAcknowledged;
+    setSafetyAcknowledged(next);
+    const correlationId = crypto.randomUUID();
+    logger.info("safety warning acknowledgment toggled", { correlationId, stepIndex: step.stepIndex, acknowledged: next });
+    trackEvent("maintenance_session_safety_warning_acknowledged", { correlationId, properties: { stepIndex: step.stepIndex, acknowledged: next } });
+  }
+
   async function handleSelect(optionId: string) {
-    if (pending || !sessionId) return;
+    if (pending || !sessionId || safetyGateBlocking) return;
 
     const trimmedDetail = detailText.trim();
     const correlationId = crypto.randomUUID();
@@ -317,7 +354,7 @@ export default function CurrentStepCard({
 
   async function handleSkip() {
     const trimmedReason = skipReason.trim();
-    if (pending || !sessionId || !trimmedReason) return;
+    if (pending || !sessionId || !trimmedReason || safetyGateBlocking) return;
 
     const correlationId = crypto.randomUUID();
     setPending(true);
@@ -399,6 +436,19 @@ export default function CurrentStepCard({
       {step.safetyWarning && (
         <p role="alert">
           安全警告:<span>{step.safetyWarning}</span>
+        </p>
+      )}
+      {step.safetyWarning && (
+        <p>
+          <label htmlFor={safetyFieldId}>
+            <input
+              id={safetyFieldId}
+              type="checkbox"
+              checked={safetyAcknowledged}
+              onChange={handleToggleSafetyAcknowledged}
+            />
+            我已閱讀並了解上述安全警告
+          </label>
         </p>
       )}
       {sessionId && (
@@ -485,7 +535,13 @@ export default function CurrentStepCard({
           )}
           <p>
             {step.options.map((option) => (
-              <button key={option.id} type="button" onClick={() => handleSelect(option.id)} disabled={pending} style={{ marginRight: 8 }}>
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => handleSelect(option.id)}
+                disabled={pending || safetyGateBlocking}
+                style={{ marginRight: 8 }}
+              >
                 {option.label}
               </button>
             ))}
@@ -501,7 +557,7 @@ export default function CurrentStepCard({
             />
           </p>
           <p>
-            <button type="button" onClick={handleSkip} disabled={pending || !skipReason.trim()}>
+            <button type="button" onClick={handleSkip} disabled={pending || !skipReason.trim() || safetyGateBlocking}>
               跳過此步驟
             </button>
           </p>

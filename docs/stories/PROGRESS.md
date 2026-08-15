@@ -28,11 +28,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
-| E07 Maintenance Assistant Experience | 25 | 16 | 0 | 0 | 0 | 9 |
+| E07 Maintenance Assistant Experience | 25 | 16 | 1 | 0 | 0 | 8 |
 | E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 99 | 0 | 0 | 1 | 75 |
+| **合計** | **175** | 99 | 1 | 0 | 1 | 74 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -155,7 +155,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E07-S014 | approved | story/E07-S014-ai-explain-step-panel | [E07-S014.md](E07-S014.md) | 獨立審核 APPROVE(AI explain-step panel;既有 mock-AI 內容先例研究(未走正式 /advisor 對話,完成同等權威查詢+程式碼先例研究)判定 explainDiagnosticStep 為新 lib/diagnostic-explanations.ts 模組、async+Result 但無 artificial delay(同大多數 lib/*.ts,非 E03 streaming 那種完整演出);UI 面板 gated 在 sessionId(非 step.options,因任何步驟皆可說明);獨立 pending/error 狀態,不與既有 mutation 共用;`explanation` 短路已載入內容避免重複打;1 次 FIX 循環(typecheck,測試型別標註問題,非邏輯錯誤);maintenance-session.tsx/diagnostic-sessions.ts/diagnostic-steps.ts 零異動(能力自足,不寫入 session 欄位);審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,83/83 檔案 1052/1052 unit test,178/178 E2E 全過;另以與 DEV 階段不同的獨立對抗性突變(sessionId gating 而非 DEV 驗證的 refetch-guard)複驗,恰好命中 2 個測試——其中一個是 S007 自己的凍結測試,獨立證實這條 gating 對更早的 story 也是真正必要而非巧合;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S015 | approved | story/E07-S015-sop-citation-component | [E07-S015.md](E07-S015.md) | 獨立審核 APPROVE(SOP citation component;既有引用系統先例研究(E03 的 [N] 標記機制 vs S014 的 toggle 面板機制)判定比照 S014,不比照 E03——step-level 關係非 sub-string-level;新型別 SopCitation(title/section/snippet,不重用 CitationSource 的 file/page,snippet 的「（模擬片段）」標示逐字沿用 citations.ts 既有慣例);獨立 sopOpen/sopPending/sopError/sopCitation 狀態,不與 explain 面板共用;0 次 FIX 循環;maintenance-session.tsx/diagnostic-sessions.ts/lib/citations.ts 零異動;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1062/1062 unit test,180/180 E2E 全過;另以獨立對抗性突變(SOP 按鈕的 sessionId gating)複驗,精準命中 3 個測試(含 S007 與 S014 各自的凍結測試),證實這個 gating 對更早的 story 也持續必要;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E07-S016 | approved | story/E07-S016-safety-warning-component | [E07-S016.md](E07-S016.md) | 獨立審核 APPROVE(Safety warning component;判定主動、無條件顯示(role="alert"),不比照 S014/S015 的 toggle 面板模式——安全資訊不該藏在點擊後面;不 gated 在 sessionId(非按鈕,不撞 S007 凍結測試);新增 DiagnosticStep.safetyWarning? 純欄位,不建獨立 async 模組;僅 step 0 有警告;不做確認/阻擋邏輯(留給 E07-S017);0 次 FIX 循環;本 session 至今唯一不需要新增 lib 檔案的 story;maintenance-session.tsx/diagnostic-sessions.ts 零異動;審核者獨立 force 全量重跑 typecheck/lint/build/test 皆 0 cache——20/20+20/20+12/12,84/84 檔案 1067/1067 unit test,181/181 E2E 全過;另以獨立對抗性突變(移除整個顯示條件,永遠渲染)複驗,精準命中 7 個測試——不只預期的空狀態測試,還包括 S008/S010/S011/S012/S014/S015 各自的錯誤路徑測試(因為無條件的 role="alert" 會與同檔案內任何真正的錯誤訊息 role="alert" 衝突),比預期更完整地證實這個條件式渲染的必要性;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
-| E07-S017 | todo | | | |
+| E07-S017 | done | story/E07-S017-high-risk-confirmation-gate | [E07-S017.md](E07-S017.md) | DEV 完成,待獨立審核。重用 step.safetyWarning 存在本身作為 gate 觸發信號(不新增第二個 highRisk 欄位);gate 選項+略過按鈕,不 gate 上一步/重新開始/AI 說明/SOP 引用來源;純前端狀態,stepIndex 變更時重置;1 次 FIX 循環(誠實記錄:S016 為 step 0 加上 safetyWarning 這個真實跨 story 互動,讓 12 個既有測試——2 unit + 10 E2E——的前提過期,逐一新增「先勾選確認框」互動步驟,斷言逐字未動,非測試技術性錯誤亦非實作錯誤);diagnostic-steps.ts/diagnostic-sessions.ts 零異動 |
 | E07-S018 | todo | | | |
 | E07-S019 | todo | | | |
 | E07-S020 | todo | | | |

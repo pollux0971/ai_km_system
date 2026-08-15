@@ -152,6 +152,9 @@ test("E07-S008: selecting a decision option advances the session to the next ste
 }) => {
   const caseId = await createCase(page, "空壓機 A");
 
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常已排除" }).click();
 
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
@@ -186,6 +189,9 @@ test("E07-S008: selecting a decision option a second time (e.g. a slow double-cl
   page,
 }) => {
   await createCase(page, "空壓機 A");
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常仍然存在" }).click();
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
 
@@ -205,6 +211,9 @@ test("E07-S009: typing free-text detail before selecting an option records it, a
   const caseId = await createCase(page, "空壓機 A");
 
   await page.getByLabel("補充說明").fill("現場有明顯異音，且設備外殼溫度偏高");
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常已排除" }).click();
 
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
@@ -226,6 +235,9 @@ test("E07-S009: selecting an option without typing any detail advances normally 
 }) => {
   await createCase(page, "空壓機 A");
 
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常仍然存在" }).click();
 
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
@@ -238,6 +250,9 @@ test("E07-S010: clicking 上一步 returns to the first step, clears the stale c
   await createCase(page, "空壓機 A");
 
   await page.getByLabel("補充說明").fill("最初的觀察紀錄");
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常已排除" }).click();
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
 
@@ -248,7 +263,10 @@ test("E07-S010: clicking 上一步 returns to the first step, clears the stale c
   await expect(page.getByLabel("補充說明")).toHaveValue("");
   await expect(page.getByRole("button", { name: "異常已排除" })).toBeVisible();
 
-  // The repeat-guard no longer blocks a fresh selection after going back.
+  // The repeat-guard no longer blocks a fresh selection after going back —
+  // but E07-S017's own gate does require re-acknowledging (going back
+  // resets `safetyAcknowledged`, same as every other transient UI state).
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常仍然存在" }).click();
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
 });
@@ -266,6 +284,9 @@ test("E07-S011: clicking 重新開始 resets a fully-advanced session back to th
 }) => {
   await createCase(page, "空壓機 A");
   await page.getByLabel("補充說明").fill("現場有明顯異音");
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常已排除" }).click();
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
   await expect(page.getByText("進行中", { exact: true })).toBeVisible();
@@ -277,7 +298,10 @@ test("E07-S011: clicking 重新開始 resets a fully-advanced session back to th
   await expect(page.getByText("現場有明顯異音")).not.toBeVisible();
   await expect(page.getByLabel("補充說明")).toHaveValue("");
 
-  // A genuinely fresh start — the repeat-guard doesn't block re-selecting.
+  // A genuinely fresh start — the repeat-guard doesn't block re-selecting,
+  // but E07-S017's own gate does require re-acknowledging (重新開始 resets
+  // `safetyAcknowledged`, same as every other transient UI state).
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常仍然存在" }).click();
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
 });
@@ -290,6 +314,10 @@ test("E07-S011: 重新開始 is available even on the very first step", async ({
 
 test("E07-S012: 跳過此步驟 stays disabled until a reason is typed, then advances and records it", async ({ page }) => {
   await createCase(page, "空壓機 A");
+  // E07-S017: step 0's safetyWarning gates 跳過此步驟 behind this checkbox
+  // too — checked first here so the assertions below isolate the
+  // reason-required gate this test is actually about, unaffected by it.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
 
   const skipButton = page.getByRole("button", { name: "跳過此步驟" });
   await expect(skipButton).toBeDisabled();
@@ -307,6 +335,9 @@ test("E07-S012: skipping a second time is rejected (nothing left to skip), same 
   page,
 }) => {
   await createCase(page, "空壓機 A");
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByLabel("略過原因").fill("第一次略過原因");
   await page.getByRole("button", { name: "跳過此步驟" }).click();
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
@@ -327,6 +358,9 @@ test("E07-S013: attaching a photo before selecting an option records its name, a
     mimeType: "image/jpeg",
     buffer: Buffer.from("fake photo content"),
   });
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常已排除" }).click();
 
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
@@ -353,6 +387,9 @@ test("E07-S013: clicking 上一步 after attaching a photo clears the selection,
     mimeType: "image/jpeg",
     buffer: Buffer.from("fake photo content"),
   });
+  // E07-S017: step 0's safetyWarning gates its option/skip buttons behind
+  // this checkbox — see current-step-card.tsx's own doc comment.
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
   await page.getByRole("button", { name: "異常已排除" }).click();
   await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
   await expect(page.getByText("現場照片.jpg", { exact: false })).toBeVisible();
@@ -406,4 +443,33 @@ test("E07-S016: the first step's safety warning displays automatically, honestly
   await createCase(page, "空壓機 A");
 
   await expect(page.getByRole("alert").filter({ hasText: "模擬警告" })).toBeVisible();
+});
+
+test("E07-S017: option buttons stay disabled on a high-risk step until the safety warning is acknowledged, then work normally", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+
+  const optionButton = page.getByRole("button", { name: "異常已排除" });
+  await expect(optionButton).toBeDisabled();
+
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
+  await expect(optionButton).toBeEnabled();
+  await optionButton.click();
+
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+});
+
+test("E07-S017: going back to a high-risk step requires re-acknowledging the warning", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByLabel("我已閱讀並了解上述安全警告").check();
+  await page.getByRole("button", { name: "異常已排除" }).click();
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+
+  await page.getByRole("button", { name: "上一步" }).click();
+
+  await expect(page.getByRole("heading", { name: "步驟 1", level: 2 })).toBeVisible();
+  await expect(page.getByLabel("我已閱讀並了解上述安全警告")).not.toBeChecked();
+  await expect(page.getByRole("button", { name: "異常已排除" })).toBeDisabled();
 });

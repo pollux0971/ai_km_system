@@ -198,3 +198,36 @@ test("E07-S008: selecting a decision option a second time (e.g. a slow double-cl
   expect(sessions).toHaveLength(1);
   expect(sessions[0]?.currentStepIndex).toBe(1);
 });
+
+test("E07-S009: typing free-text detail before selecting an option records it, and it stays visible after advancing and reloading", async ({
+  page,
+}) => {
+  const caseId = await createCase(page, "空壓機 A");
+
+  await page.getByLabel("補充說明").fill("現場有明顯異音，且設備外殼溫度偏高");
+  await page.getByRole("button", { name: "異常已排除" }).click();
+
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+  await expect(page.getByText("現場有明顯異音，且設備外殼溫度偏高")).toBeVisible();
+
+  const sessionPath = `/maintenance/${caseId}/session`;
+  await page.goto(sessionPath);
+  await page.waitForURL((url) => url.pathname === "/login");
+  await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);
+  await page.getByLabel("密碼").fill(MOCK_VALID_PASSWORD);
+  await page.getByRole("button", { name: "登入", exact: true }).click();
+  await page.waitForURL((url) => url.pathname === sessionPath);
+
+  await expect(page.getByText("現場有明顯異音，且設備外殼溫度偏高")).toBeVisible();
+});
+
+test("E07-S009: selecting an option without typing any detail advances normally and shows no leftover detail line", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+
+  await page.getByRole("button", { name: "異常仍然存在" }).click();
+
+  await expect(page.getByRole("heading", { name: "步驟 2", level: 2 })).toBeVisible();
+  await expect(page.getByText("您的補充說明", { exact: false })).not.toBeVisible();
+});

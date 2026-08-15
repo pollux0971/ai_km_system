@@ -37,7 +37,9 @@ type State =
  * interior content) plus E07-S008 "Decision options" (letting a session
  * genuinely advance — see diagnostic-steps.ts's own doc comment for why
  * it's a flat, deliberately non-branching sequence rather than a real
- * decision-tree traversal). Loading/error/not-found/loaded states mirror
+ * decision-tree traversal) plus E07-S009 "Free-text detail" (passing
+ * `session.lastFreeTextDetail` down so a recorded note stays visible, not
+ * a write-only void). Loading/error/not-found/loaded states mirror
  * KnowledgeDetail/ConversationDetail's own established pattern.
  *
  * `handleAdvanced` replaces `session` in-place within the already-narrowed
@@ -168,7 +170,12 @@ export default function MaintenanceSession({ id }: { id: string }) {
       <p>
         診斷狀態:<span>{SESSION_STATUS_LABELS[session.status]}</span>
       </p>
-      <CurrentStepCard sessionId={session.id} step={getCurrentDiagnosticStep(session.currentStepIndex)} onAdvanced={handleAdvanced} />
+      <CurrentStepCard
+        sessionId={session.id}
+        step={getCurrentDiagnosticStep(session.currentStepIndex)}
+        onAdvanced={handleAdvanced}
+        recordedDetail={session.lastFreeTextDetail}
+      />
       <p>
         <Link href="/maintenance">返回維修助手首頁</Link>
       </p>

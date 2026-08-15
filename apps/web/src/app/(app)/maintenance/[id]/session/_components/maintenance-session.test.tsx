@@ -165,4 +165,16 @@ describe("MaintenanceSession (E07-S006)", () => {
     expect(await screen.findByRole("heading", { name: "步驟 2", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("進行中")).toBeInTheDocument();
   });
+
+  it("E07-S009: shows a previously recorded free-text detail when the session already has one", async () => {
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleSession, currentStepIndex: 1, lastFreeTextDetail: "現場有明顯異音" },
+    });
+
+    render(<MaintenanceSession id="case1" />);
+
+    expect(await screen.findByText("現場有明顯異音")).toBeInTheDocument();
+  });
 });

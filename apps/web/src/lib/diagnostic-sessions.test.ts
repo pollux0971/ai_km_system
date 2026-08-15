@@ -129,3 +129,51 @@ describe("selectDecisionOption (E07-S008)", () => {
     }
   });
 });
+
+describe("selectDecisionOption free-text detail (E07-S009)", () => {
+  async function createSession() {
+    const equipment = EQUIPMENT_OPTIONS[0];
+    if (!equipment) throw new Error("EQUIPMENT_OPTIONS must not be empty");
+    const maintenanceCase = await createMaintenanceCase(equipment.id);
+    if (!maintenanceCase.ok) throw new Error("failed to create maintenance case fixture");
+    const session = await createDiagnosticSession(maintenanceCase.value.id);
+    if (!session.ok) throw new Error("failed to create diagnostic session fixture");
+    return session.value;
+  }
+
+  it("stores a trimmed, non-empty detail alongside the chosen option", async () => {
+    const session = await createSession();
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+
+    const result = await selectDecisionOption(session.id, firstOption.id, "  現場有明顯異音  ");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastFreeTextDetail).toBe("現場有明顯異音");
+  });
+
+  it("does not store a whitespace-only detail — same absence-means-not-set precedent as maintenance-cases.ts's serialNumber", async () => {
+    const session = await createSession();
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+
+    const result = await selectDecisionOption(session.id, firstOption.id, "   ");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastFreeTextDetail).toBeUndefined();
+  });
+
+  it("leaves lastFreeTextDetail unset when no detail argument is given at all", async () => {
+    const session = await createSession();
+    const firstOption = getCurrentDiagnosticStep(0).options?.[0];
+    if (!firstOption) throw new Error("step 0 must have at least one option");
+
+    const result = await selectDecisionOption(session.id, firstOption.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastFreeTextDetail).toBeUndefined();
+  });
+});

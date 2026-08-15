@@ -82,3 +82,79 @@ describe("CurrentStepCard decision options (E07-S008)", () => {
     expect(onAdvanced).not.toHaveBeenCalled();
   });
 });
+
+describe("CurrentStepCard free-text detail (E07-S009)", () => {
+  const stepWithOptions = {
+    stepIndex: 0,
+    instruction: "測試步驟內容",
+    options: [
+      { id: "opt-a", label: "選項甲" },
+      { id: "opt-b", label: "選項乙" },
+    ],
+  };
+  const advancedSession = {
+    id: "session1",
+    maintenanceCaseId: "case1",
+    status: "IN_PROGRESS" as const,
+    currentStepIndex: 1,
+    createdAt: "2026-08-15T00:00:00.000Z",
+    updatedAt: "2026-08-15T00:01:00.000Z",
+  };
+
+  beforeEach(() => {
+    mockedSelectDecisionOption.mockReset();
+  });
+
+  it("renders a free-text detail textarea alongside the options", () => {
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+
+    expect(screen.getByLabelText("補充說明")).toBeInTheDocument();
+  });
+
+  it("does not render a free-text detail textarea when the step has no options (nothing to submit it alongside)", () => {
+    render(<CurrentStepCard step={{ stepIndex: 1, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("passes the trimmed detail as a third argument when selecting an option after typing", async () => {
+    mockedSelectDecisionOption.mockResolvedValue({ ok: true, value: { ...advancedSession, lastSelectedOptionId: "opt-a", lastFreeTextDetail: "現場有異音" } });
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+    fireEvent.change(screen.getByLabelText("補充說明"), { target: { value: "  現場有異音  " } });
+    fireEvent.click(screen.getByRole("button", { name: "選項甲" }));
+
+    expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", "opt-a", "現場有異音");
+  });
+
+  it("omits the detail argument entirely when the textarea is left blank — same 2-argument call shape E07-S008's own test already locks in", () => {
+    mockedSelectDecisionOption.mockResolvedValue({ ok: true, value: { ...advancedSession, lastSelectedOptionId: "opt-a" } });
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "選項甲" }));
+
+    expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", "opt-a");
+  });
+
+  it("omits the detail argument when the textarea contains only whitespace", () => {
+    mockedSelectDecisionOption.mockResolvedValue({ ok: true, value: { ...advancedSession, lastSelectedOptionId: "opt-a" } });
+
+    render(<CurrentStepCard sessionId="session1" step={stepWithOptions} onAdvanced={() => {}} />);
+    fireEvent.change(screen.getByLabelText("補充說明"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "選項甲" }));
+
+    expect(mockedSelectDecisionOption).toHaveBeenCalledWith("session1", "opt-a");
+  });
+
+  it("shows a previously recorded detail when the session already has one", () => {
+    render(<CurrentStepCard step={{ stepIndex: 1, instruction: "測試步驟內容" }} recordedDetail="現場有明顯異音" />);
+
+    expect(screen.getByText("現場有明顯異音")).toBeInTheDocument();
+  });
+
+  it("shows nothing extra when there is no recorded detail yet", () => {
+    render(<CurrentStepCard step={{ stepIndex: 0, instruction: "測試步驟內容" }} />);
+
+    expect(screen.queryByText("您的補充說明", { exact: false })).not.toBeInTheDocument();
+  });
+});

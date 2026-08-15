@@ -15,6 +15,7 @@ import {
 import { explainDiagnosticStep } from "@/lib/diagnostic-explanations";
 import { getDiagnosticStepCitation, type SopCitation } from "@/lib/diagnostic-citations";
 import type { DiagnosticStep } from "@/lib/diagnostic-steps";
+import { submitKnowledgeCandidate } from "@/lib/knowledge-candidates";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:current-step-card");
@@ -227,6 +228,29 @@ function formatFileSize(bytes: number): string {
  * no need for a separate `sessionStatus` prop just to know whether to hide
  * the escalation UI.
  *
+ * The 候選內容 textarea + 提交為知識候選 button (E07-S023 "Knowledge
+ * candidate submission") reuse `sessionAlreadyTerminal` too, but as a
+ * MINIMUM condition, not the only one — submitting a candidate makes
+ * sense once the case has reached an outcome either way (resolved or
+ * escalated both plausibly teach something worth capturing), so this
+ * block is additionally gated on `maintenanceCaseId` being present
+ * (passed down by maintenance-session.tsx, since a knowledge candidate
+ * belongs to the CASE, not the diagnostic session — see
+ * knowledge-candidates.ts's own doc comment for why it's a fully
+ * separate entity from DiagnosticSession). Unlike escalate/complete,
+ * submitting a candidate does NOT change `sessionAlreadyTerminal`'s own
+ * value (it doesn't touch DiagnosticSession at all), so once the form
+ * appears it stays available until a submission actually succeeds —
+ * there's no risk of it flickering based on session state the way the
+ * escalate/complete forms' own mutual-hiding logic must guard against.
+ * `submittedCandidateContent` is local-only state (not threaded back
+ * through `onAdvanced`, since submitKnowledgeCandidate returns a
+ * KnowledgeCandidate, not a DiagnosticSession — a genuinely different
+ * return shape from every other mutation in this file) — it takes over
+ * from `recordedKnowledgeCandidate` the moment a submission succeeds, so
+ * the form disappears immediately without waiting on a parent refetch
+ * that wouldn't even carry this value anyway.
+ *
  * The 解決此案例 button + 解決摘要 textarea (E07-S019 "Completion summary")
  * are `escalateDiagnosticSession`'s structural twin for the opposite
  * terminal outcome — same session-level gating, same shared `pending`/
@@ -242,6 +266,7 @@ function formatFileSize(bytes: number): string {
  */
 export default function CurrentStepCard({
   sessionId,
+  maintenanceCaseId,
   step,
   onAdvanced,
   recordedDetail,
@@ -250,8 +275,10 @@ export default function CurrentStepCard({
   recordedPhotoSizeBytes,
   recordedEscalationReason,
   recordedCompletionSummary,
+  recordedKnowledgeCandidate,
 }: {
   sessionId?: string;
+  maintenanceCaseId?: string;
   step: DiagnosticStep;
   onAdvanced?: (session: DiagnosticSession) => void;
   recordedDetail?: string;
@@ -260,6 +287,7 @@ export default function CurrentStepCard({
   recordedPhotoSizeBytes?: number;
   recordedEscalationReason?: string;
   recordedCompletionSummary?: string;
+  recordedKnowledgeCandidate?: string;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -277,14 +305,18 @@ export default function CurrentStepCard({
   const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
   const [escalationReason, setEscalationReason] = useState("");
   const [completionSummary, setCompletionSummary] = useState("");
+  const [candidateContent, setCandidateContent] = useState("");
+  const [submittedCandidateContent, setSubmittedCandidateContent] = useState<string | null>(null);
   const detailFieldId = useId();
   const skipFieldId = useId();
   const photoFieldId = useId();
   const safetyFieldId = useId();
   const escalationFieldId = useId();
   const completionFieldId = useId();
+  const candidateFieldId = useId();
   const safetyGateBlocking = Boolean(step.safetyWarning) && !safetyAcknowledged;
   const sessionAlreadyTerminal = Boolean(recordedEscalationReason) || Boolean(recordedCompletionSummary);
+  const displayedCandidate = submittedCandidateContent ?? recordedKnowledgeCandidate;
 
   useEffect(() => {
     setDetailText("");
@@ -299,6 +331,7 @@ export default function CurrentStepCard({
     setSafetyAcknowledged(false);
     setEscalationReason("");
     setCompletionSummary("");
+    setCandidateContent("");
   }, [step.stepIndex]);
 
   function handleToggleSafetyAcknowledged() {
@@ -471,6 +504,34 @@ export default function CurrentStepCard({
     logger.info("diagnostic session completed", { correlationId, sessionId });
     trackEvent("maintenance_session_complete_success", { correlationId, properties: { sessionId } });
     onAdvanced?.(result.value);
+  }
+
+  async function handleSubmitCandidate() {
+    const trimmedContent = candidateContent.trim();
+    if (pending || !maintenanceCaseId || !trimmedContent) return;
+
+    const correlationId = crypto.randomUUID();
+    setPending(true);
+    setError(null);
+    logger.info("submitting knowledge candidate", { correlationId, maintenanceCaseId });
+    trackEvent("maintenance_session_knowledge_candidate_submit_attempt", { correlationId, properties: { maintenanceCaseId } });
+
+    const result = await submitKnowledgeCandidate(maintenanceCaseId, trimmedContent);
+
+    setPending(false);
+    if (!result.ok) {
+      logger.error("failed to submit knowledge candidate", { correlationId, maintenanceCaseId, code: result.error.code });
+      trackEvent("maintenance_session_knowledge_candidate_submit_failure", {
+        correlationId,
+        properties: { maintenanceCaseId, code: result.error.code },
+      });
+      setError(result.error.message);
+      return;
+    }
+
+    logger.info("knowledge candidate submitted", { correlationId, maintenanceCaseId });
+    trackEvent("maintenance_session_knowledge_candidate_submit_success", { correlationId, properties: { maintenanceCaseId } });
+    setSubmittedCandidateContent(result.value.content);
   }
 
   async function handleToggleExplain() {
@@ -717,6 +778,30 @@ export default function CurrentStepCard({
           <p>
             <button type="button" onClick={handleComplete} disabled={pending || !completionSummary.trim()}>
               解決此案例
+            </button>
+          </p>
+        </>
+      )}
+      {displayedCandidate && (
+        <p>
+          已提交知識候選:<span>{displayedCandidate}</span>
+        </p>
+      )}
+      {sessionId && maintenanceCaseId && sessionAlreadyTerminal && !displayedCandidate && (
+        <>
+          <p>
+            <label htmlFor={candidateFieldId}>候選內容</label>
+            <br />
+            <textarea
+              id={candidateFieldId}
+              value={candidateContent}
+              onChange={(event) => setCandidateContent(event.target.value)}
+              disabled={pending}
+            />
+          </p>
+          <p>
+            <button type="button" onClick={handleSubmitCandidate} disabled={pending || !candidateContent.trim()}>
+              提交為知識候選
             </button>
           </p>
         </>

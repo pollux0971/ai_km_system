@@ -12,6 +12,7 @@ import {
   type DiagnosticSessionStatus,
 } from "@/lib/diagnostic-sessions";
 import { getCurrentDiagnosticStep } from "@/lib/diagnostic-steps";
+import { getKnowledgeCandidateForCase, type KnowledgeCandidate } from "@/lib/knowledge-candidates";
 import CurrentStepCard from "./current-step-card";
 
 const logger = createLogger("web:maintenance-session");
@@ -29,7 +30,7 @@ type State =
   | { status: "loading" }
   | { status: "error" }
   | { status: "not-found" }
-  | { status: "loaded"; maintenanceCase: MaintenanceCaseSummary; session: DiagnosticSession };
+  | { status: "loaded"; maintenanceCase: MaintenanceCaseSummary; session: DiagnosticSession; knowledgeCandidate: KnowledgeCandidate | null };
 
 /**
  * E07-S006 "Diagnostic session shell" (the wrapping frame a diagnostic
@@ -47,7 +48,21 @@ type State =
  * `lastPhotoSizeBytes`, same reasoning again) plus E07-S018 "Escalation
  * action" (`session.lastEscalationReason`, same reasoning again) plus
  * E07-S019 "Completion summary" (`session.lastCompletionSummary`, same
- * reasoning again).
+ * reasoning again) plus E07-S023 "Knowledge candidate submission"
+ * (`knowledgeCandidate?.content`, same reasoning again — except this one
+ * comes from a fully separate entity/fetch, getKnowledgeCandidateForCase,
+ * not another DiagnosticSession field; see knowledge-candidates.ts's own
+ * doc comment for why). Fetched in parallel with the session lookup
+ * (both only need the already-confirmed-real `id`, no dependency on each
+ * other) and carried into BOTH the resume and the freshly-created
+ * branches below, unlike a DiagnosticSession field which only the resume
+ * branch would ever already have. A candidate-fetch failure degrades to
+ * `null` rather than failing this whole page closed — unlike the
+ * session fetch right next to it, a candidate is a secondary feature
+ * layered onto an already-complete diagnostic-session experience, not
+ * primary content this page cannot function without (same distinction
+ * KnowledgeDetail's own documentCount doc comment draws against its own
+ * primary knowledgeBase fetch).
  * Loading/error/not-found/loaded states mirror KnowledgeDetail/
  * ConversationDetail's own established pattern.
  *
@@ -106,7 +121,10 @@ export default function MaintenanceSession({ id }: { id: string }) {
       }
 
       const maintenanceCase = caseResult.value;
-      const existingSessionResult = await getDiagnosticSessionForCase(id);
+      const [existingSessionResult, candidateResult] = await Promise.all([
+        getDiagnosticSessionForCase(id),
+        getKnowledgeCandidateForCase(id),
+      ]);
       if (cancelled) return;
 
       if (!existingSessionResult.ok) {
@@ -115,13 +133,18 @@ export default function MaintenanceSession({ id }: { id: string }) {
         return;
       }
 
+      if (!candidateResult.ok) {
+        logger.error("failed to load knowledge candidate", { correlationId, id, code: candidateResult.error.code });
+      }
+      const knowledgeCandidate = candidateResult.ok ? candidateResult.value : null;
+
       if (existingSessionResult.value) {
         logger.info("resuming existing diagnostic session", {
           correlationId,
           id,
           sessionId: existingSessionResult.value.id,
         });
-        setState({ status: "loaded", maintenanceCase, session: existingSessionResult.value });
+        setState({ status: "loaded", maintenanceCase, session: existingSessionResult.value, knowledgeCandidate });
         return;
       }
 
@@ -135,7 +158,7 @@ export default function MaintenanceSession({ id }: { id: string }) {
       }
 
       logger.info("diagnostic session created", { correlationId, id, sessionId: createdSessionResult.value.id });
-      setState({ status: "loaded", maintenanceCase, session: createdSessionResult.value });
+      setState({ status: "loaded", maintenanceCase, session: createdSessionResult.value, knowledgeCandidate });
     });
 
     return () => {
@@ -167,10 +190,10 @@ export default function MaintenanceSession({ id }: { id: string }) {
     );
   }
 
-  const { maintenanceCase, session } = state;
+  const { maintenanceCase, session, knowledgeCandidate } = state;
 
   function handleAdvanced(updated: DiagnosticSession) {
-    setState({ status: "loaded", maintenanceCase, session: updated });
+    setState({ status: "loaded", maintenanceCase, session: updated, knowledgeCandidate });
   }
 
   return (
@@ -181,6 +204,7 @@ export default function MaintenanceSession({ id }: { id: string }) {
       </p>
       <CurrentStepCard
         sessionId={session.id}
+        maintenanceCaseId={maintenanceCase.id}
         step={getCurrentDiagnosticStep(session.currentStepIndex)}
         onAdvanced={handleAdvanced}
         recordedDetail={session.lastFreeTextDetail}
@@ -189,6 +213,7 @@ export default function MaintenanceSession({ id }: { id: string }) {
         recordedPhotoSizeBytes={session.lastPhotoSizeBytes}
         recordedEscalationReason={session.lastEscalationReason}
         recordedCompletionSummary={session.lastCompletionSummary}
+        recordedKnowledgeCandidate={knowledgeCandidate?.content}
       />
       <p>
         <Link href="/maintenance">返回維修助手首頁</Link>

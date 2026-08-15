@@ -11,6 +11,7 @@ import {
 } from "@/lib/diagnostic-sessions";
 import { explainDiagnosticStep } from "@/lib/diagnostic-explanations";
 import { getDiagnosticStepCitation } from "@/lib/diagnostic-citations";
+import { submitKnowledgeCandidate } from "@/lib/knowledge-candidates";
 
 vi.mock("@/lib/diagnostic-sessions", () => ({
   selectDecisionOption: vi.fn(),
@@ -29,6 +30,10 @@ vi.mock("@/lib/diagnostic-citations", () => ({
   getDiagnosticStepCitation: vi.fn(),
 }));
 
+vi.mock("@/lib/knowledge-candidates", () => ({
+  submitKnowledgeCandidate: vi.fn(),
+}));
+
 const mockedSelectDecisionOption = vi.mocked(selectDecisionOption);
 const mockedGoToPreviousStep = vi.mocked(goToPreviousStep);
 const mockedRestartDiagnosticSession = vi.mocked(restartDiagnosticSession);
@@ -37,6 +42,7 @@ const mockedExplainDiagnosticStep = vi.mocked(explainDiagnosticStep);
 const mockedGetDiagnosticStepCitation = vi.mocked(getDiagnosticStepCitation);
 const mockedEscalateDiagnosticSession = vi.mocked(escalateDiagnosticSession);
 const mockedCompleteDiagnosticSession = vi.mocked(completeDiagnosticSession);
+const mockedSubmitKnowledgeCandidate = vi.mocked(submitKnowledgeCandidate);
 
 function makePhoto(name: string, sizeBytes: number, type = "image/jpeg"): File {
   const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name, { type });
@@ -1010,5 +1016,137 @@ describe("CurrentStepCard completion summary (E07-S019)", () => {
 
     expect(screen.queryByLabelText("升級原因")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "升級此案例" })).not.toBeInTheDocument();
+  });
+});
+
+describe("CurrentStepCard knowledge candidate submission (E07-S023)", () => {
+  beforeEach(() => {
+    mockedSubmitKnowledgeCandidate.mockReset();
+  });
+
+  it("does not show the candidate form when the session is not yet terminal", () => {
+    render(
+      <CurrentStepCard sessionId="session1" maintenanceCaseId="case1" step={{ stepIndex: 0, instruction: "測試步驟內容" }} />,
+    );
+
+    expect(screen.queryByLabelText("候選內容")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "提交為知識候選" })).not.toBeInTheDocument();
+  });
+
+  it("shows the candidate form once the session has been escalated", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        maintenanceCaseId="case1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedEscalationReason="現場情況超出可自行處理範圍"
+      />,
+    );
+
+    expect(screen.getByLabelText("候選內容")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "提交為知識候選" })).toBeInTheDocument();
+  });
+
+  it("shows the candidate form once the session has been resolved", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        maintenanceCaseId="case1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedCompletionSummary="已更換零件並確認設備恢復正常運作"
+      />,
+    );
+
+    expect(screen.getByLabelText("候選內容")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "提交為知識候選" })).toBeInTheDocument();
+  });
+
+  it("keeps 提交為知識候選 disabled until content is typed", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        maintenanceCaseId="case1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedCompletionSummary="已更換零件並確認設備恢復正常運作"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "提交為知識候選" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("候選內容"), { target: { value: "空壓機異音多半是軸承磨損" } });
+
+    expect(screen.getByRole("button", { name: "提交為知識候選" })).not.toBeDisabled();
+  });
+
+  it("clicking 提交為知識候選 calls submitKnowledgeCandidate with maintenanceCaseId and the trimmed content, then shows it as already submitted", async () => {
+    mockedSubmitKnowledgeCandidate.mockResolvedValue({
+      ok: true,
+      value: { id: "candidate1", maintenanceCaseId: "case1", content: "空壓機異音多半是軸承磨損", createdAt: "2026-08-16T00:00:00.000Z" },
+    });
+
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        maintenanceCaseId="case1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedCompletionSummary="已更換零件並確認設備恢復正常運作"
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("候選內容"), { target: { value: "  空壓機異音多半是軸承磨損  " } });
+    fireEvent.click(screen.getByRole("button", { name: "提交為知識候選" }));
+
+    expect(mockedSubmitKnowledgeCandidate).toHaveBeenCalledWith("case1", "空壓機異音多半是軸承磨損");
+    expect(await screen.findByText("已提交知識候選:")).toBeInTheDocument();
+    expect(screen.getByText("空壓機異音多半是軸承磨損")).toBeInTheDocument();
+    expect(screen.queryByLabelText("候選內容")).not.toBeInTheDocument();
+  });
+
+  it("shows an error message and stays on the form when submitting a candidate fails", async () => {
+    mockedSubmitKnowledgeCandidate.mockResolvedValue({
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: "這個案例已經提交過知識候選。" },
+    });
+
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        maintenanceCaseId="case1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedCompletionSummary="已更換零件並確認設備恢復正常運作"
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("候選內容"), { target: { value: "候選內容" } });
+    fireEvent.click(screen.getByRole("button", { name: "提交為知識候選" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("這個案例已經提交過知識候選。");
+    expect(screen.getByLabelText("候選內容")).toBeInTheDocument();
+  });
+
+  it("shows a previously recorded knowledge candidate instead of the form when one already exists", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        maintenanceCaseId="case1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedCompletionSummary="已更換零件並確認設備恢復正常運作"
+        recordedKnowledgeCandidate="空壓機異音多半是軸承磨損"
+      />,
+    );
+
+    expect(screen.getByText("空壓機異音多半是軸承磨損")).toBeInTheDocument();
+    expect(screen.queryByLabelText("候選內容")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "提交為知識候選" })).not.toBeInTheDocument();
+  });
+
+  it("does not show the candidate form when maintenanceCaseId is absent, even once terminal", () => {
+    render(
+      <CurrentStepCard
+        sessionId="session1"
+        step={{ stepIndex: 0, instruction: "測試步驟內容" }}
+        recordedCompletionSummary="已更換零件並確認設備恢復正常運作"
+      />,
+    );
+
+    expect(screen.queryByLabelText("候選內容")).not.toBeInTheDocument();
   });
 });

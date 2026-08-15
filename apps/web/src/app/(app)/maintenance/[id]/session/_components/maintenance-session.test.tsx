@@ -13,6 +13,7 @@ import {
   skipDiagnosticStep,
 } from "@/lib/diagnostic-sessions";
 import { getCurrentDiagnosticStep } from "@/lib/diagnostic-steps";
+import { submitKnowledgeCandidate } from "@/lib/knowledge-candidates";
 
 vi.mock("@/lib/maintenance-cases", () => ({
   getMaintenanceCase: vi.fn(),
@@ -299,5 +300,25 @@ describe("MaintenanceSession (E07-S006)", () => {
     render(<MaintenanceSession id="case1" />);
 
     expect(await screen.findByText("已更換零件並確認設備恢復正常運作")).toBeInTheDocument();
+  });
+
+  it("E07-S023: shows a previously submitted knowledge candidate when the case already has one", async () => {
+    // knowledge-candidates.ts is deliberately NOT mocked in this file (see
+    // that module's own doc comment: getKnowledgeCandidateForCase is a
+    // safe, always-successful read, same precedent every other
+    // getXForCase function in this codebase already establishes) — this
+    // seeds real data through the real submitKnowledgeCandidate, which
+    // itself calls the already-mocked getMaintenanceCase internally for
+    // its own NOT_FOUND validation.
+    mockedGetMaintenanceCase.mockResolvedValue({ ok: true, value: sampleCase });
+    mockedGetDiagnosticSessionForCase.mockResolvedValue({
+      ok: true,
+      value: { ...sampleSession, status: "RESOLVED" as const, lastCompletionSummary: "已更換零件並確認設備恢復正常運作" },
+    });
+    await submitKnowledgeCandidate(sampleCase.id, "空壓機異音多半是軸承磨損,更換軸承即可排除。");
+
+    render(<MaintenanceSession id="case1" />);
+
+    expect(await screen.findByText("空壓機異音多半是軸承磨損,更換軸承即可排除。")).toBeInTheDocument();
   });
 });

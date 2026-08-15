@@ -534,3 +534,26 @@ test("E07-S019: 解決此案例 works even when a high-risk step's safety warnin
 
   await expect(page.getByText("已解決", { exact: true })).toBeVisible();
 });
+
+test("E07-S023: resolving a case then submitting a knowledge candidate records and shows it, replacing the submission form", async ({
+  page,
+}) => {
+  await createCase(page, "空壓機 A");
+  await page.getByLabel("解決摘要").fill("已更換零件並確認設備恢復正常運作");
+  await page.getByRole("button", { name: "解決此案例" }).click();
+  await expect(page.getByText("已解決", { exact: true })).toBeVisible();
+
+  await page.getByLabel("候選內容").fill("空壓機異音多半是軸承磨損,更換軸承即可排除。");
+  await page.getByRole("button", { name: "提交為知識候選" }).click();
+
+  await expect(page.getByText("已提交知識候選:")).toBeVisible();
+  await expect(page.getByText("空壓機異音多半是軸承磨損,更換軸承即可排除。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "提交為知識候選" })).not.toBeVisible();
+});
+
+test("E07-S023: 提交為知識候選 is not offered before the case reaches a terminal state", async ({ page }) => {
+  await createCase(page, "空壓機 A");
+
+  await expect(page.getByLabel("候選內容")).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "提交為知識候選" })).not.toBeVisible();
+});

@@ -628,6 +628,26 @@ describe("ErpQueryDetail chart (E09-S011)", () => {
     }
   });
 
+  it("renders each bar's visual width proportional to its own computed widthPercent", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    const chart = getErpResultChart(executedQuery.selectedScenarioId);
+    const chartGroup = await screen.findByRole("group", { name: "結果圖表" });
+    // The chart's whole point is comparing values by bar length — a
+    // component-level regression that silently stopped wiring
+    // widthPercent into the rendered style (while still rendering the
+    // right label/detail text) would defeat that purpose without any
+    // other test in this file catching it.
+    for (const bar of chart.bars) {
+      const barRow = within(chartGroup).getByText(bar.label).parentElement;
+      const widthBar = barRow?.querySelector("div");
+      expect(widthBar).toHaveStyle({ width: `${bar.widthPercent}%` });
+    }
+  });
+
   it("does not show any chart before execution completes", async () => {
     mockedGetErpQuery.mockResolvedValue({
       ok: true,

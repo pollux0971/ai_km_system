@@ -1,3 +1,4 @@
+import Link from "next/link";
 import ErpQueryList from "./_components/erp-query-list";
 
 /**
@@ -8,16 +9,18 @@ import ErpQueryList from "./_components/erp-query-list";
  * itself needs no additional authorization wiring of its own). Page
  * frame only; ErpQueryList owns the loading/error/empty/loaded states.
  *
- * No entry link yet, deliberately — E09-S002 "Natural-language query
- * composer" is the story that owns the first real interactive step of
- * asking a new question, and its target route doesn't exist yet. Same
- * relationship maintenance/page.tsx's own doc comment establishes
- * between E07-S001 and E07-S002.
+ * E09-S002 "Natural-language query composer" adds the "開始新的 ERP 查詢"
+ * entry link to /erp/new — the capability E09-S001 deliberately deferred
+ * to its own separate story, same relationship maintenance/page.tsx's
+ * own doc comment establishes between E07-S001 and E07-S002.
  */
 export default function ErpPage() {
   return (
     <main style={{ padding: 32 }}>
       <h1>ERP 助手</h1>
+      <p>
+        <Link href="/erp/new">開始新的 ERP 查詢</Link>
+      </p>
       <ErpQueryList />
     </main>
   );

@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 0 | 1 | 0 | 0 | 24 |
+| E11 Admin Console | 25 | 1 | 0 | 0 | 0 | 24 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 132 | 1 | 0 | 1 | 41 |
+| **合計** | **175** | 133 | 0 | 0 | 1 | 41 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -198,7 +198,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E11-S001 | done | story/E11-S001-admin-dashboard | [E11-S001.md](E11-S001.md) | Admin dashboard(E11 第一個 story,apps/admin 從空白 scaffold 開始);範圍比照 E01-S001 精確邊界(route 骨架/root layout/correlation-id middleware/全域 404/vitest 建置),刻意不做 session/auth/login/route gating——查證確認 E11-S023「admin route authorization」是 E01-S017 RoleGuard 的直接對應物,apps/web 自己當年 S002 到 S016(共 15 個 story)都是在 RoleGuard 存在前無 gate 上線,本 story 依循同一個已核准的既有排序,不需為此升級 advisor;新增 `apps/admin` 自己的 vitest 建置(先前完全沒有測試基礎設施)。同時擴充 `tests/e2e/playwright.config.ts` 支援第二個 app(:3001)的 multi-project 設定,過程中誠實記錄並修正一個真實的 config bug(`testMatch`/`testIgnore` 用 `^` 錨定,但 Playwright 其實是比對完整絕對路徑,不是檔名,導致新測試被錯誤路由到 `[web]` project——用 `--list` 驗證發現並修正)。SELF-REVIEW 對抗性複驗過程中也發現並修正一個真實的測試品質落差:Playwright `getByRole` 的 `name` 字串比對預設是「子字串比對」而非精確比對(與 Testing Library 預設行為不同),導致 E2E 測試對標題文字的突變一開始沒被抓到,加上 `exact: true` 後重跑精準命中。過程中一次不相關的 web 既有測試(`maintenance-session.test.tsx`)偶發性失敗,獨立重跑確認乾淨,判定為資源競爭造成的環境雜訊,非本 story 引起的迴歸。全部 gate:typecheck 20/20、lint 20/20、build 12/12、unit(web 105/105 檔案 1354/1354 tests + admin 3/3 檔案 5/5 tests,admin 首次擁有自己的測試套件)、E2E 207/207(較先前淨增 2,web+admin 兩個 dev server 同時啟動,耗時與先前相近);待獨立審核。 |
+| E11-S001 | approved | story/E11-S001-admin-dashboard | [E11-S001.md](E11-S001.md) | 獨立審核 APPROVE(單輪;Admin dashboard,**E11 第一個 story**,apps/admin 從空白 scaffold 開始;範圍比照 E01-S001 精確邊界,刻意不做 session/auth/login/route gating;審核者獨立重新查證核心主張:直接讀取 `docs/stories/E01-S001.md` 逐字確認其範圍嚴格限定為「route 骨架/root layout/correlation-id middleware/全域 404」且刻意排除 login/session/gating;獨立確認 E11-S023 標題確實是「admin route authorization」、E01-S017 標題確實是「建立 route-level 401/403/404 guards」且排在 S002(login)之後,證實「apps/web 自己當年也是 S002-S016 無 gate 上線,S017 才補」這個既有排序主張屬實,不是規避理由;獨立確認 `git diff main --stat -- apps/web` 為空,證實零觸碰既有 app 的核心前提;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit(web 105/105 檔案 1354/1354 tests、admin 3/3 檔案 5/5 tests,此次重跑乾淨無 flake)、E2E 207/207(獨立單獨執行,web+admin 兩個 dev server 同時啟動,launch 前確認無殘留 process);審核者另以獨立對抗性突變、鎖定與 DEV 自己驗證過的層(`page.tsx` 標題文字)完全不同的另一層——`middleware.ts` 的 correlation-id 保留邏輯(改成永遠產生新 id、完全忽略上游已提供的 id,模擬「忘記檢查既有 header」的實作錯誤)——精準命中預期的 1 個測試失敗(「preserves an existing correlation id」),另外 2 個測試(生成新 id/處理空白 id)不受影響,證實這個新建立的 middleware 測試套件確實在保護正確的行為;diff 邊界確認乾淨(16 個檔案,皆在 apps/admin/tests/e2e/docs 範圍內,禁止清單資料夾與 apps/web 零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;E11 至此開工,PROGRESS.md 逐列計數複核一致) |
 | E11-S002 | todo | | | |
 | E11-S003 | todo | | | |
 | E11-S004 | todo | | | |

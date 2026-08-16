@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getErpQuery, selectErpQueryScenario, type ErpQuerySummary } from "@/lib/erp-queries";
-import { matchErpScenarios } from "@/lib/erp-scenarios";
+import { isAmbiguousErpQuery, matchErpScenarios } from "@/lib/erp-scenarios";
 
 const logger = createLogger("web:erp-query-detail");
 
@@ -17,11 +17,11 @@ type State =
 
 /**
  * E09-S002 "Natural-language query composer" — the `/erp/[id]` route
- * NewErpQueryPage redirects to on a successful submission. E09-S004
- * clarification, S005 confirmation, S006 loading, S007+ results are
- * their own separate stories that grow what this page shows further —
- * same "don't invent a field/section ahead of the story that owns it"
- * discipline this codebase applies everywhere else.
+ * NewErpQueryPage redirects to on a successful submission. E09-S005
+ * confirmation, S006 loading, S007+ results are their own separate
+ * stories that grow what this page shows further — same "don't invent a
+ * field/section ahead of the story that owns it" discipline this
+ * codebase applies everywhere else.
  *
  * E09-S003 "Query scenario selector" adds the picker below: once loaded,
  * matchErpScenarios(erpQuery.questionText) surfaces candidate whitelisted
@@ -31,6 +31,15 @@ type State =
  * current-step-card.tsx's own decision-option flow already establishes,
  * scoped to this page's own local state rather than a separate lib
  * "session" concept E09 doesn't have.
+ *
+ * E09-S004 "Clarification UI" swaps the picker's own prompt wording when
+ * isAmbiguousErpQuery(erpQuery.questionText) — i.e. matchErpScenarios()
+ * is showing its bare S003 fallback (every scenario, because none
+ * genuinely matched) rather than a real match. This is intentionally
+ * still the same picker, same options, same click handler — only the
+ * prompt text changes; a more sophisticated clarifying flow (rephrasing,
+ * follow-up questions) is explicitly out of this story's own MVP scope
+ * (AC 8 allows simplifying the algorithm, not skipping the capability).
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -135,7 +144,11 @@ export default function ErpQueryDetail({ id }: { id: string }) {
         <p>查詢情境:{selectedScenario.label}</p>
       ) : (
         <div style={{ marginBottom: 16 }}>
-          <p>請選擇最符合您問題的查詢情境:</p>
+          <p>
+            {isAmbiguousErpQuery(erpQuery.questionText)
+              ? "我們無法確定您的問題屬於哪個查詢情境，請從以下選項中選擇最接近的，或換個方式描述您的問題:"
+              : "請選擇最符合您問題的查詢情境:"}
+          </p>
           {matchErpScenarios(erpQuery.questionText).map((scenario) => (
             <button
               key={scenario.id}

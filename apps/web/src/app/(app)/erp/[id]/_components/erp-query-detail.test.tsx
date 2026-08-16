@@ -137,3 +137,44 @@ describe("ErpQueryDetail scenario selector (E09-S003)", () => {
     expect(screen.getByRole("button", { name: scenario.label })).toBeInTheDocument();
   });
 });
+
+describe("ErpQueryDetail clarification wording (E09-S004)", () => {
+  const matchingQuestionQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+  };
+
+  it("shows the plain scenario prompt (not clarification wording) when the question confidently matched a scenario", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: matchingQuestionQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: matchingQuestionQuery.questionText, level: 1 });
+
+    expect(screen.getByText("請選擇最符合您問題的查詢情境:")).toBeInTheDocument();
+    expect(screen.queryByText(/無法確定您的問題屬於哪個查詢情境/)).not.toBeInTheDocument();
+  });
+
+  it("shows distinct clarification wording when the question matched no scenario (the S003 fallback case)", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: sampleQuery });
+
+    render(<ErpQueryDetail id="query1" />);
+    await screen.findByRole("heading", { name: sampleQuery.questionText, level: 1 });
+
+    expect(screen.getByText(/無法確定您的問題屬於哪個查詢情境/)).toBeInTheDocument();
+    expect(screen.queryByText("請選擇最符合您問題的查詢情境:")).not.toBeInTheDocument();
+  });
+
+  it("no longer shows clarification wording once a scenario has been selected", async () => {
+    const scenario = matchErpScenarios(sampleQuery.questionText)[0]!;
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...sampleQuery, selectedScenarioId: scenario.id },
+    });
+
+    render(<ErpQueryDetail id="query1" />);
+    await screen.findByRole("heading", { name: sampleQuery.questionText, level: 1 });
+
+    expect(screen.queryByText(/無法確定您的問題屬於哪個查詢情境/)).not.toBeInTheDocument();
+  });
+});

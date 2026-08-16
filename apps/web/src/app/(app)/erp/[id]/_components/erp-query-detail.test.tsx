@@ -34,6 +34,19 @@ vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
 
+// E09-S023: every real whitelisted scenario stays under the chart's
+// large-result cap (erp-result-charts.test.ts covers the capping logic
+// itself against synthetic data), so the "note appears" render path has
+// no real scenario to exercise it through — this partial mock keeps the
+// real implementation as the default (every existing test below still
+// exercises real scenario data unmodified) while letting one dedicated
+// test override the return value to prove the component's own
+// conditional rendering is wired correctly, not just the lib function.
+vi.mock("@/lib/erp-result-charts", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/erp-result-charts")>("@/lib/erp-result-charts");
+  return { ...actual, getErpResultChart: vi.fn(actual.getErpResultChart) };
+});
+
 const mockedGetErpQuery = vi.mocked(getErpQuery);
 const mockedSelectErpQueryScenario = vi.mocked(selectErpQueryScenario);
 const mockedConfirmErpQuery = vi.mocked(confirmErpQuery);
@@ -41,6 +54,7 @@ const mockedExecuteErpQuery = vi.mocked(executeErpQuery);
 const mockedSimulateErpQueryExecution = vi.mocked(simulateErpQueryExecution);
 const mockedSimulateErpExportProgress = vi.mocked(simulateErpExportProgress);
 const mockedTrackEvent = vi.mocked(trackEvent);
+const mockedGetErpResultChart = vi.mocked(getErpResultChart);
 
 // E09-S017: the export flow triggers a real download via a programmatic,
 // detached <a download>.click() (see erp-query-detail.tsx's own doc
@@ -516,8 +530,8 @@ describe("ErpQueryDetail result table pagination (E09-S009)", () => {
     await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
 
     expect(await screen.findByRole("navigation", { name: "查詢結果分頁" })).toBeInTheDocument();
-    const { totalPages } = paginateErpResultTable(table, 1);
-    expect(screen.getByText(`第 1 頁，共 ${totalPages} 頁`)).toBeInTheDocument();
+    const { totalPages, totalRows } = paginateErpResultTable(table, 1);
+    expect(screen.getByText(`第 1 頁，共 ${totalPages} 頁（共 ${totalRows} 筆）`)).toBeInTheDocument();
   });
 
   it("the previous-page button is disabled on page 1", async () => {
@@ -621,7 +635,8 @@ describe("ErpQueryDetail KPI card (E09-S010)", () => {
     expect(screen.getByText(String(kpi.value))).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "下一頁" }));
-    await screen.findByText("第 2 頁，共 2 頁");
+    const { totalRows } = paginateErpResultTable(getErpResultTable(executedQuery.selectedScenarioId), 2);
+    await screen.findByText(`第 2 頁，共 2 頁（共 ${totalRows} 筆）`);
 
     // Still the full count, unchanged by paging — a KPI reflecting only
     // the current page's row count would be a real bug this guards
@@ -689,6 +704,41 @@ describe("ErpQueryDetail chart (E09-S011)", () => {
     await screen.findByText("執行中…");
 
     expect(screen.queryByRole("group", { name: "結果圖表" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ErpQueryDetail large-result chart cap (E09-S023)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+
+  it("does not show a large-result note for a real scenario (all stay under the chart cap today)", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByRole("group", { name: "結果圖表" });
+
+    expect(screen.queryByText(/未顯示於圖表/)).not.toBeInTheDocument();
+  });
+
+  it("shows a large-result note stating how many rows are hidden when the chart data indicates truncation", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+    mockedGetErpResultChart.mockReturnValueOnce({
+      bars: [{ label: "項目 1", detail: "100", widthPercent: 100 }],
+      hiddenCount: 7,
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const chartGroup = await screen.findByRole("group", { name: "結果圖表" });
+
+    expect(within(chartGroup).getByText(/還有 7 筆.*未顯示於圖表/)).toBeInTheDocument();
   });
 });
 

@@ -1,4 +1,4 @@
-import { getErpResultTable } from "./erp-result-tables";
+import { getErpResultTable, type ErpResultTable } from "./erp-result-tables";
 
 /**
  * E09-S011 "Chart renderer". No charting library exists anywhere in
@@ -29,7 +29,25 @@ export interface ErpResultChartBar {
 
 export interface ErpResultChart {
   bars: ErpResultChartBar[];
+  hiddenCount: number;
 }
+
+/**
+ * E09-S023 "Large-result UX": every whitelisted scenario's mock table
+ * tops out at 5 rows today, so an unbounded one-bar-per-row chart has
+ * never actually been exercised by real data — same "capability must
+ * not be absent just because current mock data never exercises it"
+ * reasoning erp-result-table-pagination.ts's own deliberately-small
+ * page size already established. Caps at the first
+ * ERP_RESULT_CHART_MAX_BARS rows (table order, not re-sorted by value —
+ * there's no ordering-by-importance concept anywhere else in this file
+ * to justify inventing one here) and reports how many rows were left
+ * off via `hiddenCount`, so the UI can say so rather than silently
+ * dropping them. The full result stays completely reachable regardless
+ * — it's always still in the paginated table (E09-S009) below the
+ * chart, which has no such cap.
+ */
+export const ERP_RESULT_CHART_MAX_BARS = 10;
 
 export function parseNumericCell(cell: string): number | null {
   const cleaned = cell
@@ -45,22 +63,26 @@ export function parseNumericCell(cell: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-export function getErpResultChart(scenarioId: string): ErpResultChart {
-  const table = getErpResultTable(scenarioId);
-
+export function buildErpResultChart(table: ErpResultTable): ErpResultChart {
   if (table.rows.length === 0) {
-    return { bars: [] };
+    return { bars: [], hiddenCount: 0 };
   }
 
-  const parsedValues = table.rows.map((row) => parseNumericCell(row[1] ?? ""));
+  const shownRows = table.rows.slice(0, ERP_RESULT_CHART_MAX_BARS);
+  const parsedValues = shownRows.map((row) => parseNumericCell(row[1] ?? ""));
   const allNumeric = parsedValues.every((value) => value !== null);
   const maxValue = allNumeric ? Math.max(...(parsedValues as number[])) : 0;
 
   return {
-    bars: table.rows.map((row, index) => ({
+    bars: shownRows.map((row, index) => ({
       label: row[0] ?? "",
       detail: row[1] ?? "",
       widthPercent: allNumeric && maxValue > 0 ? ((parsedValues[index] as number) / maxValue) * 100 : 100,
     })),
+    hiddenCount: table.rows.length - shownRows.length,
   };
+}
+
+export function getErpResultChart(scenarioId: string): ErpResultChart {
+  return buildErpResultChart(getErpResultTable(scenarioId));
 }

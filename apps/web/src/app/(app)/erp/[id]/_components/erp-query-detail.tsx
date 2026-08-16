@@ -548,6 +548,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
                         <p>{bar.detail}</p>
                       </div>
                     ))}
+                    {chart.hiddenCount > 0 && <p>還有 {chart.hiddenCount} 筆未顯示於圖表，完整資料請見下方表格。</p>}
                   </div>
                 );
               })()}
@@ -583,7 +584,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
                           上一頁
                         </button>
                         <span>
-                          第 {paginated.page} 頁，共 {paginated.totalPages} 頁
+                          第 {paginated.page} 頁，共 {paginated.totalPages} 頁（共 {paginated.totalRows} 筆）
                         </span>
                         <button
                           type="button"

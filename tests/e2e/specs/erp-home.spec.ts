@@ -77,6 +77,11 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   // replaces the picker with the selected label, same
   // pick-once-then-show-the-result shape as the diagnostic session's own
   // decision-option flow.
+  //
+  // E09-S004 "Clarification UI" — this same no-match case is exactly the
+  // one isAmbiguousErpQuery() flags, so the distinct clarification
+  // wording (not the plain S003 prompt) is what's actually shown here.
+  await expect(page.getByText(/無法確定您的問題屬於哪個查詢情境/)).toBeVisible();
   await expect(page.getByRole("button", { name: "各分公司營收" })).toBeVisible();
   await page.getByRole("button", { name: "各分公司營收" }).click();
   await expect(page.getByText("查詢情境:各分公司營收")).toBeVisible();

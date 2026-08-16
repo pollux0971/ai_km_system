@@ -26,22 +26,39 @@ export const ERP_SCENARIO_OPTIONS: ErpQueryScenario[] = [
 ];
 
 /**
- * Matches a natural-language question against ERP_SCENARIO_OPTIONS by
- * simple keyword substring containment — the MVP-honest equivalent of
- * "AI-generated SQL restricted to whitelisted views" (SOURCE_BASELINE
- * pinned #20/#21): this never invents a query outside the whitelist, it
- * only ever narrows or falls back to it.
- *
- * Falls back to every whitelisted scenario (not an empty list) when
- * nothing matches — same "never leave the user with nothing to pick"
- * reasoning ErrorMessage's own fail-closed-but-actionable states follow
- * elsewhere. E09-S004 "Clarification UI" is free to replace or enrich
- * this bare fallback with a more sophisticated clarifying flow; this
- * story's own scope is only to guarantee the picker is never empty.
+ * Keyword substring containment against ERP_SCENARIO_OPTIONS — the
+ * MVP-honest equivalent of "AI-generated SQL restricted to whitelisted
+ * views" (SOURCE_BASELINE pinned #20/#21): this never invents a query
+ * outside the whitelist, it only ever narrows or falls back to it.
+ * Shared by matchErpScenarios (E09-S003) and isAmbiguousErpQuery
+ * (E09-S004) so both stay consistent about what counts as "matched"
+ * without either one calling into the other's own public contract.
+ */
+function realMatches(questionText: string): ErpQueryScenario[] {
+  return ERP_SCENARIO_OPTIONS.filter((scenario) => scenario.keywords.some((keyword) => questionText.includes(keyword)));
+}
+
+/**
+ * E09-S003 "Query scenario selector". Falls back to every whitelisted
+ * scenario (not an empty list) when nothing matches — same "never leave
+ * the user with nothing to pick" reasoning ErrorMessage's own
+ * fail-closed-but-actionable states follow elsewhere.
  */
 export function matchErpScenarios(questionText: string): ErpQueryScenario[] {
-  const matches = ERP_SCENARIO_OPTIONS.filter((scenario) =>
-    scenario.keywords.some((keyword) => questionText.includes(keyword)),
-  );
+  const matches = realMatches(questionText);
   return matches.length > 0 ? matches : ERP_SCENARIO_OPTIONS;
+}
+
+/**
+ * E09-S004 "Clarification UI". True exactly when matchErpScenarios()
+ * would be showing its bare fallback (every scenario, because none
+ * genuinely matched) rather than a real match — the signal the picker UI
+ * uses to show clarifying wording instead of the plain "pick the closest
+ * match" prompt. Deliberately a separate function rather than changing
+ * matchErpScenarios' own return shape to carry this — that function's
+ * signature and behavior are already covered by E09-S003's own approved
+ * tests, which this story leaves untouched.
+ */
+export function isAmbiguousErpQuery(questionText: string): boolean {
+  return realMatches(questionText).length === 0;
 }

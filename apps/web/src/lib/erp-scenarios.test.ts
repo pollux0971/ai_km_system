@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ERP_SCENARIO_OPTIONS, matchErpScenarios } from "./erp-scenarios";
+import { ERP_SCENARIO_OPTIONS, isAmbiguousErpQuery, matchErpScenarios } from "./erp-scenarios";
 
 describe("ERP_SCENARIO_OPTIONS (E09-S003)", () => {
   it("is a non-empty, fixed whitelist of scenarios with unique ids", () => {
@@ -32,5 +32,16 @@ describe("matchErpScenarios (E09-S003)", () => {
     const matches = matchErpScenarios("完全不相關的內容，不含任何關鍵字");
 
     expect(matches).toEqual(ERP_SCENARIO_OPTIONS);
+  });
+});
+
+describe("isAmbiguousErpQuery (E09-S004)", () => {
+  it("is false for a question that matches at least one scenario's keywords", () => {
+    expect(isAmbiguousErpQuery("上個月各分公司的營收總額是多少?")).toBe(false);
+    expect(isAmbiguousErpQuery("目前庫存低於安全存量的品項有哪些?")).toBe(false);
+  });
+
+  it("is true for a question that matches no scenario's keywords", () => {
+    expect(isAmbiguousErpQuery("完全不相關的內容，不含任何關鍵字")).toBe(true);
   });
 });

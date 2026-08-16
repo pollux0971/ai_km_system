@@ -143,13 +143,17 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(page.getByText("資料來源系統：模擬 ERP 系統(MVP,唯讀)")).toBeVisible();
 
   // E09-S009 "Server pagination UI" (below) legitimately adds its own
-  // 上一頁/下一頁 nav buttons at this exact resting state — a different
-  // kind of control (browsing an already-complete result) from what this
-  // guards against (no leftover confirm/retry-style button still driving
-  // the query process forward). Scoped past the pagination nav rather
-  // than asserting a literal count, same narrowing this story's own unit
-  // test uses for the equivalent assertion.
-  await expect(page.locator("main button:not(nav button)")).toHaveCount(0);
+  // 上一頁/下一頁 nav buttons, and E09-S016/S017 "Excel export action"/
+  // "Export progress" legitimately adds its own 匯出 Excel button, at
+  // this exact resting state — different kinds of control (browsing an
+  // already-complete result; exporting it) from what this guards against
+  // (no leftover confirm/retry-style button still driving the query
+  // process forward). Scoped past both rather than asserting a literal
+  // count, same narrowing this story's own unit test uses for the
+  // equivalent assertion. `:text()` is a Playwright-specific CSS
+  // extension (not standard CSS), matching accessible-name text directly
+  // in the selector rather than filtering a wider result set afterward.
+  await expect(page.locator('main button:not(nav button):not(:text("匯出 Excel"))')).toHaveCount(0);
 
   // E09-S007 "Text summary" — additive: the existing 查詢已執行完成 status
   // line stays exactly as S006 left it, alongside the scenario's own
@@ -208,9 +212,16 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   // the full result set regardless of which page happens to be on
   // screen — still page 2 here (高雄 visible, 台北 hidden) from the
   // pagination steps just above, yet the download must contain every row.
+  //
+  // E09-S017 "Export progress" — additive again: clicking now shows a
+  // real, visible 匯出中… state (backed by a genuine ~500ms simulated
+  // delay, same as this page's own 執行中… state above) before the
+  // download fires, instead of downloading immediately.
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("link", { name: "匯出 Excel" }).click();
+  await page.getByRole("button", { name: "匯出 Excel" }).click();
+  await expect(page.getByText("匯出中…")).toBeVisible();
   const download = await downloadPromise;
+  await expect(page.getByRole("button", { name: "匯出 Excel" })).toBeVisible();
 
   expect(download.suggestedFilename()).toBe("erp-query-result.csv");
   const stream = await download.createReadStream();

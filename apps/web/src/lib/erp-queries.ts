@@ -66,17 +66,58 @@ function readStore(): ErpQuerySummary[] {
   }
 }
 
+/** E09-S002 "Natural-language query composer". First writeStore() caller — S001 (list-only) deliberately left it out. */
+function writeStore(items: ErpQuerySummary[]): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
 /**
  * All ERP queries, most-recently-created first — same "list needs an
  * explicit, deterministic order, not insertion order" reasoning as
- * listMaintenanceCases' own sort. No writeStore()/create function yet —
- * S001 (list-only) deliberately leaves that out, same relationship
- * lib/maintenance-cases.ts's own doc comment establishes for E07-S001 vs
- * E07-S002.
+ * listMaintenanceCases' own sort.
  */
 export async function listErpQueries(): Promise<Result<ErpQuerySummary[], ApiError>> {
   return {
     ok: true,
     value: [...readStore()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   };
+}
+
+/**
+ * E09-S002. First single-item lookup this file exports — same
+ * `value: T | null` (not a rejected Promise or a NOT_FOUND error) shape
+ * getMaintenanceCase already establishes for "the fetch itself
+ * succeeded; the id just doesn't resolve to anything", leaving the
+ * NOT_FOUND-vs-error distinction to the caller.
+ */
+export async function getErpQuery(id: string): Promise<Result<ErpQuerySummary | null, ApiError>> {
+  return { ok: true, value: readStore().find((item) => item.id === id) ?? null };
+}
+
+/**
+ * E09-S002 "Natural-language query composer". Creates a new query from
+ * the user's typed natural-language question. Rejects an empty or
+ * whitespace-only question with VALIDATION_ERROR — same server-
+ * validates-too discipline as createMaintenanceCase, even though the
+ * composer's own submit button is already disabled until non-whitespace
+ * text is entered. Fails closed rather than trusting a bypassed client.
+ *
+ * `questionText` is trimmed before storing — same "store the
+ * user's intent, not incidental whitespace" precedent createKnowledgeBase
+ * already establishes for `name`.
+ */
+export async function submitErpQuery(questionText: string): Promise<Result<ErpQuerySummary, ApiError>> {
+  const trimmed = questionText.trim();
+  if (!trimmed) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請輸入您的問題。" } };
+  }
+
+  const query: ErpQuerySummary = {
+    id: crypto.randomUUID(),
+    questionText: trimmed,
+    createdAt: new Date().toISOString(),
+  };
+  writeStore([...readStore(), query]);
+  return { ok: true, value: query };
 }

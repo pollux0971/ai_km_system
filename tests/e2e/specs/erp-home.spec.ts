@@ -44,9 +44,29 @@ test("E09-S001: ERP assistant home shows the seeded ERP queries to a sales_purch
   await expect(page.getByText("目前庫存低於安全存量的品項有哪些?")).toBeVisible();
   await expect(page.getByText("本季應收帳款逾期客戶清單")).toBeVisible();
 
-  // No entry links yet — E09-S002 "Natural-language query composer" is
-  // its own separate story for that, same "don't invent a link to a
-  // route that doesn't exist yet" reasoning maintenance/page.tsx's own
-  // doc comment established for E07-S001 vs E07-S002.
+  // The one entry link E09-S002 added — but still no per-query links.
+  // No story owns a per-query detail link from this list (see
+  // erp-query-list.tsx's own doc comment). Scoped via the list itself —
+  // an unscoped getByRole("list") also matches the sidebar's own nav
+  // <ul>, which isn't what this is about.
+  await expect(page.getByRole("link", { name: "開始新的 ERP 查詢" })).toHaveAttribute("href", "/erp/new");
   await expect(page.getByRole("main").getByRole("list").getByRole("link")).toHaveCount(0);
+});
+
+test("E09-S002: submitting a natural-language question creates a new ERP query and lands on its own page", async ({ page }) => {
+  await login(page);
+  await sidebarNav(page).getByRole("link", { name: "ERP 助手" }).click();
+  await page.waitForURL((url) => url.pathname === "/erp");
+
+  await page.getByRole("link", { name: "開始新的 ERP 查詢" }).click();
+  await page.waitForURL((url) => url.pathname === "/erp/new");
+
+  await expect(page.getByRole("button", { name: "送出查詢" })).toBeDisabled();
+  await page.getByLabel("輸入您的問題").fill("上季各產品線的毛利率是多少?");
+  await expect(page.getByRole("button", { name: "送出查詢" })).toBeEnabled();
+  await page.getByRole("button", { name: "送出查詢" }).click();
+
+  await page.waitForURL((url) => /^\/erp\/[^/]+$/.test(url.pathname));
+  await expect(page.getByRole("heading", { name: "上季各產品線的毛利率是多少?", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "返回 ERP 助手首頁" })).toHaveAttribute("href", "/erp");
 });

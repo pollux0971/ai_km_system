@@ -9,6 +9,7 @@ import { isAmbiguousErpQuery, matchErpScenarios } from "@/lib/erp-scenarios";
 import { simulateErpQueryExecution } from "@/lib/erp-execution";
 import { getErpResultSummary } from "@/lib/erp-results";
 import { getErpResultTable } from "@/lib/erp-result-tables";
+import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -99,9 +100,18 @@ type State =
  * selectedScenarioId) as a semantic `<table>`, additive next to S007's
  * own summary text for the same reason S007 itself was additive to
  * S006 — the "executed, done" state keeps growing richer content, it
- * never needs an existing test to change. No pagination controls here —
- * that's E09-S009's own separate story; this one renders the whole
- * (small, mock) table at once.
+ * never needs an existing test to change. (Originally rendered the whole
+ * table at once with no pagination; E09-S009, directly below, adds that.)
+ *
+ * E09-S009 "Server pagination UI" wraps the table body in
+ * paginateErpResultTable (client-side slicing over the already-loaded
+ * mock table — see erp-result-table-pagination.ts's own doc comment for
+ * why the page size is deliberately small). This narrows S008's own
+ * "every cell visible at once" test to "page 1's own cells visible at
+ * once" — a later story's new capability legitimately making an earlier
+ * approved test's precondition stale, same category of change S005→S006
+ * already established precedent for in this same file, documented in
+ * docs/stories/E09-S009.md.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -118,6 +128,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
   const [confirmPending, setConfirmPending] = useState(false);
   const [confirmError, setConfirmError] = useState(false);
   const [executionError, setExecutionError] = useState(false);
+  const [tablePage, setTablePage] = useState(1);
 
   async function handleSelectScenario(scenarioId: string) {
     if (selectionPending) return;
@@ -269,24 +280,52 @@ export default function ErpQueryDetail({ id }: { id: string }) {
             <>
               <p>查詢已執行完成。</p>
               <p>{getErpResultSummary(erpQuery.selectedScenarioId ?? "")}</p>
-              <table>
-                <thead>
-                  <tr>
-                    {getErpResultTable(erpQuery.selectedScenarioId ?? "").columns.map((column) => (
-                      <th key={column}>{column}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {getErpResultTable(erpQuery.selectedScenarioId ?? "").rows.map((row, rowIndex) => (
-                    <tr key={rowIndex}>
-                      {row.map((cell, cellIndex) => (
-                        <td key={cellIndex}>{cell}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {(() => {
+                const paginated = paginateErpResultTable(getErpResultTable(erpQuery.selectedScenarioId ?? ""), tablePage);
+                return (
+                  <>
+                    <table>
+                      <thead>
+                        <tr>
+                          {paginated.columns.map((column) => (
+                            <th key={column}>{column}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginated.rows.map((row, rowIndex) => (
+                          <tr key={rowIndex}>
+                            {row.map((cell, cellIndex) => (
+                              <td key={cellIndex}>{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {paginated.totalPages > 1 && (
+                      <nav aria-label="查詢結果分頁">
+                        <button
+                          type="button"
+                          onClick={() => setTablePage((current) => current - 1)}
+                          disabled={paginated.page <= 1}
+                        >
+                          上一頁
+                        </button>
+                        <span>
+                          第 {paginated.page} 頁，共 {paginated.totalPages} 頁
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setTablePage((current) => current + 1)}
+                          disabled={paginated.page >= paginated.totalPages}
+                        >
+                          下一頁
+                        </button>
+                      </nav>
+                    )}
+                  </>
+                );
+              })()}
             </>
           ) : erpQuery.confirmedAt ? (
             executionError ? (

@@ -105,7 +105,14 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await page.getByRole("button", { name: "確認執行查詢" }).click();
   await expect(page.getByText("執行中…")).toBeVisible();
   await expect(page.getByText("查詢已執行完成。")).toBeVisible();
-  await expect(page.getByRole("main").getByRole("button")).toHaveCount(0);
+  // E09-S009 "Server pagination UI" (below) legitimately adds its own
+  // 上一頁/下一頁 nav buttons at this exact resting state — a different
+  // kind of control (browsing an already-complete result) from what this
+  // guards against (no leftover confirm/retry-style button still driving
+  // the query process forward). Scoped past the pagination nav rather
+  // than asserting a literal count, same narrowing this story's own unit
+  // test uses for the equivalent assertion.
+  await expect(page.locator("main button:not(nav button)")).toHaveCount(0);
 
   // E09-S007 "Text summary" — additive: the existing 查詢已執行完成 status
   // line stays exactly as S006 left it, alongside the scenario's own
@@ -115,13 +122,27 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   ).toBeVisible();
 
   // E09-S008 "Result table" — additive again, next to S007's own summary:
-  // the scenario's own mock table, no pagination yet (E09-S009's own
-  // separate story).
+  // the scenario's own mock table. E09-S009 (below) narrows this initial
+  // check to page 1's own cells — the whole table no longer renders
+  // unpaginated in one shot.
   await expect(page.getByRole("table")).toBeVisible();
   for (const column of ["分公司", "營收金額", "較上期成長"]) {
     await expect(page.getByRole("columnheader", { name: column })).toBeVisible();
   }
-  for (const cell of ["台北", "NT$ 5,200,000", "台中", "高雄"]) {
+  for (const cell of ["台北", "NT$ 5,200,000", "台中"]) {
     await expect(page.getByRole("cell", { name: cell })).toBeVisible();
   }
+
+  // E09-S009 "Server pagination UI" — a small mock page size (2) means
+  // even this 3-row table spans 2 pages, so the capability is genuinely
+  // exercised here rather than a control that never actually triggers.
+  await expect(page.getByRole("cell", { name: "高雄" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "查詢結果分頁" })).toBeVisible();
+  await expect(page.getByText("第 1 頁，共 2 頁")).toBeVisible();
+  await expect(page.getByRole("button", { name: "上一頁" })).toBeDisabled();
+  await page.getByRole("button", { name: "下一頁" }).click();
+  await expect(page.getByRole("cell", { name: "高雄" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "台北" })).toHaveCount(0);
+  await expect(page.getByText("第 2 頁，共 2 頁")).toBeVisible();
+  await expect(page.getByRole("button", { name: "下一頁" })).toBeDisabled();
 });

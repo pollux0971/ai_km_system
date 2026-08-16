@@ -6,6 +6,7 @@ import { matchErpScenarios } from "@/lib/erp-scenarios";
 import { simulateErpQueryExecution } from "@/lib/erp-execution";
 import { getErpResultSummary } from "@/lib/erp-results";
 import { getErpResultTable } from "@/lib/erp-result-tables";
+import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/erp-queries", () => ({
@@ -285,7 +286,7 @@ describe("ErpQueryDetail query execution (E09-S006)", () => {
     await waitFor(() => expect(mockedExecuteErpQuery).toHaveBeenCalledWith("query2"));
   });
 
-  it("shows an executed-done message once execution succeeds, with no loading text and no buttons left", async () => {
+  it("shows an executed-done message once execution succeeds, with no loading text and no leftover process-driving buttons", async () => {
     mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQuery });
     mockedExecuteErpQuery.mockResolvedValue({
       ok: true,
@@ -297,7 +298,20 @@ describe("ErpQueryDetail query execution (E09-S006)", () => {
 
     expect(await screen.findByText("查詢已執行完成。")).toBeInTheDocument();
     expect(screen.queryByText("執行中…")).not.toBeInTheDocument();
-    expect(screen.getByRole("main").querySelectorAll("button")).toHaveLength(0);
+
+    // E09-S009 "Server pagination UI" legitimately adds its own nav
+    // buttons (上一頁/下一頁) at this exact resting state — a different
+    // kind of control (browsing an already-complete result) from what
+    // this test actually guards against (no leftover confirm/retry-style
+    // button that would still be driving the query process forward).
+    // Scoped past the pagination nav rather than the original blanket
+    // "zero buttons anywhere" check, same narrowing category as S003's
+    // own scenario-picker assertion narrowed for S005.
+    const paginationNav = screen.queryByRole("navigation", { name: "查詢結果分頁" });
+    const buttonsOutsideNav = Array.from(screen.getByRole("main").querySelectorAll("button")).filter(
+      (button) => !paginationNav?.contains(button),
+    );
+    expect(buttonsOutsideNav).toHaveLength(0);
   });
 
   it("does not re-trigger execution when the query is already executed", async () => {
@@ -415,19 +429,23 @@ describe("ErpQueryDetail result table (E09-S008)", () => {
     executedAt: "2026-08-16T00:05:01.000Z",
   };
 
-  it("shows the scenario's own result table (every column header and every cell) once executed", async () => {
+  it("shows the scenario's own result table (every column header, and page 1's own cells) once executed", async () => {
     mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
 
     render(<ErpQueryDetail id="query2" />);
     await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
     await screen.findByText(getErpResultSummary(executedQuery.selectedScenarioId));
 
+    // E09-S009 "Server pagination UI" narrows this to page 1's own cells —
+    // not every row is on screen at once once a table spans more than one
+    // page. Full multi-page coverage lives in its own describe block below.
     const table = getErpResultTable(executedQuery.selectedScenarioId);
+    const page1 = paginateErpResultTable(table, 1);
     expect(screen.getByRole("table")).toBeInTheDocument();
     for (const column of table.columns) {
       expect(screen.getByRole("columnheader", { name: column })).toBeInTheDocument();
     }
-    for (const row of table.rows) {
+    for (const row of page1.rows) {
       for (const cell of row) {
         expect(screen.getByRole("cell", { name: cell })).toBeInTheDocument();
       }
@@ -446,5 +464,81 @@ describe("ErpQueryDetail result table (E09-S008)", () => {
     await screen.findByText("執行中…");
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+});
+
+describe("ErpQueryDetail result table pagination (E09-S009)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+  const table = getErpResultTable(executedQuery.selectedScenarioId); // revenue-by-branch, 3 rows
+
+  it("shows a pagination nav with the correct page indicator once executed", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    expect(await screen.findByRole("navigation", { name: "查詢結果分頁" })).toBeInTheDocument();
+    const { totalPages } = paginateErpResultTable(table, 1);
+    expect(screen.getByText(`第 1 頁，共 ${totalPages} 頁`)).toBeInTheDocument();
+  });
+
+  it("the previous-page button is disabled on page 1", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    expect(await screen.findByRole("button", { name: "上一頁" })).toBeDisabled();
+  });
+
+  it("clicking 下一頁 reveals the next page's rows and hides the previous page's own rows", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByRole("table");
+
+    expect(screen.getByRole("cell", { name: "台北" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "高雄" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "下一頁" }));
+
+    expect(await screen.findByRole("cell", { name: "高雄" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "台北" })).not.toBeInTheDocument();
+  });
+
+  it("下一頁 becomes disabled on the last page, and 上一頁 becomes enabled", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByRole("table");
+
+    fireEvent.click(screen.getByRole("button", { name: "下一頁" }));
+    await screen.findByRole("cell", { name: "高雄" });
+
+    expect(screen.getByRole("button", { name: "下一頁" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "上一頁" })).toBeEnabled();
+  });
+
+  it("does not show any pagination nav before execution completes", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...executedQuery, executedAt: undefined },
+    });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByText("執行中…");
+
+    expect(screen.queryByRole("navigation", { name: "查詢結果分頁" })).not.toBeInTheDocument();
   });
 });

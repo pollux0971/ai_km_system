@@ -257,6 +257,19 @@ type State =
  * again. Unlike S018's own render change, this adds no new button, so
  * S006's own "no leftover buttons" assertion needed no further update.
  *
+ * E09-S020 "Prediction disclaimer" adds one more constant line right
+ * after S019's own prediction text, gated the same way (nothing to
+ * disclaim before a prediction exists). A literal, hand-typed string —
+ * same "no derivation logic worth its own lib file" reasoning S013/S014
+ * already established for their own bare constants — using the exact
+ * `（模擬X）...正式版本中，...目前為前端固定文字` labeling convention
+ * `diagnostic-explanations.ts` (E07-S014) already establishes for
+ * honestly disclosing simulated AI-shaped content elsewhere in this
+ * codebase, rather than inventing a new disclosure style. Identical for
+ * every horizon (same reasoning S014's own source-system badge already
+ * gives for being scenario-invariant) — there's nothing horizon-specific
+ * to disclaim differently.
+ *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
  * documents for MaintenanceCaseList — ErpQueryList's own "renders no
@@ -566,7 +579,14 @@ export default function ErpQueryDetail({ id }: { id: string }) {
                     {horizon.label}
                   </button>
                 ))}
-                {predictionHorizonId && <p>{getErpPrediction(selectedScenario?.label ?? "", predictionHorizonId)}</p>}
+                {predictionHorizonId && (
+                  <>
+                    <p>{getErpPrediction(selectedScenario?.label ?? "", predictionHorizonId)}</p>
+                    <p>
+                      （模擬預測）此預測套用固定的簡化成長率假設，並非真實財務預測或對未來表現的保證，正式版本中將由實際的預測模型產生。
+                    </p>
+                  </>
+                )}
               </div>
             </>
           ) : erpQuery.confirmedAt ? (

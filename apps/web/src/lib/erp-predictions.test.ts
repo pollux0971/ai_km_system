@@ -30,6 +30,18 @@ describe("getErpPrediction (E09-S019)", () => {
     expect(quarter).toBeLessThan(year);
   });
 
+  // The relative-ordering test above would not catch every 3 rates
+  // shifting together while preserving their relative order (e.g. 3/8/15
+  // becoming 5/10/20) — pinning the exact expected string for each
+  // horizon closes that gap directly, same "assert the literal value, not
+  // just a structural property" discipline this codebase applies
+  // elsewhere (e.g. S011's chart width test).
+  it("returns the exact expected growth statement for each whitelisted horizon", () => {
+    expect(getErpPrediction("各分公司營收", "next-month")).toBe("預測「各分公司營收」下月將較本期成長約 3%。");
+    expect(getErpPrediction("各分公司營收", "next-quarter")).toBe("預測「各分公司營收」下季將較本期成長約 8%。");
+    expect(getErpPrediction("各分公司營收", "next-year")).toBe("預測「各分公司營收」下年將較本期成長約 15%。");
+  });
+
   it("covers every whitelisted prediction horizon without falling back", () => {
     for (const horizon of ERP_PREDICTION_HORIZONS) {
       const prediction = getErpPrediction("各分公司營收", horizon.id);

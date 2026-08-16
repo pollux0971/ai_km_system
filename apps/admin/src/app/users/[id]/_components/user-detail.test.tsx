@@ -33,7 +33,14 @@ describe("UserDetail (E11-S003)", () => {
 
     render(<UserDetail userId="u1" />);
 
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    // Asserts the specific wording, not just role=alert — a "fetch
+    // genuinely failed" message and a "no such user" message are both
+    // role=alert, but mean very different things to the person reading
+    // them; a regression that swapped the two (see this story's own
+    // EVIDENCE for the independent-review mutation that found this gap)
+    // would misdirect a real system-failure report as if it were the
+    // user's own typo, or vice versa.
+    expect(await screen.findByText("無法載入使用者資料。")).toBeInTheDocument();
   });
 
   it("shows a not-found state for an unknown user id", async () => {

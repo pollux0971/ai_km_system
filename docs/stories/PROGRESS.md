@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
+| E11 Admin Console | 25 | 1 | 0 | 0 | 0 | 24 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 132 | 0 | 0 | 1 | 42 |
+| **合計** | **175** | 133 | 0 | 0 | 1 | 41 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -198,7 +198,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E11-S001 | todo | | | |
+| E11-S001 | approved | story/E11-S001-admin-dashboard | [E11-S001.md](E11-S001.md) | 獨立審核 APPROVE(單輪;Admin dashboard,**E11 第一個 story**,apps/admin 從空白 scaffold 開始;範圍比照 E01-S001 精確邊界,刻意不做 session/auth/login/route gating;審核者獨立重新查證核心主張:直接讀取 `docs/stories/E01-S001.md` 逐字確認其範圍嚴格限定為「route 骨架/root layout/correlation-id middleware/全域 404」且刻意排除 login/session/gating;獨立確認 E11-S023 標題確實是「admin route authorization」、E01-S017 標題確實是「建立 route-level 401/403/404 guards」且排在 S002(login)之後,證實「apps/web 自己當年也是 S002-S016 無 gate 上線,S017 才補」這個既有排序主張屬實,不是規避理由;獨立確認 `git diff main --stat -- apps/web` 為空,證實零觸碰既有 app 的核心前提;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit(web 105/105 檔案 1354/1354 tests、admin 3/3 檔案 5/5 tests,此次重跑乾淨無 flake)、E2E 207/207(獨立單獨執行,web+admin 兩個 dev server 同時啟動,launch 前確認無殘留 process);審核者另以獨立對抗性突變、鎖定與 DEV 自己驗證過的層(`page.tsx` 標題文字)完全不同的另一層——`middleware.ts` 的 correlation-id 保留邏輯(改成永遠產生新 id、完全忽略上游已提供的 id,模擬「忘記檢查既有 header」的實作錯誤)——精準命中預期的 1 個測試失敗(「preserves an existing correlation id」),另外 2 個測試(生成新 id/處理空白 id)不受影響,證實這個新建立的 middleware 測試套件確實在保護正確的行為;diff 邊界確認乾淨(16 個檔案,皆在 apps/admin/tests/e2e/docs 範圍內,禁止清單資料夾與 apps/web 零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;E11 至此開工,PROGRESS.md 逐列計數複核一致) |
 | E11-S002 | todo | | | |
 | E11-S003 | todo | | | |
 | E11-S004 | todo | | | |

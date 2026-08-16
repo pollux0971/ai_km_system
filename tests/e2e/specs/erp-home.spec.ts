@@ -254,4 +254,12 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await predictionGroup.getByRole("button", { name: "下季" }).click();
   await expect(predictionGroup.getByRole("button", { name: "下季", pressed: true })).toBeVisible();
   await expect(predictionGroup.getByRole("button", { name: "下月", pressed: false })).toBeVisible();
+
+  // E09-S019 "Prediction result" — additive again: a growth-rate
+  // statement naming the already-selected scenario and the just-picked
+  // horizon, switching when a different horizon is picked.
+  await expect(predictionGroup.getByText("預測「各分公司營收」下季將較本期成長約 8%。")).toBeVisible();
+  await predictionGroup.getByRole("button", { name: "下年" }).click();
+  await expect(predictionGroup.getByText("預測「各分公司營收」下年將較本期成長約 15%。")).toBeVisible();
+  await expect(predictionGroup.getByText("預測「各分公司營收」下季將較本期成長約 8%。")).toHaveCount(0);
 });

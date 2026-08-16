@@ -12,6 +12,7 @@ import { getErpResultKpi } from "@/lib/erp-result-kpis";
 import { getErpResultChart } from "@/lib/erp-result-charts";
 import { getAppliedFilterLabel } from "@/lib/erp-applied-filters";
 import { ERP_PREDICTION_HORIZONS } from "@/lib/erp-prediction-horizons";
+import { getErpPrediction } from "@/lib/erp-predictions";
 import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/erp-queries", () => ({
@@ -1068,5 +1069,55 @@ describe("ErpQueryDetail prediction scenario selector (E09-S018)", () => {
 
     const calls = mockedTrackEvent.mock.calls.filter((entry) => entry[0] === "erp_prediction_horizon_selected");
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("ErpQueryDetail prediction result (E09-S019)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+  const scenarioLabel = matchErpScenarios(executedQuery.questionText)[0]!.label;
+
+  it("shows no prediction result before any horizon is selected", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByRole("group", { name: "AI 預測" });
+
+    expect(screen.queryByText(getErpPrediction(scenarioLabel, "next-month"))).not.toBeInTheDocument();
+    expect(screen.queryByText(getErpPrediction(scenarioLabel, "next-quarter"))).not.toBeInTheDocument();
+    expect(screen.queryByText(getErpPrediction(scenarioLabel, "next-year"))).not.toBeInTheDocument();
+  });
+
+  it("shows the matching prediction result once a horizon is selected", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    fireEvent.click(within(group).getByRole("button", { name: "下季" }));
+
+    expect(await screen.findByText(getErpPrediction(scenarioLabel, "next-quarter"))).toBeInTheDocument();
+  });
+
+  it("switches the prediction result when a different horizon is selected", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    fireEvent.click(within(group).getByRole("button", { name: "下月" }));
+    await screen.findByText(getErpPrediction(scenarioLabel, "next-month"));
+
+    fireEvent.click(within(group).getByRole("button", { name: "下年" }));
+
+    expect(await screen.findByText(getErpPrediction(scenarioLabel, "next-year"))).toBeInTheDocument();
+    expect(screen.queryByText(getErpPrediction(scenarioLabel, "next-month"))).not.toBeInTheDocument();
   });
 });

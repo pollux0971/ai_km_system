@@ -8,6 +8,7 @@ import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario, 
 import { isAmbiguousErpQuery, matchErpScenarios } from "@/lib/erp-scenarios";
 import { simulateErpQueryExecution } from "@/lib/erp-execution";
 import { getErpResultSummary } from "@/lib/erp-results";
+import { getErpResultTable } from "@/lib/erp-result-tables";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -93,6 +94,14 @@ type State =
  * sensitive operation, same "the mutation gets audited, not every
  * subsequent render of its outcome" reasoning implicit in every other
  * read-only render in this codebase.
+ *
+ * E09-S008 "Result table" adds getErpResultTable(erpQuery.
+ * selectedScenarioId) as a semantic `<table>`, additive next to S007's
+ * own summary text for the same reason S007 itself was additive to
+ * S006 — the "executed, done" state keeps growing richer content, it
+ * never needs an existing test to change. No pagination controls here —
+ * that's E09-S009's own separate story; this one renders the whole
+ * (small, mock) table at once.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -260,6 +269,24 @@ export default function ErpQueryDetail({ id }: { id: string }) {
             <>
               <p>查詢已執行完成。</p>
               <p>{getErpResultSummary(erpQuery.selectedScenarioId ?? "")}</p>
+              <table>
+                <thead>
+                  <tr>
+                    {getErpResultTable(erpQuery.selectedScenarioId ?? "").columns.map((column) => (
+                      <th key={column}>{column}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {getErpResultTable(erpQuery.selectedScenarioId ?? "").rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((cell, cellIndex) => (
+                        <td key={cellIndex}>{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </>
           ) : erpQuery.confirmedAt ? (
             executionError ? (

@@ -113,4 +113,15 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(
     page.getByText("本次查詢共涵蓋 3 個分公司,總營收為 NT$ 12,450,000,較上期成長 8%。"),
   ).toBeVisible();
+
+  // E09-S008 "Result table" — additive again, next to S007's own summary:
+  // the scenario's own mock table, no pagination yet (E09-S009's own
+  // separate story).
+  await expect(page.getByRole("table")).toBeVisible();
+  for (const column of ["分公司", "營收金額", "較上期成長"]) {
+    await expect(page.getByRole("columnheader", { name: column })).toBeVisible();
+  }
+  for (const cell of ["台北", "NT$ 5,200,000", "台中", "高雄"]) {
+    await expect(page.getByRole("cell", { name: cell })).toBeVisible();
+  }
 });

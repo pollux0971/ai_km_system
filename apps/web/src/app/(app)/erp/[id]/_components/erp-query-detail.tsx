@@ -15,6 +15,7 @@ import { getErpResultChart } from "@/lib/erp-result-charts";
 import { getAppliedFilterLabel } from "@/lib/erp-applied-filters";
 import { erpResultTableToCsv } from "@/lib/erp-result-export";
 import { simulateErpExportProgress } from "@/lib/erp-export-progress";
+import { ERP_PREDICTION_HORIZONS } from "@/lib/erp-prediction-horizons";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -213,6 +214,39 @@ type State =
  * can fail — same as erp-execution.ts's own "Always succeeds" doc
  * comment), so there is no corresponding `_failure` event.
  *
+ * E09-S018 "Prediction scenario selector" adds an "AI 預測" button group
+ * right after the export block: SOURCE_BASELINE names "Prediction" as
+ * one capability alongside Table/KPI/Chart/Excel Export, but pins
+ * nothing about what gets predicted or how, and — unlike
+ * ERP_SCENARIO_OPTIONS — never names a second, separate "prediction
+ * scenario" business taxonomy anywhere in the spec baseline (checked
+ * before writing this: SOURCE_BASELINE.md, this epic file, docs/adr/,
+ * TRACEABILITY.md, readme_zh.md all zero-hit anything more specific than
+ * the bare story titles). Reading this story's own "scenario" as "which
+ * selectable option" rather than a second business-area re-selection:
+ * ERP_PREDICTION_HORIZONS (erp-prediction-horizons.ts) is a fixed set of
+ * *time horizons* (下月/下季/下年) for the query's own already-selected
+ * business scenario, not a competing whitelist. Pure local component
+ * state (`predictionHorizonId`), not a persisted field on ErpQuerySummary
+ * or a call through erp-queries.ts — same "tablePage" precedent (E09-S009)
+ * for a display selection with no real backend mutation behind it, unlike
+ * S003's own selectErpQueryScenario (a genuine, audited state change).
+ * Behaves as a freely-switchable toggle group (`aria-pressed`), not
+ * S003's own one-way "picker replaced by the resolved label" shape — S003
+ * commits to something with real consequences (which SQL view runs);
+ * switching horizons here has none, so there's no reason to lock it in.
+ * `handleSelectPredictionHorizon` no-ops on re-clicking the
+ * already-pressed horizon, both to avoid a redundant telemetry
+ * `erp_prediction_horizon_selected` event and to keep this consistent
+ * with AC5's "no undefined duplicate side effect" even though a plain
+ * `setState` call couldn't meaningfully "duplicate" on its own. Gated on
+ * executedAt like every other section since S007, for the same
+ * "nothing to predict from before a result exists" reasoning. S019
+ * "Prediction result" and S020 "Prediction disclaimer" are their own
+ * separate, later stories — this one only owns the selection UI, same
+ * "don't invent the next story's own capability" restraint S008 already
+ * applied to S009's pagination.
+ *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
  * documents for MaintenanceCaseList — ErpQueryList's own "renders no
@@ -230,6 +264,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
   const [executionError, setExecutionError] = useState(false);
   const [tablePage, setTablePage] = useState(1);
   const [exportPending, setExportPending] = useState(false);
+  const [predictionHorizonId, setPredictionHorizonId] = useState<string | undefined>(undefined);
 
   async function handleSelectScenario(scenarioId: string) {
     if (selectionPending) return;
@@ -298,6 +333,17 @@ export default function ErpQueryDetail({ id }: { id: string }) {
       properties: { erpQueryId: id, scenarioId, rowCount: table.rows.length },
     });
     setExportPending(false);
+  }
+
+  function handleSelectPredictionHorizon(horizonId: string) {
+    if (predictionHorizonId === horizonId) return;
+
+    const correlationId = crypto.randomUUID();
+    setPredictionHorizonId(horizonId);
+    trackEvent("erp_prediction_horizon_selected", {
+      correlationId,
+      properties: { erpQueryId: id, horizonId },
+    });
   }
 
   useEffect(() => {
@@ -497,6 +543,20 @@ export default function ErpQueryDetail({ id }: { id: string }) {
                   </p>
                 );
               })()}
+              <div role="group" aria-label="AI 預測">
+                <p>選擇預測時間範圍:</p>
+                {ERP_PREDICTION_HORIZONS.map((horizon) => (
+                  <button
+                    key={horizon.id}
+                    type="button"
+                    onClick={() => handleSelectPredictionHorizon(horizon.id)}
+                    aria-pressed={predictionHorizonId === horizon.id}
+                    style={{ marginRight: 8 }}
+                  >
+                    {horizon.label}
+                  </button>
+                ))}
+              </div>
             </>
           ) : erpQuery.confirmedAt ? (
             executionError ? (

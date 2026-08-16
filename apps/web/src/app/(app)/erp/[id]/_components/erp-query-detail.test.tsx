@@ -11,6 +11,7 @@ import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { getErpResultKpi } from "@/lib/erp-result-kpis";
 import { getErpResultChart } from "@/lib/erp-result-charts";
 import { getAppliedFilterLabel } from "@/lib/erp-applied-filters";
+import { ERP_PREDICTION_HORIZONS } from "@/lib/erp-prediction-horizons";
 import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/erp-queries", () => ({
@@ -322,19 +323,23 @@ describe("ErpQueryDetail query execution (E09-S006)", () => {
     expect(screen.queryByText("執行中…")).not.toBeInTheDocument();
 
     // E09-S009 "Server pagination UI" legitimately adds its own nav
-    // buttons (上一頁/下一頁), and E09-S016/S017 "Excel export action"/
-    // "Export progress" legitimately adds its own 匯出 Excel button, at
-    // this exact resting state — different kinds of control (browsing an
-    // already-complete result; exporting it) from what this test actually
-    // guards against (no leftover confirm/retry-style button that would
-    // still be driving the query process forward). Scoped past both
-    // rather than the original blanket "zero buttons anywhere" check,
-    // same narrowing category as S003's own scenario-picker assertion
-    // narrowed for S005.
+    // buttons (上一頁/下一頁), E09-S016/S017 "Excel export action"/"Export
+    // progress" legitimately adds its own 匯出 Excel button, and E09-S018
+    // "Prediction scenario selector" legitimately adds its own 3-button
+    // "AI 預測" group, at this exact resting state — different kinds of
+    // control (browsing an already-complete result; exporting it;
+    // exploring a prediction) from what this test actually guards against
+    // (no leftover confirm/retry-style button that would still be driving
+    // the query process forward). Scoped past all three *containers*
+    // (nav/group), not individual button labels, so a future story adding
+    // another legitimately-grouped control doesn't need this test edited
+    // again — same narrowing category as S003's own scenario-picker
+    // assertion narrowed for S005.
     const paginationNav = screen.queryByRole("navigation", { name: "查詢結果分頁" });
+    const predictionGroup = screen.queryByRole("group", { name: "AI 預測" });
     const exportButton = screen.queryByRole("button", { name: "匯出 Excel" });
     const buttonsOutsideNav = Array.from(screen.getByRole("main").querySelectorAll("button")).filter(
-      (button) => !paginationNav?.contains(button) && button !== exportButton,
+      (button) => !paginationNav?.contains(button) && !predictionGroup?.contains(button) && button !== exportButton,
     );
     expect(buttonsOutsideNav).toHaveLength(0);
   });
@@ -969,5 +974,99 @@ describe("ErpQueryDetail Excel export action (E09-S016, E09-S017 progress)", () 
       const properties = (call as [string, { properties?: Record<string, unknown> }])[1]?.properties;
       expect(JSON.stringify(properties ?? {})).not.toContain(executedQuery.questionText);
     }
+  });
+});
+
+describe("ErpQueryDetail prediction scenario selector (E09-S018)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+
+  it("shows a horizon button for every whitelisted prediction horizon once executed, none pressed yet", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    for (const horizon of ERP_PREDICTION_HORIZONS) {
+      expect(within(group).getByRole("button", { name: horizon.label, pressed: false })).toBeInTheDocument();
+    }
+  });
+
+  it("does not show the prediction selector before execution completes", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...executedQuery, executedAt: undefined },
+    });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByText("執行中…");
+
+    expect(screen.queryByRole("group", { name: "AI 預測" })).not.toBeInTheDocument();
+  });
+
+  it("clicking a horizon marks it pressed and leaves the others unpressed", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    fireEvent.click(within(group).getByRole("button", { name: "下季" }));
+
+    expect(within(group).getByRole("button", { name: "下季", pressed: true })).toBeInTheDocument();
+    for (const horizon of ERP_PREDICTION_HORIZONS.filter((candidate) => candidate.id !== "next-quarter")) {
+      expect(within(group).getByRole("button", { name: horizon.label, pressed: false })).toBeInTheDocument();
+    }
+  });
+
+  it("clicking a different horizon switches which one is pressed, without a separate confirm step", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    fireEvent.click(within(group).getByRole("button", { name: "下月" }));
+    expect(within(group).getByRole("button", { name: "下月", pressed: true })).toBeInTheDocument();
+
+    fireEvent.click(within(group).getByRole("button", { name: "下年" }));
+
+    expect(within(group).getByRole("button", { name: "下年", pressed: true })).toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "下月", pressed: false })).toBeInTheDocument();
+  });
+
+  it("clicking a horizon fires erp_prediction_horizon_selected telemetry, excluding the free-form question text", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    fireEvent.click(within(group).getByRole("button", { name: "下月" }));
+
+    const call = mockedTrackEvent.mock.calls.find((entry) => entry[0] === "erp_prediction_horizon_selected");
+    expect(call).toBeDefined();
+    const [, options] = call as [string, { correlationId: string; properties: Record<string, unknown> }];
+    expect(options.properties).toEqual({ erpQueryId: "query2", horizonId: "next-month" });
+    expect(JSON.stringify(options.properties)).not.toContain(executedQuery.questionText);
+  });
+
+  it("re-clicking the already-pressed horizon does not fire a duplicate telemetry event", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    fireEvent.click(within(group).getByRole("button", { name: "下月" }));
+    fireEvent.click(within(group).getByRole("button", { name: "下月" }));
+
+    const calls = mockedTrackEvent.mock.calls.filter((entry) => entry[0] === "erp_prediction_horizon_selected");
+    expect(calls).toHaveLength(1);
   });
 });

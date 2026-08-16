@@ -143,17 +143,27 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(page.getByText("資料來源系統：模擬 ERP 系統(MVP,唯讀)")).toBeVisible();
 
   // E09-S009 "Server pagination UI" (below) legitimately adds its own
-  // 上一頁/下一頁 nav buttons, and E09-S016/S017 "Excel export action"/
-  // "Export progress" legitimately adds its own 匯出 Excel button, at
-  // this exact resting state — different kinds of control (browsing an
-  // already-complete result; exporting it) from what this guards against
-  // (no leftover confirm/retry-style button still driving the query
-  // process forward). Scoped past both rather than asserting a literal
-  // count, same narrowing this story's own unit test uses for the
-  // equivalent assertion. `:text()` is a Playwright-specific CSS
-  // extension (not standard CSS), matching accessible-name text directly
-  // in the selector rather than filtering a wider result set afterward.
-  await expect(page.locator('main button:not(nav button):not(:text("匯出 Excel"))')).toHaveCount(0);
+  // 上一頁/下一頁 nav buttons, E09-S016/S017 "Excel export action"/"Export
+  // progress" legitimately adds its own 匯出 Excel button, and E09-S018
+  // "Prediction scenario selector" legitimately adds its own 3-button
+  // "AI 預測" group, at this exact resting state — different kinds of
+  // control (browsing an already-complete result; exporting it; exploring
+  // a prediction) from what this guards against (no leftover
+  // confirm/retry-style button still driving the query process forward).
+  // Counted arithmetically (total in main, minus each known-legitimate
+  // container's own count) rather than a single combined selector, so a
+  // future story adding another legitimately-grouped control extends this
+  // the same way instead of growing an ever-longer :not() chain — same
+  // narrowing this story's own unit test uses for the equivalent
+  // assertion.
+  const totalMainButtons = await page.getByRole("main").locator("button").count();
+  const paginationNavButtons = await page
+    .getByRole("navigation", { name: "查詢結果分頁" })
+    .locator("button")
+    .count();
+  const predictionGroupButtons = await page.getByRole("group", { name: "AI 預測" }).locator("button").count();
+  const exportButtons = await page.getByRole("main").getByRole("button", { name: "匯出 Excel" }).count();
+  expect(totalMainButtons - paginationNavButtons - predictionGroupButtons - exportButtons).toBe(0);
 
   // E09-S007 "Text summary" — additive: the existing 查詢已執行完成 status
   // line stays exactly as S006 left it, alongside the scenario's own
@@ -231,4 +241,17 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   for (const cell of ["台北", "NT$ 5,200,000", "台中", "NT$ 3,850,000", "高雄", "NT$ 3,400,000"]) {
     expect(content).toContain(cell);
   }
+
+  // E09-S018 "Prediction scenario selector" — additive again: a freely
+  // switchable toggle group of time horizons for the same
+  // already-selected scenario (not a second business-area re-selection —
+  // see erp-query-detail.tsx's own doc comment).
+  const predictionGroup = page.getByRole("group", { name: "AI 預測" });
+  await expect(predictionGroup).toBeVisible();
+  for (const horizon of ["下月", "下季", "下年"]) {
+    await expect(predictionGroup.getByRole("button", { name: horizon, pressed: false })).toBeVisible();
+  }
+  await predictionGroup.getByRole("button", { name: "下季" }).click();
+  await expect(predictionGroup.getByRole("button", { name: "下季", pressed: true })).toBeVisible();
+  await expect(predictionGroup.getByRole("button", { name: "下月", pressed: false })).toBeVisible();
 });

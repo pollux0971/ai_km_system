@@ -200,4 +200,24 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(page.getByRole("cell", { name: "台北" })).toHaveCount(0);
   await expect(page.getByText("第 2 頁，共 2 頁")).toBeVisible();
   await expect(page.getByRole("button", { name: "下一頁" })).toBeDisabled();
+
+  // E09-S016 "Excel export action" — additive again: a real CSV download
+  // (Excel-openable; same data: URI technique maintenance-report.spec.ts's
+  // own "clicking 匯出 CSV downloads a real CSV file" test (E07-S022)
+  // already proves works end-to-end in this exact environment), holding
+  // the full result set regardless of which page happens to be on
+  // screen — still page 2 here (高雄 visible, 台北 hidden) from the
+  // pagination steps just above, yet the download must contain every row.
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("link", { name: "匯出 Excel" }).click();
+  const download = await downloadPromise;
+
+  expect(download.suggestedFilename()).toBe("erp-query-result.csv");
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const content = Buffer.concat(chunks).toString("utf-8");
+  for (const cell of ["台北", "NT$ 5,200,000", "台中", "NT$ 3,850,000", "高雄", "NT$ 3,400,000"]) {
+    expect(content).toContain(cell);
+  }
 });

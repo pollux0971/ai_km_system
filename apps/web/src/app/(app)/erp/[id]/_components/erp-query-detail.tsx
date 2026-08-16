@@ -13,6 +13,7 @@ import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { getErpResultKpi } from "@/lib/erp-result-kpis";
 import { getErpResultChart } from "@/lib/erp-result-charts";
 import { getAppliedFilterLabel } from "@/lib/erp-applied-filters";
+import { erpResultTableToCsv } from "@/lib/erp-result-export";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -159,6 +160,38 @@ type State =
  * scenario-derived. Gated on executedAt like S013 (both describe the
  * result's own provenance). Purely additive.
  *
+ * E09-S016 "Excel export action" adds one more line right after the
+ * table/pagination block: a plain `<a download href="data:text/csv;...">`,
+ * mirroring maintenance-report.tsx's own casesToCsv precedent (E07-S022 —
+ * still the only export/download feature in this codebase; its own doc
+ * comment confirms nothing shared was ever extracted from it, so
+ * erp-result-export.ts is a fresh, bespoke copy of the same CSV-escaping
+ * shape rather than a cross-epic import). Labeled "匯出 Excel" (this
+ * story's own name/intent), not "匯出 CSV" (E07-S022's own literal
+ * label) — the underlying file is CSV, but AC8 explicitly allows
+ * simplifying the algorithm as long as the capability itself isn't
+ * absent, a real xlsx-generation dependency exists nowhere in this
+ * monorepo (checked before writing this, same discipline S011's own doc
+ * comment already applies to charting libraries), and a CSV file is
+ * genuinely Excel-openable — the filename itself stays honestly
+ * `erp-query-result.csv`, only the visible label states the product
+ * intent. Exports getErpResultTable's own full, un-paginated table (not
+ * paginateErpResultTable's current-page slice) — an export is expected to
+ * hold the whole result set regardless of which page happens to be on
+ * screen. Gated on executedAt like S007-S014 (nothing to export before a
+ * result exists). One `erp_query_export` telemetry event fires on click,
+ * same "closest thing to a sensitive operation this page has, a real
+ * artifact leaves the browser" reasoning maintenance-report.tsx's own
+ * doc comment already gives for its own equivalent event — payload stays
+ * `erpQueryId`/`scenarioId`/`rowCount` only, same free-form-text
+ * restraint every other telemetry call in this file already keeps.
+ * S017 "Export progress" is its own separate, later story for any
+ * loading/progress state around the export itself — this story's own
+ * generation is synchronous (a small in-memory mock table), so there is
+ * no real async gap for a progress indicator to fill yet, same "don't
+ * invent the next story's own capability" restraint S008 already applied
+ * to S009's pagination.
+ *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
  * documents for MaintenanceCaseList — ErpQueryList's own "renders no
@@ -216,6 +249,14 @@ export default function ErpQueryDetail({ id }: { id: string }) {
 
     logger.info("ERP query confirmed", { correlationId, id });
     setState({ status: "loaded", erpQuery: result.value });
+  }
+
+  function handleExportClick(scenarioId: string | undefined, rowCount: number) {
+    const correlationId = crypto.randomUUID();
+    trackEvent("erp_query_export", {
+      correlationId,
+      properties: { erpQueryId: id, scenarioId, rowCount },
+    });
   }
 
   useEffect(() => {
@@ -398,6 +439,21 @@ export default function ErpQueryDetail({ id }: { id: string }) {
                       </nav>
                     )}
                   </>
+                );
+              })()}
+              {(() => {
+                const table = getErpResultTable(erpQuery.selectedScenarioId ?? "");
+                const csvHref = `data:text/csv;charset=utf-8,${encodeURIComponent(`﻿${erpResultTableToCsv(table)}`)}`;
+                return (
+                  <p>
+                    <a
+                      href={csvHref}
+                      download="erp-query-result.csv"
+                      onClick={() => handleExportClick(erpQuery.selectedScenarioId, table.rows.length)}
+                    >
+                      匯出 Excel
+                    </a>
+                  </p>
                 );
               })()}
             </>

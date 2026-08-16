@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 1 | 1 | 0 | 0 | 23 |
+| E11 Admin Console | 25 | 2 | 0 | 0 | 0 | 23 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 133 | 1 | 0 | 1 | 40 |
+| **合計** | **175** | 134 | 0 | 0 | 1 | 40 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -199,7 +199,7 @@ mock 也做不了才標 `blocked-team-b`。
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
 | E11-S001 | approved | story/E11-S001-admin-dashboard | [E11-S001.md](E11-S001.md) | 獨立審核 APPROVE(單輪;Admin dashboard,**E11 第一個 story**,apps/admin 從空白 scaffold 開始;範圍比照 E01-S001 精確邊界,刻意不做 session/auth/login/route gating;審核者獨立重新查證核心主張:直接讀取 `docs/stories/E01-S001.md` 逐字確認其範圍嚴格限定為「route 骨架/root layout/correlation-id middleware/全域 404」且刻意排除 login/session/gating;獨立確認 E11-S023 標題確實是「admin route authorization」、E01-S017 標題確實是「建立 route-level 401/403/404 guards」且排在 S002(login)之後,證實「apps/web 自己當年也是 S002-S016 無 gate 上線,S017 才補」這個既有排序主張屬實,不是規避理由;獨立確認 `git diff main --stat -- apps/web` 為空,證實零觸碰既有 app 的核心前提;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit(web 105/105 檔案 1354/1354 tests、admin 3/3 檔案 5/5 tests,此次重跑乾淨無 flake)、E2E 207/207(獨立單獨執行,web+admin 兩個 dev server 同時啟動,launch 前確認無殘留 process);審核者另以獨立對抗性突變、鎖定與 DEV 自己驗證過的層(`page.tsx` 標題文字)完全不同的另一層——`middleware.ts` 的 correlation-id 保留邏輯(改成永遠產生新 id、完全忽略上游已提供的 id,模擬「忘記檢查既有 header」的實作錯誤)——精準命中預期的 1 個測試失敗(「preserves an existing correlation id」),另外 2 個測試(生成新 id/處理空白 id)不受影響,證實這個新建立的 middleware 測試套件確實在保護正確的行為;diff 邊界確認乾淨(16 個檔案,皆在 apps/admin/tests/e2e/docs 範圍內,禁止清單資料夾與 apps/web 零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;E11 至此開工,PROGRESS.md 逐列計數複核一致) |
-| E11-S002 | done | story/E11-S002-user-list | [E11-S002.md](E11-S002.md) | User list;`AdminUser` 重用 `AuthSession`/`MockAccount` 已建立的欄位詞彙(userId/name/email/department/roles),不發明平行命名;8 筆種子資料 = 沿用 `mock.ts` 既有 3 個真實身份 + 補 4 個管理員角色(it/ai_administrator、auditor、super_administrator,mock.ts 自己目前完全沒種)+ 1 筆停用帳號;不對每列加連結到 `/users/{id}`,理由同 E09-S001→S015 既有先例(E11-S003 才擁有那個路由)。撰寫測試過程誠實記錄並修正一個真實的元件缺陷:欄位用裸 `<br/>` 分隔文字節點,`getByText` 找不到個別欄位(Testing Library 自己的錯誤訊息點出原因),改為每個欄位各自包 `<p>` 修正,兼顧可測試性與語意 HTML。SELF-REVIEW 對抗性複驗(讓停用/啟用狀態顯示相同文字)精準命中,且失敗方式本身(getByText 找到多個相同文字元素)就是有力證據。全部 gate:typecheck 20/20、lint 20/20、build 12/12、unit(web 105/105 檔案 1354/1354 tests 未變動 + admin 5/5 檔案 15/15 tests)、E2E 208/208(較 S001 淨增 1);待獨立審核。 |
+| E11-S002 | approved | story/E11-S002-user-list | [E11-S002.md](E11-S002.md) | 獨立審核 APPROVE(單輪;User list;`AdminUser` 重用 `AuthSession`/`MockAccount` 已建立的欄位詞彙,8 筆種子資料延續既有身份並補齊管理員角色與停用狀態;審核者獨立重新查證核心主張:直接 grep `packages/auth-client/src/mock.ts` 的 `ACCOUNTS` 確認恰好只有 3 筆帳號、角色分別是 general_user/maintenance_engineer/sales_purchasing,零管理員角色,證實「mock.ts 完全沒種管理員帳號」的宣稱屬實;獨立核對 `AuthSession`(index.ts)與 `AdminUser`(users.ts)的欄位名稱逐一對應(userId/roles/name/email/department)確認重用而非發明平行命名;獨立確認 `git diff main --stat -- apps/web` 為空;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit(web 105/105 檔案 1354/1354 tests、admin 5/5 檔案 15/15 tests)、E2E 208/208(獨立單獨執行,launch 前確認無殘留 process);審核者另以獨立對抗性突變、鎖定與 DEV 自己驗證過的層(元件層 `STATUS_LABEL` 顯示對應)完全不同的另一層——`listUsers()` 自己的種子資料(把停用帳號的 `status` 悄悄改成 `active`,模擬資料建立時的手誤)——精準命中預期的 lib 測試失敗(「includes at least one disabled user」),同時驗證元件測試完全不受影響(因為元件測試用 `vi.mock` 隔離,不觸及真實 `listUsers()`)、E2E 測試則確實命中失敗(因為 E2E 是對真實資料的端對端驗證)——三層測試的隔離/覆蓋範圍分工清楚,各自守護正確的東西;diff 邊界確認乾淨(10 個檔案,皆在 apps/admin/tests/e2e/docs 範圍內,禁止清單資料夾與 apps/web 零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E11-S003 | todo | | | |
 | E11-S004 | todo | | | |
 | E11-S005 | todo | | | |

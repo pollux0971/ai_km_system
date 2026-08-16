@@ -69,4 +69,21 @@ describe("RoleGuard (E01-S017)", () => {
     renderGuardAs(["maintenance_engineer"], "/maintenance/case-sample-1/session");
     expect(screen.getByText("protected content")).toBeInTheDocument();
   });
+
+  it("(E09-S022) denies a general_user on /erp", () => {
+    renderGuardAs(["general_user"], "/erp");
+    expect(screen.queryByText("protected content")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("您沒有權限執行此操作。");
+  });
+
+  it("(E09-S022) denies a maintenance_engineer on a route nested under /erp (an ERP query detail page)", () => {
+    renderGuardAs(["maintenance_engineer"], "/erp/query1");
+    expect(screen.queryByText("protected content")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("您沒有權限執行此操作。");
+  });
+
+  it("(E09-S022) allows a sales_purchasing user on a route nested under /erp", () => {
+    renderGuardAs(["sales_purchasing"], "/erp/query1");
+    expect(screen.getByText("protected content")).toBeInTheDocument();
+  });
 });

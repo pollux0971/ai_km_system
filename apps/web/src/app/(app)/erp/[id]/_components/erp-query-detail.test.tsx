@@ -9,6 +9,7 @@ import { getErpResultTable } from "@/lib/erp-result-tables";
 import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { getErpResultKpi } from "@/lib/erp-result-kpis";
 import { getErpResultChart } from "@/lib/erp-result-charts";
+import { getAppliedFilterLabel } from "@/lib/erp-applied-filters";
 import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/erp-queries", () => ({
@@ -660,5 +661,58 @@ describe("ErpQueryDetail chart (E09-S011)", () => {
     await screen.findByText("執行中…");
 
     expect(screen.queryByRole("group", { name: "結果圖表" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ErpQueryDetail applied-filter display (E09-S012)", () => {
+  const matchingQuestionQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+  };
+
+  it("shows the applied-filter label as soon as a scenario is selected, before confirmation", async () => {
+    const scenario = matchErpScenarios(matchingQuestionQuery.questionText)[0]!;
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...matchingQuestionQuery, selectedScenarioId: scenario.id },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: matchingQuestionQuery.questionText, level: 1 });
+
+    const label = getAppliedFilterLabel(scenario.id, matchingQuestionQuery.questionText);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("still shows the applied-filter label once execution completes", async () => {
+    const scenario = matchErpScenarios(matchingQuestionQuery.questionText)[0]!;
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: {
+        ...matchingQuestionQuery,
+        selectedScenarioId: scenario.id,
+        confirmedAt: "2026-08-16T00:05:00.000Z",
+        executedAt: "2026-08-16T00:05:01.000Z",
+      },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: matchingQuestionQuery.questionText, level: 1 });
+
+    const label = getAppliedFilterLabel(scenario.id, matchingQuestionQuery.questionText);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("does not show any applied-filter label before a scenario has been selected", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: matchingQuestionQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: matchingQuestionQuery.questionText, level: 1 });
+
+    for (const scenario of matchErpScenarios(matchingQuestionQuery.questionText)) {
+      const label = getAppliedFilterLabel(scenario.id, matchingQuestionQuery.questionText);
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
   });
 });

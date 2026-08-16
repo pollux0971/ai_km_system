@@ -12,6 +12,7 @@ import { getErpResultTable } from "@/lib/erp-result-tables";
 import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { getErpResultKpi } from "@/lib/erp-result-kpis";
 import { getErpResultChart } from "@/lib/erp-result-charts";
+import { getAppliedFilterLabel } from "@/lib/erp-applied-filters";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -128,6 +129,13 @@ type State =
  * own doc comment). Bar labels/details are the table's own row cells
  * shown verbatim, never a re-derived number. Purely additive, no
  * existing test needed to change.
+ *
+ * E09-S012 "Applied-filter display" adds one more line right next to
+ * "查詢情境:{label}" — not a duplicate (that shows *which* scenario;
+ * this shows *why*, via getAppliedFilterLabel's own keyword-match
+ * reasoning, see its own doc comment). Shown as soon as a scenario is
+ * selected, not gated on execution — it explains the AI's scenario
+ * choice, independent of whether results exist yet. Purely additive.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -292,6 +300,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
       {selectedScenario ? (
         <div style={{ marginBottom: 16 }}>
           <p>查詢情境:{selectedScenario.label}</p>
+          <p>{getAppliedFilterLabel(erpQuery.selectedScenarioId ?? "", erpQuery.questionText)}</p>
           {erpQuery.executedAt ? (
             <>
               <p>查詢已執行完成。</p>

@@ -49,15 +49,30 @@ describe("ErpQueryList (E09-S001)", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("renders no links on any query item (no query detail route exists yet)", async () => {
+  it("links each query item to its own detail page (E09-S015 'Query history')", async () => {
     mockedListErpQueries.mockResolvedValue({
       ok: true,
       value: [{ id: "query1", questionText: "測試 ERP 查詢", createdAt: "2026-08-14T06:30:00.000Z" }],
     });
 
     render(<ErpQueryList />);
-    await screen.findByText("測試 ERP 查詢");
 
-    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    const link = await screen.findByRole("link", { name: /測試 ERP 查詢/ });
+    expect(link).toHaveAttribute("href", "/erp/query1");
+  });
+
+  it("links multiple items to their own distinct detail pages, not all to the same one", async () => {
+    mockedListErpQueries.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: "query1", questionText: "第一筆查詢", createdAt: "2026-08-14T06:30:00.000Z" },
+        { id: "query2", questionText: "第二筆查詢", createdAt: "2026-08-13T06:30:00.000Z" },
+      ],
+    });
+
+    render(<ErpQueryList />);
+
+    expect(await screen.findByRole("link", { name: /第一筆查詢/ })).toHaveAttribute("href", "/erp/query1");
+    expect(screen.getByRole("link", { name: /第二筆查詢/ })).toHaveAttribute("href", "/erp/query2");
   });
 });

@@ -29,10 +29,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
-| E09 AI ERP & Reporting Experience | 24 | 14 | 0 | 1 | 0 | 9 |
+| E09 AI ERP & Reporting Experience | 24 | 14 | 1 | 0 | 0 | 9 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 122 | 0 | 1 | 1 | 51 |
+| **合計** | **175** | 122 | 1 | 0 | 1 | 51 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -183,7 +183,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E09-S012 | approved | story/E09-S012-applied-filter-display | [E09-S012.md](E09-S012.md) | 獨立審核 APPROVE(Applied-filter display;不重複 S003 既有的「查詢情境」那行(顯示哪個情境),本story回答「為什麼」(哪個關鍵字命中);重用 matchErpScenarios/isAmbiguousErpQuery 既有的比對規則,不是另一套邏輯;無真正命中時誠實顯示「使用者手動選擇」而非假裝命中;顯示時機不綁定執行完成(說明 AI 判定,與結果無關);IMPLEMENT 階段就地發現並修正 selectedScenario 退回 shape 缺少 id 欄位的技術性錯誤,改用既有 selectedScenarioId ?? "" 慣例——審核者獨立讀 erp-queries.ts確認 selectedScenarioId 確實是 optional,證實這個修正真正必要;審核者獨立讀原始碼結構性複驗「顯示時機在 executedAt 判斷式之前」;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit 101/101 檔案 1295/1295 tests、E2E 203/203(0 cache)全綠;審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的層(component 呼叫getAppliedFilterLabel 時的參數順序 wiring,而非 DEV 驗證的純函式自己的關鍵字比對方向)複驗,把兩個參數對調,精準命中預期的 2 個測試;diff 邊界確認乾淨(7 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;純疊加,零既有測試窄化;PROGRESS.md 逐列計數複核一致) |
 | E09-S013 | approved | story/E09-S013-data-freshness-badge | [E09-S013.md](E09-S013.md) | 獨立審核 APPROVE(Data freshness badge;顯示查詢自己的 executedAt時間戳記(這個 mock 唯一誠實的「資料更新時間」,因為沒有真正的 ERP後端同步流程);S007-S013 系列中第一個不需要新 lib 檔案的 story——邏輯只是與既有 createdAt 完全相同的一行 Date API 呼叫,沿用既有模式而非為求形式一致硬生一個檔案;TDD 撰寫時發現並修正測試自己的空白正規化技術性錯誤(toLocaleString 產生 U+2009 THIN SPACE,Testing Library 的 getByText 會正規化 DOM 空白但測試自己算的比對字串沒有正規化)——審核者用 node -e 獨立重新推導 codepoint 序列確認診斷屬實;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit 101/101 檔案 1295/1295 tests 全綠;E2E 獨立重跑過程中遇到系統負載飆到本session最高值(26.27)導致的一次真實瀏覽器連線層級失敗(erp-home.spec.ts 自己的 E09-S002 測試,Protocol error session closed,非斷言不符)——審核者未輕易採信為雜訊,而是完整三重驗證:立即隔離重跑 2/2 乾淨、確認負載已回落、待負載趨緩後完整重跑全部 E2E 套件 203/203 全數乾淨通過,確認與本story無關;審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的層(只突變 dateTime屬性本身、保留可見文字不變,驗證機器可讀語意屬性是否獨立於顯示文字被測試守護,而非 DEV 驗證的「徽章顯示 executedAt 而非createdAt」整體正確性)複驗,精準命中預期的 1 個測試;diff 邊界確認乾淨(5 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;純疊加,零既有測試窄化;PROGRESS.md 逐列計數複核一致) |
 | E09-S014 | approved | story/E09-S014-source-system-badge | [E09-S014.md](E09-S014.md) | 獨立審核 APPROVE(Source-system badge;查證規格庫確認無已命名 ERP系統可重用(SOURCE_BASELINE 與 epic 檔零命中 SAP/Oracle 等產品名,pinned #19-21 只用「ERP」單數+「Whitelist View」通用詞彙)——審核者獨立重新 grep 並直接讀取 pinned 決策 #19-22 原文複核屬實;固定常數徽章(此 MVP 只有一個模擬資料來源,4 個情境顯示完全相同內容,明確測試涵蓋);誠實標示為「模擬 ERP 系統」而非虛構真實廠商名稱;不建新 lib 檔案,與 S013 相同理由(純字面常數無衍生邏輯);獨立force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit 101/101 檔案 1300/1300 tests、E2E 203/203(0 cache,系統負載已回復正常);審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的層(把徽章那一行從 executedAt 判斷式內部移到外部,模擬複製貼上貼錯位置的重構錯誤,驗證顯示時機的結構性守護,而非 DEV 驗證的固定文字逐字正確性)複驗,精準命中預期的 1 個測試;diff 邊界確認乾淨(5 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;純疊加,零既有測試窄化;PROGRESS.md 逐列計數複核一致) |
-| E09-S015 | in-progress | story/E09-S015-query-history | | |
+| E09-S015 | done | story/E09-S015-query-history | [E09-S015.md](E09-S015.md) | DEV 完成,VERIFY/SELF-REVIEW 全綠,待獨立審核 |
 | E09-S016 | todo | | | |
 | E09-S017 | todo | | | |
 | E09-S018 | todo | | | |

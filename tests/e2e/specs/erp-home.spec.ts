@@ -121,6 +121,14 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
     page.getByText("本次查詢共涵蓋 3 個分公司,總營收為 NT$ 12,450,000,較上期成長 8%。"),
   ).toBeVisible();
 
+  // E09-S010 "KPI card" — additive again: a single derived headline
+  // number (the table's own total row count — 3, for this scenario's 3
+  // branches), not a hand-typed duplicate.
+  const kpiCard = page.getByRole("group", { name: "關鍵指標" });
+  await expect(kpiCard).toBeVisible();
+  await expect(kpiCard.getByText("「各分公司營收」結果筆數")).toBeVisible();
+  await expect(kpiCard.getByText("3", { exact: true })).toBeVisible();
+
   // E09-S008 "Result table" — additive again, next to S007's own summary:
   // the scenario's own mock table. E09-S009 (below) narrows this initial
   // check to page 1's own cells — the whole table no longer renders

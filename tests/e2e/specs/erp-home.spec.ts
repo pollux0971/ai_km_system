@@ -106,4 +106,11 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(page.getByText("執行中…")).toBeVisible();
   await expect(page.getByText("查詢已執行完成。")).toBeVisible();
   await expect(page.getByRole("main").getByRole("button")).toHaveCount(0);
+
+  // E09-S007 "Text summary" — additive: the existing 查詢已執行完成 status
+  // line stays exactly as S006 left it, alongside the scenario's own
+  // canned result summary (各分公司營收 was the scenario selected above).
+  await expect(
+    page.getByText("本次查詢共涵蓋 3 個分公司,總營收為 NT$ 12,450,000,較上期成長 8%。"),
+  ).toBeVisible();
 });

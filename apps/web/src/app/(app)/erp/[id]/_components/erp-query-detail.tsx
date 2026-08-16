@@ -7,6 +7,7 @@ import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario, type ErpQuerySummary } from "@/lib/erp-queries";
 import { isAmbiguousErpQuery, matchErpScenarios } from "@/lib/erp-scenarios";
 import { simulateErpQueryExecution } from "@/lib/erp-execution";
+import { getErpResultSummary } from "@/lib/erp-results";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -19,10 +20,11 @@ type State =
 
 /**
  * E09-S002 "Natural-language query composer" — the `/erp/[id]` route
- * NewErpQueryPage redirects to on a successful submission. E09-S007+
- * results are their own separate stories that grow what this page shows
- * further — same "don't invent a field/section ahead of the story that
- * owns it" discipline this codebase applies everywhere else.
+ * NewErpQueryPage redirects to on a successful submission. E09-S008+
+ * (result table, KPI card, chart, ...) are their own separate stories
+ * that grow what this page shows further — same "don't invent a
+ * field/section ahead of the story that owns it" discipline this
+ * codebase applies everywhere else.
  *
  * E09-S003 "Query scenario selector" adds the picker below: once loaded,
  * matchErpScenarios(erpQuery.questionText) surfaces candidate whitelisted
@@ -79,6 +81,18 @@ type State =
  * `erpQueryId`/`scenarioId` (fixed-vocabulary, same category as
  * errorCode) — never `questionText`, same free-form-content restraint
  * every other telemetry call in this epic already keeps.
+ *
+ * E09-S007 "Text summary" adds getErpResultSummary(erpQuery.
+ * selectedScenarioId) once `executedAt` is set — purely additive next to
+ * S006's own "查詢已執行完成。" status line, not a replacement: unlike
+ * S005→S006 (where the "confirmed, ready" state became genuinely
+ * unobservable), the "executed, done" state stays a real, valid resting
+ * state a user can see — this story only enriches it with content, so
+ * none of S006's own tests needed to change. Judged AC7 N/A: displaying
+ * an already-executed, already-audited result isn't itself a new
+ * sensitive operation, same "the mutation gets audited, not every
+ * subsequent render of its outcome" reasoning implicit in every other
+ * read-only render in this codebase.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -243,7 +257,10 @@ export default function ErpQueryDetail({ id }: { id: string }) {
         <div style={{ marginBottom: 16 }}>
           <p>查詢情境:{selectedScenario.label}</p>
           {erpQuery.executedAt ? (
-            <p>查詢已執行完成。</p>
+            <>
+              <p>查詢已執行完成。</p>
+              <p>{getErpResultSummary(erpQuery.selectedScenarioId ?? "")}</p>
+            </>
           ) : erpQuery.confirmedAt ? (
             executionError ? (
               <ErrorMessage message="無法執行查詢，請稍後再試。" />

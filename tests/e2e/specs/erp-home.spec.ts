@@ -66,7 +66,7 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(page.getByRole("button", { name: "送出查詢" })).toBeEnabled();
   await page.getByRole("button", { name: "送出查詢" }).click();
 
-  await page.waitForURL((url) => /^\/erp\/[^/]+$/.test(url.pathname));
+  await page.waitForURL((url) => url.pathname !== "/erp/new" && /^\/erp\/[^/]+$/.test(url.pathname));
   await expect(page.getByRole("heading", { name: "上季各產品線的毛利率是多少?", level: 1 })).toBeVisible();
   await expect(page.getByRole("link", { name: "返回 ERP 助手首頁" })).toHaveAttribute("href", "/erp");
 });

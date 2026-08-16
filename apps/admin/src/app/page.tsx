@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 /**
  * E11-S001 "Admin dashboard" — apps/admin's own bootstrap root page,
  * mirroring apps/web's own E01-S001 in scope: route skeleton + a bare
@@ -19,12 +21,18 @@
  * additive way erp/page.tsx (E09-S001) grew its own "開始新的 ERP 查詢"
  * link only once E09-S002 actually existed — not invented ahead of time
  * here, since none of those sections' own data models exist yet.
+ *
+ * E11-S002 "User list" is the first of these — adds the "使用者管理"
+ * entry link now that /users actually exists.
  */
 export default function AdminHomePage() {
   return (
     <main style={{ padding: 32 }}>
       <h1>AI KM 管理主控台</h1>
       <p>企業知識管理平台的後台管理入口。</p>
+      <p>
+        <Link href="/users">使用者管理</Link>
+      </p>
     </main>
   );
 }

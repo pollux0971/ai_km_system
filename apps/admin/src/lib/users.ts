@@ -116,8 +116,48 @@ const SAMPLE_USERS: AdminUser[] = [
   },
 ];
 
+/**
+ * All roles this system defines (`@ai-km/permissions`'s own `Role`
+ * union, listed out here the same way apps/web's own role-labels.ts
+ * hardcodes `ALL_ROLES` — no shared package exports this list, so each
+ * app keeps its own copy rather than importing across apps). Both the
+ * create-user form (which roles to offer) and createUser's own
+ * server-side validation (which roles are legal) share this one list.
+ */
+export const ALL_ROLES: Role[] = [
+  "general_user",
+  "department_manager",
+  "knowledge_manager",
+  "maintenance_engineer",
+  "sales_purchasing",
+  "it_administrator",
+  "ai_administrator",
+  "auditor",
+  "super_administrator",
+];
+
+const STORAGE_KEY = "ai-km:mock-admin-users";
+
+/** Same sessionStorage-backed reasoning as apps/web's own lib/erp-queries.ts readStore(). */
+function readStore(): AdminUser[] {
+  if (typeof window === "undefined") return SAMPLE_USERS;
+  const raw = window.sessionStorage.getItem(STORAGE_KEY);
+  if (!raw) return SAMPLE_USERS;
+  try {
+    return JSON.parse(raw) as AdminUser[];
+  } catch {
+    return SAMPLE_USERS;
+  }
+}
+
+/** E11-S004 "Create user". First writeStore() caller — S002/S003 (read-only) deliberately left it out. */
+function writeStore(users: AdminUser[]): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+}
+
 export async function listUsers(): Promise<Result<AdminUser[], ApiError>> {
-  return { ok: true, value: SAMPLE_USERS };
+  return { ok: true, value: readStore() };
 }
 
 /**
@@ -128,5 +168,62 @@ export async function listUsers(): Promise<Result<AdminUser[], ApiError>> {
  * the caller.
  */
 export async function getUser(userId: string): Promise<Result<AdminUser | null, ApiError>> {
-  return { ok: true, value: SAMPLE_USERS.find((user) => user.userId === userId) ?? null };
+  return { ok: true, value: readStore().find((user) => user.userId === userId) ?? null };
+}
+
+/**
+ * E11-S004 "Create user". Validates each required field independently
+ * (own distinct VALIDATION_ERROR message per field) — same pattern
+ * createMaintenanceCase/createKnowledgeBase already establish, fails
+ * closed before any write happens (no partial side effect). `roles`
+ * additionally requires at least one entry (a user account with zero
+ * roles isn't a meaningful account in this system) and every entry must
+ * be a real role, same "server validates against the whitelist too,
+ * don't trust a bypassed client" discipline selectErpQueryScenario's own
+ * scenarioId check already establishes for a different enum-like field.
+ *
+ * New users start `status: "active"` — same "created means usable" default
+ * every other create* in this codebase implies (disabling is E11-S005's
+ * own separate, later action, not something creation itself decides).
+ */
+export async function createUser(input: {
+  name: string;
+  email: string;
+  department: string;
+  roles: readonly Role[];
+}): Promise<Result<AdminUser, ApiError>> {
+  const name = input.name.trim();
+  if (!name) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請輸入姓名。" } };
+  }
+
+  const email = input.email.trim();
+  if (!email) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請輸入電子郵件。" } };
+  }
+
+  const department = input.department.trim();
+  if (!department) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請輸入部門。" } };
+  }
+
+  if (input.roles.length === 0) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請至少選擇一個角色。" } };
+  }
+
+  if (!input.roles.every((role) => ALL_ROLES.includes(role))) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "包含無效的角色。" } };
+  }
+
+  const user: AdminUser = {
+    userId: crypto.randomUUID(),
+    name,
+    email,
+    department,
+    roles: [...input.roles],
+    status: "active",
+    createdAt: new Date().toISOString(),
+  };
+  writeStore([...readStore(), user]);
+  return { ok: true, value: user };
 }

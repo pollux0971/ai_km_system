@@ -69,4 +69,19 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await page.waitForURL((url) => url.pathname !== "/erp/new" && /^\/erp\/[^/]+$/.test(url.pathname));
   await expect(page.getByRole("heading", { name: "上季各產品線的毛利率是多少?", level: 1 })).toBeVisible();
   await expect(page.getByRole("link", { name: "返回 ERP 助手首頁" })).toHaveAttribute("href", "/erp");
+
+  // E09-S003 "Query scenario selector" — this question doesn't match any
+  // whitelisted scenario's keywords, so every scenario is offered as a
+  // fallback option (matchErpScenarios' own "never an empty list"
+  // guarantee — see erp-scenarios.test.ts). Picking one records it and
+  // replaces the picker with the selected label, same
+  // pick-once-then-show-the-result shape as the diagnostic session's own
+  // decision-option flow.
+  await expect(page.getByRole("button", { name: "各分公司營收" })).toBeVisible();
+  await page.getByRole("button", { name: "各分公司營收" }).click();
+  await expect(page.getByText("查詢情境:各分公司營收")).toBeVisible();
+  // Scoped to `main` — an unscoped getByRole("button") also matches the
+  // header chrome's own 通知/user-menu buttons, which isn't what this is
+  // about.
+  await expect(page.getByRole("main").getByRole("button")).toHaveCount(0);
 });

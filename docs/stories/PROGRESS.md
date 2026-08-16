@@ -29,10 +29,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
-| E09 AI ERP & Reporting Experience | 24 | 0 | 1 | 0 | 0 | 23 |
+| E09 AI ERP & Reporting Experience | 24 | 1 | 0 | 0 | 0 | 23 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 108 | 1 | 0 | 1 | 65 |
+| **合計** | **175** | 109 | 0 | 0 | 1 | 65 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -169,7 +169,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E09-S001 | done | story/E09-S001-erp-assistant-home | [E09-S001.md](E09-S001.md) | ERP assistant home;複用 E07-S001「Maintenance home」的 landing-list 形狀(loading/error/empty/loaded);ErpQuerySummary 3 欄位最小化;無入口連結(E09-S002 才有);route-guards.spec.ts 移除已預告的過期測試(該檔案自己的 doc comment 早已預告本 story 這一刻,確認無其他候選路由可移轉);typecheck/lint/build 20/20+20/20+12/12,91 檔案 1188 unit test 全過,202/202 E2E 全過;第一輪 pnpm test 背景任務誤報 exit 0 但實際輸出顯示失敗——未採信摘要,直接讀取原始輸出,單獨重跑本 story 2 個 E2E 檔案排除自身問題,量測系統負載確認環境雜訊(load average 14+、4 並行 session),完整重跑 202/202 全過確認；對抗性突變鎖定排序邏輯，精準命中預期唯一失敗；0 個 scope 外變更
+| E09-S001 | approved | story/E09-S001-erp-assistant-home | [E09-S001.md](E09-S001.md) | 獨立審核 APPROVE(ERP assistant home;E09 第一個 story;複用 E07-S001「Maintenance home」的 landing-list 形狀(loading/error/empty/loaded),ErpQuerySummary 3 欄位最小化(id/questionText/createdAt),無入口連結(E09-S002 才有);route-guards.spec.ts 移除一個已預告的過期測試——該檔案自己的 doc comment 早已預告本 story 這一刻,審核者獨立重新確認 nav-items.ts 的 NAV_ITEMS 只有 /maintenance 與 /erp 兩個真正 role-restricted entry、兩者現在都有頁面,無其他候選路由可移轉,判定為合理移除而非放寬測試;審核者獨立 force 全量重跑 typecheck/lint/build/test 0 cache——web 11/11、91 檔案 1188/1188 unit test、202/202 E2E(含新增的 erp-home.spec.ts)全過;過程中 apps/admin#typecheck 與 3 個 E2E 測試各出現一次性失敗,獨立隔離重跑確認皆為環境資源競爭(load average 13-16、4 並行 session)非本 story 缺陷,knowledge-ui-e2e.spec.ts E05-S031 是本 window 已記錄過的既有 flaky 測試,與本 story 檔案零關聯;審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的邏輯(ErpQueryList 的 empty-state 分支,而非 DEV 驗證的排序邏輯)複驗,精準命中預期的 1 個測試;diff 邊界確認乾淨(9 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致)
 | E09-S002 | todo | | | |
 | E09-S003 | todo | | | |
 | E09-S004 | todo | | | |

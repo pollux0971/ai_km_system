@@ -29,10 +29,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
-| E09 AI ERP & Reporting Experience | 24 | 2 | 0 | 0 | 0 | 22 |
+| E09 AI ERP & Reporting Experience | 24 | 2 | 1 | 0 | 0 | 21 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 110 | 0 | 0 | 1 | 64 |
+| **合計** | **175** | 110 | 1 | 0 | 1 | 63 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -171,7 +171,7 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|
 | E09-S001 | approved | story/E09-S001-erp-assistant-home | [E09-S001.md](E09-S001.md) | 獨立審核 APPROVE(ERP assistant home;E09 第一個 story;複用 E07-S001「Maintenance home」的 landing-list 形狀(loading/error/empty/loaded),ErpQuerySummary 3 欄位最小化(id/questionText/createdAt),無入口連結(E09-S002 才有);route-guards.spec.ts 移除一個已預告的過期測試——該檔案自己的 doc comment 早已預告本 story 這一刻,審核者獨立重新確認 nav-items.ts 的 NAV_ITEMS 只有 /maintenance 與 /erp 兩個真正 role-restricted entry、兩者現在都有頁面,無其他候選路由可移轉,判定為合理移除而非放寬測試;審核者獨立 force 全量重跑 typecheck/lint/build/test 0 cache——web 11/11、91 檔案 1188/1188 unit test、202/202 E2E(含新增的 erp-home.spec.ts)全過;過程中 apps/admin#typecheck 與 3 個 E2E 測試各出現一次性失敗,獨立隔離重跑確認皆為環境資源競爭(load average 13-16、4 並行 session)非本 story 缺陷,knowledge-ui-e2e.spec.ts E05-S031 是本 window 已記錄過的既有 flaky 測試,與本 story 檔案零關聯;審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的邏輯(ErpQueryList 的 empty-state 分支,而非 DEV 驗證的排序邏輯)複驗,精準命中預期的 1 個測試;diff 邊界確認乾淨(9 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致)
 | E09-S002 | approved | story/E09-S002-nl-query-composer | [E09-S002.md](E09-S002.md) | 獨立審核 APPROVE(Natural-language query composer;單一自由文字問題欄位,composer 本身建立/erp/[id] 最小 shell(E09 沒有獨立 shell story);ErpQueryList(S001)刻意不 retrofit 連結,同 CaseDetail 既有先例;審核者獨立 force 全量重跑 typecheck/lint/build(分開跑,避開已知的.next/types 任務排序競爭)/test 0 cache——web 9-10/9-10 三項各自乾淨、93 檔案 1206/1206 unit test;獨立重跑 E2E 時發現 erp-home.spec.ts 自己新增的測試出現 1 次失敗,追查為測試自己的 waitForURL 正則誤 match 靜態手足路由 /erp/new 的技術性錯誤(DEV 階段時序恰好夠快而未觸發),修正後獨立重跑 4 次穩定通過——誠實記錄此修正技術上偏離 /story-review「只讀不改碼」的規則,理由與判斷已完整記錄於 E09-S002.md 的獨立審核附錄;完整套件重新確認時另有 5 個與本 story 無關的既有環境雜訊失敗,--workers=1 隔離後 4 個轉為通過,剩 1 個是本 session 已多次記錄過的既有 E05-S031 flaky測試(此輪系統負載達 21+,高於稍早記錄的 13-16);審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的邏輯(ErpQueryDetail 的 not-found 分支,而非 DEV 驗證的 submitErpQuery 空白驗證)複驗,精準命中預期的 1 個測試,並額外證實該分支缺失會導致真正的 null 崩潰(同 E07-S021 的既有發現類型);diff 邊界確認乾淨(11 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR,1 個已記錄的流程偏差(見附錄);PROGRESS.md 逐列計數複核一致)
-| E09-S003 | todo | | | |
+| E09-S003 | done | story/E09-S003-query-scenario-selector | [E09-S003.md](E09-S003.md) | Query scenario selector;固定白名單 4 個情境(對應 pinned #21「SQL 執行限白名單 view」),關鍵字比對非真正 NL 理解(AC 8 明確允許 MVP 簡化);零匹配時 fallback 到全部情境而非空清單(對抗性突變已驗證此保證真正被強制執行);selectedScenarioId 直接擴充 ErpQuerySummary,selectErpQueryScenario 鏡射既有 mutate-by-id 慣例(NOT_FOUND/VALIDATION_ERROR);typecheck/lint/build 9/9+9/9+9/9,94 檔案 1218 unit test全過(+12);erp-home.spec.ts 延伸測試穩定通過,完整套件 4 個無關失敗經 --workers=1 隔離後只剩本 session已四度記錄的既有 E05-S031 flaky 測試;對抗性突變鎖定 matchErpScenarios 的 fallback 保證,精準命中預期唯一失敗;0 個 scope 外變更
 | E09-S004 | todo | | | |
 | E09-S005 | todo | | | |
 | E09-S006 | todo | | | |

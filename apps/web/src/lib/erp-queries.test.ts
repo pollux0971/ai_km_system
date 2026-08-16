@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getErpQuery, listErpQueries, submitErpQuery } from "./erp-queries";
+import { getErpQuery, listErpQueries, selectErpQueryScenario, submitErpQuery } from "./erp-queries";
+import { ERP_SCENARIO_OPTIONS } from "./erp-scenarios";
 
 describe("listErpQueries (E09-S001)", () => {
   it("resolves with a non-empty list of ERP query summaries", async () => {
@@ -96,5 +97,50 @@ describe("submitErpQuery (E09-S002)", () => {
     expect(after.ok).toBe(true);
     if (!after.ok) return;
     expect(after.value.length).toBe(countBefore);
+  });
+});
+
+describe("selectErpQueryScenario (E09-S003)", () => {
+  it("records the chosen scenario on the matching query", async () => {
+    const created = await submitErpQuery("上季各產品線的毛利率是多少?");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const scenario = ERP_SCENARIO_OPTIONS[0]!;
+
+    const result = await selectErpQueryScenario(created.value.id, scenario.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.selectedScenarioId).toBe(scenario.id);
+
+    const fetched = await getErpQuery(created.value.id);
+    expect(fetched.ok).toBe(true);
+    if (!fetched.ok) return;
+    expect(fetched.value?.selectedScenarioId).toBe(scenario.id);
+  });
+
+  it("fails with NOT_FOUND for an unknown query id, with no side effect", async () => {
+    const scenario = ERP_SCENARIO_OPTIONS[0]!;
+
+    const result = await selectErpQueryScenario("not-a-real-query-id", scenario.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("fails with VALIDATION_ERROR for an unrecognized scenarioId, with no side effect on the query", async () => {
+    const created = await submitErpQuery("測試驗證失敗情境");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await selectErpQueryScenario(created.value.id, "not-a-real-scenario-id");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const fetched = await getErpQuery(created.value.id);
+    expect(fetched.ok).toBe(true);
+    if (!fetched.ok) return;
+    expect(fetched.value?.selectedScenarioId).toBeUndefined();
   });
 });

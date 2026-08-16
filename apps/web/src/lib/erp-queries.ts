@@ -1,27 +1,35 @@
 import type { ApiError, Result } from "@ai-km/types";
+import { ERP_SCENARIO_OPTIONS } from "./erp-scenarios";
 
 /**
  * E09-S001 "ERP assistant home". An ERP query's recent-list summary —
  * same "fields deliberately minimal" discipline MaintenanceCaseSummary
  * (E07-S001) already established: `questionText` + `createdAt` is
  * everything a bare landing-page list needs to display. No `resultRows`/
- * `sqlPreview`/`scenario` field yet — those belong to their own later
- * stories (E09-S002 "Natural-language query composer" and neighbors),
- * same "don't invent a field ahead of the story that actually owns it"
- * discipline. `questionText` is the free-form natural-language question
- * that was asked, playing the same role `title` plays for a maintenance
- * case.
+ * `sqlPreview` field yet — those belong to their own later stories
+ * (E09-S007 onward), same "don't invent a field ahead of the story that
+ * actually owns it" discipline. `questionText` is the free-form
+ * natural-language question that was asked, playing the same role
+ * `title` plays for a maintenance case.
  *
- * The real ERP query engine (E09-S002 onward) and its E10 (Enterprise
- * Data Integration, Team B) backend don't exist yet — `contracts/` has
- * zero hits for erp/E10, and E10 is Team B's own separate epic. Per
- * SOURCE_BASELINE §5 pinned #35 and the identical E08/E07 precedent,
- * this file is a pure frontend mock, not a wait for E10.
+ * `selectedScenarioId` (E09-S003 "Query scenario selector") is optional
+ * — absent until the user picks one of the ERP_SCENARIO_OPTIONS
+ * candidates matchErpScenarios() surfaces for this query's own
+ * questionText, same "field absence means not-yet-set" precedent
+ * MaintenanceCaseSummary's own equipmentId/serialNumber/errorCode
+ * already establish.
+ *
+ * The real ERP query engine and its E10 (Enterprise Data Integration,
+ * Team B) backend don't exist yet — `contracts/` has zero hits for
+ * erp/E10, and E10 is Team B's own separate epic. Per SOURCE_BASELINE
+ * §5 pinned #35 and the identical E08/E07 precedent, this file is a
+ * pure frontend mock, not a wait for E10.
  */
 export interface ErpQuerySummary {
   id: string;
   questionText: string;
   createdAt: string;
+  selectedScenarioId?: string;
 }
 
 /**
@@ -120,4 +128,31 @@ export async function submitErpQuery(questionText: string): Promise<Result<ErpQu
   };
   writeStore([...readStore(), query]);
   return { ok: true, value: query };
+}
+
+/**
+ * E09-S003 "Query scenario selector". Records which whitelisted scenario
+ * the user picked for an already-submitted query. Fails closed with
+ * NOT_FOUND for an unknown query id (same shape createMaintenanceCase's
+ * sibling mutations use for a missing parent, not a `value: null` —
+ * this is a write, not a lookup) and VALIDATION_ERROR for a scenarioId
+ * outside ERP_SCENARIO_OPTIONS, even though the picker UI only ever
+ * offers real options — same "server validates too, don't trust a
+ * bypassed client" discipline createMaintenanceCase's own equipmentId
+ * check already establishes.
+ */
+export async function selectErpQueryScenario(id: string, scenarioId: string): Promise<Result<ErpQuerySummary, ApiError>> {
+  const store = readStore();
+  const query = store.find((item) => item.id === id);
+  if (!query) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個 ERP 查詢。" } };
+  }
+
+  if (!ERP_SCENARIO_OPTIONS.some((option) => option.id === scenarioId)) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請選擇有效的查詢情境。" } };
+  }
+
+  const updated: ErpQuerySummary = { ...query, selectedScenarioId: scenarioId };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
 }

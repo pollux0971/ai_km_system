@@ -93,10 +93,17 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   }
 
   // E09-S005 "Query confirmation UI" — a separate explicit confirm step
-  // sits between scenario selection and S006's own execution/loading
-  // state (which doesn't exist yet), same "don't invent the next story's
-  // own capability" restraint this whole epic already follows.
+  // sits between scenario selection and execution.
+  //
+  // E09-S006 "Query loading state" — confirming immediately (no extra
+  // click) starts execution: the confirmed-but-not-yet-executing state
+  // is transient, not a resting one a user would ever actually see held
+  // still, so this no longer asserts the old static "準備執行" message
+  // (S005's own original wording) — it asserts the real, observable
+  // sequence that message was always a placeholder for: 執行中… while
+  // the simulated execution runs, then 查詢已執行完成。 once it settles.
   await page.getByRole("button", { name: "確認執行查詢" }).click();
-  await expect(page.getByText("查詢已確認，準備執行。")).toBeVisible();
+  await expect(page.getByText("執行中…")).toBeVisible();
+  await expect(page.getByText("查詢已執行完成。")).toBeVisible();
   await expect(page.getByRole("main").getByRole("button")).toHaveCount(0);
 });

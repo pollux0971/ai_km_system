@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
-import { confirmErpQuery, getErpQuery, selectErpQueryScenario, type ErpQuerySummary } from "@/lib/erp-queries";
+import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario, type ErpQuerySummary } from "@/lib/erp-queries";
 import { isAmbiguousErpQuery, matchErpScenarios } from "@/lib/erp-scenarios";
+import { simulateErpQueryExecution } from "@/lib/erp-execution";
+import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
 
@@ -17,11 +19,10 @@ type State =
 
 /**
  * E09-S002 "Natural-language query composer" — the `/erp/[id]` route
- * NewErpQueryPage redirects to on a successful submission. E09-S006
- * loading, S007+ results are their own separate stories that grow what
- * this page shows further — same "don't invent a field/section ahead of
- * the story that owns it" discipline this codebase applies everywhere
- * else.
+ * NewErpQueryPage redirects to on a successful submission. E09-S007+
+ * results are their own separate stories that grow what this page shows
+ * further — same "don't invent a field/section ahead of the story that
+ * owns it" discipline this codebase applies everywhere else.
  *
  * E09-S003 "Query scenario selector" adds the picker below: once loaded,
  * matchErpScenarios(erpQuery.questionText) surfaces candidate whitelisted
@@ -43,17 +44,41 @@ type State =
  *
  * E09-S005 "Query confirmation UI" adds one more gate once a scenario is
  * selected: a 確認執行查詢 button the user must explicitly click before
- * this query is considered ready for S006's own execution/loading step
- * (which doesn't exist yet — `confirmedAt` is as far as this story goes).
- * Deliberately does NOT let picking a scenario auto-confirm — the whole
- * point of a dedicated confirmation story is an explicit, separate
- * intent-to-execute gesture, not folding it into the selection click.
- * S003's own "picker replaced by the selected label, zero picker buttons
- * left" tests are scoped to the picker's own scenario buttons
- * specifically (see their own updated comments) rather than "zero
- * buttons of any kind" — this story's differently-purposed confirm
- * button legitimately coexists at that same point without those tests'
- * original intent actually changing.
+ * this query is considered ready to execute. Deliberately does NOT let
+ * picking a scenario auto-confirm — the whole point of a dedicated
+ * confirmation story is an explicit, separate intent-to-execute gesture,
+ * not folding it into the selection click. S003's own "picker replaced
+ * by the selected label, zero picker buttons left" tests are scoped to
+ * the picker's own scenario buttons specifically (see their own updated
+ * comments) rather than "zero buttons of any kind" — this story's
+ * differently-purposed confirm button legitimately coexists at that same
+ * point without those tests' original intent actually changing.
+ *
+ * E09-S006 "Query loading state": once `confirmedAt` is set and
+ * `executedAt` isn't, a useEffect automatically starts execution — no
+ * extra click. Confirming already IS the user's intent-to-execute
+ * gesture (S005's own reasoning above); requiring a second explicit
+ * "now actually run it" action would just be redundant friction, not a
+ * genuinely different decision point. This makes S005's own original
+ * "查詢已確認,準備執行。" resting message transient rather than a state a
+ * user could ever actually observe held still, so it's removed — S005's
+ * own two tests that asserted it are updated/removed accordingly (full
+ * reasoning in docs/stories/E09-S006.md, self-adopted as a single-story,
+ * low-risk, fully reversible UX decision per STORY_WORKFLOW's own
+ * "advisor Step 4" self-adoption criteria).
+ *
+ * This is the first mutation in E09's own flow that touches something
+ * SOURCE_BASELINE pinned #22 ("SQL execution must be audited") actually
+ * cares about (even though execution itself is still simulated, not a
+ * real SELECT) — S002/S003/S005 all judged their own equivalent AC as
+ * N/A because nothing before this point does anything resembling data
+ * access. trackEvent (this codebase's own established E14 stand-in —
+ * see telemetry.ts's own doc comment, and E05-S006/E07-S022's own
+ * precedent for using it as the interim audit channel) fires
+ * attempt/success/failure around the execution, payload limited to
+ * `erpQueryId`/`scenarioId` (fixed-vocabulary, same category as
+ * errorCode) — never `questionText`, same free-form-content restraint
+ * every other telemetry call in this epic already keeps.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -69,6 +94,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
   const [selectionError, setSelectionError] = useState(false);
   const [confirmPending, setConfirmPending] = useState(false);
   const [confirmError, setConfirmError] = useState(false);
+  const [executionError, setExecutionError] = useState(false);
 
   async function handleSelectScenario(scenarioId: string) {
     if (selectionPending) return;
@@ -141,6 +167,42 @@ export default function ErpQueryDetail({ id }: { id: string }) {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (state.status !== "loaded") return;
+    const { erpQuery } = state;
+    if (!erpQuery.confirmedAt || erpQuery.executedAt) return;
+
+    let cancelled = false;
+    const correlationId = crypto.randomUUID();
+    setExecutionError(false);
+    logger.info("executing ERP query", { correlationId, id });
+    trackEvent("erp_query_execute_attempt", {
+      correlationId,
+      properties: { erpQueryId: id, scenarioId: erpQuery.selectedScenarioId },
+    });
+
+    (async () => {
+      await simulateErpQueryExecution();
+      const result = await executeErpQuery(id);
+      if (cancelled) return;
+
+      if (!result.ok) {
+        logger.error("failed to execute ERP query", { correlationId, id, code: result.error.code });
+        trackEvent("erp_query_execute_failure", { correlationId, properties: { erpQueryId: id, code: result.error.code } });
+        setExecutionError(true);
+        return;
+      }
+
+      logger.info("ERP query executed", { correlationId, id });
+      trackEvent("erp_query_execute_success", { correlationId, properties: { erpQueryId: id } });
+      setState({ status: "loaded", erpQuery: result.value });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state, id]);
+
   if (state.status === "loading") {
     return (
       <main style={{ padding: 32 }}>
@@ -180,8 +242,17 @@ export default function ErpQueryDetail({ id }: { id: string }) {
       {selectedScenario ? (
         <div style={{ marginBottom: 16 }}>
           <p>查詢情境:{selectedScenario.label}</p>
-          {erpQuery.confirmedAt ? (
-            <p>查詢已確認，準備執行。</p>
+          {erpQuery.executedAt ? (
+            <p>查詢已執行完成。</p>
+          ) : erpQuery.confirmedAt ? (
+            executionError ? (
+              <ErrorMessage message="無法執行查詢，請稍後再試。" />
+            ) : (
+              <>
+                <LoadingIndicator />
+                <p>執行中…</p>
+              </>
+            )
           ) : (
             <>
               <button type="button" onClick={handleConfirm} disabled={confirmPending}>

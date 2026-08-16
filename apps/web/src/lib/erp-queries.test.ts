@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { confirmErpQuery, getErpQuery, listErpQueries, selectErpQueryScenario, submitErpQuery } from "./erp-queries";
+import {
+  confirmErpQuery,
+  executeErpQuery,
+  getErpQuery,
+  listErpQueries,
+  selectErpQueryScenario,
+  submitErpQuery,
+} from "./erp-queries";
 import { ERP_SCENARIO_OPTIONS } from "./erp-scenarios";
 
 describe("listErpQueries (E09-S001)", () => {
@@ -188,5 +195,57 @@ describe("confirmErpQuery (E09-S005)", () => {
     expect(fetched.ok).toBe(true);
     if (!fetched.ok) return;
     expect(fetched.value?.confirmedAt).toBeUndefined();
+  });
+});
+
+describe("executeErpQuery (E09-S006)", () => {
+  async function createConfirmedQuery(questionText: string) {
+    const created = await submitErpQuery(questionText);
+    if (!created.ok) throw new Error("setup failed: submitErpQuery");
+    const scenario = ERP_SCENARIO_OPTIONS[0]!;
+    const selected = await selectErpQueryScenario(created.value.id, scenario.id);
+    if (!selected.ok) throw new Error("setup failed: selectErpQueryScenario");
+    const confirmed = await confirmErpQuery(created.value.id);
+    if (!confirmed.ok) throw new Error("setup failed: confirmErpQuery");
+    return created.value.id;
+  }
+
+  it("records an executedAt timestamp on a query that is already confirmed", async () => {
+    const id = await createConfirmedQuery("上季各產品線的毛利率是多少?");
+
+    const result = await executeErpQuery(id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.executedAt).toBeTruthy();
+    expect(result.value.confirmedAt).toBeTruthy();
+
+    const fetched = await getErpQuery(id);
+    expect(fetched.ok).toBe(true);
+    if (!fetched.ok) return;
+    expect(fetched.value?.executedAt).toBeTruthy();
+  });
+
+  it("fails with NOT_FOUND for an unknown query id, with no side effect", async () => {
+    const result = await executeErpQuery("not-a-real-query-id");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("fails with VALIDATION_ERROR when the query has not been confirmed yet, with no side effect", async () => {
+    const created = await submitErpQuery("測試尚未確認就執行");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await executeErpQuery(created.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const fetched = await getErpQuery(created.value.id);
+    expect(fetched.ok).toBe(true);
+    if (!fetched.ok) return;
+    expect(fetched.value?.executedAt).toBeUndefined();
   });
 });

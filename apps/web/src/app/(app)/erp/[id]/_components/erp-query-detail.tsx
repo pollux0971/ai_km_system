@@ -16,6 +16,7 @@ import { getAppliedFilterLabel } from "@/lib/erp-applied-filters";
 import { erpResultTableToCsv } from "@/lib/erp-result-export";
 import { simulateErpExportProgress } from "@/lib/erp-export-progress";
 import { ERP_PREDICTION_HORIZONS } from "@/lib/erp-prediction-horizons";
+import { getErpPrediction } from "@/lib/erp-predictions";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -246,6 +247,15 @@ type State =
  * separate, later stories — this one only owns the selection UI, same
  * "don't invent the next story's own capability" restraint S008 already
  * applied to S009's pagination.
+ *
+ * E09-S019 "Prediction result" adds one more line inside the "AI 預測"
+ * group, right after the horizon buttons: getErpPrediction's own text,
+ * shown once predictionHorizonId is set (nothing to predict before a
+ * horizon is chosen). Reuses selectedScenario's own already-computed
+ * label — same single-source-of-truth discipline every other line in
+ * this file already follows — rather than re-deriving or hand-typing it
+ * again. Unlike S018's own render change, this adds no new button, so
+ * S006's own "no leftover buttons" assertion needed no further update.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -556,6 +566,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
                     {horizon.label}
                   </button>
                 ))}
+                {predictionHorizonId && <p>{getErpPrediction(selectedScenario?.label ?? "", predictionHorizonId)}</p>}
               </div>
             </>
           ) : erpQuery.confirmedAt ? (

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
-import { getErpQuery, selectErpQueryScenario, type ErpQuerySummary } from "@/lib/erp-queries";
+import { confirmErpQuery, getErpQuery, selectErpQueryScenario, type ErpQuerySummary } from "@/lib/erp-queries";
 import { isAmbiguousErpQuery, matchErpScenarios } from "@/lib/erp-scenarios";
 
 const logger = createLogger("web:erp-query-detail");
@@ -17,11 +17,11 @@ type State =
 
 /**
  * E09-S002 "Natural-language query composer" — the `/erp/[id]` route
- * NewErpQueryPage redirects to on a successful submission. E09-S005
- * confirmation, S006 loading, S007+ results are their own separate
- * stories that grow what this page shows further — same "don't invent a
- * field/section ahead of the story that owns it" discipline this
- * codebase applies everywhere else.
+ * NewErpQueryPage redirects to on a successful submission. E09-S006
+ * loading, S007+ results are their own separate stories that grow what
+ * this page shows further — same "don't invent a field/section ahead of
+ * the story that owns it" discipline this codebase applies everywhere
+ * else.
  *
  * E09-S003 "Query scenario selector" adds the picker below: once loaded,
  * matchErpScenarios(erpQuery.questionText) surfaces candidate whitelisted
@@ -41,6 +41,20 @@ type State =
  * follow-up questions) is explicitly out of this story's own MVP scope
  * (AC 8 allows simplifying the algorithm, not skipping the capability).
  *
+ * E09-S005 "Query confirmation UI" adds one more gate once a scenario is
+ * selected: a 確認執行查詢 button the user must explicitly click before
+ * this query is considered ready for S006's own execution/loading step
+ * (which doesn't exist yet — `confirmedAt` is as far as this story goes).
+ * Deliberately does NOT let picking a scenario auto-confirm — the whole
+ * point of a dedicated confirmation story is an explicit, separate
+ * intent-to-execute gesture, not folding it into the selection click.
+ * S003's own "picker replaced by the selected label, zero picker buttons
+ * left" tests are scoped to the picker's own scenario buttons
+ * specifically (see their own updated comments) rather than "zero
+ * buttons of any kind" — this story's differently-purposed confirm
+ * button legitimately coexists at that same point without those tests'
+ * original intent actually changing.
+ *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
  * documents for MaintenanceCaseList — ErpQueryList's own "renders no
@@ -53,6 +67,8 @@ export default function ErpQueryDetail({ id }: { id: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [selectionPending, setSelectionPending] = useState(false);
   const [selectionError, setSelectionError] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [confirmError, setConfirmError] = useState(false);
 
   async function handleSelectScenario(scenarioId: string) {
     if (selectionPending) return;
@@ -72,6 +88,27 @@ export default function ErpQueryDetail({ id }: { id: string }) {
     }
 
     logger.info("ERP query scenario selected", { correlationId, id, scenarioId });
+    setState({ status: "loaded", erpQuery: result.value });
+  }
+
+  async function handleConfirm() {
+    if (confirmPending) return;
+
+    const correlationId = crypto.randomUUID();
+    setConfirmPending(true);
+    setConfirmError(false);
+    logger.info("confirming ERP query", { correlationId, id });
+
+    const result = await confirmErpQuery(id);
+    setConfirmPending(false);
+
+    if (!result.ok) {
+      logger.error("failed to confirm ERP query", { correlationId, id, code: result.error.code });
+      setConfirmError(true);
+      return;
+    }
+
+    logger.info("ERP query confirmed", { correlationId, id });
     setState({ status: "loaded", erpQuery: result.value });
   }
 
@@ -141,7 +178,23 @@ export default function ErpQueryDetail({ id }: { id: string }) {
         <time dateTime={erpQuery.createdAt}>{new Date(erpQuery.createdAt).toLocaleString("zh-TW")}</time>
       </p>
       {selectedScenario ? (
-        <p>查詢情境:{selectedScenario.label}</p>
+        <div style={{ marginBottom: 16 }}>
+          <p>查詢情境:{selectedScenario.label}</p>
+          {erpQuery.confirmedAt ? (
+            <p>查詢已確認，準備執行。</p>
+          ) : (
+            <>
+              <button type="button" onClick={handleConfirm} disabled={confirmPending}>
+                確認執行查詢
+              </button>
+              {confirmError && (
+                <div style={{ marginTop: 8 }}>
+                  <ErrorMessage message="無法確認查詢，請稍後再試。" />
+                </div>
+              )}
+            </>
+          )}
+        </div>
       ) : (
         <div style={{ marginBottom: 16 }}>
           <p>

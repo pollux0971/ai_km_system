@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getErpQuery, listErpQueries, selectErpQueryScenario, submitErpQuery } from "./erp-queries";
+import { confirmErpQuery, getErpQuery, listErpQueries, selectErpQueryScenario, submitErpQuery } from "./erp-queries";
 import { ERP_SCENARIO_OPTIONS } from "./erp-scenarios";
 
 describe("listErpQueries (E09-S001)", () => {
@@ -142,5 +142,51 @@ describe("selectErpQueryScenario (E09-S003)", () => {
     expect(fetched.ok).toBe(true);
     if (!fetched.ok) return;
     expect(fetched.value?.selectedScenarioId).toBeUndefined();
+  });
+});
+
+describe("confirmErpQuery (E09-S005)", () => {
+  it("records a confirmedAt timestamp on a query that already has a selected scenario", async () => {
+    const created = await submitErpQuery("上季各產品線的毛利率是多少?");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const scenario = ERP_SCENARIO_OPTIONS[0]!;
+    const selected = await selectErpQueryScenario(created.value.id, scenario.id);
+    expect(selected.ok).toBe(true);
+
+    const result = await confirmErpQuery(created.value.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.confirmedAt).toBeTruthy();
+    expect(result.value.selectedScenarioId).toBe(scenario.id);
+
+    const fetched = await getErpQuery(created.value.id);
+    expect(fetched.ok).toBe(true);
+    if (!fetched.ok) return;
+    expect(fetched.value?.confirmedAt).toBeTruthy();
+  });
+
+  it("fails with NOT_FOUND for an unknown query id, with no side effect", async () => {
+    const result = await confirmErpQuery("not-a-real-query-id");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("fails with VALIDATION_ERROR when no scenario has been selected yet, with no side effect", async () => {
+    const created = await submitErpQuery("測試尚未選擇情境就確認");
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await confirmErpQuery(created.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+
+    const fetched = await getErpQuery(created.value.id);
+    expect(fetched.ok).toBe(true);
+    if (!fetched.ok) return;
+    expect(fetched.value?.confirmedAt).toBeUndefined();
   });
 });

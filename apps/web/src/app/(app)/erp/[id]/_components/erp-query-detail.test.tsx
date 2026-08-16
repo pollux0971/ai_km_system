@@ -1,16 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ErpQueryDetail from "./erp-query-detail";
-import { getErpQuery, selectErpQueryScenario } from "@/lib/erp-queries";
+import { confirmErpQuery, getErpQuery, selectErpQueryScenario } from "@/lib/erp-queries";
 import { matchErpScenarios } from "@/lib/erp-scenarios";
 
 vi.mock("@/lib/erp-queries", () => ({
   getErpQuery: vi.fn(),
   selectErpQueryScenario: vi.fn(),
+  confirmErpQuery: vi.fn(),
 }));
 
 const mockedGetErpQuery = vi.mocked(getErpQuery);
 const mockedSelectErpQueryScenario = vi.mocked(selectErpQueryScenario);
+const mockedConfirmErpQuery = vi.mocked(confirmErpQuery);
 
 const sampleQuery = {
   id: "query1",
@@ -104,7 +106,14 @@ describe("ErpQueryDetail scenario selector (E09-S003)", () => {
 
     await waitFor(() => expect(mockedSelectErpQueryScenario).toHaveBeenCalledWith("query2", scenario.id));
     expect(await screen.findByText(`查詢情境:${scenario.label}`)).toBeInTheDocument();
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // Scoped to the picker's own scenario buttons (identified by label) —
+    // not "zero buttons of any kind": E09-S005 "Query confirmation UI"
+    // legitimately adds its own, differently-purposed 確認執行查詢 button
+    // at exactly this point, which this assertion was never meant to
+    // guard against. See erp-query-detail.tsx's own updated doc comment.
+    for (const candidate of matchErpScenarios(matchingQuestionQuery.questionText)) {
+      expect(screen.queryByRole("button", { name: candidate.label })).not.toBeInTheDocument();
+    }
   });
 
   it("shows the already-selected scenario directly, with no picker, when the query already has one", async () => {
@@ -118,7 +127,10 @@ describe("ErpQueryDetail scenario selector (E09-S003)", () => {
     await screen.findByRole("heading", { name: matchingQuestionQuery.questionText, level: 1 });
 
     expect(screen.getByText(`查詢情境:${scenario.label}`)).toBeInTheDocument();
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // Scoped the same way as the test above — see its own comment.
+    for (const candidate of matchErpScenarios(matchingQuestionQuery.questionText)) {
+      expect(screen.queryByRole("button", { name: candidate.label })).not.toBeInTheDocument();
+    }
   });
 
   it("shows a distinct error alert when selecting a scenario fails, and keeps the picker visible", async () => {
@@ -176,5 +188,69 @@ describe("ErpQueryDetail clarification wording (E09-S004)", () => {
     await screen.findByRole("heading", { name: sampleQuery.questionText, level: 1 });
 
     expect(screen.queryByText(/無法確定您的問題屬於哪個查詢情境/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ErpQueryDetail confirmation (E09-S005)", () => {
+  const selectedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+  };
+  const scenarioLabel = matchErpScenarios(selectedQuery.questionText)[0]!.label;
+
+  it("shows a confirm button once a scenario is selected but not yet confirmed", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: selectedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: selectedQuery.questionText, level: 1 });
+
+    expect(screen.getByText(`查詢情境:${scenarioLabel}`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "確認執行查詢" })).toBeInTheDocument();
+  });
+
+  it("clicking confirm calls confirmErpQuery and then shows the confirmed state instead of the button", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: selectedQuery });
+    mockedConfirmErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...selectedQuery, confirmedAt: "2026-08-16T00:05:00.000Z" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: selectedQuery.questionText, level: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "確認執行查詢" }));
+
+    await waitFor(() => expect(mockedConfirmErpQuery).toHaveBeenCalledWith("query2"));
+    expect(await screen.findByText("查詢已確認，準備執行。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "確認執行查詢" })).not.toBeInTheDocument();
+  });
+
+  it("shows the confirmed state directly, with no confirm button, when the query is already confirmed", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...selectedQuery, confirmedAt: "2026-08-16T00:05:00.000Z" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: selectedQuery.questionText, level: 1 });
+
+    expect(screen.getByText("查詢已確認，準備執行。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "確認執行查詢" })).not.toBeInTheDocument();
+  });
+
+  it("shows a distinct error alert when confirming fails, and keeps the confirm button", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: selectedQuery });
+    mockedConfirmErpQuery.mockResolvedValue({
+      ok: false,
+      error: { code: "SERVICE_UNAVAILABLE", message: "down" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: selectedQuery.questionText, level: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "確認執行查詢" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("無法確認查詢");
+    expect(screen.getByRole("button", { name: "確認執行查詢" })).toBeInTheDocument();
   });
 });

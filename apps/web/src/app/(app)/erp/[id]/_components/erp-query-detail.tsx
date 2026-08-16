@@ -10,6 +10,7 @@ import { simulateErpQueryExecution } from "@/lib/erp-execution";
 import { getErpResultSummary } from "@/lib/erp-results";
 import { getErpResultTable } from "@/lib/erp-result-tables";
 import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
+import { getErpResultKpi } from "@/lib/erp-result-kpis";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -112,6 +113,13 @@ type State =
  * approved test's precondition stale, same category of change S005→S006
  * already established precedent for in this same file, documented in
  * docs/stories/E09-S009.md.
+ *
+ * E09-S010 "KPI card" adds getErpResultKpi(erpQuery.selectedScenarioId)
+ * between the summary and the table — a single derived headline number
+ * (the table's own total row count, not a hand-typed duplicate of it;
+ * see erp-result-kpis.ts's own doc comment for why, tying back to the
+ * cross-file drift E09-S008's own independent review caught). Purely
+ * additive, no existing test needed to change.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -280,6 +288,15 @@ export default function ErpQueryDetail({ id }: { id: string }) {
             <>
               <p>查詢已執行完成。</p>
               <p>{getErpResultSummary(erpQuery.selectedScenarioId ?? "")}</p>
+              {(() => {
+                const kpi = getErpResultKpi(erpQuery.selectedScenarioId ?? "");
+                return (
+                  <div role="group" aria-label="關鍵指標">
+                    <p>{kpi.label}</p>
+                    <p>{kpi.value}</p>
+                  </div>
+                );
+              })()}
               {(() => {
                 const paginated = paginateErpResultTable(getErpResultTable(erpQuery.selectedScenarioId ?? ""), tablePage);
                 return (

@@ -25,6 +25,14 @@ import { ERP_SCENARIO_OPTIONS } from "./erp-scenarios";
  * "store when, not just whether" precedent `createdAt` itself already
  * sets for this same interface.
  *
+ * `executedAt` (E09-S006 "Query loading state") is optional the same
+ * way again — absent until executeErpQuery() completes for an already-
+ * confirmed query. This is the first field in this file whose owning
+ * mutation genuinely triggers SOURCE_BASELINE pinned #22's audit
+ * requirement (see executeErpQuery's own doc comment) — S002/S003/S005
+ * all judged their own equivalent AC as N/A because nothing before this
+ * point actually touches ERP data, even in simulated form.
+ *
  * The real ERP query engine and its E10 (Enterprise Data Integration,
  * Team B) backend don't exist yet — `contracts/` has zero hits for
  * erp/E10, and E10 is Team B's own separate epic. Per SOURCE_BASELINE
@@ -37,6 +45,7 @@ export interface ErpQuerySummary {
   createdAt: string;
   selectedScenarioId?: string;
   confirmedAt?: string;
+  executedAt?: string;
 }
 
 /**
@@ -187,6 +196,40 @@ export async function confirmErpQuery(id: string): Promise<Result<ErpQuerySummar
   }
 
   const updated: ErpQuerySummary = { ...query, confirmedAt: new Date().toISOString() };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E09-S006 "Query loading state". Records that a confirmed query has
+ * actually run (in this MVP: a simulated, always-successful mock, not a
+ * real SELECT against a whitelisted view — see erp-execution.ts's own
+ * doc comment for the timing primitive this is paired with). Fails
+ * closed with NOT_FOUND for an unknown query id and VALIDATION_ERROR
+ * when the query has not been confirmed yet, same shape and
+ * server-validates-too discipline every sibling mutation in this file
+ * already follows.
+ *
+ * This is the first mutation in this file whose caller genuinely needs
+ * a real audit event rather than judging AC7 N/A — see
+ * erp-query-detail.tsx's own updated doc comment for where that
+ * trackEvent call actually lives (the component, not here: this
+ * function only owns the data mutation itself, same "mutation and
+ * telemetry are the caller's job, not the lib function's" separation
+ * every other mutation in this file already keeps).
+ */
+export async function executeErpQuery(id: string): Promise<Result<ErpQuerySummary, ApiError>> {
+  const store = readStore();
+  const query = store.find((item) => item.id === id);
+  if (!query) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個 ERP 查詢。" } };
+  }
+
+  if (!query.confirmedAt) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請先確認查詢。" } };
+  }
+
+  const updated: ErpQuerySummary = { ...query, executedAt: new Date().toISOString() };
   writeStore(store.map((item) => (item.id === id ? updated : item)));
   return { ok: true, value: updated };
 }

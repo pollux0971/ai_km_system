@@ -1,18 +1,37 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ErpQueryDetail from "./erp-query-detail";
-import { confirmErpQuery, getErpQuery, selectErpQueryScenario } from "@/lib/erp-queries";
+import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario } from "@/lib/erp-queries";
 import { matchErpScenarios } from "@/lib/erp-scenarios";
+import { simulateErpQueryExecution } from "@/lib/erp-execution";
+import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/erp-queries", () => ({
   getErpQuery: vi.fn(),
   selectErpQueryScenario: vi.fn(),
   confirmErpQuery: vi.fn(),
+  executeErpQuery: vi.fn(),
+}));
+
+vi.mock("@/lib/erp-execution", () => ({
+  simulateErpQueryExecution: vi.fn(),
+}));
+
+vi.mock("@/lib/telemetry", () => ({
+  trackEvent: vi.fn(),
 }));
 
 const mockedGetErpQuery = vi.mocked(getErpQuery);
 const mockedSelectErpQueryScenario = vi.mocked(selectErpQueryScenario);
 const mockedConfirmErpQuery = vi.mocked(confirmErpQuery);
+const mockedExecuteErpQuery = vi.mocked(executeErpQuery);
+const mockedSimulateErpQueryExecution = vi.mocked(simulateErpQueryExecution);
+const mockedTrackEvent = vi.mocked(trackEvent);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockedSimulateErpQueryExecution.mockResolvedValue(undefined);
+});
 
 const sampleQuery = {
   id: "query1",
@@ -210,32 +229,20 @@ describe("ErpQueryDetail confirmation (E09-S005)", () => {
     expect(screen.getByRole("button", { name: "確認執行查詢" })).toBeInTheDocument();
   });
 
-  it("clicking confirm calls confirmErpQuery and then shows the confirmed state instead of the button", async () => {
+  it("clicking confirm calls confirmErpQuery and then shows the loading state instead of the button (E09-S006 auto-triggers execution — see erp-query-detail.tsx's own updated doc comment)", async () => {
     mockedGetErpQuery.mockResolvedValue({ ok: true, value: selectedQuery });
     mockedConfirmErpQuery.mockResolvedValue({
       ok: true,
       value: { ...selectedQuery, confirmedAt: "2026-08-16T00:05:00.000Z" },
     });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
 
     render(<ErpQueryDetail id="query2" />);
     await screen.findByRole("heading", { name: selectedQuery.questionText, level: 1 });
     fireEvent.click(screen.getByRole("button", { name: "確認執行查詢" }));
 
     await waitFor(() => expect(mockedConfirmErpQuery).toHaveBeenCalledWith("query2"));
-    expect(await screen.findByText("查詢已確認，準備執行。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "確認執行查詢" })).not.toBeInTheDocument();
-  });
-
-  it("shows the confirmed state directly, with no confirm button, when the query is already confirmed", async () => {
-    mockedGetErpQuery.mockResolvedValue({
-      ok: true,
-      value: { ...selectedQuery, confirmedAt: "2026-08-16T00:05:00.000Z" },
-    });
-
-    render(<ErpQueryDetail id="query2" />);
-    await screen.findByRole("heading", { name: selectedQuery.questionText, level: 1 });
-
-    expect(screen.getByText("查詢已確認，準備執行。")).toBeInTheDocument();
+    expect(await screen.findByText("執行中…")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "確認執行查詢" })).not.toBeInTheDocument();
   });
 
@@ -252,5 +259,111 @@ describe("ErpQueryDetail confirmation (E09-S005)", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("無法確認查詢");
     expect(screen.getByRole("button", { name: "確認執行查詢" })).toBeInTheDocument();
+  });
+});
+
+describe("ErpQueryDetail query execution (E09-S006)", () => {
+  const confirmedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+  };
+
+  it("automatically starts executing (no extra click) once a query is confirmed but not yet executed, showing a loading state", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQuery });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQuery.questionText, level: 1 });
+
+    expect(await screen.findByText("執行中…")).toBeInTheDocument();
+    await waitFor(() => expect(mockedSimulateErpQueryExecution).toHaveBeenCalled());
+    await waitFor(() => expect(mockedExecuteErpQuery).toHaveBeenCalledWith("query2"));
+  });
+
+  it("shows an executed-done message once execution succeeds, with no loading text and no buttons left", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQuery });
+    mockedExecuteErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...confirmedQuery, executedAt: "2026-08-16T00:05:01.000Z" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQuery.questionText, level: 1 });
+
+    expect(await screen.findByText("查詢已執行完成。")).toBeInTheDocument();
+    expect(screen.queryByText("執行中…")).not.toBeInTheDocument();
+    expect(screen.getByRole("main").querySelectorAll("button")).toHaveLength(0);
+  });
+
+  it("does not re-trigger execution when the query is already executed", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...confirmedQuery, executedAt: "2026-08-16T00:05:01.000Z" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQuery.questionText, level: 1 });
+    await screen.findByText("查詢已執行完成。");
+
+    expect(mockedSimulateErpQueryExecution).not.toHaveBeenCalled();
+    expect(mockedExecuteErpQuery).not.toHaveBeenCalled();
+  });
+
+  it("shows a distinct error alert when execution fails, without claiming success", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQuery });
+    mockedExecuteErpQuery.mockResolvedValue({
+      ok: false,
+      error: { code: "SERVICE_UNAVAILABLE", message: "down" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQuery.questionText, level: 1 });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("無法執行查詢");
+    expect(screen.queryByText("查詢已執行完成。")).not.toBeInTheDocument();
+  });
+
+  it("emits attempt and success audit telemetry sharing the same correlation id, excluding the free-form question text", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQuery });
+    mockedExecuteErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...confirmedQuery, executedAt: "2026-08-16T00:05:01.000Z" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQuery.questionText, level: 1 });
+    await screen.findByText("查詢已執行完成。");
+
+    const attemptCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_execute_attempt");
+    const successCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_execute_success");
+    expect(attemptCall).toBeDefined();
+    expect(successCall).toBeDefined();
+    const attemptId = (attemptCall as [string, { correlationId: string }])[1].correlationId;
+    const successId = (successCall as [string, { correlationId: string }])[1].correlationId;
+    expect(attemptId).toBe(successId);
+
+    for (const call of mockedTrackEvent.mock.calls) {
+      const properties = (call as [string, { properties?: Record<string, unknown> }])[1]?.properties;
+      expect(JSON.stringify(properties ?? {})).not.toContain(confirmedQuery.questionText);
+    }
+  });
+
+  it("emits failure audit telemetry with the error code when execution fails", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQuery });
+    mockedExecuteErpQuery.mockResolvedValue({
+      ok: false,
+      error: { code: "SERVICE_UNAVAILABLE", message: "down" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQuery.questionText, level: 1 });
+    await screen.findByRole("alert");
+
+    const failureCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_execute_failure");
+    expect(failureCall).toBeDefined();
+    expect((failureCall as [string, { properties: { code: string } }])[1].properties.code).toBe("SERVICE_UNAVAILABLE");
   });
 });

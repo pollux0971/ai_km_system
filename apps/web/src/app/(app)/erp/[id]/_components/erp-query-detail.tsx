@@ -148,6 +148,17 @@ type State =
  * only means something once a result actually exists), unlike S012's
  * own applied-filter line just above. Purely additive.
  *
+ * E09-S014 "Source-system badge" adds one more constant line right
+ * after the freshness badge — a literal, hand-typed string, not derived
+ * from anything on erpQuery. Checked before writing this: neither
+ * SOURCE_BASELINE.md nor this epic's own file ever names a specific ERP
+ * product (no "SAP"/"Oracle"/etc. anywhere), and pinned decisions #19-21
+ * only ever describe "ERP" singular + "whitelist view" (plural views,
+ * one system) — this MVP has exactly one (simulated) data source, not
+ * several, so the badge is identical for every scenario rather than
+ * scenario-derived. Gated on executedAt like S013 (both describe the
+ * result's own provenance). Purely additive.
+ *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
  * documents for MaintenanceCaseList — ErpQueryList's own "renders no
@@ -318,6 +329,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
               <p>
                 資料更新時間：<time dateTime={erpQuery.executedAt}>{new Date(erpQuery.executedAt).toLocaleString("zh-TW")}</time>
               </p>
+              <p>資料來源系統：模擬 ERP 系統(MVP,唯讀)</p>
               <p>{getErpResultSummary(erpQuery.selectedScenarioId ?? "")}</p>
               {(() => {
                 const kpi = getErpResultKpi(erpQuery.selectedScenarioId ?? "");

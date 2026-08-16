@@ -75,4 +75,22 @@ describe("ErpQueryList (E09-S001)", () => {
     expect(await screen.findByRole("link", { name: /第一筆查詢/ })).toHaveAttribute("href", "/erp/query1");
     expect(screen.getByRole("link", { name: /第二筆查詢/ })).toHaveAttribute("href", "/erp/query2");
   });
+
+  it("includes the timestamp inside the clickable link, not just the question text", async () => {
+    mockedListErpQueries.mockResolvedValue({
+      ok: true,
+      value: [{ id: "query1", questionText: "測試 ERP 查詢", createdAt: "2026-08-14T06:30:00.000Z" }],
+    });
+
+    render(<ErpQueryList />);
+
+    // A blanket "matches this text" query on the link's accessible name
+    // would still pass even if the timestamp were moved outside the
+    // link (its name would still contain the question text) — this
+    // checks the actual DOM structure directly instead, so a future
+    // refactor that narrows the clickable area can't silently regress
+    // the "whole item is clickable" UX this story's own EVIDENCE claims.
+    const link = await screen.findByRole("link", { name: /測試 ERP 查詢/ });
+    expect(link.querySelector("time")).not.toBeNull();
+  });
 });

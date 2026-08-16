@@ -262,4 +262,12 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await predictionGroup.getByRole("button", { name: "下年" }).click();
   await expect(predictionGroup.getByText("預測「各分公司營收」下年將較本期成長約 15%。")).toBeVisible();
   await expect(predictionGroup.getByText("預測「各分公司營收」下季將較本期成長約 8%。")).toHaveCount(0);
+
+  // E09-S020 "Prediction disclaimer" — additive again: a constant,
+  // honest-mock disclosure shown alongside the prediction result.
+  await expect(
+    predictionGroup.getByText(
+      "（模擬預測）此預測套用固定的簡化成長率假設，並非真實財務預測或對未來表現的保證，正式版本中將由實際的預測模型產生。",
+    ),
+  ).toBeVisible();
 });

@@ -1121,3 +1121,50 @@ describe("ErpQueryDetail prediction result (E09-S019)", () => {
     expect(screen.queryByText(getErpPrediction(scenarioLabel, "next-month"))).not.toBeInTheDocument();
   });
 });
+
+describe("ErpQueryDetail prediction disclaimer (E09-S020)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+  const disclaimerText = "（模擬預測）此預測套用固定的簡化成長率假設，並非真實財務預測或對未來表現的保證，正式版本中將由實際的預測模型產生。";
+
+  it("does not show the prediction disclaimer before any horizon is selected", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByRole("group", { name: "AI 預測" });
+
+    expect(screen.queryByText(disclaimerText)).not.toBeInTheDocument();
+  });
+
+  it("shows the prediction disclaimer once a horizon is selected, alongside the prediction result", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    fireEvent.click(within(group).getByRole("button", { name: "下季" }));
+
+    expect(await screen.findByText(disclaimerText)).toBeInTheDocument();
+  });
+
+  it("keeps showing the identical disclaimer text when the horizon is switched", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const group = await screen.findByRole("group", { name: "AI 預測" });
+    fireEvent.click(within(group).getByRole("button", { name: "下月" }));
+    await screen.findByText(disclaimerText);
+
+    fireEvent.click(within(group).getByRole("button", { name: "下年" }));
+
+    expect(await screen.findByText(disclaimerText)).toBeInTheDocument();
+  });
+});

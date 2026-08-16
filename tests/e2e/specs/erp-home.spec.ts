@@ -123,6 +123,11 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   // value itself.
   await expect(page.getByText("資料更新時間：")).toBeVisible();
 
+  // E09-S014 "Source-system badge" — additive again: a constant, literal
+  // string (this MVP has exactly one simulated ERP data source, not a
+  // real named product), identical for every scenario.
+  await expect(page.getByText("資料來源系統：模擬 ERP 系統(MVP,唯讀)")).toBeVisible();
+
   // E09-S009 "Server pagination UI" (below) legitimately adds its own
   // 上一頁/下一頁 nav buttons at this exact resting state — a different
   // kind of control (browsing an already-complete result) from what this

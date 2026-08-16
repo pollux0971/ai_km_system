@@ -207,12 +207,12 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   // exercised here rather than a control that never actually triggers.
   await expect(page.getByRole("cell", { name: "高雄" })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "查詢結果分頁" })).toBeVisible();
-  await expect(page.getByText("第 1 頁，共 2 頁")).toBeVisible();
+  await expect(page.getByText("第 1 頁，共 2 頁（共 3 筆）")).toBeVisible();
   await expect(page.getByRole("button", { name: "上一頁" })).toBeDisabled();
   await page.getByRole("button", { name: "下一頁" }).click();
   await expect(page.getByRole("cell", { name: "高雄" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "台北" })).toHaveCount(0);
-  await expect(page.getByText("第 2 頁，共 2 頁")).toBeVisible();
+  await expect(page.getByText("第 2 頁，共 2 頁（共 3 筆）")).toBeVisible();
   await expect(page.getByRole("button", { name: "下一頁" })).toBeDisabled();
 
   // E09-S016 "Excel export action" — additive again: a real CSV download

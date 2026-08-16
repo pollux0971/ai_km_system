@@ -4,6 +4,7 @@ import ErpQueryDetail from "./erp-query-detail";
 import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario } from "@/lib/erp-queries";
 import { matchErpScenarios } from "@/lib/erp-scenarios";
 import { simulateErpQueryExecution } from "@/lib/erp-execution";
+import { simulateErpExportProgress } from "@/lib/erp-export-progress";
 import { getErpResultSummary } from "@/lib/erp-results";
 import { getErpResultTable } from "@/lib/erp-result-tables";
 import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
@@ -23,6 +24,10 @@ vi.mock("@/lib/erp-execution", () => ({
   simulateErpQueryExecution: vi.fn(),
 }));
 
+vi.mock("@/lib/erp-export-progress", () => ({
+  simulateErpExportProgress: vi.fn(),
+}));
+
 vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
@@ -32,11 +37,25 @@ const mockedSelectErpQueryScenario = vi.mocked(selectErpQueryScenario);
 const mockedConfirmErpQuery = vi.mocked(confirmErpQuery);
 const mockedExecuteErpQuery = vi.mocked(executeErpQuery);
 const mockedSimulateErpQueryExecution = vi.mocked(simulateErpQueryExecution);
+const mockedSimulateErpExportProgress = vi.mocked(simulateErpExportProgress);
 const mockedTrackEvent = vi.mocked(trackEvent);
+
+// E09-S017: the export flow triggers a real download via a programmatic,
+// detached <a download>.click() (see erp-query-detail.tsx's own doc
+// comment) rather than a standing, DOM-inspectable link — intercepting
+// HTMLAnchorElement.prototype.click captures the anchor at the moment of
+// the (attempted) download so its href/download attributes can still be
+// asserted directly, without needing jsdom to implement real navigation.
+const clickedAnchors: HTMLAnchorElement[] = [];
+vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+  clickedAnchors.push(this);
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockedSimulateErpQueryExecution.mockResolvedValue(undefined);
+  mockedSimulateErpExportProgress.mockResolvedValue(undefined);
+  clickedAnchors.length = 0;
 });
 
 const sampleQuery = {
@@ -303,16 +322,19 @@ describe("ErpQueryDetail query execution (E09-S006)", () => {
     expect(screen.queryByText("執行中…")).not.toBeInTheDocument();
 
     // E09-S009 "Server pagination UI" legitimately adds its own nav
-    // buttons (上一頁/下一頁) at this exact resting state — a different
-    // kind of control (browsing an already-complete result) from what
-    // this test actually guards against (no leftover confirm/retry-style
-    // button that would still be driving the query process forward).
-    // Scoped past the pagination nav rather than the original blanket
-    // "zero buttons anywhere" check, same narrowing category as S003's
-    // own scenario-picker assertion narrowed for S005.
+    // buttons (上一頁/下一頁), and E09-S016/S017 "Excel export action"/
+    // "Export progress" legitimately adds its own 匯出 Excel button, at
+    // this exact resting state — different kinds of control (browsing an
+    // already-complete result; exporting it) from what this test actually
+    // guards against (no leftover confirm/retry-style button that would
+    // still be driving the query process forward). Scoped past both
+    // rather than the original blanket "zero buttons anywhere" check,
+    // same narrowing category as S003's own scenario-picker assertion
+    // narrowed for S005.
     const paginationNav = screen.queryByRole("navigation", { name: "查詢結果分頁" });
+    const exportButton = screen.queryByRole("button", { name: "匯出 Excel" });
     const buttonsOutsideNav = Array.from(screen.getByRole("main").querySelectorAll("button")).filter(
-      (button) => !paginationNav?.contains(button),
+      (button) => !paginationNav?.contains(button) && button !== exportButton,
     );
     expect(buttonsOutsideNav).toHaveLength(0);
   });
@@ -807,7 +829,7 @@ describe("ErpQueryDetail source-system badge (E09-S014)", () => {
   });
 });
 
-describe("ErpQueryDetail Excel export action (E09-S016)", () => {
+describe("ErpQueryDetail Excel export action (E09-S016, E09-S017 progress)", () => {
   const executedQuery = {
     id: "query2",
     questionText: "上個月各分公司的營收總額是多少?",
@@ -831,51 +853,16 @@ describe("ErpQueryDetail Excel export action (E09-S016)", () => {
     return decodeCsvHrefRaw(href).replace(/^﻿/, "");
   }
 
-  it("shows an 匯出 Excel link once executed, downloading a CSV data URI", async () => {
+  it("shows a 匯出 Excel button once executed", async () => {
     mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
 
     render(<ErpQueryDetail id="query2" />);
     await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
 
-    const link = await screen.findByRole("link", { name: "匯出 Excel" });
-    expect(link).toHaveAttribute("download", "erp-query-result.csv");
-    decodeCsvHref(link.getAttribute("href") ?? "");
+    expect(await screen.findByRole("button", { name: "匯出 Excel" })).toBeInTheDocument();
   });
 
-  it("prefixes the CSV with a UTF-8 BOM, so Excel doesn't mis-detect the Chinese-character encoding", async () => {
-    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
-
-    render(<ErpQueryDetail id="query2" />);
-    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
-
-    const link = await screen.findByRole("link", { name: "匯出 Excel" });
-    const rawCsv = decodeCsvHrefRaw(link.getAttribute("href") ?? "");
-    expect(rawCsv.startsWith("﻿")).toBe(true);
-  });
-
-  it("the exported CSV contains every row of the full table, including rows beyond the current (page 1) view", async () => {
-    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
-
-    render(<ErpQueryDetail id="query2" />);
-    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
-    // Still on page 1 — 高雄 isn't rendered in the table yet (E09-S009),
-    // but the export must include it regardless: an export is expected to
-    // hold the whole result set, not just whatever page happens to be on
-    // screen.
-    expect(screen.queryByRole("cell", { name: "高雄" })).not.toBeInTheDocument();
-
-    const table = getErpResultTable(executedQuery.selectedScenarioId);
-    const link = await screen.findByRole("link", { name: "匯出 Excel" });
-    const csv = decodeCsvHref(link.getAttribute("href") ?? "");
-
-    for (const row of table.rows) {
-      for (const cell of row) {
-        expect(csv).toContain(cell);
-      }
-    }
-  });
-
-  it("does not show any export link before execution completes", async () => {
+  it("does not show any export button before execution completes", async () => {
     mockedGetErpQuery.mockResolvedValue({
       ok: true,
       value: { ...executedQuery, executedAt: undefined },
@@ -886,25 +873,101 @@ describe("ErpQueryDetail Excel export action (E09-S016)", () => {
     await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
     await screen.findByText("執行中…");
 
-    expect(screen.queryByRole("link", { name: "匯出 Excel" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "匯出 Excel" })).not.toBeInTheDocument();
   });
 
-  it("clicking export fires erp_query_export telemetry with the scenario id and row count, excluding the free-form question text", async () => {
+  // E09-S017 "Export progress" — S016's own generation was instant
+  // (synchronous, in-memory), so clicking the button used to download
+  // immediately with no observable in-between state. This story adds a
+  // simulated delay (erp-export-progress.ts, same shape as
+  // erp-execution.ts's own execution delay) with a distinct 匯出中…
+  // state shown while it runs, same auto-transition shape S006 already
+  // established for query execution (no extra click needed once started).
+  it("E09-S017: shows a 匯出中… progress state while exporting, hiding the button", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+    mockedSimulateErpExportProgress.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    fireEvent.click(await screen.findByRole("button", { name: "匯出 Excel" }));
+
+    expect(await screen.findByText("匯出中…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "匯出 Excel" })).not.toBeInTheDocument();
+  });
+
+  it("E09-S017: returns to the 匯出 Excel button once the simulated export progress completes", async () => {
     mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
 
     render(<ErpQueryDetail id="query2" />);
     await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
-    const link = await screen.findByRole("link", { name: "匯出 Excel" });
-    fireEvent.click(link);
+    fireEvent.click(await screen.findByRole("button", { name: "匯出 Excel" }));
 
-    const exportCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_export");
-    expect(exportCall).toBeDefined();
-    const [, options] = exportCall as [string, { correlationId: string; properties: Record<string, unknown> }];
-    expect(options.properties).toEqual({
+    await waitFor(() => expect(clickedAnchors).toHaveLength(1));
+    expect(await screen.findByRole("button", { name: "匯出 Excel" })).toBeInTheDocument();
+    expect(screen.queryByText("匯出中…")).not.toBeInTheDocument();
+  });
+
+  // The download itself is triggered via a programmatic, detached
+  // <a download>.click() (see erp-query-detail.tsx's own doc comment for
+  // why — S016's original standing, DOM-inspectable <a> can't represent a
+  // "pending" state) — HTMLAnchorElement.prototype.click is intercepted
+  // above so the anchor's own href/download attributes are still directly
+  // assertable, same content the original S016 tests already checked.
+  it("downloads a CSV file (correct filename, BOM-prefixed, full table content) once the export completes", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    // Still on page 1 — 高雄 isn't rendered in the table yet (E09-S009),
+    // but the export must include it regardless: an export is expected to
+    // hold the whole result set, not just whatever page happens to be on
+    // screen.
+    expect(screen.queryByRole("cell", { name: "高雄" })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "匯出 Excel" }));
+
+    await waitFor(() => expect(clickedAnchors).toHaveLength(1));
+    const anchor = clickedAnchors[0]!;
+    expect(anchor.download).toBe("erp-query-result.csv");
+    const rawCsv = decodeCsvHrefRaw(anchor.href);
+    expect(rawCsv.startsWith("﻿")).toBe(true);
+    const csv = decodeCsvHref(anchor.href);
+    const table = getErpResultTable(executedQuery.selectedScenarioId);
+    for (const row of table.rows) {
+      for (const cell of row) {
+        expect(csv).toContain(cell);
+      }
+    }
+  });
+
+  // Renamed from S016's single erp_query_export (fired once, synchronously,
+  // on click) to an attempt/success pair sharing a correlation id — the
+  // same shape erp_query_execute_attempt/_success already use in this same
+  // file — now that there's a genuine start and end to the operation
+  // instead of one instantaneous action.
+  it("clicking export fires erp_query_export_attempt then erp_query_export_success telemetry sharing a correlation id, with the scenario id and row count, excluding the free-form question text", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    fireEvent.click(await screen.findByRole("button", { name: "匯出 Excel" }));
+
+    await waitFor(() => expect(clickedAnchors).toHaveLength(1));
+
+    const attemptCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_export_attempt");
+    const successCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_export_success");
+    expect(attemptCall).toBeDefined();
+    expect(successCall).toBeDefined();
+    const attemptOptions = (attemptCall as [string, { correlationId: string; properties: Record<string, unknown> }])[1];
+    const successOptions = (successCall as [string, { correlationId: string; properties: Record<string, unknown> }])[1];
+    expect(attemptOptions.correlationId).toBe(successOptions.correlationId);
+    expect(successOptions.properties).toEqual({
       erpQueryId: "query2",
       scenarioId: executedQuery.selectedScenarioId,
       rowCount: getErpResultTable(executedQuery.selectedScenarioId).rows.length,
     });
-    expect(JSON.stringify(options.properties)).not.toContain(executedQuery.questionText);
+    for (const call of [attemptCall, successCall]) {
+      const properties = (call as [string, { properties?: Record<string, unknown> }])[1]?.properties;
+      expect(JSON.stringify(properties ?? {})).not.toContain(executedQuery.questionText);
+    }
   });
 });

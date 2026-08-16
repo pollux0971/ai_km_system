@@ -8,12 +8,13 @@ import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario, 
 import { isAmbiguousErpQuery, matchErpScenarios } from "@/lib/erp-scenarios";
 import { simulateErpQueryExecution } from "@/lib/erp-execution";
 import { getErpResultSummary } from "@/lib/erp-results";
-import { getErpResultTable } from "@/lib/erp-result-tables";
+import { getErpResultTable, type ErpResultTable } from "@/lib/erp-result-tables";
 import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { getErpResultKpi } from "@/lib/erp-result-kpis";
 import { getErpResultChart } from "@/lib/erp-result-charts";
 import { getAppliedFilterLabel } from "@/lib/erp-applied-filters";
 import { erpResultTableToCsv } from "@/lib/erp-result-export";
+import { simulateErpExportProgress } from "@/lib/erp-export-progress";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -161,8 +162,12 @@ type State =
  * result's own provenance). Purely additive.
  *
  * E09-S016 "Excel export action" adds one more line right after the
- * table/pagination block: a plain `<a download href="data:text/csv;...">`,
- * mirroring maintenance-report.tsx's own casesToCsv precedent (E07-S022 —
+ * table/pagination block: originally a plain `<a download href="data:
+ * text/csv;...">` (S017, directly below, turns this into a button that
+ * builds and clicks that same kind of anchor programmatically once its own
+ * simulated delay completes — the CSV-building/escaping design below is
+ * unchanged by that, only the trigger mechanism is), mirroring
+ * maintenance-report.tsx's own casesToCsv precedent (E07-S022 —
  * still the only export/download feature in this codebase; its own doc
  * comment confirms nothing shared was ever extracted from it, so
  * erp-result-export.ts is a fresh, bespoke copy of the same CSV-escaping
@@ -179,18 +184,34 @@ type State =
  * paginateErpResultTable's current-page slice) — an export is expected to
  * hold the whole result set regardless of which page happens to be on
  * screen. Gated on executedAt like S007-S014 (nothing to export before a
- * result exists). One `erp_query_export` telemetry event fires on click,
- * same "closest thing to a sensitive operation this page has, a real
- * artifact leaves the browser" reasoning maintenance-report.tsx's own
- * doc comment already gives for its own equivalent event — payload stays
- * `erpQueryId`/`scenarioId`/`rowCount` only, same free-form-text
- * restraint every other telemetry call in this file already keeps.
- * S017 "Export progress" is its own separate, later story for any
- * loading/progress state around the export itself — this story's own
- * generation is synchronous (a small in-memory mock table), so there is
- * no real async gap for a progress indicator to fill yet, same "don't
- * invent the next story's own capability" restraint S008 already applied
- * to S009's pagination.
+ * result exists). Telemetry fires around the click (see S017 below for
+ * its exact attempt/success shape), same "closest thing to a sensitive
+ * operation this page has, a real artifact leaves the browser" reasoning
+ * maintenance-report.tsx's own doc comment already gives for its own
+ * equivalent event — payload stays `erpQueryId`/`scenarioId`/`rowCount`
+ * only, same free-form-text restraint every other telemetry call in this
+ * file already keeps.
+ *
+ * E09-S017 "Export progress" turns S016's originally-instant, always-ready
+ * link into a `<button>` + `exportPending` state: clicking calls
+ * simulateErpExportProgress (erp-export-progress.ts — same "own tiny delay
+ * primitive in its own file" shape as erp-execution.ts's own execution
+ * delay), showing a 匯出中… line (same LoadingIndicator this file already
+ * uses for 執行中…) while it runs, then builds the CSV href, creates a
+ * detached `<a download>`, appends+clicks+removes it to trigger the real
+ * download, and returns to the button — the same auto-transition shape
+ * S006 already established for query execution (no second click needed
+ * once started). A standing, always-rendered `<a>` (S016's original
+ * shape) has no way to represent a "pending" state, which is why the
+ * trigger mechanism — not the CSV-building logic itself — is what
+ * changes here. Telemetry splits into `erp_query_export_attempt`/
+ * `_success` sharing one correlationId (S016's single, click-time-only
+ * `erp_query_export` no longer fits now that there's a genuine start and
+ * end to represent — same reasoning `erp_query_execute_attempt`/
+ * `_success` already follow for query execution above). The simulated
+ * delay always succeeds (a timing primitive, not a real operation that
+ * can fail — same as erp-execution.ts's own "Always succeeds" doc
+ * comment), so there is no corresponding `_failure` event.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -208,6 +229,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
   const [confirmError, setConfirmError] = useState(false);
   const [executionError, setExecutionError] = useState(false);
   const [tablePage, setTablePage] = useState(1);
+  const [exportPending, setExportPending] = useState(false);
 
   async function handleSelectScenario(scenarioId: string) {
     if (selectionPending) return;
@@ -251,12 +273,31 @@ export default function ErpQueryDetail({ id }: { id: string }) {
     setState({ status: "loaded", erpQuery: result.value });
   }
 
-  function handleExportClick(scenarioId: string | undefined, rowCount: number) {
+  async function handleExportClick(scenarioId: string | undefined, table: ErpResultTable) {
+    if (exportPending) return;
+
     const correlationId = crypto.randomUUID();
-    trackEvent("erp_query_export", {
+    setExportPending(true);
+    trackEvent("erp_query_export_attempt", {
       correlationId,
-      properties: { erpQueryId: id, scenarioId, rowCount },
+      properties: { erpQueryId: id, scenarioId },
     });
+
+    await simulateErpExportProgress();
+
+    const csvHref = `data:text/csv;charset=utf-8,${encodeURIComponent(`﻿${erpResultTableToCsv(table)}`)}`;
+    const link = document.createElement("a");
+    link.href = csvHref;
+    link.download = "erp-query-result.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    trackEvent("erp_query_export_success", {
+      correlationId,
+      properties: { erpQueryId: id, scenarioId, rowCount: table.rows.length },
+    });
+    setExportPending(false);
   }
 
   useEffect(() => {
@@ -443,16 +484,16 @@ export default function ErpQueryDetail({ id }: { id: string }) {
               })()}
               {(() => {
                 const table = getErpResultTable(erpQuery.selectedScenarioId ?? "");
-                const csvHref = `data:text/csv;charset=utf-8,${encodeURIComponent(`﻿${erpResultTableToCsv(table)}`)}`;
-                return (
+                return exportPending ? (
+                  <>
+                    <LoadingIndicator />
+                    <p>匯出中…</p>
+                  </>
+                ) : (
                   <p>
-                    <a
-                      href={csvHref}
-                      download="erp-query-result.csv"
-                      onClick={() => handleExportClick(erpQuery.selectedScenarioId, table.rows.length)}
-                    >
+                    <button type="button" onClick={() => handleExportClick(erpQuery.selectedScenarioId, table)}>
                       匯出 Excel
-                    </a>
+                    </button>
                   </p>
                 );
               })()}

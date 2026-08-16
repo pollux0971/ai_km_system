@@ -65,6 +65,24 @@ describe("NewUserPage (E11-S004)", () => {
     expect(screen.getByRole("button", { name: "建立" })).toBeEnabled();
   });
 
+  it("stays disabled on a blank department even once name, email, and a role are already filled in", () => {
+    // Isolates department's own contribution to the disabled-guard: name,
+    // email, and a role are all valid *before* department is ever touched,
+    // so a canSubmit check that silently dropped the department condition
+    // would wrongly read as enabled here (the sibling "keeps the submit
+    // button disabled..." test above always has department already valid
+    // by the time it checks for enabled, so it can't catch that on its own).
+    render(<NewUserPage />);
+
+    fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "新進使用者" } });
+    fireEvent.change(screen.getByLabelText("電子郵件"), { target: { value: "new-user@example.com" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "sales_purchasing" }));
+    expect(screen.getByRole("button", { name: "建立" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("部門"), { target: { value: "業務部" } });
+    expect(screen.getByRole("button", { name: "建立" })).toBeEnabled();
+  });
+
   it("unchecking the only selected role disables submit again", () => {
     render(<NewUserPage />);
 

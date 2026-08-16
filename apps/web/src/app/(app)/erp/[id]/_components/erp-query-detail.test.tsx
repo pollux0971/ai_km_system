@@ -5,6 +5,7 @@ import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario }
 import { matchErpScenarios } from "@/lib/erp-scenarios";
 import { simulateErpQueryExecution } from "@/lib/erp-execution";
 import { getErpResultSummary } from "@/lib/erp-results";
+import { getErpResultTable } from "@/lib/erp-result-tables";
 import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/erp-queries", () => ({
@@ -401,5 +402,49 @@ describe("ErpQueryDetail text summary (E09-S007)", () => {
     await screen.findByText("執行中…");
 
     expect(screen.queryByText(getErpResultSummary(executedQuery.selectedScenarioId))).not.toBeInTheDocument();
+  });
+});
+
+describe("ErpQueryDetail result table (E09-S008)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+
+  it("shows the scenario's own result table (every column header and every cell) once executed", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByText(getErpResultSummary(executedQuery.selectedScenarioId));
+
+    const table = getErpResultTable(executedQuery.selectedScenarioId);
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    for (const column of table.columns) {
+      expect(screen.getByRole("columnheader", { name: column })).toBeInTheDocument();
+    }
+    for (const row of table.rows) {
+      for (const cell of row) {
+        expect(screen.getByRole("cell", { name: cell })).toBeInTheDocument();
+      }
+    }
+  });
+
+  it("does not show any result table before execution completes", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...executedQuery, executedAt: undefined },
+    });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByText("執行中…");
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 });

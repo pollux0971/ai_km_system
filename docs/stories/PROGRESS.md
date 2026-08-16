@@ -29,10 +29,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
-| E09 AI ERP & Reporting Experience | 24 | 8 | 0 | 1 | 0 | 15 |
+| E09 AI ERP & Reporting Experience | 24 | 8 | 1 | 0 | 0 | 15 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 116 | 0 | 1 | 1 | 57 |
+| **合計** | **175** | 116 | 1 | 0 | 1 | 57 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -177,7 +177,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E09-S006 | approved | story/E09-S006-query-loading-state | [E09-S006.md](E09-S006.md) | 獨立審核 APPROVE(深度審查——Query loading state;自動觸發執行,本epic首次AC7真正適用;**本story自主判斷刪除1個+修改1個既有S005測試,是本session至今最大幅度的測試凍結規則例外**,審核者對此施以最高強度審查:獨立讀取原始碼結構化確認被刪除測試的前提(靜態「準備執行」訊息)在渲染邏輯中已完全不存在、不只是難以觀察;獨立確認新增的 S006 測試確實覆蓋被刪除測試原本要驗證的相同前提(載入即已確認但未執行的查詢);確認被修改測試的核心斷言(確認按鈕消失)逐字未變,只有具體替代畫面的文字更新;審核者另以獨立對抗性突變,精準鎖定被審查的那個主張本身(「確認後按鈕消失」的結構保證),精準命中4 個測試(包含被修改的那一個),直接證明修改沒有削弱任何防護力;審核者獨立 force 分開重跑 typecheck/lint/build/test 0 cache——web 9/9 三項各自乾淨、95 檔案 1240/1240 unit test、203/203 E2E 全過;diff 邊界確認乾淨(9 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致)
 | E09-S007 | approved | story/E09-S007-text-summary | [E09-S007.md](E09-S007.md) | 獨立審核 APPROVE(Text summary;純粹疊加在 S006 既有「查詢已執行完成」旁;審核者獨立以 grep 對兩個被修改的測試檔案 diff 逐行確認零刪除(`git diff ... | grep -E "^-" | grep -v "^---"` 回傳空),獨立確證「純疊加、零既有測試異動」的宣稱;getErpResultSummary 純函式,獨立檔案不加到ErpQueryScenario;AC7 判定不適用;審核者獨立 force 分開重跑 typecheck/lint/build/test 0 cache——web 9/9 三項各自乾淨、96 檔案 1246/1246 unit test、203/203 E2E 全過;審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的層(component 自己的「執行完成前不顯示摘要」條件,而非 DEV 驗證的 lib 層fallback)複驗,精準命中預期的 1 個測試;diff 邊界確認乾淨(7 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致)
 | E09-S008 | approved | story/E09-S008-result-table | [E09-S008.md](E09-S008.md) | 獨立審核 APPROVE(2 輪——Result table;純疊加在 S006/S007 既有內容旁,無 pagination(S009 自己的範圍);getErpResultTable 對未知 scenarioId 的 fallback 保證結構永遠合法(非零欄位壞表格),經對抗性突變驗證;Round 1 REQUEST-CHANGES:審核者發現 overdue-receivables 情境的 erp-results.ts(S007,已核准)摘要文字宣稱「8 筆」但本story新增的表格只有 4 列(金額加總精確等於摘要總額,顯示筆數是唯一錯的欄位)——SELF-REVIEW 的對抗性突變沒有覆蓋跨檔案數字一致性,是本story自己漏掉的真實缺陷;DEV 修正為「4 筆」(而非擴表格到 8 列,因為擴表格會破壞已自洽的金額加總,需虛構 0 元逾期或重寫全部金額),`grep` 確認零測試引用舊文字,零既有斷言受影響;Round 2 獨立複驗 4/4 情境筆數與表格列數一致,獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit 97/97 檔案 1252/1252 tests、E2E 203/203(0 cache)全綠;審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的層(component 自己把 selectedScenarioId 傳進 getErpResultTable 的 wiring,而非 DEV 驗證的lib 層 fallback 保證)複驗,精準命中預期的 1 個測試;diff 邊界確認乾淨(8 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER,Round 1 的 1 個 MAJOR 已修正並消除,0 個 MINOR;PROGRESS.md 逐列計數複核一致) |
-| E09-S009 | in-progress | story/E09-S009-server-pagination-ui | | |
+| E09-S009 | done | story/E09-S009-server-pagination-ui | [E09-S009.md](E09-S009.md) | DEV 完成,VERIFY/SELF-REVIEW 全綠,待獨立審核 |
 | E09-S010 | todo | | | |
 | E09-S011 | todo | | | |
 | E09-S012 | todo | | | |

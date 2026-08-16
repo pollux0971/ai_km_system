@@ -806,3 +806,105 @@ describe("ErpQueryDetail source-system badge (E09-S014)", () => {
     expect(screen.queryByText(sourceSystemLabel)).not.toBeInTheDocument();
   });
 });
+
+describe("ErpQueryDetail Excel export action (E09-S016)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+
+  function decodeCsvHrefRaw(href: string): string {
+    expect(href.startsWith("data:text/csv;charset=utf-8,")).toBe(true);
+    return decodeURIComponent(href.replace("data:text/csv;charset=utf-8,", ""));
+  }
+
+  // Strips the leading BOM after its own presence is verified separately
+  // below — a bare strip-without-asserting here would make this helper
+  // silently tolerate a regression that drops the BOM entirely (a mutation
+  // test confirmed exactly that: removing the BOM left every other test in
+  // this block still green, since none of them checked for it directly).
+  function decodeCsvHref(href: string): string {
+    return decodeCsvHrefRaw(href).replace(/^﻿/, "");
+  }
+
+  it("shows an 匯出 Excel link once executed, downloading a CSV data URI", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    const link = await screen.findByRole("link", { name: "匯出 Excel" });
+    expect(link).toHaveAttribute("download", "erp-query-result.csv");
+    decodeCsvHref(link.getAttribute("href") ?? "");
+  });
+
+  it("prefixes the CSV with a UTF-8 BOM, so Excel doesn't mis-detect the Chinese-character encoding", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    const link = await screen.findByRole("link", { name: "匯出 Excel" });
+    const rawCsv = decodeCsvHrefRaw(link.getAttribute("href") ?? "");
+    expect(rawCsv.startsWith("﻿")).toBe(true);
+  });
+
+  it("the exported CSV contains every row of the full table, including rows beyond the current (page 1) view", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    // Still on page 1 — 高雄 isn't rendered in the table yet (E09-S009),
+    // but the export must include it regardless: an export is expected to
+    // hold the whole result set, not just whatever page happens to be on
+    // screen.
+    expect(screen.queryByRole("cell", { name: "高雄" })).not.toBeInTheDocument();
+
+    const table = getErpResultTable(executedQuery.selectedScenarioId);
+    const link = await screen.findByRole("link", { name: "匯出 Excel" });
+    const csv = decodeCsvHref(link.getAttribute("href") ?? "");
+
+    for (const row of table.rows) {
+      for (const cell of row) {
+        expect(csv).toContain(cell);
+      }
+    }
+  });
+
+  it("does not show any export link before execution completes", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...executedQuery, executedAt: undefined },
+    });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByText("執行中…");
+
+    expect(screen.queryByRole("link", { name: "匯出 Excel" })).not.toBeInTheDocument();
+  });
+
+  it("clicking export fires erp_query_export telemetry with the scenario id and row count, excluding the free-form question text", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    const link = await screen.findByRole("link", { name: "匯出 Excel" });
+    fireEvent.click(link);
+
+    const exportCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_export");
+    expect(exportCall).toBeDefined();
+    const [, options] = exportCall as [string, { correlationId: string; properties: Record<string, unknown> }];
+    expect(options.properties).toEqual({
+      erpQueryId: "query2",
+      scenarioId: executedQuery.selectedScenarioId,
+      rowCount: getErpResultTable(executedQuery.selectedScenarioId).rows.length,
+    });
+    expect(JSON.stringify(options.properties)).not.toContain(executedQuery.questionText);
+  });
+});

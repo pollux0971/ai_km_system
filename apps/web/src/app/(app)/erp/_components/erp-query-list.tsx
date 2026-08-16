@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { listErpQueries, type ErpQuerySummary } from "@/lib/erp-queries";
@@ -17,11 +18,14 @@ type State =
  * MaintenanceCaseList (E07-S001) already established for the identical
  * kind of problem — a read-only landing list over a mocked async fetch.
  *
- * Items are plain text, not links — this story has no query detail route
- * to link to (and none of E09's 24 stories owns a per-query detail page;
- * E09-S015 "Query history" is the dedicated full-browse story), same
- * "don't invent a link to a route that isn't there yet" reasoning
- * MaintenanceCaseList's own doc comment gives for its own unlinked items.
+ * E09-S015 "Query history" links each item to its own `/erp/{id}`
+ * detail page — the dedicated full-browse story this file's own doc
+ * comment named since S001. Every S007-S014 story deliberately left
+ * this list untouched precisely so this one story could claim it
+ * cleanly; clicking through reveals whatever state that query is
+ * actually in (still confirming a scenario, executing, or fully
+ * settled with all of S007-S014's own result/metadata content) — no
+ * new logic here, `/erp/[id]`'s own page already handles every state.
  */
 export default function ErpQueryList() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -65,9 +69,11 @@ export default function ErpQueryList() {
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.items.map((item) => (
         <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
-          <strong>{item.questionText}</strong>
-          <br />
-          <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("zh-TW")}</time>
+          <Link href={`/erp/${item.id}`}>
+            <strong>{item.questionText}</strong>
+            <br />
+            <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("zh-TW")}</time>
+          </Link>
         </li>
       ))}
     </ul>

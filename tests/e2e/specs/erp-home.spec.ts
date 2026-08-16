@@ -44,13 +44,27 @@ test("E09-S001: ERP assistant home shows the seeded ERP queries to a sales_purch
   await expect(page.getByText("目前庫存低於安全存量的品項有哪些?")).toBeVisible();
   await expect(page.getByText("本季應收帳款逾期客戶清單")).toBeVisible();
 
-  // The one entry link E09-S002 added — but still no per-query links.
-  // No story owns a per-query detail link from this list (see
-  // erp-query-list.tsx's own doc comment). Scoped via the list itself —
-  // an unscoped getByRole("list") also matches the sidebar's own nav
-  // <ul>, which isn't what this is about.
   await expect(page.getByRole("link", { name: "開始新的 ERP 查詢" })).toHaveAttribute("href", "/erp/new");
-  await expect(page.getByRole("main").getByRole("list").getByRole("link")).toHaveCount(0);
+
+  // E09-S015 "Query history" — each seeded item now links to its own
+  // /erp/{id} detail page (see erp-query-list.tsx's own updated doc
+  // comment; this was the dedicated story every prior S007-S014 story
+  // deliberately left this list untouched for). Scoped via the list
+  // itself — an unscoped getByRole("list") also matches the sidebar's
+  // own nav <ul>, which isn't what this is about.
+  const list = page.getByRole("main").getByRole("list");
+  await expect(list.getByRole("link", { name: /上個月各分公司的營收總額是多少/ })).toHaveAttribute(
+    "href",
+    "/erp/erp-query-sample-1",
+  );
+  await expect(list.getByRole("link", { name: /目前庫存低於安全存量的品項有哪些/ })).toHaveAttribute(
+    "href",
+    "/erp/erp-query-sample-2",
+  );
+  await expect(list.getByRole("link", { name: /本季應收帳款逾期客戶清單/ })).toHaveAttribute(
+    "href",
+    "/erp/erp-query-sample-3",
+  );
 });
 
 test("E09-S002: submitting a natural-language question creates a new ERP query and lands on its own page", async ({ page }) => {

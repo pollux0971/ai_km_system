@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
 import { listUsers, type AdminUser } from "@/lib/users";
@@ -17,12 +18,12 @@ const STATUS_LABEL: Record<AdminUser["status"], string> = {
 /**
  * E11-S002 "User list" — same loading/error/empty/loaded shape every
  * other epic's own first list page already established (ErpQueryList,
- * MaintenanceCaseList, KnowledgeList). Deliberately does not link each
- * row to a detail page yet — E11-S003 "User detail" is the story that
- * owns the `/users/[id]` route this would point to; adding the link
- * before that route exists would be inventing structure ahead of the
- * story that owns it, same discipline erp-query-list.tsx's own doc
- * comment already established for E09-S001 vs. E09-S015.
+ * MaintenanceCaseList, KnowledgeList).
+ *
+ * E11-S003 "User detail" adds the link straight to `/users/{id}` below,
+ * now that the route actually exists — same "don't invent structure
+ * ahead of the story that owns it" discipline erp-query-list.tsx's own
+ * doc comment already established for E09-S001 vs. E09-S015.
  */
 export default function UserList() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -67,7 +68,9 @@ export default function UserList() {
       {state.users.map((user) => (
         <li key={user.userId} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
           <p>
-            <strong>{user.name}</strong>
+            <Link href={`/users/${user.userId}`}>
+              <strong>{user.name}</strong>
+            </Link>
           </p>
           <p>{user.email}</p>
           <p>{user.department}</p>

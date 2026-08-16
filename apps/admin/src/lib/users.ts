@@ -26,6 +26,8 @@ export interface AdminUser {
   department: string;
   roles: Role[];
   status: "active" | "disabled";
+  /** E11-S003 "User detail" — account creation time, UTC storage per this codebase's own established convention. */
+  createdAt: string;
 }
 
 /**
@@ -47,6 +49,7 @@ const SAMPLE_USERS: AdminUser[] = [
     department: "資訊部",
     roles: ["general_user"],
     status: "active",
+    createdAt: "2026-01-15T02:00:00.000Z",
   },
   {
     userId: "mock-user-maintenance",
@@ -55,6 +58,7 @@ const SAMPLE_USERS: AdminUser[] = [
     department: "維修部",
     roles: ["maintenance_engineer"],
     status: "active",
+    createdAt: "2026-02-03T03:30:00.000Z",
   },
   {
     userId: "mock-user-sales",
@@ -63,6 +67,7 @@ const SAMPLE_USERS: AdminUser[] = [
     department: "業務部",
     roles: ["sales_purchasing"],
     status: "active",
+    createdAt: "2026-02-20T06:15:00.000Z",
   },
   {
     userId: "mock-user-it-admin",
@@ -71,6 +76,7 @@ const SAMPLE_USERS: AdminUser[] = [
     department: "資訊部",
     roles: ["it_administrator"],
     status: "active",
+    createdAt: "2025-11-01T01:00:00.000Z",
   },
   {
     userId: "mock-user-ai-admin",
@@ -79,6 +85,7 @@ const SAMPLE_USERS: AdminUser[] = [
     department: "資訊部",
     roles: ["ai_administrator"],
     status: "active",
+    createdAt: "2025-11-01T01:05:00.000Z",
   },
   {
     userId: "mock-user-auditor",
@@ -87,6 +94,7 @@ const SAMPLE_USERS: AdminUser[] = [
     department: "稽核部",
     roles: ["auditor"],
     status: "active",
+    createdAt: "2025-11-05T04:20:00.000Z",
   },
   {
     userId: "mock-user-super-admin",
@@ -95,6 +103,7 @@ const SAMPLE_USERS: AdminUser[] = [
     department: "資訊部",
     roles: ["super_administrator"],
     status: "active",
+    createdAt: "2025-10-01T00:00:00.000Z",
   },
   {
     userId: "mock-user-disabled",
@@ -103,9 +112,21 @@ const SAMPLE_USERS: AdminUser[] = [
     department: "業務部",
     roles: ["sales_purchasing"],
     status: "disabled",
+    createdAt: "2026-03-10T08:45:00.000Z",
   },
 ];
 
 export async function listUsers(): Promise<Result<AdminUser[], ApiError>> {
   return { ok: true, value: SAMPLE_USERS };
+}
+
+/**
+ * E11-S003 "User detail". Same `value: T | null` (not a rejected Promise
+ * or a NOT_FOUND error) shape getErpQuery/getMaintenanceCase already
+ * establish for "the fetch itself succeeded; the id just doesn't
+ * resolve to anything", leaving the NOT_FOUND-vs-error distinction to
+ * the caller.
+ */
+export async function getUser(userId: string): Promise<Result<AdminUser | null, ApiError>> {
+  return { ok: true, value: SAMPLE_USERS.find((user) => user.userId === userId) ?? null };
 }

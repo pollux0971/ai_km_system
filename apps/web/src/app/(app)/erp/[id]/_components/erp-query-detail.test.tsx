@@ -1168,3 +1168,116 @@ describe("ErpQueryDetail prediction disclaimer (E09-S020)", () => {
     expect(await screen.findByText(disclaimerText)).toBeInTheDocument();
   });
 });
+
+describe("ErpQueryDetail error UX (E09-S021)", () => {
+  const confirmedQueryForRetryTests = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+  };
+
+  it("shows a retry button alongside the query-load error", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+
+    render(<ErpQueryDetail id="query1" />);
+
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "重試" })).toBeInTheDocument();
+  });
+
+  it("clicking retry on a load failure shows the loading state immediately, before the retry resolves", async () => {
+    mockedGetErpQuery.mockResolvedValueOnce({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+    mockedGetErpQuery.mockReturnValueOnce(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query1" />);
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("clicking retry on a load failure re-fetches the query and shows it once the retry succeeds", async () => {
+    mockedGetErpQuery.mockResolvedValueOnce({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+    mockedGetErpQuery.mockResolvedValueOnce({ ok: true, value: sampleQuery });
+
+    render(<ErpQueryDetail id="query1" />);
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+
+    expect(await screen.findByRole("heading", { name: sampleQuery.questionText, level: 1 })).toBeInTheDocument();
+    expect(mockedGetErpQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it("clicking retry on a load failure that fails again still shows the error state (and another retry button), not a crash", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+
+    render(<ErpQueryDetail id="query1" />);
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("無法載入 ERP 查詢。");
+    expect(screen.getByRole("button", { name: "重試" })).toBeInTheDocument();
+    expect(mockedGetErpQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a retry button alongside the execution error", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQueryForRetryTests });
+    mockedExecuteErpQuery.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQueryForRetryTests.questionText, level: 1 });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("無法執行查詢，請稍後再試。");
+    expect(screen.getByRole("button", { name: "重試" })).toBeInTheDocument();
+  });
+
+  it("clicking retry on an execution failure shows 執行中… immediately, then succeeds on the retried attempt", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQueryForRetryTests });
+    mockedExecuteErpQuery.mockResolvedValueOnce({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+    mockedExecuteErpQuery.mockResolvedValueOnce({
+      ok: true,
+      value: { ...confirmedQueryForRetryTests, executedAt: "2026-08-16T00:05:01.000Z" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQueryForRetryTests.questionText, level: 1 });
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+
+    expect(await screen.findByText("執行中…")).toBeInTheDocument();
+    expect(await screen.findByText("查詢已執行完成。")).toBeInTheDocument();
+    expect(mockedExecuteErpQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it("retrying execution re-fires erp_query_execute_attempt/_success telemetry with a fresh correlation id", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: confirmedQueryForRetryTests });
+    mockedExecuteErpQuery.mockResolvedValueOnce({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+    mockedExecuteErpQuery.mockResolvedValueOnce({
+      ok: true,
+      value: { ...confirmedQueryForRetryTests, executedAt: "2026-08-16T00:05:01.000Z" },
+    });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: confirmedQueryForRetryTests.questionText, level: 1 });
+    await screen.findByRole("alert");
+    const firstAttemptId = (
+      mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_execute_attempt") as [
+        string,
+        { correlationId: string },
+      ]
+    )[1].correlationId;
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+    await screen.findByText("查詢已執行完成。");
+
+    const attemptCalls = mockedTrackEvent.mock.calls.filter((call) => call[0] === "erp_query_execute_attempt");
+    const successCalls = mockedTrackEvent.mock.calls.filter((call) => call[0] === "erp_query_execute_success");
+    expect(attemptCalls).toHaveLength(2);
+    expect(successCalls).toHaveLength(1);
+    const retryAttemptId = (attemptCalls[1] as [string, { correlationId: string }])[1].correlationId;
+    expect(retryAttemptId).not.toBe(firstAttemptId);
+    expect((successCalls[0] as [string, { correlationId: string }])[1].correlationId).toBe(retryAttemptId);
+  });
+});

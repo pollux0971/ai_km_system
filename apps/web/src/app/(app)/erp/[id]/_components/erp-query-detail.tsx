@@ -270,6 +270,44 @@ type State =
  * gives for being scenario-invariant) — there's nothing horizon-specific
  * to disclaim differently.
  *
+ * E09-S021 "ERP error UX" fixes two genuine dead-ends found by auditing
+ * every error state in this file: the initial query-load effect and the
+ * execution effect both only ever run once (their own dependency arrays
+ * — `[id]` and `[state, id]` respectively — never change again after a
+ * failure, since neither failure branch calls `setState` on the query
+ * itself), so before this story a load or execution failure was
+ * unrecoverable without a full page reload. `loadAttempt`/
+ * `executionAttempt` are pure "force this effect to run again" counters
+ * (no meaning of their own beyond identity), added to each effect's own
+ * dependency array; a 重試 button bumps the relevant one. Deliberately
+ * NOT a separate component with its own pending/error state mirroring
+ * `KnowledgeDocumentRetryButton` (E05-S021) — that component's pattern
+ * fits its own situation (a genuinely distinct retry mutation, no other
+ * visible re-triggerable action), but re-triggering the *exact same*
+ * effect that already owns full error handling and (for execution)
+ * telemetry is a smaller, less duplicative change here, and keeps the
+ * same "swap the whole view on state transition" shape this file already
+ * uses everywhere else (confirm→執行中…, 匯出→匯出中…) rather than mixing
+ * in a second, differently-shaped "disabled + relabeled button" pattern
+ * for just these two states. The query-load effect now also resets
+ * `state` to `{status: "loading"}` at its own top (previously implicit
+ * only on first mount, since that was the initial state) — this is what
+ * makes a retry click show the loading view immediately, the same way
+ * the execution effect's own pre-existing `setExecutionError(false)` at
+ * its top already did for execution retries, needing no new logic there.
+ * Retrying execution re-fires the *same* `erp_query_execute_attempt`/
+ * `_success`/`_failure` telemetry the original attempt already used
+ * (fresh correlationId each run) rather than inventing separate
+ * `_retry_*` event names — SOURCE_BASELINE pinned #22 cares that SQL
+ * execution is audited, not that a human reading the trail can label
+ * which attempt number a given event was, and every attempt already gets
+ * its own distinct correlationId regardless. The query-load retry stays
+ * logger-only, deliberately not trackEvent'd — consistent with the
+ * *original* (non-retry) load already being logger-only (S002's own
+ * doc comment above judges reads generally N/A for AC7-style audit
+ * requirements); retrying a plain read shouldn't newly require an
+ * audit trail its own non-retried counterpart never needed.
+ *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
  * documents for MaintenanceCaseList — ErpQueryList's own "renders no
@@ -285,6 +323,8 @@ export default function ErpQueryDetail({ id }: { id: string }) {
   const [confirmPending, setConfirmPending] = useState(false);
   const [confirmError, setConfirmError] = useState(false);
   const [executionError, setExecutionError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [executionAttempt, setExecutionAttempt] = useState(0);
   const [tablePage, setTablePage] = useState(1);
   const [exportPending, setExportPending] = useState(false);
   const [predictionHorizonId, setPredictionHorizonId] = useState<string | undefined>(undefined);
@@ -372,6 +412,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
   useEffect(() => {
     let cancelled = false;
     const correlationId = crypto.randomUUID();
+    setState({ status: "loading" });
     logger.info("loading ERP query detail", { correlationId, id });
 
     getErpQuery(id).then((result) => {
@@ -396,7 +437,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, loadAttempt]);
 
   useEffect(() => {
     if (state.status !== "loaded") return;
@@ -432,7 +473,7 @@ export default function ErpQueryDetail({ id }: { id: string }) {
     return () => {
       cancelled = true;
     };
-  }, [state, id]);
+  }, [state, id, executionAttempt]);
 
   if (state.status === "loading") {
     return (
@@ -446,6 +487,11 @@ export default function ErpQueryDetail({ id }: { id: string }) {
     return (
       <main style={{ padding: 32 }}>
         <ErrorMessage message="無法載入 ERP 查詢。" />
+        <p>
+          <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
+            重試
+          </button>
+        </p>
       </main>
     );
   }
@@ -591,7 +637,14 @@ export default function ErpQueryDetail({ id }: { id: string }) {
             </>
           ) : erpQuery.confirmedAt ? (
             executionError ? (
-              <ErrorMessage message="無法執行查詢，請稍後再試。" />
+              <>
+                <ErrorMessage message="無法執行查詢，請稍後再試。" />
+                <p>
+                  <button type="button" onClick={() => setExecutionAttempt((attempt) => attempt + 1)}>
+                    重試
+                  </button>
+                </p>
+              </>
             ) : (
               <>
                 <LoadingIndicator />

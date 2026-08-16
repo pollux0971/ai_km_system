@@ -29,10 +29,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
-| E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 0 | 0 | 24 |
+| E09 AI ERP & Reporting Experience | 24 | 0 | 0 | 1 | 0 | 23 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 108 | 0 | 0 | 1 | 66 |
+| **合計** | **175** | 108 | 0 | 1 | 1 | 65 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -169,7 +169,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E09-S001 | todo | | | |
+| E09-S001 | in-progress | story/E09-S001-erp-assistant-home | | |
 | E09-S002 | todo | | | |
 | E09-S003 | todo | | | |
 | E09-S004 | todo | | | |

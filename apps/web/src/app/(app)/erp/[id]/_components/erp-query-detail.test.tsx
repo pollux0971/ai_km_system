@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import ErpQueryDetail from "./erp-query-detail";
 import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario } from "@/lib/erp-queries";
 import { matchErpScenarios } from "@/lib/erp-scenarios";
@@ -8,6 +8,7 @@ import { getErpResultSummary } from "@/lib/erp-results";
 import { getErpResultTable } from "@/lib/erp-result-tables";
 import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { getErpResultKpi } from "@/lib/erp-result-kpis";
+import { getErpResultChart } from "@/lib/erp-result-charts";
 import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/erp-queries", () => ({
@@ -597,5 +598,67 @@ describe("ErpQueryDetail KPI card (E09-S010)", () => {
     // the current page's row count would be a real bug this guards
     // against.
     expect(screen.getByText(String(kpi.value))).toBeInTheDocument();
+  });
+});
+
+describe("ErpQueryDetail chart (E09-S011)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+
+  it("shows the scenario's own chart (one bar per row, with correct labels and details) once executed", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    const chart = getErpResultChart(executedQuery.selectedScenarioId);
+    const chartGroup = await screen.findByRole("group", { name: "結果圖表" });
+    // Scoped to the chart's own container — bar labels/details (e.g. 台北)
+    // legitimately repeat text already shown in the table above, so an
+    // unscoped query would be ambiguous.
+    for (const bar of chart.bars) {
+      expect(within(chartGroup).getByText(bar.label)).toBeInTheDocument();
+      expect(within(chartGroup).getByText(bar.detail)).toBeInTheDocument();
+    }
+  });
+
+  it("renders each bar's visual width proportional to its own computed widthPercent", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    const chart = getErpResultChart(executedQuery.selectedScenarioId);
+    const chartGroup = await screen.findByRole("group", { name: "結果圖表" });
+    // The chart's whole point is comparing values by bar length — a
+    // component-level regression that silently stopped wiring
+    // widthPercent into the rendered style (while still rendering the
+    // right label/detail text) would defeat that purpose without any
+    // other test in this file catching it.
+    for (const bar of chart.bars) {
+      const barRow = within(chartGroup).getByText(bar.label).parentElement;
+      const widthBar = barRow?.querySelector("div");
+      expect(widthBar).toHaveStyle({ width: `${bar.widthPercent}%` });
+    }
+  });
+
+  it("does not show any chart before execution completes", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...executedQuery, executedAt: undefined },
+    });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByText("執行中…");
+
+    expect(screen.queryByRole("group", { name: "結果圖表" })).not.toBeInTheDocument();
   });
 });

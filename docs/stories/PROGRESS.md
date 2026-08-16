@@ -29,10 +29,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
-| E09 AI ERP & Reporting Experience | 24 | 5 | 0 | 0 | 0 | 19 |
+| E09 AI ERP & Reporting Experience | 24 | 5 | 0 | 1 | 0 | 18 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 113 | 0 | 0 | 1 | 61 |
+| **合計** | **175** | 113 | 0 | 1 | 1 | 60 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -174,7 +174,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E09-S003 | approved | story/E09-S003-query-scenario-selector | [E09-S003.md](E09-S003.md) | 獨立審核 APPROVE(Query scenario selector;固定白名單 4 個情境(對應 pinned #21);關鍵字比對,零匹配時fallback 到全部情境;selectedScenarioId 擴充 ErpQuerySummary,selectErpQueryScenario 鏡射既有mutate-by-id 慣例;審核者獨立 force 分開重跑 typecheck/lint/build(避開已知的 .next/types 任務排序競爭)/test 0 cache——web 9/9 三項各自乾淨、94 檔案 1218/1218 unit test、203/203 E2E 全過(本story只延伸既有 S002 測試,總數與 S002 相同,未增加新測試筆數);審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的邏輯(selectErpQueryScenario 的 NOT_FOUND guard,而非 DEV 驗證的 matchErpScenarios fallback保證)複驗,精準命中預期的 1 個測試;diff 邊界確認乾淨(9 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致)
 | E09-S004 | approved | story/E09-S004-clarification-ui | [E09-S004.md](E09-S004.md) | 獨立審核 APPROVE(Clarification UI;新增獨立 isAmbiguousErpQuery 函式而非修改 matchErpScenarios 既有簽章(避免牴觸 S003 已核准凍結的測試),兩者共用私有 realMatches helper;只換 picker 的 prompt 文案,不做真正的多輪澄清對話(AC 8 允許簡化演算法);erp-queries.ts 零異動,純粹是呈現層決策;審核者獨立force 分開重跑 typecheck/lint/build/test 0 cache——web 9/9 三項各自乾淨、94 檔案 1223/1223 unit test、203/203 E2E(本story只延伸既有測試,總數與 S003 相同)全過,系統負載低(2.82-6.5)一次乾淨通過無需額外隔離;審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的層(component 自己的條件式 wiring,而非DEV 驗證的 lib 層 isAmbiguousErpQuery 本身)複驗,精準命中預期的 2 個失敗;diff 邊界確認乾淨(7 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致)
 | E09-S005 | approved | story/E09-S005-query-confirmation-ui | [E09-S005.md](E09-S005.md) | 獨立審核 APPROVE(Query confirmation UI;獨立確認按鈕(非選情境時自動確認),confirmedAt 時間戳記,confirmErpQuery 鏡射既有 mutate-by-id 慣例;3 處既有測試的「zero buttons」斷言收斂為「picker 自己的按鈕消失」——審核者對此判斷特別加強審查:獨立突變 selectedScenario 的計算條件(讓 picker 永遠不被取代),證實收斂後的斷言仍精準命中這個 S003 原本要防的迴歸(與 4 個 S004/S005 自己的測試一起失敗,共 7 個),確認收斂沒有削弱任何既有防護力;審核者獨立 force 分開重跑 typecheck/lint/build/test 0 cache——web 9/9 三項各自乾淨、94 檔案 1230/1230 unit test、203/203 E2E 全過(本story只延伸既有測試,總數不變);審核者另以獨立對抗性突變鎖定與 DEV 自己不同的邏輯(picker-replacement 條件本身,而非 DEV 驗證的 confirmErpQuery 驗證邏輯)複驗;diff 邊界確認乾淨(7 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致)
-| E09-S006 | todo | | | |
+| E09-S006 | in-progress | story/E09-S006-query-loading-state | | |
 | E09-S007 | todo | | | |
 | E09-S008 | todo | | | |
 | E09-S009 | todo | | | |

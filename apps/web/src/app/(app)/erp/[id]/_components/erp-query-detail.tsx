@@ -11,6 +11,7 @@ import { getErpResultSummary } from "@/lib/erp-results";
 import { getErpResultTable } from "@/lib/erp-result-tables";
 import { paginateErpResultTable } from "@/lib/erp-result-table-pagination";
 import { getErpResultKpi } from "@/lib/erp-result-kpis";
+import { getErpResultChart } from "@/lib/erp-result-charts";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:erp-query-detail");
@@ -120,6 +121,13 @@ type State =
  * see erp-result-kpis.ts's own doc comment for why, tying back to the
  * cross-file drift E09-S008's own independent review caught). Purely
  * additive, no existing test needed to change.
+ *
+ * E09-S011 "Chart renderer" adds a hand-rolled, dependency-free
+ * horizontal bar chart between the KPI card and the table (no charting
+ * library exists anywhere in this codebase — see erp-result-charts.ts's
+ * own doc comment). Bar labels/details are the table's own row cells
+ * shown verbatim, never a re-derived number. Purely additive, no
+ * existing test needed to change.
  *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
@@ -294,6 +302,20 @@ export default function ErpQueryDetail({ id }: { id: string }) {
                   <div role="group" aria-label="關鍵指標">
                     <p>{kpi.label}</p>
                     <p>{kpi.value}</p>
+                  </div>
+                );
+              })()}
+              {(() => {
+                const chart = getErpResultChart(erpQuery.selectedScenarioId ?? "");
+                return (
+                  <div role="group" aria-label="結果圖表">
+                    {chart.bars.map((bar) => (
+                      <div key={bar.label}>
+                        <p>{bar.label}</p>
+                        <div style={{ width: `${bar.widthPercent}%`, height: 8, background: "currentColor" }} />
+                        <p>{bar.detail}</p>
+                      </div>
+                    ))}
                   </div>
                 );
               })()}

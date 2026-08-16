@@ -129,6 +129,16 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(kpiCard.getByText("「各分公司營收」結果筆數")).toBeVisible();
   await expect(kpiCard.getByText("3", { exact: true })).toBeVisible();
 
+  // E09-S011 "Chart renderer" — additive again: a hand-rolled bar chart,
+  // one bar per row. Scoped to the chart's own container — bar
+  // labels/details (e.g. 台北) legitimately repeat text the table below
+  // also shows, so an unscoped locator would be ambiguous.
+  const chart = page.getByRole("group", { name: "結果圖表" });
+  await expect(chart).toBeVisible();
+  for (const barText of ["台北", "NT$ 5,200,000", "台中", "NT$ 3,850,000", "高雄", "NT$ 3,400,000"]) {
+    await expect(chart.getByText(barText, { exact: true })).toBeVisible();
+  }
+
   // E09-S008 "Result table" — additive again, next to S007's own summary:
   // the scenario's own mock table. E09-S009 (below) narrows this initial
   // check to page 1's own cells — the whole table no longer renders

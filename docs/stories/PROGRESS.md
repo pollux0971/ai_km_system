@@ -29,10 +29,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
-| E09 AI ERP & Reporting Experience | 24 | 11 | 0 | 0 | 0 | 13 |
+| E09 AI ERP & Reporting Experience | 24 | 11 | 1 | 0 | 0 | 12 |
 | E11 Admin Console | 25 | 0 | 0 | 0 | 0 | 25 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 119 | 0 | 0 | 1 | 55 |
+| **合計** | **175** | 119 | 1 | 0 | 1 | 54 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -180,7 +180,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E09-S009 | approved | story/E09-S009-server-pagination-ui | [E09-S009.md](E09-S009.md) | 獨立審核 APPROVE(Server pagination UI;先查既有先例(唯一的分頁 UI 是 E03-S022 conversation-list.tsx,prev/next-only、明確拒絕頁碼連結)後比照其 UI 形狀與 conversations.ts 的 page/pageSize/totalPages 詞彙,刻意不採用目前無人使用的 shared Pagination contract 型別;page size 刻意選小(2)確保 4 個白名單情境的小表格都真的跨頁,能力不會形同虛設;純函式 paginateErpResultTable 對已載入表格做同步切片,無新非同步dependency;窄化 2 處既有測試(S006 的 unit+E2E「零按鈕」斷言、S008 的「每個儲存格一次全部可見」斷言)——審核者獨立讀取 component 渲染邏輯結構性複驗兩處窄化後的前提皆為真(tbody 只 map paginated.rows、nav 完全包在 executedAt 分支內且是此狀態唯一按鈕來源),而非只信任 EVIDENCE 文字;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit 98/98 檔案 1266/1266 tests、E2E 203/203(0 cache,經 nohup/disown 脫離重跑,未再遇到 DEV 階段記錄的環境中止插曲);特別複查磁力數字/跨檔案一致性風險(S008 才剛發現的類型)——E2E 硬寫的頁碼文字屬於這個檔案既有的「直接斷言預期渲染文字」風格,與 S008 那種兩個獨立檔案各自宣稱彼此漂移的情況不同類,判定不成立;審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的層(component 自己把 clamp 後的頁碼接到上一頁按鈕 disabled 屬性的 wiring,而非 DEV 驗證的 paginateErpResultTable 純函式clamp 保證)複驗,精準命中預期的 1 個測試;diff 邊界確認乾淨(7 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 | E09-S010 | approved | story/E09-S010-kpi-card | [E09-S010.md](E09-S010.md) | 獨立審核 APPROVE(KPI card;單一衍生 headline 指標(結果筆數),刻意不手寫第四份 mock 資料檔——直接吸取 E09-S008 獨立審核抓到的教訓(兩個獨立手寫檔案的數字彼此漂移),改讓 KPI 值直接讀 getErpResultTable 的列數本身,結構上不可能漂移;label 重用 S003 已核准的情境 label,不新造文案;審核者獨立讀取 component 原始碼結構性複驗「讀整張表格、不受分頁影響」這個關鍵宣稱——getErpResultKpi 與 paginateErpResultTable是兩個完全獨立呼叫,KPI 計算不引用 tablePage state;審核者獨立 force全量重跑 typecheck 20/20、lint 20/20、build 12/12;unit test 獨立重跑首次出現 1 個失敗但連續重跑 2 次皆 99/99 檔案 1274/1274 tests 全過,系統負載中等(9.83),判定為既有 timing-sensitive 測試的環境雜訊(本 session 已多次記錄過的既有模式),非本story缺陷;E2E 203/203(0 cache);審核者另以獨立對抗性突變、鎖定與 DEV 自己不同的層(把KPI 卡片的顯示值從 kpi.value 改成 tablePage,模擬「KPI 誤顯示頁碼而非真正總數」這個 EVIDENCE 聲稱被防範的典型 wiring bug,而非 DEV驗證的 getErpResultKpi 純函式列數衍生保證)複驗,精準命中預期的 2個測試;diff 邊界確認乾淨(7 個檔案,皆在 apps/web/tests/e2e/docs範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;純疊加,零既有測試窄化;PROGRESS.md 逐列計數複核一致) |
 | E09-S011 | approved | story/E09-S011-chart-renderer | [E09-S011.md](E09-S011.md) | 獨立審核 APPROVE(2 輪——Chart renderer;零依賴手刻長條圖(搜尋確認codebase 無任何圖表庫,新增依賴比加檔案重得多);長條資料直接來自表格本身(row[0]/row[1] 原文),避免重演 E09-S008 的跨檔案漂移;無法解析為數字(purchase-order-status 第二欄是供應商名稱)時誠實退回等寬,不假裝比例;Round 1 REQUEST-CHANGES:審核者以獨立對抗性突變(把長條寬度硬改成固定 50%)發現 component 層級 36 個測試全數依然通過——長條圖最核心的視覺主張(比例呈現)在 component wiring 層級完全沒有測試保護,只有 pure function 自己的比例計算被測試;DEV 補上用 jest-dom toHaveStyle 直接檢查渲染 CSS 寬度的測試(不用data-testid,此 codebase 零筆先例,改用 DOM 導航定位),獨立複驗確認新測試精準命中同一個突變;Round 2 獨立複驗:重跑全部 gate 0 cache——typecheck 20/20、lint 20/20、build 12/12、unit 100/100 檔案1286/1286 tests;E2E 完整套件連兩次獨立重跑都精準命中同一組既有 flaky 測試(knowledge-ui-e2e.spec.ts E05-S031、maintenance-e2e.spec.ts E07-S025,201 passed,系統負載持續偏高19-21),獨立隔離重跑 erp-home.spec.ts 兩次皆 2/2 乾淨通過,確認與本story無關;獨立確認 package.json/lockfile 零異動,證實未新增任何圖表函式庫依賴;diff 邊界確認乾淨(7 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER,Round 1 的 1 個 MAJOR 已修正並消除,0 個 MINOR;PROGRESS.md 逐列計數複核一致) |
-| E09-S012 | todo | | | |
+| E09-S012 | done | story/E09-S012-applied-filter-display | [E09-S012.md](E09-S012.md) | DEV 完成,VERIFY/SELF-REVIEW 全綠,待獨立審核 |
 | E09-S013 | todo | | | |
 | E09-S014 | todo | | | |
 | E09-S015 | todo | | | |

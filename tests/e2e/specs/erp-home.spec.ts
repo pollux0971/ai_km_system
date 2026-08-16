@@ -85,6 +85,15 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(page.getByRole("button", { name: "各分公司營收" })).toBeVisible();
   await page.getByRole("button", { name: "各分公司營收" }).click();
   await expect(page.getByText("查詢情境:各分公司營收")).toBeVisible();
+
+  // E09-S012 "Applied-filter display" — this question ("上季各產品線的
+  // 毛利率是多少?") never matched any scenario's own keywords (that's why
+  // the clarification picker showed every scenario as a fallback option
+  // above), so picking 各分公司營收 here was a manual, no-real-match pick
+  // — the honest "no keyword" label, not a fabricated match, is what
+  // should show.
+  await expect(page.getByText("已套用篩選：無自動偵測關鍵字(使用者手動選擇此情境)")).toBeVisible();
+
   // The picker's own scenario buttons are gone — not "zero buttons of any
   // kind": E09-S005 "Query confirmation UI" legitimately adds its own,
   // differently-purposed 確認執行查詢 button at exactly this point.

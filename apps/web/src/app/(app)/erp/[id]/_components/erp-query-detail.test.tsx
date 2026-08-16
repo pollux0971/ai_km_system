@@ -4,6 +4,7 @@ import ErpQueryDetail from "./erp-query-detail";
 import { confirmErpQuery, executeErpQuery, getErpQuery, selectErpQueryScenario } from "@/lib/erp-queries";
 import { matchErpScenarios } from "@/lib/erp-scenarios";
 import { simulateErpQueryExecution } from "@/lib/erp-execution";
+import { getErpResultSummary } from "@/lib/erp-results";
 import { trackEvent } from "@/lib/telemetry";
 
 vi.mock("@/lib/erp-queries", () => ({
@@ -365,5 +366,40 @@ describe("ErpQueryDetail query execution (E09-S006)", () => {
     const failureCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "erp_query_execute_failure");
     expect(failureCall).toBeDefined();
     expect((failureCall as [string, { properties: { code: string } }])[1].properties.code).toBe("SERVICE_UNAVAILABLE");
+  });
+});
+
+describe("ErpQueryDetail text summary (E09-S007)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+
+  it("shows the scenario's own result summary alongside the existing 查詢已執行完成 status once executed", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    expect(await screen.findByText("查詢已執行完成。")).toBeInTheDocument();
+    expect(screen.getByText(getErpResultSummary(executedQuery.selectedScenarioId))).toBeInTheDocument();
+  });
+
+  it("does not show any result summary before execution completes", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...executedQuery, executedAt: undefined },
+    });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByText("執行中…");
+
+    expect(screen.queryByText(getErpResultSummary(executedQuery.selectedScenarioId))).not.toBeInTheDocument();
   });
 });

@@ -21,7 +21,7 @@
 const ERP_RESULT_SUMMARIES: Record<string, string> = {
   "revenue-by-branch": "本次查詢共涵蓋 3 個分公司,總營收為 NT$ 12,450,000,較上期成長 8%。",
   "low-stock-items": "共發現 5 項庫存低於安全存量的品項,建議儘快補貨。",
-  "overdue-receivables": "共有 8 筆逾期應收帳款,總金額 NT$ 850,000。",
+  "overdue-receivables": "共有 4 筆逾期應收帳款,總金額 NT$ 850,000。",
   "purchase-order-status": "目前有 4 張採購單處於待到貨狀態。",
 };
 

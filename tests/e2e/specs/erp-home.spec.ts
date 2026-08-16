@@ -114,6 +114,15 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await page.getByRole("button", { name: "確認執行查詢" }).click();
   await expect(page.getByText("執行中…")).toBeVisible();
   await expect(page.getByText("查詢已執行完成。")).toBeVisible();
+
+  // E09-S013 "Data freshness badge" — additive again: the query's own
+  // executedAt timestamp, formatted the same way as the existing
+  // createdAt line at the top of the page. The exact time is set at
+  // real E2E run time (not a fixed mock), so only the badge's presence
+  // and label text are asserted here — not the volatile timestamp
+  // value itself.
+  await expect(page.getByText("資料更新時間：")).toBeVisible();
+
   // E09-S009 "Server pagination UI" (below) legitimately adds its own
   // 上一頁/下一頁 nav buttons at this exact resting state — a different
   // kind of control (browsing an already-complete result) from what this

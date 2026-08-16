@@ -45,6 +45,7 @@ describe("UserList (E11-S002)", () => {
           department: "資訊部",
           roles: ["general_user"],
           status: "active",
+          createdAt: "2026-01-15T02:00:00.000Z",
         },
         {
           userId: "u2",
@@ -53,6 +54,7 @@ describe("UserList (E11-S002)", () => {
           department: "業務部",
           roles: ["sales_purchasing"],
           status: "disabled",
+          createdAt: "2026-03-10T08:45:00.000Z",
         },
       ],
     });
@@ -79,6 +81,7 @@ describe("UserList (E11-S002)", () => {
           department: "資訊部",
           roles: ["general_user"],
           status: "active",
+          createdAt: "2026-01-15T02:00:00.000Z",
         },
       ],
     });
@@ -87,5 +90,29 @@ describe("UserList (E11-S002)", () => {
 
     await screen.findByText("示範使用者");
     expect(screen.queryByText("尚無使用者。")).not.toBeInTheDocument();
+  });
+});
+
+describe("UserList links to detail pages (E11-S003)", () => {
+  it("links each user's own row to its /users/{id} detail page, now that route exists", async () => {
+    mockedListUsers.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          userId: "u1",
+          name: "示範使用者",
+          email: "demo-user@example.com",
+          department: "資訊部",
+          roles: ["general_user"],
+          status: "active",
+          createdAt: "2026-01-15T02:00:00.000Z",
+        },
+      ],
+    });
+
+    render(<UserList />);
+
+    const link = await screen.findByRole("link", { name: /示範使用者/ });
+    expect(link).toHaveAttribute("href", "/users/u1");
   });
 });

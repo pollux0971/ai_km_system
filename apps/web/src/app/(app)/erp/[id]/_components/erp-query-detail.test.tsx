@@ -716,3 +716,46 @@ describe("ErpQueryDetail applied-filter display (E09-S012)", () => {
     }
   });
 });
+
+describe("ErpQueryDetail data freshness badge (E09-S013)", () => {
+  const executedQuery = {
+    id: "query2",
+    questionText: "上個月各分公司的營收總額是多少?",
+    createdAt: "2026-08-16T00:00:00.000Z",
+    selectedScenarioId: matchErpScenarios("上個月各分公司的營收總額是多少?")[0]!.id,
+    confirmedAt: "2026-08-16T00:05:00.000Z",
+    executedAt: "2026-08-16T00:05:01.000Z",
+  };
+
+  it("shows the data freshness badge with the execution timestamp once executed", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    // toLocaleString("zh-TW") inserts a U+2009 thin space before 上午/下午
+    // — normalized the same way Testing Library's own default normalizer
+    // collapses DOM whitespace, so both sides of the comparison agree.
+    const formattedExecutedAt = new Date(executedQuery.executedAt).toLocaleString("zh-TW").replace(/\s+/g, " ");
+    expect(await screen.findByText(formattedExecutedAt)).toBeInTheDocument();
+    expect(screen.getByText(formattedExecutedAt).closest("time")).toHaveAttribute("dateTime", executedQuery.executedAt);
+  });
+
+  it("does not show any data freshness badge before execution completes", async () => {
+    mockedGetErpQuery.mockResolvedValue({
+      ok: true,
+      value: { ...executedQuery, executedAt: undefined },
+    });
+    mockedExecuteErpQuery.mockReturnValue(new Promise(() => {}));
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+    await screen.findByText("執行中…");
+
+    // toLocaleString("zh-TW") inserts a U+2009 thin space before 上午/下午
+    // — normalized the same way Testing Library's own default normalizer
+    // collapses DOM whitespace, so both sides of the comparison agree.
+    const formattedExecutedAt = new Date(executedQuery.executedAt).toLocaleString("zh-TW").replace(/\s+/g, " ");
+    expect(screen.queryByText(formattedExecutedAt)).not.toBeInTheDocument();
+  });
+});

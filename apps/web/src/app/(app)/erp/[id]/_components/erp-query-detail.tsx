@@ -137,6 +137,17 @@ type State =
  * selected, not gated on execution — it explains the AI's scenario
  * choice, independent of whether results exist yet. Purely additive.
  *
+ * E09-S013 "Data freshness badge" adds one more line right after "查詢
+ * 已執行完成。" — this mock has no real ERP backend sync process to
+ * report a freshness timestamp from, so the only honest "as of" moment
+ * is this query's own executedAt, formatted the identical way
+ * erpQuery.createdAt already is above (same `<time dateTime=...>`
+ * pattern — neither one has ever needed its own lib file, this being
+ * a bare Date/toLocaleString call with no derivation logic to unit-test
+ * in isolation). Gated on executedAt like S007-S011 (a freshness claim
+ * only means something once a result actually exists), unlike S012's
+ * own applied-filter line just above. Purely additive.
+ *
  * Deliberately does NOT retrofit ErpQueryList (S001) into linking here,
  * same self-adopted scope boundary CaseDetail (E07-S021) already
  * documents for MaintenanceCaseList — ErpQueryList's own "renders no
@@ -304,6 +315,9 @@ export default function ErpQueryDetail({ id }: { id: string }) {
           {erpQuery.executedAt ? (
             <>
               <p>查詢已執行完成。</p>
+              <p>
+                資料更新時間：<time dateTime={erpQuery.executedAt}>{new Date(erpQuery.executedAt).toLocaleString("zh-TW")}</time>
+              </p>
               <p>{getErpResultSummary(erpQuery.selectedScenarioId ?? "")}</p>
               {(() => {
                 const kpi = getErpResultKpi(erpQuery.selectedScenarioId ?? "");

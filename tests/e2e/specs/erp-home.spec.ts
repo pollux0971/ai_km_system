@@ -85,8 +85,18 @@ test("E09-S002: submitting a natural-language question creates a new ERP query a
   await expect(page.getByRole("button", { name: "各分公司營收" })).toBeVisible();
   await page.getByRole("button", { name: "各分公司營收" }).click();
   await expect(page.getByText("查詢情境:各分公司營收")).toBeVisible();
-  // Scoped to `main` — an unscoped getByRole("button") also matches the
-  // header chrome's own 通知/user-menu buttons, which isn't what this is
-  // about.
+  // The picker's own scenario buttons are gone — not "zero buttons of any
+  // kind": E09-S005 "Query confirmation UI" legitimately adds its own,
+  // differently-purposed 確認執行查詢 button at exactly this point.
+  for (const scenarioLabel of ["各分公司營收", "低庫存品項", "逾期應收帳款", "採購單狀態"]) {
+    await expect(page.getByRole("button", { name: scenarioLabel })).toHaveCount(0);
+  }
+
+  // E09-S005 "Query confirmation UI" — a separate explicit confirm step
+  // sits between scenario selection and S006's own execution/loading
+  // state (which doesn't exist yet), same "don't invent the next story's
+  // own capability" restraint this whole epic already follows.
+  await page.getByRole("button", { name: "確認執行查詢" }).click();
+  await expect(page.getByText("查詢已確認，準備執行。")).toBeVisible();
   await expect(page.getByRole("main").getByRole("button")).toHaveCount(0);
 });

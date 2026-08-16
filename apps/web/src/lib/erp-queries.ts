@@ -19,6 +19,12 @@ import { ERP_SCENARIO_OPTIONS } from "./erp-scenarios";
  * MaintenanceCaseSummary's own equipmentId/serialNumber/errorCode
  * already establish.
  *
+ * `confirmedAt` (E09-S005 "Query confirmation UI") is optional the same
+ * way — absent until the user explicitly confirms a query that already
+ * has a `selectedScenarioId`. A timestamp rather than a boolean, same
+ * "store when, not just whether" precedent `createdAt` itself already
+ * sets for this same interface.
+ *
  * The real ERP query engine and its E10 (Enterprise Data Integration,
  * Team B) backend don't exist yet — `contracts/` has zero hits for
  * erp/E10, and E10 is Team B's own separate epic. Per SOURCE_BASELINE
@@ -30,6 +36,7 @@ export interface ErpQuerySummary {
   questionText: string;
   createdAt: string;
   selectedScenarioId?: string;
+  confirmedAt?: string;
 }
 
 /**
@@ -153,6 +160,33 @@ export async function selectErpQueryScenario(id: string, scenarioId: string): Pr
   }
 
   const updated: ErpQuerySummary = { ...query, selectedScenarioId: scenarioId };
+  writeStore(store.map((item) => (item.id === id ? updated : item)));
+  return { ok: true, value: updated };
+}
+
+/**
+ * E09-S005 "Query confirmation UI". Records the user's explicit
+ * confirmation that a query (with a scenario already selected) is ready
+ * to run — the gate E09-S006 "Query loading state" will check before
+ * actually starting execution. Fails closed with NOT_FOUND for an
+ * unknown query id (same shape selectErpQueryScenario already uses) and
+ * VALIDATION_ERROR when no scenario has been selected yet, even though
+ * the confirm button only ever renders after selection — same
+ * server-validates-too discipline every sibling mutation in this file
+ * already follows.
+ */
+export async function confirmErpQuery(id: string): Promise<Result<ErpQuerySummary, ApiError>> {
+  const store = readStore();
+  const query = store.find((item) => item.id === id);
+  if (!query) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個 ERP 查詢。" } };
+  }
+
+  if (!query.selectedScenarioId) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請先選擇查詢情境。" } };
+  }
+
+  const updated: ErpQuerySummary = { ...query, confirmedAt: new Date().toISOString() };
   writeStore(store.map((item) => (item.id === id ? updated : item)));
   return { ok: true, value: updated };
 }

@@ -817,9 +817,18 @@ describe("ErpQueryDetail Excel export action (E09-S016)", () => {
     executedAt: "2026-08-16T00:05:01.000Z",
   };
 
-  function decodeCsvHref(href: string): string {
+  function decodeCsvHrefRaw(href: string): string {
     expect(href.startsWith("data:text/csv;charset=utf-8,")).toBe(true);
-    return decodeURIComponent(href.replace("data:text/csv;charset=utf-8,", "")).replace(/^﻿/, "");
+    return decodeURIComponent(href.replace("data:text/csv;charset=utf-8,", ""));
+  }
+
+  // Strips the leading BOM after its own presence is verified separately
+  // below — a bare strip-without-asserting here would make this helper
+  // silently tolerate a regression that drops the BOM entirely (a mutation
+  // test confirmed exactly that: removing the BOM left every other test in
+  // this block still green, since none of them checked for it directly).
+  function decodeCsvHref(href: string): string {
+    return decodeCsvHrefRaw(href).replace(/^﻿/, "");
   }
 
   it("shows an 匯出 Excel link once executed, downloading a CSV data URI", async () => {
@@ -831,6 +840,17 @@ describe("ErpQueryDetail Excel export action (E09-S016)", () => {
     const link = await screen.findByRole("link", { name: "匯出 Excel" });
     expect(link).toHaveAttribute("download", "erp-query-result.csv");
     decodeCsvHref(link.getAttribute("href") ?? "");
+  });
+
+  it("prefixes the CSV with a UTF-8 BOM, so Excel doesn't mis-detect the Chinese-character encoding", async () => {
+    mockedGetErpQuery.mockResolvedValue({ ok: true, value: executedQuery });
+
+    render(<ErpQueryDetail id="query2" />);
+    await screen.findByRole("heading", { name: executedQuery.questionText, level: 1 });
+
+    const link = await screen.findByRole("link", { name: "匯出 Excel" });
+    const rawCsv = decodeCsvHrefRaw(link.getAttribute("href") ?? "");
+    expect(rawCsv.startsWith("﻿")).toBe(true);
   });
 
   it("the exported CSV contains every row of the full table, including rows beyond the current (page 1) view", async () => {

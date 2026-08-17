@@ -35,6 +35,38 @@ const ROLE_DESCRIPTIONS: Record<Role, string> = {
   super_administrator: "最高系統權限。",
 };
 
+const STORAGE_KEY = "ai-km:mock-role-descriptions";
+
+/**
+ * E11-S007 "Role editor" — first writeDescriptions() caller (S006,
+ * read-only, deliberately left persistence out). Same sessionStorage-
+ * backed reasoning as users.ts's own readStore(), except this stores a
+ * `Record<Role, string>` (the full, always-9-key description map) not
+ * an array — `updateRoleDescription` always reads the full map, updates
+ * one key, and writes the full map back, same "write the complete
+ * current state, not a diff" shape disableUser's own writeStore call
+ * already establishes for its own array.
+ */
+function readDescriptions(): Record<Role, string> {
+  if (typeof window === "undefined") return ROLE_DESCRIPTIONS;
+  const raw = window.sessionStorage.getItem(STORAGE_KEY);
+  if (!raw) return ROLE_DESCRIPTIONS;
+  try {
+    return JSON.parse(raw) as Record<Role, string>;
+  } catch {
+    return ROLE_DESCRIPTIONS;
+  }
+}
+
+function writeDescriptions(descriptions: Record<Role, string>): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(descriptions));
+}
+
+function isRole(value: string): value is Role {
+  return (ALL_ROLES as string[]).includes(value);
+}
+
 /**
  * Same `Promise<Result<T[], ApiError>>` shape listUsers/listErpQueries/
  * listMaintenanceCases already establish for "the thing a whole list
@@ -46,5 +78,49 @@ const ROLE_DESCRIPTIONS: Record<Role, string> = {
  * story's own list page consistent with every sibling list page.
  */
 export async function listRoles(): Promise<Result<RoleSummary[], ApiError>> {
-  return { ok: true, value: ALL_ROLES.map((role) => ({ role, description: ROLE_DESCRIPTIONS[role] })) };
+  const descriptions = readDescriptions();
+  return { ok: true, value: ALL_ROLES.map((role) => ({ role, description: descriptions[role] })) };
+}
+
+/**
+ * E11-S007 "Role editor". Takes a raw `string` (not `Role`) — the
+ * caller is a `/roles/[role]` dynamic route segment, which is always an
+ * untyped string from the URL, not guaranteed to be a real role. Same
+ * `value: T | null` (not a NOT_FOUND error) shape getUser/getErpQuery
+ * already establish for "the lookup itself succeeded; this particular
+ * id/role just doesn't resolve to anything."
+ */
+export async function getRole(role: string): Promise<Result<RoleSummary | null, ApiError>> {
+  if (!isRole(role)) {
+    return { ok: true, value: null };
+  }
+  const descriptions = readDescriptions();
+  return { ok: true, value: { role, description: descriptions[role] } };
+}
+
+/**
+ * E11-S007 "Role editor". Also takes a raw `string` for `role` and
+ * re-validates it server-side — same "don't trust a bypassed client"
+ * discipline selectErpQueryScenario's own scenarioId check already
+ * establishes, even though the editor UI only ever reaches this
+ * function after `getRole` has already confirmed the role is real.
+ * Unlike `disableUser`/`enableUser` (idempotent, no validity check on
+ * their own input beyond existence), `description` is required here —
+ * a role's description IS this whole feature's actual content, not
+ * optional metadata the way KnowledgeBase's own `description` is.
+ */
+export async function updateRoleDescription(role: string, description: string): Promise<Result<RoleSummary, ApiError>> {
+  if (!isRole(role)) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個角色。" } };
+  }
+
+  const trimmed = description.trim();
+  if (!trimmed) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請輸入角色說明。" } };
+  }
+
+  const descriptions = readDescriptions();
+  const updated = { ...descriptions, [role]: trimmed };
+  writeDescriptions(updated);
+  return { ok: true, value: { role, description: trimmed } };
 }

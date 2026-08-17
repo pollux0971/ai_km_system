@@ -34,3 +34,37 @@ test("E11-S006: navigating from the admin home to 角色管理 shows all 9 syste
     await expect(page.getByText(role, { exact: true })).toBeVisible();
   }
 });
+
+/**
+ * E11-S007 "Role editor" — clicking a role's own row from the list (the
+ * link E11-S007 added, per role-list.tsx's own doc comment) reaches a
+ * dedicated /roles/{role} page where its description can be edited and
+ * saved, with the change surviving a reload (sessionStorage-backed,
+ * same persistence guarantee every other mutation in this codebase
+ * already has).
+ */
+test("E11-S007: editing a role's description from its own page persists across a reload", async ({ page }) => {
+  await page.goto("/roles");
+  await page.getByRole("link", { name: "auditor" }).click();
+  await page.waitForURL((url) => url.pathname === "/roles/auditor");
+
+  await expect(page.getByRole("heading", { name: "auditor", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("角色說明")).toHaveValue("查看 Audit、Security Event。");
+
+  await page.getByLabel("角色說明").fill("負責稽核與安全事件審閱。");
+  await page.getByRole("button", { name: "儲存" }).click();
+
+  await expect(page.getByText("已儲存。", { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByLabel("角色說明")).toHaveValue("負責稽核與安全事件審閱。");
+
+  await page.goto("/roles");
+  await expect(page.getByText("負責稽核與安全事件審閱。", { exact: true })).toBeVisible();
+});
+
+test("E11-S007: visiting an unknown role shows a distinct not-found state", async ({ page }) => {
+  await page.goto("/roles/this-role-does-not-exist");
+
+  await expect(page.getByText("找不到這個角色。", { exact: true })).toBeVisible();
+});

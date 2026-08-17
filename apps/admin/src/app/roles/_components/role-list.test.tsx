@@ -78,3 +78,17 @@ describe("RoleList (E11-S006)", () => {
     expect(screen.queryByText("尚無角色。")).not.toBeInTheDocument();
   });
 });
+
+describe("RoleList links to the role editor (E11-S007)", () => {
+  it("links each role's own row to its /roles/{role} editor page, now that route exists", async () => {
+    mockedListRoles.mockResolvedValue({
+      ok: true,
+      value: [{ role: "general_user", description: "一般企業員工。" }],
+    });
+
+    render(<RoleList />);
+
+    const link = await screen.findByRole("link", { name: "general_user" });
+    expect(link).toHaveAttribute("href", "/roles/general_user");
+  });
+});

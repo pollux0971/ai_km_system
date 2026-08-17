@@ -25,3 +25,11 @@ describe("AdminHomePage entry links (E11-S006)", () => {
     expect(screen.getByRole("link", { name: "角色管理" })).toHaveAttribute("href", "/roles");
   });
 });
+
+describe("AdminHomePage entry links (E11-S008)", () => {
+  it("links to the permission matrix", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "權限矩陣" })).toHaveAttribute("href", "/permissions");
+  });
+});

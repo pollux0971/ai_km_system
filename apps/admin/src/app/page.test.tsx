@@ -65,3 +65,11 @@ describe("AdminHomePage entry links (E11-S012)", () => {
     expect(screen.getByRole("link", { name: "提示詞管理" })).toHaveAttribute("href", "/prompts");
   });
 });
+
+describe("AdminHomePage entry links (E11-S013)", () => {
+  it("links to model admin", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "模型管理" })).toHaveAttribute("href", "/models");
+  });
+});

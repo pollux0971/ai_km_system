@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 9 | 0 | 0 | 0 | 16 |
+| E11 Admin Console | 25 | 9 | 0 | 1 | 0 | 15 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 141 | 0 | 0 | 1 | 33 |
+| **合計** | **175** | 141 | 0 | 1 | 1 | 32 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -207,7 +207,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E11-S007 | approved | story/E11-S007-role-editor | [E11-S007.md](E11-S007.md) | Role editor;`getRole(role)`(比照 `getUser` 的 `value: T \| null` 形狀)+ `updateRoleDescription(role, description)`(role 需真實存在→NOT_FOUND、說明不得空白→VALIDATION_ERROR),`roles.ts` 新增 sessionStorage-backed `readDescriptions`/`writeDescriptions`。`/roles/[role]` 獨立路由頁面(比照 `EditKnowledgeBase` 的獨立路由先例,非 `RenameConversation` 的行內切換——本頁本身沒有「編輯狀態之外」的既有頁可切換回去),role 唯讀、description 可編輯,儲存成功不導頁(同頁反映最新值,因本頁同時是角色詳情頁)。`description` 刻意設為必填,偏離 `EditKnowledgeBase` 的 description 選填先例(理由:兩者欄位語意不同,已於 EVIDENCE 記錄)。`role-list.tsx` 加上連結,兌現 S006 自己記錄的延後事項。DEV 自己的對抗性複驗確認「只更新目標角色」不變量被測試守護(突變:全部角色套用同一段新說明,精準命中 1 個測試)。EVIDENCE 落檔後自我複查再補 1 個測試(編輯已儲存的草稿後「已儲存。」提示需消失),純新增。獨立審核 APPROVE(1 round,無需修正;gate 全綠:typecheck 20/20、lint 20/20、`pnpm test` 全 pipeline 綠,admin 11/11 檔案 93/93 tests、E2E 216/216;diff 邊界確認乾淨,僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S008 | approved | story/E11-S008-permission-matrix | [E11-S008.md](E11-S008.md) | Permission matrix;`listPermissionMatrix()`(比照 `listRoles`/`listUsers` 形狀)回傳 9 個角色 × 各自能力清單;能力內容逐項取自 SOURCE_BASELINE §7 每個角色的「管理/使用/查看 X」條列(`roles.ts` 已用過同一份來源),`super_administrator` 依「最高系統權限」字面推導取全部能力聯集(已誠實記錄為 assumption)。`contracts/permissions/README.md` 確認 Team B 尚未提供真正權限模型 contract,本 story 刻意不發明 resource:action 授權系統,純唯讀參考矩陣。UI 用真正的 `<table>`(role rows × capability columns),cell 用「✓」/空白文字表示,不靠顏色傳達狀態。首頁新增「權限矩陣」入口連結,兌現既有模式。獨立審核 APPROVE(1 round,1 個 MINOR 不影響判定;審核者獨立對抗性突變鎖定與 DEV 不同的元件渲染層,精準命中 1 個測試;gate 全綠:typecheck 20/20、lint 20/20、build 12/12,`pnpm test` 全 pipeline 綠,admin 13/13 檔案 108/108 tests、E2E 217/217;diff 邊界確認乾淨,僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S009 | approved | story/E11-S009-department-management | [E11-S009.md](E11-S009.md) | Department management;`listDepartments()`/`createDepartment({ name })`,種子資料(資訊部/維修部/業務部/稽核部)逐字取自 `users.ts`/`auth-client` mock 既有 `department` 自由文字值,未發明新組織架構內容。`AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` 的「E02-S03 Department Entity」屬 Team B,`contracts/` 零 department 相關內容;本 story 比照 `E11-S004`「Create user」的既有先例(`AdminUser` 同樣名義上 Team B 所有,仍以純前端 mock 完整建出 CRUD),不等待 Team B、不發明 contract,誠實標示為 mock。List + Create 合併成一頁(部門只有 name 一個欄位,不到獨立路由頁的複雜度門檻),建立成功即時併入畫面清單,不整頁重新整理。FIX 循環 2 次(typecheck 索引型別錯誤 1 次、測試漏寫 mock reset 導致呼叫次數斷言累積失敗 1 次),皆單次修正、未觸及 5 次上限。獨立審核 APPROVE(1 round,無需修正;審核者獨立對抗性突變鎖定與 DEV 不同的元件狀態更新層,精準命中 1 個測試;另獨立查證 contracts/ 與 packages/ 零 Department 型別、E11-S004 先例屬實;gate 全綠:typecheck 20/20、lint 20/20、build 12/12,`pnpm test` 全 pipeline 綠,admin 15/15 檔案 127/127 tests、E2E 218/218;diff 邊界確認乾淨,僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
-| E11-S010 | todo | | | |
+| E11-S010 | in-progress | story/E11-S010-group-management | | 開發中 |
 | E11-S011 | todo | | | |
 | E11-S012 | todo | | | |
 | E11-S013 | todo | | | |

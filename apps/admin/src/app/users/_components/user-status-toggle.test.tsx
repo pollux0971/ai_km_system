@@ -90,6 +90,21 @@ describe("UserStatusToggle (E11-S005)", () => {
     expect(screen.getByRole("button", { name: "啟用" })).toBeInTheDocument();
   });
 
+  it("clears the previous error message once a retry succeeds", async () => {
+    mockedDisable.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個使用者。" } });
+    const onToggled = vi.fn();
+    render(<UserStatusToggle userId="u1" status="active" onToggled={onToggled} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "停用" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("停用失敗，請稍後再試。");
+
+    mockedDisable.mockResolvedValueOnce({ ok: true, value: sampleUser({ status: "disabled" }) });
+    fireEvent.click(screen.getByRole("button", { name: "停用" }));
+
+    await waitFor(() => expect(onToggled).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("disables the button while the toggle is in flight, preventing a double click", async () => {
     let resolveDisable!: (value: Awaited<ReturnType<typeof disableUser>>) => void;
     mockedDisable.mockReturnValue(new Promise((resolve) => (resolveDisable = resolve)));

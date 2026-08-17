@@ -97,3 +97,11 @@ describe("AdminHomePage entry links (E11-S016)", () => {
     expect(screen.getByRole("link", { name: "回饋佇列" })).toHaveAttribute("href", "/feedback");
   });
 });
+
+describe("AdminHomePage entry links (E11-S018)", () => {
+  it("links to the document failure queue", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "文件失敗佇列" })).toHaveAttribute("href", "/document-failures");
+  });
+});

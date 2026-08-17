@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
 import { listFailedDocuments, type FailedDocument } from "@/lib/document-failures";
+import DocumentFailureRetryButton from "./document-failure-retry-button";
 
 const logger = createLogger("admin:document-failure-list");
 
@@ -17,17 +18,23 @@ type State = { status: "loading" } | { status: "error" } | { status: "loaded"; d
  * own doc comment explains it's also honestly the current answer even
  * if a real aggregation channel existed, since apps/web's own seed
  * data has zero failed documents today.
+ *
+ * E11-S019 "Retry processing" adds a `DocumentFailureRetryButton` per
+ * row. `fetchDocuments` is pulled out of the mount effect (still
+ * guarded against an unmounted-component state update) so the SAME
+ * fetch can be re-triggered as `onRetried` — the same "the parent
+ * re-fetches, the child doesn't keep its own state" shape UserList's
+ * own `fetchUsers`/`onToggled` (E11-S005) already establishes.
  */
 export default function DocumentFailureList() {
   const [state, setState] = useState<State>({ status: "loading" });
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchDocuments = useCallback((cancelledRef?: { current: boolean }) => {
     const correlationId = crypto.randomUUID();
     logger.info("loading document failure list", { correlationId });
 
     listFailedDocuments().then((result) => {
-      if (cancelled) return;
+      if (cancelledRef?.current) return;
 
       if (!result.ok) {
         logger.error("failed to load document failure list", { correlationId, code: result.error.code });
@@ -38,11 +45,16 @@ export default function DocumentFailureList() {
       logger.info("document failure list loaded", { correlationId, count: result.value.length });
       setState({ status: "loaded", documents: result.value });
     });
+  }, []);
+
+  useEffect(() => {
+    const cancelledRef = { current: false };
+    fetchDocuments(cancelledRef);
 
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
-  }, []);
+  }, [fetchDocuments]);
 
   if (state.status === "loading") {
     return <LoadingIndicator />;
@@ -66,6 +78,9 @@ export default function DocumentFailureList() {
           <p>{document.knowledgeBaseId}</p>
           <p>
             <time dateTime={document.uploadedAt}>{new Date(document.uploadedAt).toLocaleString("zh-TW")}</time>
+          </p>
+          <p>
+            <DocumentFailureRetryButton documentId={document.id} onRetried={() => fetchDocuments()} />
           </p>
         </li>
       ))}

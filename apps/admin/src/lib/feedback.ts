@@ -34,3 +34,14 @@ export interface FeedbackItem {
 export async function listFeedback(): Promise<Result<FeedbackItem[], ApiError>> {
   return { ok: true, value: [] };
 }
+
+/**
+ * E11-S017 "Feedback detail". Same `T | null` shape `getUser`/`getRole`
+ * already establish for a single-record lookup by id — but here the
+ * answer is unconditionally `null` for every id, the direct consequence
+ * of `listFeedback()` above always being empty: there has never been a
+ * real feedback item for any id to match.
+ */
+export async function getFeedback(_id: string): Promise<Result<FeedbackItem | null, ApiError>> {
+  return { ok: true, value: null };
+}

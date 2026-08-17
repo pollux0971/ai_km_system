@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
 import { listRoles, type RoleSummary } from "@/lib/roles";
@@ -13,10 +14,10 @@ type State = { status: "loading" } | { status: "error" } | { status: "loaded"; r
  * E11-S006 "Role list" — same loading/error/empty/loaded shape
  * UserList (E11-S002) already established for this app's list pages.
  *
- * No link per row — `E11-S007` "Role editor" is the story that adds a
- * `/roles/{role}` route to link into, same "don't invent structure
- * ahead of the story that owns it" discipline user-list.tsx's own S002
- * doc comment already established for E11-S002 vs. E11-S003.
+ * E11-S007 "Role editor" adds the link straight to `/roles/{role}`
+ * below, now that the route actually exists — same relationship
+ * user-list.tsx's own doc comment already establishes between E11-S002
+ * and E11-S003.
  */
 export default function RoleList() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -61,7 +62,9 @@ export default function RoleList() {
       {state.roles.map((summary) => (
         <li key={summary.role} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
           <p>
-            <strong>{summary.role}</strong>
+            <Link href={`/roles/${summary.role}`}>
+              <strong>{summary.role}</strong>
+            </Link>
           </p>
           <p>{summary.description}</p>
         </li>

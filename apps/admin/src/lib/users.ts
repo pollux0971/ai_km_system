@@ -227,3 +227,41 @@ export async function createUser(input: {
   writeStore([...readStore(), user]);
   return { ok: true, value: user };
 }
+
+/**
+ * E11-S005 "Disable/enable user". Two separate functions rather than one
+ * boolean-toggle — same reasoning `archiveKnowledgeBaseDocument`/
+ * `unarchiveKnowledgeBaseDocument` already establish: each is its own
+ * distinct, independently-named user action (停用 vs 啟用), not one
+ * generic "set this flag" operation. Only failure is NOT_FOUND for an
+ * unknown id — same as that pair, disabling an already-disabled user (or
+ * enabling an already-active one) is allowed/idempotent, not a
+ * VALIDATION_ERROR; there is no current-state precondition to violate.
+ * No logger call here — same "mutation and telemetry are the caller's
+ * job, not the lib function's" separation every other mutation in this
+ * file already keeps (see executeErpQuery's own doc comment in
+ * erp-queries.ts for the original precedent).
+ */
+export async function disableUser(userId: string): Promise<Result<AdminUser, ApiError>> {
+  const store = readStore();
+  const existing = store.find((user) => user.userId === userId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個使用者。" } };
+  }
+
+  const updated: AdminUser = { ...existing, status: "disabled" };
+  writeStore(store.map((user) => (user.userId === userId ? updated : user)));
+  return { ok: true, value: updated };
+}
+
+export async function enableUser(userId: string): Promise<Result<AdminUser, ApiError>> {
+  const store = readStore();
+  const existing = store.find((user) => user.userId === userId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這個使用者。" } };
+  }
+
+  const updated: AdminUser = { ...existing, status: "active" };
+  writeStore(store.map((user) => (user.userId === userId ? updated : user)));
+  return { ok: true, value: updated };
+}

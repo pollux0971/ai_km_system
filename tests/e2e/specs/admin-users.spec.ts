@@ -96,3 +96,29 @@ test("E11-S004: the submit button stays disabled until the required fields and a
   await page.getByRole("checkbox", { name: "sales_purchasing" }).check();
   await expect(submit).toBeEnabled();
 });
+
+/**
+ * E11-S005 "Disable/enable user" — the per-row 停用/啟用 toggle
+ * (mirroring 封存文件/取消封存's own E05-S025 round-trip test) flips a
+ * seeded active user to disabled and back, with the change surviving a
+ * reload (sessionStorage-backed, same persistence guarantee every other
+ * mutation in this file already has).
+ */
+test("E11-S005: disabling and re-enabling a user from the list updates their status and survives a reload", async ({ page }) => {
+  await page.goto("/users");
+
+  const row = page.locator("li").filter({ hasText: "示範使用者" });
+  await expect(row.getByText("啟用中", { exact: true })).toBeVisible();
+
+  await row.getByRole("button", { name: "停用" }).click();
+  await expect(row.getByText("已停用", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "啟用" })).toBeVisible();
+
+  await page.reload();
+  const rowAfterReload = page.locator("li").filter({ hasText: "示範使用者" });
+  await expect(rowAfterReload.getByText("已停用", { exact: true })).toBeVisible();
+
+  await rowAfterReload.getByRole("button", { name: "啟用" }).click();
+  await expect(rowAfterReload.getByText("啟用中", { exact: true })).toBeVisible();
+  await expect(rowAfterReload.getByRole("button", { name: "停用" })).toBeVisible();
+});

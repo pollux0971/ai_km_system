@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
 import { listUsers, type AdminUser } from "@/lib/users";
+import UserStatusToggle from "./user-status-toggle";
 
 const logger = createLogger("admin:user-list");
 
@@ -24,17 +25,24 @@ const STATUS_LABEL: Record<AdminUser["status"], string> = {
  * now that the route actually exists — same "don't invent structure
  * ahead of the story that owns it" discipline erp-query-list.tsx's own
  * doc comment already established for E09-S001 vs. E09-S015.
+ *
+ * E11-S005 "Disable/enable user" adds a `UserStatusToggle` per row.
+ * `fetchUsers` is pulled out of the mount effect (still guarded against
+ * an unmounted-component state update) so the SAME fetch can be
+ * re-triggered as `onToggled` — a plain re-fetch, not a local patch of
+ * one row's status, same "the parent re-fetches, the child doesn't keep
+ * its own state" shape KnowledgeDocumentArchiveToggle's own `onToggled`
+ * callback already establishes for its sibling list.
  */
 export default function UserList() {
   const [state, setState] = useState<State>({ status: "loading" });
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchUsers = useCallback((cancelledRef?: { current: boolean }) => {
     const correlationId = crypto.randomUUID();
     logger.info("loading user list", { correlationId });
 
     listUsers().then((result) => {
-      if (cancelled) return;
+      if (cancelledRef?.current) return;
 
       if (!result.ok) {
         logger.error("failed to load user list", { correlationId, code: result.error.code });
@@ -45,11 +53,16 @@ export default function UserList() {
       logger.info("user list loaded", { correlationId, count: result.value.length });
       setState({ status: "loaded", users: result.value });
     });
+  }, []);
+
+  useEffect(() => {
+    const cancelledRef = { current: false };
+    fetchUsers(cancelledRef);
 
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
-  }, []);
+  }, [fetchUsers]);
 
   if (state.status === "loading") {
     return <LoadingIndicator />;
@@ -76,6 +89,9 @@ export default function UserList() {
           <p>{user.department}</p>
           <p>{user.roles.join("、")}</p>
           <p>{STATUS_LABEL[user.status]}</p>
+          <p>
+            <UserStatusToggle userId={user.userId} status={user.status} onToggled={() => fetchUsers()} />
+          </p>
         </li>
       ))}
     </ul>

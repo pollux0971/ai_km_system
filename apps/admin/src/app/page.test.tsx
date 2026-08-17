@@ -81,3 +81,11 @@ describe("AdminHomePage entry links (E11-S014)", () => {
     expect(screen.getByRole("link", { name: "連接器管理" })).toHaveAttribute("href", "/connectors");
   });
 });
+
+describe("AdminHomePage entry links (E11-S015)", () => {
+  it("links to the audit viewer", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "稽核紀錄" })).toHaveAttribute("href", "/audit");
+  });
+});

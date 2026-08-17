@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 20 | 0 | 0 | 0 | 5 |
+| E11 Admin Console | 25 | 20 | 0 | 1 | 0 | 4 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 152 | 0 | 0 | 1 | 22 |
+| **合計** | **175** | 152 | 0 | 1 | 1 | 21 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -218,7 +218,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E11-S018 | approved | story/E11-S018-document-failure-queue | [E11-S018.md](E11-S018.md) | Document failure queue;`listFailedDocuments()` 永遠回傳空陣列——與 Audit/Feedback 不同,缺的不是整個概念(`apps/web` 自己的 E05-S020/S021 已經把「文件處理失敗」+「重試」做成真的),而是跨知識庫聚合查詢管道,`contracts/` 零相關內容;獨立查核 apps/web 種子資料確認今天也真的沒有任何失敗文件。`FailedDocument` 鏡射 Team A 自己已核准的 `KnowledgeBaseDocument` 真實欄位,不是暫定猜測形狀。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。DEV 自己的對抗性複驗鎖定渲染層欄位對應(突變:name 被 knowledgeBaseId 覆蓋,精準命中 3 個測試)。獨立審核 APPROVE(1 round,無需修正;審核者獨立查核 E05-S020/S021 確實已核准、`SAMPLE_KNOWLEDGE_BASE_DOCUMENTS` 逐筆確認零 `status:"failed"`;另以獨立對抗性突變鎖定與 DEV 不同的另一層——空狀態判斷條件,精準命中 3 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 34/34 檔案 251/251 tests,E2E 227/227,較 S017 淨增 8/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S019 | approved | story/E11-S019-retry-processing | [E11-S019.md](E11-S019.md) | Retry processing;`retryDocumentProcessing(id)` 對任何 id 都回傳 `NOT_FOUND`——S018「沒有跨 KB 聚合管道」的直接推論,而非獨立假設,因為 admin 端沒有任何本機儲存可查。`DocumentFailureRetryButton` 比照 UserStatusToggle 的 pending/error 狀態模式,成功分支程式碼與測試完整存在(元件層 mock 掉 lib 函式,不受今天只能 NOT_FOUND 限制)。清單每列新增重試按鈕,`fetchDocuments` 抽出供 `onRetried` 重新觸發。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。DEV 自己的對抗性複驗誠實記錄一次未命中(防連點守衛與 disabled 屬性在測試環境重複,已診斷原因)+ 一次精準命中(移除 setError(null),命中 1 個測試)。E2E 新增「空佇列不留孤兒重試按鈕」(唯一誠實可測場景,因佇列永遠是空的)。獨立審核 APPROVE(1 round,無需修正;審核者 `--force` 全量重跑兩次皆固定命中 2 個與本 story 無關的 apps/web 長流程 E2E flaky——`knowledge-ui-e2e.spec.ts`/`maintenance-e2e.spec.ts`,失敗行號每次不同,獨立單獨執行/`--workers=1` 皆乾淨通過,診斷為資源競爭型 flaky 而非回歸,同 S010 已有先例,未修改任何測試強制變綠;本 story 自己的 2 個 E2E 測試在兩次全量重跑中皆穩定通過;另以獨立對抗性突變鎖定與 DEV 不同的第三層——`onRetried` 重新整理接線,精準命中 1 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 35/35 檔案 260/260 tests,E2E 228/228,較 S018 淨增 9/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S020 | approved | story/E11-S020-system-settings | [E11-S020.md](E11-S020.md) | System settings;`ssoEnabled` 鏡射 apps/web 自己已核准的 SSO feature flag(feature-flags.ts,E01-S015)目前預設值,是全 codebase 唯一真實存在的全域設定,刻意不發明其他項目。`SystemSettingsPanel` 比照 UserStatusToggle 的 pending/error 模式,無 empty 狀態(單一全域設定非清單)。切換對 apps/web 零真實效果(純本地 mock,同 Model/Connector 已建立的誠實揭露)。1 次 FIX 循環:狀態文字與其他文字串接在同一 `<p>` 內導致無法獨立查詢,判定為真實實作缺陷(非測試錯),拆成獨立 `<p>` 修正,從 typecheck 重新開始全數重跑皆綠。DEV 自己的對抗性複驗鎖定切換方向邏輯(突變:恆定呼叫 enableSso,精準命中 2 個測試)。E2E 新增真實的 sessionStorage 持久化驗證(停用後重新整理仍維持停用)。獨立審核 APPROVE(1 round,無需修正;審核者獨立查核 `feature-flags.ts` 的 `sso: { defaultEnabled: true }` 與 E01-S015 approved 皆屬實;另以獨立對抗性突變鎖定與 DEV 不同的另一層——顯示標籤映射,精準命中 5 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 37/37 檔案 271/271 tests,E2E 229/229,較 S019 淨增 11/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
-| E11-S021 | todo | | | |
+| E11-S021 | in-progress | story/E11-S021-usage-dashboard | | 開發中 |
 | E11-S022 | todo | | | |
 | E11-S023 | todo | | | |
 | E11-S024 | todo | | | |

@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 22 | 0 | 0 | 0 | 3 |
+| E11 Admin Console | 25 | 22 | 0 | 1 | 0 | 2 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 154 | 0 | 0 | 1 | 20 |
+| **合計** | **175** | 154 | 0 | 1 | 1 | 19 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -220,7 +220,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E11-S020 | approved | story/E11-S020-system-settings | [E11-S020.md](E11-S020.md) | System settings;`ssoEnabled` 鏡射 apps/web 自己已核准的 SSO feature flag(feature-flags.ts,E01-S015)目前預設值,是全 codebase 唯一真實存在的全域設定,刻意不發明其他項目。`SystemSettingsPanel` 比照 UserStatusToggle 的 pending/error 模式,無 empty 狀態(單一全域設定非清單)。切換對 apps/web 零真實效果(純本地 mock,同 Model/Connector 已建立的誠實揭露)。1 次 FIX 循環:狀態文字與其他文字串接在同一 `<p>` 內導致無法獨立查詢,判定為真實實作缺陷(非測試錯),拆成獨立 `<p>` 修正,從 typecheck 重新開始全數重跑皆綠。DEV 自己的對抗性複驗鎖定切換方向邏輯(突變:恆定呼叫 enableSso,精準命中 2 個測試)。E2E 新增真實的 sessionStorage 持久化驗證(停用後重新整理仍維持停用)。獨立審核 APPROVE(1 round,無需修正;審核者獨立查核 `feature-flags.ts` 的 `sso: { defaultEnabled: true }` 與 E01-S015 approved 皆屬實;另以獨立對抗性突變鎖定與 DEV 不同的另一層——顯示標籤映射,精準命中 5 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 37/37 檔案 271/271 tests,E2E 229/229,較 S019 淨增 11/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S021 | approved | story/E11-S021-usage-dashboard | [E11-S021.md](E11-S021.md) | Usage dashboard;`getUsageMetrics()` 永遠回傳零計數——真正的資料來源是 Team A 自己的 E13-S009/S010/S012(尚未排到,同 Feedback 缺口性質)。`UsageMetrics` 只涵蓋 E13-S012 標題點名的 DAU+提問數兩個指標。零計數比假數字更誠實(見設計決策)。UI 三態(loading/error/loaded,無 empty——單一數據物件)。對抗性自我複驗發現一個真實測試覆蓋缺口:初版測試只驗證兩個數字都在頁面某處,欄位互換突變測不出來;依凍結規則新增(不修改)更嚴謹的容器綁定測試,第二次同一突變精準命中。獨立審核 APPROVE(1 round,無需修正;審核者獨立查核 E13-S009/S010/S012 皆 todo、contracts 零內容,並確認新增測試確實是疊加而非修改既有內容;另以獨立對抗性突變鎖定與 DEV 不同的另一層——`useEffect` 內的錯誤分支 gating,精準命中 1 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 39/39 檔案 280/280 tests,E2E 230/230,較 S020 淨增 9/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S022 | approved | story/E11-S022-system-health-dashboard | [E11-S022.md](E11-S022.md) | System health dashboard;子系統清單本身真實(已核准的 connectors.ts/models.ts),缺的是健康讀數——真正的健康檢查是 E10-S04(Connector health check)/E12-S005(Model health/status),皆 Team B、皆未建置,`contracts/` 零 health 內容。`status: "unknown"` 型別化保留未來擴充空間。無 empty 狀態(固定真實清單)。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。DEV 自己的對抗性複驗直接吸取 E11-S006 教訓,用 4 筆真實規模 fixture 測截斷(突變:`slice(0, 2)`,精準命中)。獨立審核 APPROVE(1 round,無需修正;審核者獨立查核 E10-S004/E12-S005 皆 Owner: Team B、contracts 零 health 內容;另以獨立對抗性突變鎖定與 DEV 不同的另一層——`useEffect` 內的錯誤分支 gating,精準命中 1 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 41/41 檔案 287/287 tests,E2E 231/231,較 S021 淨增 7/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
-| E11-S023 | todo | | | |
+| E11-S023 | in-progress | story/E11-S023-admin-route-authorization | | 開發中 |
 | E11-S024 | todo | | | |
 | E11-S025 | todo | | | |
 

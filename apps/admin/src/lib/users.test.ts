@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createUser, getUser, listUsers } from "./users";
+import { createUser, disableUser, enableUser, getUser, listUsers } from "./users";
 
 // E11-S004 introduces sessionStorage-backed persistence (createUser needs
 // somewhere to write to) — same reset-between-tests precedent
@@ -209,5 +209,78 @@ describe("createUser (E11-S004)", () => {
     const after = await listUsers();
     if (!after.ok) throw new Error("expected ok");
     expect(after.value.length).toBe(before.value.length);
+  });
+});
+
+describe("disableUser / enableUser (E11-S005)", () => {
+  it("disables an active user, persisting across a subsequent getUser() call", async () => {
+    const result = await disableUser("mock-user-1");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("disabled");
+    expect(result.value.userId).toBe("mock-user-1");
+
+    const fetched = await getUser("mock-user-1");
+    if (!fetched.ok) throw new Error("expected ok");
+    expect(fetched.value?.status).toBe("disabled");
+  });
+
+  it("enables a disabled user, persisting across a subsequent getUser() call", async () => {
+    const result = await enableUser("mock-user-disabled");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("active");
+    expect(result.value.userId).toBe("mock-user-disabled");
+
+    const fetched = await getUser("mock-user-disabled");
+    if (!fetched.ok) throw new Error("expected ok");
+    expect(fetched.value?.status).toBe("active");
+  });
+
+  it("only changes the targeted user's status, leaving every other user's own record untouched", async () => {
+    const before = await listUsers();
+    if (!before.ok) throw new Error("expected ok");
+    const othersBefore = before.value.filter((user) => user.userId !== "mock-user-1");
+
+    await disableUser("mock-user-1");
+
+    const after = await listUsers();
+    if (!after.ok) throw new Error("expected ok");
+    const othersAfter = after.value.filter((user) => user.userId !== "mock-user-1");
+    expect(othersAfter).toEqual(othersBefore);
+  });
+
+  it("disabling an already-disabled user is idempotent, not an error", async () => {
+    const result = await disableUser("mock-user-disabled");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("disabled");
+  });
+
+  it("enabling an already-active user is idempotent, not an error", async () => {
+    const result = await enableUser("mock-user-1");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("active");
+  });
+
+  it("returns NOT_FOUND for disabling an unknown user id", async () => {
+    const result = await disableUser("not-a-real-user-id");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns NOT_FOUND for enabling an unknown user id", async () => {
+    const result = await enableUser("not-a-real-user-id");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("NOT_FOUND");
   });
 });

@@ -29,7 +29,8 @@ import Link from "next/link";
  * E11-S009 "Department management" adds "部門管理" the same way, now
  * that /departments exists. E11-S010 "Group management" adds "群組管理"
  * the same way, now that /groups exists. E11-S011 "Knowledge admin"
- * adds "知識庫管理" the same way, now that /knowledge exists.
+ * adds "知識庫管理" the same way, now that /knowledge exists. E11-S012
+ * "Prompt admin" adds "提示詞管理" the same way, now that /prompts exists.
  */
 export default function AdminHomePage() {
   return (
@@ -53,6 +54,9 @@ export default function AdminHomePage() {
       </p>
       <p>
         <Link href="/knowledge">知識庫管理</Link>
+      </p>
+      <p>
+        <Link href="/prompts">提示詞管理</Link>
       </p>
     </main>
   );

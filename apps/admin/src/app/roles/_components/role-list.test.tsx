@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import RoleList from "./role-list";
 import { listRoles } from "@/lib/roles";
+import { ALL_ROLES } from "@/lib/users";
 
 vi.mock("@/lib/roles", () => ({
   listRoles: vi.fn(),
@@ -49,6 +50,20 @@ describe("RoleList (E11-S006)", () => {
     expect(screen.getByText("一般企業員工。")).toBeInTheDocument();
     expect(screen.getByText("super_administrator")).toBeInTheDocument();
     expect(screen.getByText("最高系統權限。")).toBeInTheDocument();
+  });
+
+  it("renders every role it's given, not just the first few — a silent truncation would slip past a 2-item fixture", async () => {
+    mockedListRoles.mockResolvedValue({
+      ok: true,
+      value: ALL_ROLES.map((role) => ({ role, description: `${role} 的描述。` })),
+    });
+
+    render(<RoleList />);
+
+    await screen.findByText(`${ALL_ROLES[0]} 的描述。`);
+    for (const role of ALL_ROLES) {
+      expect(screen.getByText(role)).toBeInTheDocument();
+    }
   });
 
   it("does not show the empty state once roles are loaded", async () => {

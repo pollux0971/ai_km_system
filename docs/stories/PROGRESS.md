@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 18 | 0 | 0 | 0 | 7 |
+| E11 Admin Console | 25 | 18 | 0 | 1 | 0 | 6 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 150 | 0 | 0 | 1 | 24 |
+| **合計** | **175** | 150 | 0 | 1 | 1 | 23 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -216,7 +216,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E11-S016 | approved | story/E11-S016-feedback-queue | [E11-S016.md](E11-S016.md) | Feedback queue;`listFeedback()` 永遠回傳空陣列——唯一誠實的答案,因為 E13-S001「Answer OK feedback」/E13-S002「Answer NG feedback」雖屬 Team A 自己所有,但依既定 E01→E03→E05→E07→E09→E11→E13 開發順序尚未排到,整個 E13(17 個 story)都還是 todo,不是跨組缺口而是同組尚未排到的既定順序。與 Department/Group/Prompt 不同,本 story 刻意不提供任何寫入路徑——回饋的價值就是「使用者真實給出的判斷」,允許 admin 自己新增會等於允許偽造使用者意見。`FeedbackItem` 欄位是 Team A 自己對 E13-S001~S003 範圍的暫定顯示形狀,不涵蓋 E13-S004/S005 未來欄位。UI 四態齊全,loaded 狀態以測試 fixture 驗證渲染正確性。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。因無 mutation 函式可測「只更新目標」不變量,DEV 自己的對抗性複驗改為鎖定渲染層 verdict 欄位對應(突變:verdict 恆定顯示 OK,精準命中 2 個測試)。獨立審核 APPROVE(1 round,無需修正;審核者獨立查證 E13-S001/S002 Owner 為 Team A、目前仍 todo,`contracts/` 零 feedback 內容;另以獨立對抗性突變鎖定與 DEV 不同的空狀態渲染分支,精準命中 1 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 31/31 檔案 234/234 tests,E2E 225/225,較 S015 淨增 11/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S017 | approved | story/E11-S017-feedback-detail | [E11-S017.md](E11-S017.md) | Feedback detail;`getFeedback(id)` 對任何 id 都無條件回傳 null——`listFeedback()` 永遠為空的直接推論,而非獨立假設,因為沒有任何真實回饋項目存在。`FeedbackDetail` 四態齊全(loading/error/not-found/loaded),loaded 欄位與 list 每列相同,無新增欄位(比照 UserDetail 的同類誠實限制)。`feedback-list.tsx` 新增連結到 `/feedback/{id}`,兌現 S016 記錄的延後事項。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。DEV 自己的對抗性複驗鎖定 detail 元件自己獨立的 verdict 渲染邏輯(與 S016 list 元件的突變分屬不同檔案),突變:verdict 恆定顯示 OK,精準命中 1 個測試。獨立審核 APPROVE(1 round,無需修正;審核者以獨立對抗性突變鎖定與 DEV 不同的另一層——`feedback-list.tsx` 新增的 Link href 建構邏輯,精準命中 1 個測試;另獨立查證 `getFeedback` 邏輯確實是 `listFeedback()` 永遠為空的直接推論)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 32/32 檔案 243/243 tests,E2E 226/226,較 S016 淨增 9/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S018 | approved | story/E11-S018-document-failure-queue | [E11-S018.md](E11-S018.md) | Document failure queue;`listFailedDocuments()` 永遠回傳空陣列——與 Audit/Feedback 不同,缺的不是整個概念(`apps/web` 自己的 E05-S020/S021 已經把「文件處理失敗」+「重試」做成真的),而是跨知識庫聚合查詢管道,`contracts/` 零相關內容;獨立查核 apps/web 種子資料確認今天也真的沒有任何失敗文件。`FailedDocument` 鏡射 Team A 自己已核准的 `KnowledgeBaseDocument` 真實欄位,不是暫定猜測形狀。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。DEV 自己的對抗性複驗鎖定渲染層欄位對應(突變:name 被 knowledgeBaseId 覆蓋,精準命中 3 個測試)。獨立審核 APPROVE(1 round,無需修正;審核者獨立查核 E05-S020/S021 確實已核准、`SAMPLE_KNOWLEDGE_BASE_DOCUMENTS` 逐筆確認零 `status:"failed"`;另以獨立對抗性突變鎖定與 DEV 不同的另一層——空狀態判斷條件,精準命中 3 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 34/34 檔案 251/251 tests,E2E 227/227,較 S017 淨增 8/1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
-| E11-S019 | todo | | | |
+| E11-S019 | in-progress | story/E11-S019-retry-processing | | 開發中 |
 | E11-S020 | todo | | | |
 | E11-S021 | todo | | | |
 | E11-S022 | todo | | | |

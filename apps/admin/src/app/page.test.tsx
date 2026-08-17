@@ -89,3 +89,11 @@ describe("AdminHomePage entry links (E11-S015)", () => {
     expect(screen.getByRole("link", { name: "稽核紀錄" })).toHaveAttribute("href", "/audit");
   });
 });
+
+describe("AdminHomePage entry links (E11-S016)", () => {
+  it("links to the feedback queue", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "回饋佇列" })).toHaveAttribute("href", "/feedback");
+  });
+});

@@ -34,7 +34,8 @@ import Link from "next/link";
  * E11-S013 "Model admin" adds "模型管理" the same way, now that /models
  * exists. E11-S014 "Connector admin" adds "連接器管理" the same way, now
  * that /connectors exists. E11-S015 "Audit viewer" adds "稽核紀錄" the
- * same way, now that /audit exists.
+ * same way, now that /audit exists. E11-S016 "Feedback queue" adds
+ * "回饋佇列" the same way, now that /feedback exists.
  */
 export default function AdminHomePage() {
   return (
@@ -70,6 +71,9 @@ export default function AdminHomePage() {
       </p>
       <p>
         <Link href="/audit">稽核紀錄</Link>
+      </p>
+      <p>
+        <Link href="/feedback">回饋佇列</Link>
       </p>
     </main>
   );

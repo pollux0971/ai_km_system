@@ -37,7 +37,8 @@ import Link from "next/link";
  * same way, now that /audit exists. E11-S016 "Feedback queue" adds
  * "回饋佇列" the same way, now that /feedback exists. E11-S018
  * "Document failure queue" adds "文件失敗佇列" the same way, now that
- * /document-failures exists.
+ * /document-failures exists. E11-S020 "System settings" adds "系統設定"
+ * the same way, now that /settings exists.
  */
 export default function AdminHomePage() {
   return (
@@ -79,6 +80,9 @@ export default function AdminHomePage() {
       </p>
       <p>
         <Link href="/document-failures">文件失敗佇列</Link>
+      </p>
+      <p>
+        <Link href="/settings">系統設定</Link>
       </p>
     </main>
   );

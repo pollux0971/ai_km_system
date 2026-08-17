@@ -105,3 +105,11 @@ describe("AdminHomePage entry links (E11-S018)", () => {
     expect(screen.getByRole("link", { name: "文件失敗佇列" })).toHaveAttribute("href", "/document-failures");
   });
 });
+
+describe("AdminHomePage entry links (E11-S020)", () => {
+  it("links to system settings", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "系統設定" })).toHaveAttribute("href", "/settings");
+  });
+});

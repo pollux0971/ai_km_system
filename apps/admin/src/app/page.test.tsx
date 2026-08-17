@@ -121,3 +121,11 @@ describe("AdminHomePage entry links (E11-S021)", () => {
     expect(screen.getByRole("link", { name: "使用量儀表板" })).toHaveAttribute("href", "/usage");
   });
 });
+
+describe("AdminHomePage entry links (E11-S022)", () => {
+  it("links to the system health dashboard", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "系統健康儀表板" })).toHaveAttribute("href", "/health");
+  });
+});

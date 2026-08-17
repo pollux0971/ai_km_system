@@ -113,3 +113,11 @@ describe("AdminHomePage entry links (E11-S020)", () => {
     expect(screen.getByRole("link", { name: "系統設定" })).toHaveAttribute("href", "/settings");
   });
 });
+
+describe("AdminHomePage entry links (E11-S021)", () => {
+  it("links to the usage dashboard", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "使用量儀表板" })).toHaveAttribute("href", "/usage");
+  });
+});

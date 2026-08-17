@@ -33,3 +33,11 @@ describe("AdminHomePage entry links (E11-S008)", () => {
     expect(screen.getByRole("link", { name: "權限矩陣" })).toHaveAttribute("href", "/permissions");
   });
 });
+
+describe("AdminHomePage entry links (E11-S009)", () => {
+  it("links to department management", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "部門管理" })).toHaveAttribute("href", "/departments");
+  });
+});

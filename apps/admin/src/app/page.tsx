@@ -26,6 +26,8 @@ import Link from "next/link";
  * entry link once /users existed. E11-S006 "Role list" adds "角色管理"
  * the same way, now that /roles exists too. E11-S008 "Permission
  * matrix" adds "權限矩陣" the same way, now that /permissions exists.
+ * E11-S009 "Department management" adds "部門管理" the same way, now
+ * that /departments exists.
  */
 export default function AdminHomePage() {
   return (
@@ -40,6 +42,9 @@ export default function AdminHomePage() {
       </p>
       <p>
         <Link href="/permissions">權限矩陣</Link>
+      </p>
+      <p>
+        <Link href="/departments">部門管理</Link>
       </p>
     </main>
   );

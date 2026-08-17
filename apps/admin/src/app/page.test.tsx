@@ -49,3 +49,11 @@ describe("AdminHomePage entry links (E11-S010)", () => {
     expect(screen.getByRole("link", { name: "群組管理" })).toHaveAttribute("href", "/groups");
   });
 });
+
+describe("AdminHomePage entry links (E11-S011)", () => {
+  it("links to knowledge base admin", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "知識庫管理" })).toHaveAttribute("href", "/knowledge");
+  });
+});

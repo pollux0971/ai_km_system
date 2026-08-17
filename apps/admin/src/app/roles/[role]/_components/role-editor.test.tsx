@@ -79,6 +79,25 @@ describe("RoleEditor (E11-S007)", () => {
     expect(screen.getByLabelText("角色說明")).toHaveValue("更新後的說明。");
   });
 
+  it("clears the 已儲存 confirmation once the draft is edited again, so it can't misleadingly imply new edits are already saved", async () => {
+    mockedGetRole.mockResolvedValue({ ok: true, value: { role: "general_user", description: "一般企業員工。" } });
+    mockedUpdateRoleDescription.mockResolvedValue({
+      ok: true,
+      value: { role: "general_user", description: "更新後的說明。" },
+    });
+
+    render(<RoleEditor role="general_user" />);
+    await screen.findByLabelText("角色說明");
+
+    fireEvent.change(screen.getByLabelText("角色說明"), { target: { value: "更新後的說明。" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存" }));
+    expect(await screen.findByText("已儲存。")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("角色說明"), { target: { value: "更新後的說明。還沒儲存的部分" } });
+
+    expect(screen.queryByText("已儲存。")).not.toBeInTheDocument();
+  });
+
   it("shows a distinct error message and keeps the entered draft when saving fails", async () => {
     mockedGetRole.mockResolvedValue({ ok: true, value: { role: "general_user", description: "一般企業員工。" } });
     mockedUpdateRoleDescription.mockResolvedValue({

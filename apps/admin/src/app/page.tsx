@@ -39,7 +39,9 @@ import Link from "next/link";
  * "Document failure queue" adds "文件失敗佇列" the same way, now that
  * /document-failures exists. E11-S020 "System settings" adds "系統設定"
  * the same way, now that /settings exists. E11-S021 "Usage dashboard"
- * adds "使用量儀表板" the same way, now that /usage exists.
+ * adds "使用量儀表板" the same way, now that /usage exists. E11-S022
+ * "System health dashboard" adds "系統健康儀表板" the same way, now
+ * that /health exists.
  */
 export default function AdminHomePage() {
   return (
@@ -87,6 +89,9 @@ export default function AdminHomePage() {
       </p>
       <p>
         <Link href="/usage">使用量儀表板</Link>
+      </p>
+      <p>
+        <Link href="/health">系統健康儀表板</Link>
       </p>
     </main>
   );

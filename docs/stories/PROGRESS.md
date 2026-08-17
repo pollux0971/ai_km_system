@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 13 | 0 | 0 | 0 | 12 |
+| E11 Admin Console | 25 | 13 | 0 | 1 | 0 | 11 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 145 | 0 | 0 | 1 | 29 |
+| **合計** | **175** | 145 | 0 | 1 | 1 | 28 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -211,7 +211,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E11-S011 | approved | story/E11-S011-knowledge-admin | [E11-S011.md](E11-S011.md) | Knowledge admin;`listKnowledgeBases()` 唯讀清單,欄位與種子內容(產品保固政策/設備維修標準作業程序/人力資源與請假規範)逐字取自 `apps/web` 自己的 `KnowledgeBaseSummary`/`SAMPLE_KNOWLEDGE_BASES`(E05-S001)。與 S009/S010 不同(Department/Group 在此 codebase 本來就無處建立,故那兩個 story 自己就是唯一建立入口),Knowledge Base 已有 `apps/web` E05 epic(30 個已核准 story)完整的建立/管理路徑,本 story 刻意不加 create,比照 RoleList 做成唯讀 oversight 清單,避免對同一 entity 產生第二個不同步的權威來源。顯示 name/description/updatedAt(`<time>` 格式比照 UserDetail 既有 pattern)。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。獨立審核 APPROVE(1 round,無需修正;審核者獨立對抗性突變鎖定與 DEV 不同的資料層,精準命中 1 個測試;另獨立逐欄位 diff 核對種子資料與 apps/web 完全一致,並確認唯讀範圍決策無規避規格跡象;gate 全綠:typecheck 20/20、lint 20/20、build 12/12,`pnpm test` 全 pipeline 綠,admin 19/19 檔案 156/156 tests、E2E 220/220;diff 邊界確認乾淨,僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S012 | approved | story/E11-S012-prompt-admin | [E11-S012.md](E11-S012.md) | Prompt admin;`listPrompts()`/`createPrompt({ name, content })`,種子清單刻意留空(這個 codebase 沒有任何真實提示詞文字可重用,不發明業務內容)。`AI_KM_BMAD_High_Granularity/epics/E12_Model_&_Prompt_Platform.md` 的「E12-S018 Prompt registry」/「E12-S019 Prompt version entity」屬 Team B(E12),`contracts/` 零 prompt 相關內容;`apps/web` 自己的 `knowledge-prompt-editor.tsx`(E05-S008)doc comment 已明確點名本 story「not yet built」。比照 S009/S010 的既有先例,純前端 mock,不等 Team B。name/content 兩個必填欄位(content 用 textarea,比照 apps/web 既有判斷)。DEV 首輪無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。獨立審核 Round 1 REQUEST-CHANGES(1 個 MAJOR:元件測試層缺「新增不影響既有清單」的覆蓋、mock fixture 一開始就是空清單所以測不出這類 bug;另修正 EVIDENCE 誤引 SOURCE_BASELINE.md 而非實際內容所在的 epics 檔),DEV 補 1 個測試修正後 Round 2 APPROVE。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 21/21 檔案 176/176 tests,E2E 221/221,較 S011 淨增 1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S013 | approved | story/E11-S013-model-admin | [E11-S013.md](E11-S013.md) | Model admin;`listModels()`/`disableModel(id)`/`enableModel(id)`,3 個固定 tier 逐字取自 `apps/web` 自己的 `AI_MODELS`(標準/進階/雲端),`apps/web` 的 `ai-models.ts` doc comment 已明確點名本 story「Enabling it is E11-S13 'Model Admin's job」。逐一比照 `UserStatusToggle`(E11-S005)既有 disable/enable 形狀,無確認對話框。誠實揭露:啟用雲端模型純粹是 apps/admin 自己 mock store 的畫面狀態,不接任何真正的 Model Gateway(E12,Team B,尚未建置),不會真的影響資料流向;也記錄未來若接上真正系統可能需要 E11-S024 確認機制,但不越權猜測其規格。FIX 循環 2 次(model-list.test.tsx 用虛構 id 違反 ModelId 封閉聯集型別,判定為測試技術性錯誤並移除該測試——Model 真實規模就是 3 筆,不像 Role 9 筆卻只測 2 筆有落差;以及測試漏寫 mock reset 導致呼叫次數累積),皆單次修正、未觸及 5 次上限。DEV 自己的對抗性複驗確認「切換一個模型不影響其他模型」不變量被測試守護(突變:disable 套用到全部模型,精準命中 1 個測試)。獨立審核 APPROVE(1 round,無需修正;審核者對「不影響真實資料流向」的誠實揭露、apps/web 引用、git 歷史未違反測試凍結等主張逐一獨立查證屬實;另以獨立對抗性突變鎖定與 DEV 不同的元件方向性邏輯層,精準命中)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 24/24 檔案 195/195 tests,E2E 222/222,較 S012 淨增 1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
-| E11-S014 | todo | | | |
+| E11-S014 | in-progress | story/E11-S014-connector-admin | | 開發中 |
 | E11-S015 | todo | | | |
 | E11-S016 | todo | | | |
 | E11-S017 | todo | | | |

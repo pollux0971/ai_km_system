@@ -30,9 +30,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 12 | 0 | 0 | 0 | 13 |
+| E11 Admin Console | 25 | 12 | 0 | 1 | 0 | 12 |
 | E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 144 | 0 | 0 | 1 | 30 |
+| **合計** | **175** | 144 | 0 | 1 | 1 | 29 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -210,7 +210,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E11-S010 | approved | story/E11-S010-group-management | [E11-S010.md](E11-S010.md) | Group management;`listGroups()`/`createGroup({ name })`,種子資料(一般使用者群組/維修工程師群組/業務群組)逐字取自 `auth-client` mock 既有 `group` 自由文字值。`AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` 的「E02-S04 Group Entity」屬 Team B,`contracts/` 零 group 相關內容,與 S009 Department 面對完全同一種情境;本 story 直接沿用 S009 已通過獨立審核的處理方式(比照 E11-S004 Create user 先例,純前端 mock,不等 Team B)。List + Create 合併成一頁,結構逐一比照 `DepartmentManagement`。不在 `AdminUser` 上新增 group 欄位、不做成員管理(範圍外)。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。獨立審核 APPROVE(1 round,無需修正;審核者獨立對抗性突變鎖定與 DEV 不同的元件狀態更新層,精準命中 1 個測試;另獨立查證 contracts/ 零 group 內容、種子資料與 auth-client mock 逐字一致;gate 全綠:typecheck 20/20、lint 20/20、build 12/12,`pnpm test` 全 pipeline 綠,admin 17/17 檔案 146/146 tests、E2E 219/219;diff 邊界確認乾淨,僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S011 | approved | story/E11-S011-knowledge-admin | [E11-S011.md](E11-S011.md) | Knowledge admin;`listKnowledgeBases()` 唯讀清單,欄位與種子內容(產品保固政策/設備維修標準作業程序/人力資源與請假規範)逐字取自 `apps/web` 自己的 `KnowledgeBaseSummary`/`SAMPLE_KNOWLEDGE_BASES`(E05-S001)。與 S009/S010 不同(Department/Group 在此 codebase 本來就無處建立,故那兩個 story 自己就是唯一建立入口),Knowledge Base 已有 `apps/web` E05 epic(30 個已核准 story)完整的建立/管理路徑,本 story 刻意不加 create,比照 RoleList 做成唯讀 oversight 清單,避免對同一 entity 產生第二個不同步的權威來源。顯示 name/description/updatedAt(`<time>` 格式比照 UserDetail 既有 pattern)。無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。獨立審核 APPROVE(1 round,無需修正;審核者獨立對抗性突變鎖定與 DEV 不同的資料層,精準命中 1 個測試;另獨立逐欄位 diff 核對種子資料與 apps/web 完全一致,並確認唯讀範圍決策無規避規格跡象;gate 全綠:typecheck 20/20、lint 20/20、build 12/12,`pnpm test` 全 pipeline 綠,admin 19/19 檔案 156/156 tests、E2E 220/220;diff 邊界確認乾淨,僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
 | E11-S012 | approved | story/E11-S012-prompt-admin | [E11-S012.md](E11-S012.md) | Prompt admin;`listPrompts()`/`createPrompt({ name, content })`,種子清單刻意留空(這個 codebase 沒有任何真實提示詞文字可重用,不發明業務內容)。`AI_KM_BMAD_High_Granularity/epics/E12_Model_&_Prompt_Platform.md` 的「E12-S018 Prompt registry」/「E12-S019 Prompt version entity」屬 Team B(E12),`contracts/` 零 prompt 相關內容;`apps/web` 自己的 `knowledge-prompt-editor.tsx`(E05-S008)doc comment 已明確點名本 story「not yet built」。比照 S009/S010 的既有先例,純前端 mock,不等 Team B。name/content 兩個必填欄位(content 用 textarea,比照 apps/web 既有判斷)。DEV 首輪無 FIX 循環,typecheck/lint/build/unit/E2E 首次執行即全綠。獨立審核 Round 1 REQUEST-CHANGES(1 個 MAJOR:元件測試層缺「新增不影響既有清單」的覆蓋、mock fixture 一開始就是空清單所以測不出這類 bug;另修正 EVIDENCE 誤引 SOURCE_BASELINE.md 而非實際內容所在的 epics 檔),DEV 補 1 個測試修正後 Round 2 APPROVE。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 21/21 檔案 176/176 tests,E2E 221/221,較 S011 淨增 1)。diff 邊界確認乾淨(僅 apps/admin/tests-e2e/docs,apps/web 與禁止清單資料夾零命中) |
-| E11-S013 | todo | | | |
+| E11-S013 | in-progress | story/E11-S013-model-admin | | 開發中 |
 | E11-S014 | todo | | | |
 | E11-S015 | todo | | | |
 | E11-S016 | todo | | | |

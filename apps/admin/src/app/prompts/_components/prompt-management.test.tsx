@@ -118,6 +118,28 @@ describe("PromptManagement (E11-S012)", () => {
     expect(screen.getByLabelText("提示詞內容")).toHaveValue("");
   });
 
+  it("creating a new prompt does not remove any prompt already shown in the list", async () => {
+    mockedListPrompts.mockResolvedValue({
+      ok: true,
+      value: [{ promptId: "p1", name: "客服回覆語氣", content: "請以友善的語氣回答。" }],
+    });
+    mockedCreatePrompt.mockResolvedValue({
+      ok: true,
+      value: { promptId: "p2", name: "技術支援語氣", content: "請提供具體的排除步驟。" },
+    });
+
+    render(<PromptManagement />);
+    await screen.findByText("客服回覆語氣");
+
+    fireEvent.change(screen.getByLabelText("提示詞名稱"), { target: { value: "技術支援語氣" } });
+    fireEvent.change(screen.getByLabelText("提示詞內容"), { target: { value: "請提供具體的排除步驟。" } });
+    fireEvent.click(screen.getByRole("button", { name: "新增提示詞" }));
+
+    expect(await screen.findByText("技術支援語氣")).toBeInTheDocument();
+    expect(screen.getByText("客服回覆語氣")).toBeInTheDocument();
+    expect(screen.getByText("請以友善的語氣回答。")).toBeInTheDocument();
+  });
+
   it("shows a distinct error message and keeps the entered draft when creation fails", async () => {
     mockedListPrompts.mockResolvedValue({ ok: true, value: [] });
     mockedCreatePrompt.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "請輸入名稱與內容。" } });

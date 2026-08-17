@@ -50,3 +50,18 @@ export interface FailedDocument {
 export async function listFailedDocuments(): Promise<Result<FailedDocument[], ApiError>> {
   return { ok: true, value: [] };
 }
+
+/**
+ * E11-S019 "Retry processing". Mirrors `apps/web`'s own already-approved
+ * `retryDocumentProcessing` (E05-S021) in spirit — a targeted mutation
+ * by id, fails closed with NOT_FOUND when the document doesn't exist —
+ * but there is no local store to check a `status !== "failed"` guard
+ * against the way that function does: `listFailedDocuments()` above
+ * never has anything to look the id up in, so NOT_FOUND is the only
+ * reachable outcome today, for any id. Same direct-consequence
+ * reasoning as `document-failures.ts`'s own `listFailedDocuments()`
+ * being unconditionally empty — this isn't a separate assumption.
+ */
+export async function retryDocumentProcessing(_id: string): Promise<Result<void, ApiError>> {
+  return { ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件。" } };
+}

@@ -73,3 +73,11 @@ describe("AdminHomePage entry links (E11-S013)", () => {
     expect(screen.getByRole("link", { name: "模型管理" })).toHaveAttribute("href", "/models");
   });
 });
+
+describe("AdminHomePage entry links (E11-S014)", () => {
+  it("links to connector admin", () => {
+    render(<AdminHomePage />);
+
+    expect(screen.getByRole("link", { name: "連接器管理" })).toHaveAttribute("href", "/connectors");
+  });
+});

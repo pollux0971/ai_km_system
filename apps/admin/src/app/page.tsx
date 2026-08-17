@@ -32,7 +32,8 @@ import Link from "next/link";
  * adds "知識庫管理" the same way, now that /knowledge exists. E11-S012
  * "Prompt admin" adds "提示詞管理" the same way, now that /prompts exists.
  * E11-S013 "Model admin" adds "模型管理" the same way, now that /models
- * exists.
+ * exists. E11-S014 "Connector admin" adds "連接器管理" the same way, now
+ * that /connectors exists.
  */
 export default function AdminHomePage() {
   return (
@@ -62,6 +63,9 @@ export default function AdminHomePage() {
       </p>
       <p>
         <Link href="/models">模型管理</Link>
+      </p>
+      <p>
+        <Link href="/connectors">連接器管理</Link>
       </p>
     </main>
   );

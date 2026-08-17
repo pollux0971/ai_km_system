@@ -22,8 +22,9 @@ import Link from "next/link";
  * link only once E09-S002 actually existed — not invented ahead of time
  * here, since none of those sections' own data models exist yet.
  *
- * E11-S002 "User list" is the first of these — adds the "使用者管理"
- * entry link now that /users actually exists.
+ * E11-S002 "User list" was the first of these — added the "使用者管理"
+ * entry link once /users existed. E11-S006 "Role list" adds "角色管理"
+ * the same way, now that /roles exists too.
  */
 export default function AdminHomePage() {
   return (
@@ -32,6 +33,9 @@ export default function AdminHomePage() {
       <p>企業知識管理平台的後台管理入口。</p>
       <p>
         <Link href="/users">使用者管理</Link>
+      </p>
+      <p>
+        <Link href="/roles">角色管理</Link>
       </p>
     </main>
   );

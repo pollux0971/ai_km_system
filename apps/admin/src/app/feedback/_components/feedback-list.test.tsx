@@ -114,3 +114,17 @@ describe("FeedbackList (E11-S016)", () => {
     expect(screen.queryByText("尚無回饋。")).not.toBeInTheDocument();
   });
 });
+
+describe("FeedbackList links to detail pages (E11-S017)", () => {
+  it("links each feedback item's own row to its /feedback/{id} detail page, now that route exists", async () => {
+    mockedListFeedback.mockResolvedValue({
+      ok: true,
+      value: [{ id: "f1", verdict: "ok", reason: "回答完全解決問題", submittedAt: "2026-08-17T01:00:00.000Z" }],
+    });
+
+    render(<FeedbackList />);
+
+    const link = await screen.findByRole("link", { name: /OK/ });
+    expect(link).toHaveAttribute("href", "/feedback/f1");
+  });
+});

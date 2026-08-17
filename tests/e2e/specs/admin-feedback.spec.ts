@@ -18,3 +18,19 @@ test("E11-S016: navigating from the admin home to 回饋佇列 shows the honest 
   await expect(page.getByRole("heading", { name: "回饋佇列", level: 1, exact: true })).toBeVisible();
   await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
 });
+
+/**
+ * E11-S017 "Feedback detail" — same shape admin-users.spec.ts's own
+ * E11-S003 "visiting an unknown user id" test already establishes.
+ * Navigating directly (not via a list click) is the only honestly
+ * testable path here — the queue above is always empty in production
+ * today (feedback.ts's own doc comment explains why), so there is no
+ * real feedback item to click into; getFeedback(id) returns null for
+ * any id, same as listFeedback() returning an empty list for the same
+ * underlying reason.
+ */
+test("E11-S017: visiting an unknown feedback id shows a distinct not-found state", async ({ page }) => {
+  await page.goto("/feedback/this-feedback-does-not-exist");
+
+  await expect(page.getByText("找不到這筆回饋。", { exact: true })).toBeVisible();
+});

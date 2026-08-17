@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
 import { listFeedback, type FeedbackItem } from "@/lib/feedback";
@@ -18,6 +19,11 @@ const VERDICT_LABEL: Record<FeedbackItem["verdict"], string> = {
  * E11-S016 "Feedback queue" — same loading/error/empty/loaded shape
  * `AuditEventList` (E11-S015) already establishes for a sibling
  * "always empty today" read-only viewer.
+ *
+ * E11-S017 "Feedback detail" adds the link straight to `/feedback/{id}`
+ * below, now that the route actually exists — same "don't invent
+ * structure ahead of the story that owns it" discipline user-list.tsx's
+ * own doc comment already establishes for E11-S002 vs. E11-S003.
  */
 export default function FeedbackList() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -62,7 +68,9 @@ export default function FeedbackList() {
       {state.items.map((item) => (
         <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
           <p>
-            <strong>{VERDICT_LABEL[item.verdict]}</strong>
+            <Link href={`/feedback/${item.id}`}>
+              <strong>{VERDICT_LABEL[item.verdict]}</strong>
+            </Link>
           </p>
           {item.reason && <p>{item.reason}</p>}
           <p>

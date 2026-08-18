@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { createConversation, getConversation } from "./conversations";
-import { deleteMessagesForConversation, listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback, submitFeedbackReason } from "./messages";
+import {
+  deleteMessagesForConversation,
+  listMessages,
+  MAX_FEEDBACK_COMMENT_LENGTH,
+  receiveAssistantReply,
+  reviseMessage,
+  sendMessage,
+  submitAnswerFeedback,
+  submitFeedbackComment,
+  submitFeedbackReason,
+} from "./messages";
 
 describe("listMessages (E03-S009)", () => {
   it("resolves with an empty list for a conversation with no messages", async () => {
@@ -803,6 +813,265 @@ describe("submitFeedbackReason (E13-S003)", () => {
     expect(list.ok).toBe(true);
     if (list.ok) {
       expect(list.value.find((m) => m.id === second.value.id)?.feedbackReason).toBeUndefined();
+    }
+  });
+});
+
+describe("submitFeedbackComment (E13-S004)", () => {
+  it("sets feedbackComment on a message that already has OK feedback and persists it", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const result = await submitFeedbackComment(reply.value.id, "這個答案特別有幫助，因為引用了正確的政策條文。");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.feedbackComment).toBe("這個答案特別有幫助，因為引用了正確的政策條文。");
+      expect(result.value.feedback).toBe("OK");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedbackComment).toBe(
+        "這個答案特別有幫助，因為引用了正確的政策條文。",
+      );
+    }
+  });
+
+  it("sets feedbackComment on a message that already has NG feedback and persists it alongside an existing reason", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "NG");
+    await submitFeedbackReason(reply.value.id, "INCORRECT");
+
+    const result = await submitFeedbackComment(reply.value.id, "引用的條文其實是舊版，已經在三月更新過了。");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.feedbackComment).toBe("引用的條文其實是舊版，已經在三月更新過了。");
+      expect(result.value.feedbackReason).toBe("INCORRECT");
+      expect(result.value.feedback).toBe("NG");
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist", async () => {
+    const result = await submitFeedbackComment("does-not-exist", "任何內容");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR when no feedback has been given yet, and does not set feedbackComment", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    const result = await submitFeedbackComment(reply.value.id, "任何內容");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedbackComment).toBeUndefined();
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR for an empty comment, and does not set feedbackComment", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const result = await submitFeedbackComment(reply.value.id, "");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedbackComment).toBeUndefined();
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR for a whitespace-only comment, and does not set feedbackComment", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const result = await submitFeedbackComment(reply.value.id, "   \n\t  ");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR when the comment exceeds MAX_FEEDBACK_COMMENT_LENGTH, and does not set feedbackComment", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const tooLong = "a".repeat(MAX_FEEDBACK_COMMENT_LENGTH + 1);
+    const result = await submitFeedbackComment(reply.value.id, tooLong);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedbackComment).toBeUndefined();
+    }
+  });
+
+  it("accepts a comment exactly at MAX_FEEDBACK_COMMENT_LENGTH", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const exactly = "a".repeat(MAX_FEEDBACK_COMMENT_LENGTH);
+    const result = await submitFeedbackComment(reply.value.id, exactly);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.feedbackComment).toBe(exactly);
+    }
+  });
+
+  it("trims leading and trailing whitespace before storing", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const result = await submitFeedbackComment(reply.value.id, "  中間有內容前後有空白  ");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.feedbackComment).toBe("中間有內容前後有空白");
+    }
+  });
+
+  it("is idempotent — submitting the same comment twice does not create a duplicate record or change the outcome", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    await submitFeedbackComment(reply.value.id, "第一次送出的內容");
+    const second = await submitFeedbackComment(reply.value.id, "第一次送出的內容");
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value.feedbackComment).toBe("第一次送出的內容");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.feedbackComment).toBe("第一次送出的內容");
+    }
+  });
+
+  it("upserts the same row when re-submitting a different comment — the store never accumulates more than one comment record per message", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    await submitFeedbackComment(reply.value.id, "第一版留言");
+    const revised = await submitFeedbackComment(reply.value.id, "修改後的留言");
+
+    expect(revised.ok).toBe(true);
+    if (revised.ok) {
+      expect(revised.value.feedbackComment).toBe("修改後的留言");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.feedbackComment).toBe("修改後的留言");
+    }
+  });
+
+  it("does not affect other messages' feedbackComment", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const first = await receiveAssistantReply(conversation.value.id, "第一則回覆");
+    const second = await receiveAssistantReply(conversation.value.id, "第二則回覆");
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    await submitAnswerFeedback(first.value.id, "OK");
+    await submitAnswerFeedback(second.value.id, "OK");
+    await submitFeedbackComment(first.value.id, "只給第一則的留言");
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === second.value.id)?.feedbackComment).toBeUndefined();
     }
   });
 });

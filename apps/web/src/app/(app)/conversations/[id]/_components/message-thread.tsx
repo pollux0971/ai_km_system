@@ -10,10 +10,12 @@ import {
   FEEDBACK_REASONS,
   FEEDBACK_REASON_LABELS,
   listMessages,
+  MAX_FEEDBACK_COMMENT_LENGTH,
   receiveAssistantReply,
   reviseMessage,
   sendMessage,
   submitAnswerFeedback,
+  submitFeedbackComment,
   submitFeedbackReason,
   type AnswerFeedbackVerdict,
   type FeedbackReason,
@@ -421,6 +423,24 @@ const logger = createLogger("web:message-thread");
  * from visible text. `feedbackReasonPendingIds`/`feedbackReasonErrorIds`
  * (keyed by messageId, same shape as `feedbackPendingIds`/
  * `feedbackErrorIds`) track only the transient in-flight/error UI.
+ *
+ * E13-S004 "free-text feedback" renders a `<textarea>` + "送出留言" button
+ * ONCE `entry.message.feedback != null` — EITHER verdict, unlike the
+ * reason fieldset's NG-only gate (see lib/messages.ts's
+ * submitFeedbackComment doc comment for why: a free-text comment is a
+ * general elaboration on whatever verdict was given, not an NG-specific
+ * explanation). Draft text is local-only (`feedbackComments`, keyed by
+ * messageId) until "送出留言" is pressed; that button is disabled when the
+ * trimmed draft is empty or exceeds MAX_FEEDBACK_COMMENT_LENGTH, so
+ * Functional AC 2's fail-closed validation is enforced before the real
+ * request ever fires, matching the reason fieldset's "disable, don't
+ * validate after submit" approach. Once `entry.message.feedbackComment` is
+ * persisted, the textarea and button render `disabled` and the stored
+ * comment is shown as static confirmation text — same "no undo" pattern
+ * and same `.toBeDisabled()`-assertable state S001–S003 already
+ * established. `feedbackCommentPendingIds`/`feedbackCommentErrorIds`
+ * (keyed by messageId, same shape as the reason fieldset's own pending/
+ * error sets) track only the transient in-flight/error UI.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -443,6 +463,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
   const [selectedReasons, setSelectedReasons] = useState<Map<string, FeedbackReason>>(new Map());
   const [feedbackReasonPendingIds, setFeedbackReasonPendingIds] = useState<Set<string>>(new Set());
   const [feedbackReasonErrorIds, setFeedbackReasonErrorIds] = useState<Set<string>>(new Set());
+  const [feedbackComments, setFeedbackComments] = useState<Map<string, string>>(new Map());
+  const [feedbackCommentPendingIds, setFeedbackCommentPendingIds] = useState<Set<string>>(new Set());
+  const [feedbackCommentErrorIds, setFeedbackCommentErrorIds] = useState<Set<string>>(new Set());
   const stoppedRef = useRef<Set<string>>(new Set());
   const copyResetTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -832,6 +855,48 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     );
   }
 
+  function handleCommentChange(messageId: string, value: string) {
+    setFeedbackComments((previous) => new Map(previous).set(messageId, value));
+  }
+
+  async function handleSubmitFeedbackComment(messageId: string) {
+    const comment = feedbackComments.get(messageId);
+    if (!comment || comment.trim().length === 0 || comment.trim().length > MAX_FEEDBACK_COMMENT_LENGTH) return;
+
+    const correlationId = crypto.randomUUID();
+    logger.info("submitting feedback comment", { correlationId, conversationId, messageId });
+    trackEvent("conversation_feedback_comment_attempt", { correlationId, properties: { conversationId, messageId } });
+
+    setFeedbackCommentPendingIds((previous) => new Set(previous).add(messageId));
+    setFeedbackCommentErrorIds((previous) => {
+      if (!previous.has(messageId)) return previous;
+      const next = new Set(previous);
+      next.delete(messageId);
+      return next;
+    });
+
+    const result = await submitFeedbackComment(messageId, comment);
+
+    setFeedbackCommentPendingIds((previous) => {
+      const next = new Set(previous);
+      next.delete(messageId);
+      return next;
+    });
+
+    if (!result.ok) {
+      logger.error("failed to submit feedback comment", { correlationId, conversationId, messageId, code: result.error.code });
+      trackEvent("conversation_feedback_comment_failure", { correlationId, properties: { conversationId, messageId, code: result.error.code } });
+      setFeedbackCommentErrorIds((previous) => new Set(previous).add(messageId));
+      return;
+    }
+
+    logger.info("feedback comment submitted", { correlationId, conversationId, messageId });
+    trackEvent("conversation_feedback_comment_success", { correlationId, properties: { conversationId, messageId } });
+    setDisplayMessages((previous) =>
+      previous.map((entry) => (entry.kind === "sent" && entry.message.id === messageId ? { kind: "sent", message: result.value } : entry)),
+    );
+  }
+
   function handleCitationClick(citationId: string) {
     setPreviewCitationId(citationId);
   }
@@ -971,6 +1036,33 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                         </button>
                         {entry.message.feedbackReason != null && <span>已選擇原因：{FEEDBACK_REASON_LABELS[entry.message.feedbackReason]}</span>}
                         {feedbackReasonErrorIds.has(entry.message.id) && <span role="alert">原因送出失敗，請再試一次。</span>}
+                      </fieldset>
+                    )}
+                    {entry.message.feedback != null && (
+                      <fieldset>
+                        <legend>還有什麼想補充的嗎？</legend>
+                        <label htmlFor={`feedback-comment-${entry.message.id}`}>留言</label>
+                        <textarea
+                          id={`feedback-comment-${entry.message.id}`}
+                          value={entry.message.feedbackComment ?? feedbackComments.get(entry.message.id) ?? ""}
+                          onChange={(event) => handleCommentChange(entry.message.id, event.target.value)}
+                          maxLength={MAX_FEEDBACK_COMMENT_LENGTH}
+                          disabled={entry.message.feedbackComment != null || feedbackCommentPendingIds.has(entry.message.id)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSubmitFeedbackComment(entry.message.id)}
+                          disabled={
+                            entry.message.feedbackComment != null ||
+                            feedbackCommentPendingIds.has(entry.message.id) ||
+                            (feedbackComments.get(entry.message.id) ?? "").trim().length === 0 ||
+                            (feedbackComments.get(entry.message.id) ?? "").trim().length > MAX_FEEDBACK_COMMENT_LENGTH
+                          }
+                        >
+                          送出留言
+                        </button>
+                        {entry.message.feedbackComment != null && <span>已送出留言：{entry.message.feedbackComment}</span>}
+                        {feedbackCommentErrorIds.has(entry.message.id) && <span role="alert">留言送出失敗，請再試一次。</span>}
                       </fieldset>
                     )}
                   </>

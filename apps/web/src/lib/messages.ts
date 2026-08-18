@@ -82,8 +82,32 @@ import { getConversation, touchConversationLastMessage } from "./conversations";
  * because a reason only ever qualifies an already-given NG verdict; it is
  * never itself a verdict, and folding it in would force every OK-feedback
  * fixture to reason about a dimension that never applies to it.
+ *
+ * `feedbackComment` (E13-S004 "free-text feedback") is a THIRD separate
+ * optional field, alongside `feedback`/`feedbackReason` rather than folded
+ * into either — same "epic file gives this story nothing beyond its
+ * title" situation S003 already documented (confirmed again by grep), so
+ * every design choice below is a Team-A ASSUMPTION, not a spec fact.
+ * Unlike `feedbackReason` (which submitFeedbackReason gates on
+ * `feedback === "NG"` specifically, since a *reason* only makes sense for
+ * a negative verdict), this field is gated on `feedback != null` — EITHER
+ * verdict, not NG-only. A free-text comment is a general "anything else
+ * you want to add" elaboration on whatever verdict was already given
+ * (SOURCE_BASELINE's golden flow names only "Feedback Loop" generically,
+ * with no verdict-specific carve-out), not specifically an explanation of
+ * *why NG* the way the structured reason selector is — an OK comment like
+ * "this was especially helpful because..." is just as coherent as an NG
+ * one, so narrowing this to NG-only the way S003 narrowed reason would be
+ * an unjustified extra restriction this story's title doesn't ask for.
+ * `MAX_FEEDBACK_COMMENT_LENGTH` (500) is likewise a Team-A ASSUMPTION —
+ * some bound is a hard requirement (Security Acceptance: "所有外部輸入均做
+ * schema validation"), but no length appears anywhere in
+ * AI_KM_BMAD_High_Granularity/; 500 is picked as a generous-but-bounded
+ * free-text size for a supplementary comment, not a full document.
  */
 export type AnswerFeedbackVerdict = "OK" | "NG";
+
+export const MAX_FEEDBACK_COMMENT_LENGTH = 500;
 
 export const FEEDBACK_REASONS = ["INCORRECT", "INCOMPLETE", "OFF_TOPIC", "OTHER"] as const;
 export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
@@ -106,6 +130,7 @@ export interface Message {
   state?: AnswerState;
   feedback?: AnswerFeedbackVerdict;
   feedbackReason?: FeedbackReason;
+  feedbackComment?: string;
 }
 
 const STORAGE_KEY = "ai-km:mock-messages";
@@ -330,6 +355,50 @@ export async function submitFeedbackReason(messageId: string, reason: FeedbackRe
   }
 
   const updated: Message = { ...existing, feedbackReason: reason };
+  writeStore(messages.map((message) => (message.id === messageId ? updated : message)));
+
+  return { ok: true, value: updated };
+}
+
+/**
+ * E13-S004 "free-text feedback". Requires SOME feedback verdict to already
+ * exist (`feedback != null` — either OK or NG, see this file's field-doc
+ * comment above for why this is broader than submitFeedbackReason's
+ * NG-only gate), fails closed with VALIDATION_ERROR otherwise (Functional
+ * AC 2/3: no side effect without a legitimate prior verdict to attach to).
+ * Also fails closed with VALIDATION_ERROR for an empty/whitespace-only
+ * comment or one exceeding MAX_FEEDBACK_COMMENT_LENGTH after trimming —
+ * Security Acceptance's "所有外部輸入均做 schema validation" is a hard
+ * requirement even though no concrete length is spec'd (see field-doc
+ * comment). Stores the TRIMMED comment, not the raw input, so a comment
+ * that is only whitespace after trimming is correctly rejected as empty
+ * rather than persisted as meaningless padding.
+ *
+ * Same idempotent-upsert shape as submitAnswerFeedback/submitFeedbackReason:
+ * updates the row in place, allows re-submitting a revised comment (data
+ * layer has no additional guard — message-thread.tsx's UI is what would
+ * enforce any "no editing once submitted" policy, same trust boundary
+ * S001/S002/S003 already established).
+ */
+export async function submitFeedbackComment(messageId: string, comment: string): Promise<Result<Message, ApiError>> {
+  const messages = readStore();
+  const existing = messages.find((message) => message.id === messageId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } };
+  }
+  if (existing.feedback == null) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "請先提供「有幫助」或「沒有幫助」的回饋。" } };
+  }
+
+  const trimmed = comment.trim();
+  if (trimmed.length === 0) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "留言不得為空白。" } };
+  }
+  if (trimmed.length > MAX_FEEDBACK_COMMENT_LENGTH) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: `留言長度不得超過 ${MAX_FEEDBACK_COMMENT_LENGTH} 字。` } };
+  }
+
+  const updated: Message = { ...existing, feedbackComment: trimmed };
   writeStore(messages.map((message) => (message.id === messageId ? updated : message)));
 
   return { ok: true, value: updated };

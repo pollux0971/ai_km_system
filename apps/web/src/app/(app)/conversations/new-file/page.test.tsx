@@ -5,6 +5,8 @@ import { createConversation, deleteConversation } from "@/lib/conversations";
 import { classifyFileProcessing } from "@/lib/file-processing";
 import { sendMessage } from "@/lib/messages";
 import { trackEvent } from "@/lib/telemetry";
+import { CurrentUserProvider } from "@/lib/session-context";
+import { recordUsageEvent } from "@/lib/usage-events";
 
 const { mockReplace, mockRefresh, mockRouter } = vi.hoisted(() => {
   const mockReplace = vi.fn();
@@ -34,11 +36,16 @@ vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
 
+vi.mock("@/lib/usage-events", () => ({
+  recordUsageEvent: vi.fn(),
+}));
+
 const mockedCreateConversation = vi.mocked(createConversation);
 const mockedDeleteConversation = vi.mocked(deleteConversation);
 const mockedSendMessage = vi.mocked(sendMessage);
 const mockedClassifyFileProcessing = vi.mocked(classifyFileProcessing);
 const mockedTrackEvent = vi.mocked(trackEvent);
+const mockedRecordUsageEvent = vi.mocked(recordUsageEvent);
 
 const sampleConversation = {
   id: "new-1",
@@ -71,6 +78,7 @@ beforeEach(() => {
   mockedSendMessage.mockReset();
   mockedClassifyFileProcessing.mockReset();
   mockedTrackEvent.mockReset();
+  mockedRecordUsageEvent.mockReset();
 
   // E03-S029: every pre-existing test in this file selects an ordinary
   // filename and expects the create-then-attach flow to proceed — this
@@ -216,5 +224,70 @@ describe("FileChatEntryPage (E03-S028)", () => {
     expect(mockedCreateConversation).not.toHaveBeenCalled();
     expect(mockedSendMessage).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe("FileChatEntryPage usage event instrumentation (E13-S010)", () => {
+  const SESSION = { userId: "u1", roles: ["general_user"], expiresAt: "2099-01-01T00:00:00.000Z" };
+
+  it("records a conversation_created usage event for the current user once the whole flow (create + attach) succeeds", async () => {
+    mockedCreateConversation.mockResolvedValue({ ok: true, value: sampleConversation });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: sampleMessage });
+
+    render(
+      <CurrentUserProvider value={SESSION}>
+        <FileChatEntryPage />
+      </CurrentUserProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("報表.pdf")] } });
+    fireEvent.click(screen.getByRole("button", { name: "開始對話" }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(mockedRecordUsageEvent).toHaveBeenCalledWith("conversation_created", "u1");
+    expect(mockedRecordUsageEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not record a usage event when createConversation fails", async () => {
+    mockedCreateConversation.mockResolvedValue({ ok: false, error: { code: "SERVICE_UNAVAILABLE", message: "down" } });
+
+    render(
+      <CurrentUserProvider value={SESSION}>
+        <FileChatEntryPage />
+      </CurrentUserProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("報表.pdf")] } });
+    fireEvent.click(screen.getByRole("button", { name: "開始對話" }));
+
+    await screen.findByRole("alert");
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not record a usage event when the conversation is rolled back after a failed file attach (no event for a conversation that no longer exists)", async () => {
+    mockedCreateConversation.mockResolvedValue({ ok: true, value: sampleConversation });
+    mockedSendMessage.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
+    mockedDeleteConversation.mockResolvedValue({ ok: true, value: undefined });
+
+    render(
+      <CurrentUserProvider value={SESSION}>
+        <FileChatEntryPage />
+      </CurrentUserProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("報表.pdf")] } });
+    fireEvent.click(screen.getByRole("button", { name: "開始對話" }));
+
+    await waitFor(() => expect(mockedDeleteConversation).toHaveBeenCalledWith("new-1"));
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not record a usage event (and does not crash) when rendered outside a session provider", async () => {
+    mockedCreateConversation.mockResolvedValue({ ok: true, value: sampleConversation });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: sampleMessage });
+
+    render(<FileChatEntryPage />);
+    fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("報表.pdf")] } });
+    fireEvent.click(screen.getByRole("button", { name: "開始對話" }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalled();
   });
 });

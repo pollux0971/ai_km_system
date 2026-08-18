@@ -4,6 +4,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import NewConversationPage from "./page";
 import { createConversation } from "@/lib/conversations";
 import { trackEvent } from "@/lib/telemetry";
+import { CurrentUserProvider } from "@/lib/session-context";
+import { recordUsageEvent } from "@/lib/usage-events";
 
 const { mockReplace, mockRefresh, mockRouter } = vi.hoisted(() => {
   const mockReplace = vi.fn();
@@ -24,8 +26,13 @@ vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
 
+vi.mock("@/lib/usage-events", () => ({
+  recordUsageEvent: vi.fn(),
+}));
+
 const mockedCreateConversation = vi.mocked(createConversation);
 const mockedTrackEvent = vi.mocked(trackEvent);
+const mockedRecordUsageEvent = vi.mocked(recordUsageEvent);
 
 const sampleConversation = {
   id: "new-1",
@@ -42,6 +49,7 @@ beforeEach(() => {
   mockRefresh.mockReset();
   mockedCreateConversation.mockReset();
   mockedTrackEvent.mockReset();
+  mockedRecordUsageEvent.mockReset();
 });
 
 describe("NewConversationPage (E03-S001)", () => {
@@ -103,5 +111,48 @@ describe("NewConversationPage (E03-S001)", () => {
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalled());
     expect(mockedCreateConversation).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("NewConversationPage usage event instrumentation (E13-S010)", () => {
+  const SESSION = { userId: "u1", roles: ["general_user"], expiresAt: "2099-01-01T00:00:00.000Z" };
+
+  it("records a conversation_created usage event for the current user once creation succeeds", async () => {
+    mockedCreateConversation.mockResolvedValue({ ok: true, value: sampleConversation });
+
+    render(
+      <CurrentUserProvider value={SESSION}>
+        <NewConversationPage />
+      </CurrentUserProvider>,
+    );
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(mockedRecordUsageEvent).toHaveBeenCalledWith("conversation_created", "u1");
+    expect(mockedRecordUsageEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not record a usage event when creation fails", async () => {
+    mockedCreateConversation.mockResolvedValue({
+      ok: false,
+      error: { code: "SERVICE_UNAVAILABLE", message: "down" },
+    });
+
+    render(
+      <CurrentUserProvider value={SESSION}>
+        <NewConversationPage />
+      </CurrentUserProvider>,
+    );
+
+    await screen.findByRole("alert");
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not record a usage event (and does not crash) when rendered outside a session provider", async () => {
+    mockedCreateConversation.mockResolvedValue({ ok: true, value: sampleConversation });
+
+    render(<NewConversationPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalled();
   });
 });

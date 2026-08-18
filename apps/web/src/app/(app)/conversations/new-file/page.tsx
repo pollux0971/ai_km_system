@@ -8,6 +8,8 @@ import { createConversation, deleteConversation } from "@/lib/conversations";
 import { classifyFileProcessing } from "@/lib/file-processing";
 import { sendMessage } from "@/lib/messages";
 import { trackEvent } from "@/lib/telemetry";
+import { useOptionalCurrentUser } from "@/lib/session-context";
+import { recordUsageEvent } from "@/lib/usage-events";
 import { FileAttachmentPicker } from "../[id]/_components/file-attachment-picker";
 
 const logger = createLogger("web:file-chat-entry");
@@ -98,9 +100,21 @@ type State = { status: "idle" } | { status: "creating" } | { status: "error" } |
  * "error" — the underlying cause (the FILES, not the conversation
  * creation itself) is different, matching this file's own established
  * "don't reuse a label for a different cause" reasoning above.
+ *
+ * E13-S010: records a `conversation_created` usage event, but only at
+ * this route's final success point (after sendMessage's attach also
+ * succeeds) — NOT right after createConversation() resolves. That
+ * function's own success can still be rolled back a few lines later via
+ * deleteConversation() if the file-attach call fails; recording the
+ * event any earlier would leave a `conversation_created` event on
+ * record for a conversation that no longer exists once the rollback
+ * runs, an "undefined duplicate side effect"-adjacent inconsistency
+ * Functional AC 5 rules out. Same session-optional degrade-quietly
+ * behavior as E13-S009/the /conversations/new route above.
  */
 export default function FileChatEntryPage() {
   const router = useRouter();
+  const currentUser = useOptionalCurrentUser();
   const [files, setFiles] = useState<File[]>([]);
   const [state, setState] = useState<State>({ status: "idle" });
 
@@ -151,6 +165,9 @@ export default function FileChatEntryPage() {
 
     logger.info("file-chat conversation created", { correlationId, conversationId: created.value.id });
     trackEvent("file_chat_entry_success", { correlationId, properties: { conversationId: created.value.id } });
+    if (currentUser) {
+      recordUsageEvent("conversation_created", currentUser.userId);
+    }
     router.refresh();
     router.replace(`/conversations/${created.value.id}`);
   }

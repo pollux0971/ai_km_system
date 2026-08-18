@@ -16,18 +16,29 @@
  * two would force every existing trackEvent call site to also decide
  * whether it should be persisted, well outside this story's scope.
  *
- * Scope is deliberately narrow: only `"conversation_message_sent"` is
- * instrumented (wired into message-thread.tsx's attemptSend, right
- * where it already fires `conversation_message_send_success`) — this is
- * the single event that most directly corresponds to E11-S021's
- * "questionsAsked" metric. Computing DAU or wiring this into the admin
- * dashboard is explicitly out of scope (E13-S010/S012's job, per Atomic
- * Story Boundary's "one story, one capability" rule) — a future story
- * can derive "was this user active today" from the same event stream
- * this one persists, without needing a second, separate "page view"
- * event type invented here.
+ * E13-S009 scope was deliberately narrow: only `"conversation_message_sent"`
+ * (wired into message-thread.tsx's attemptSend, right where it already
+ * fires `conversation_message_send_success`) — the single event that most
+ * directly corresponds to E11-S021's "questionsAsked" metric.
+ *
+ * E13-S010 adds `"conversation_created"` — the other half of the same
+ * "questionsAsked"-adjacent DAU signal: starting a brand-new conversation
+ * (either via `/conversations/new`'s zero-interaction auto-create, or
+ * `/conversations/new-file`'s file-first entry) is the other basic
+ * "this user was active" action in this codebase. Recorded only once the
+ * conversation durably exists — `/conversations/new-file`'s rollback path
+ * (create succeeds, then the file-attach call fails and the conversation
+ * is deleted again) must NOT record an event for a conversation that no
+ * longer exists, so instrumentation sits at each route's own final
+ * success point, not at createConversation() itself.
+ *
+ * Computing DAU or wiring either event into the admin dashboard remains
+ * out of scope (E13-S012's job, per Atomic Story Boundary's "one story,
+ * one capability" rule) — a future story can derive "was this user active
+ * today" from the same event stream persisted here, without this story
+ * inventing any aggregation logic of its own.
  */
-export type UsageEventName = "conversation_message_sent";
+export type UsageEventName = "conversation_message_sent" | "conversation_created";
 
 export interface UsageEvent {
   name: UsageEventName;

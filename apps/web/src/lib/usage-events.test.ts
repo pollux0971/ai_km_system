@@ -57,3 +57,28 @@ describe("recordUsageEvent / listUsageEvents (E13-S009)", () => {
     expect(listUsageEvents()).toEqual([]);
   });
 });
+
+describe("recordUsageEvent / listUsageEvents — conversation_created (E13-S010)", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("accepts conversation_created as a distinct event name", () => {
+    recordUsageEvent("conversation_created", "u1");
+
+    const events = listUsageEvents();
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event) throw new Error("expected an event");
+    expect(event.name).toBe("conversation_created");
+    expect(event.userId).toBe("u1");
+  });
+
+  it("keeps conversation_created and conversation_message_sent distinguishable when both are recorded for the same user", () => {
+    recordUsageEvent("conversation_created", "u1");
+    recordUsageEvent("conversation_message_sent", "u1");
+
+    const events = listUsageEvents();
+    expect(events.map((event) => event.name)).toEqual(["conversation_created", "conversation_message_sent"]);
+  });
+});

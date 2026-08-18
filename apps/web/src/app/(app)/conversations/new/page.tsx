@@ -6,6 +6,8 @@ import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createConversation } from "@/lib/conversations";
 import { trackEvent } from "@/lib/telemetry";
+import { useOptionalCurrentUser } from "@/lib/session-context";
+import { recordUsageEvent } from "@/lib/usage-events";
 
 const logger = createLogger("web:conversations-new");
 
@@ -32,9 +34,16 @@ type State = { status: "creating" } | { status: "error" };
  * re-running its data fetch, so the Recent Conversations widget there
  * wouldn't pick up a conversation created afterward. Standard practice
  * for any mutating action, not specific to this route.
+ *
+ * E13-S010: records a `conversation_created` usage event right alongside
+ * the existing `conversation_create_success` trackEvent call — same
+ * "don't record for a session-less render" degrade-quietly behavior as
+ * E13-S009's message-thread.tsx (useOptionalCurrentUser(), never throws
+ * when rendered without a CurrentUserProvider).
  */
 export default function NewConversationPage() {
   const router = useRouter();
+  const currentUser = useOptionalCurrentUser();
   const [state, setState] = useState<State>({ status: "creating" });
   const startedRef = useRef(false);
 
@@ -56,10 +65,13 @@ export default function NewConversationPage() {
 
       logger.info("conversation created", { correlationId, conversationId: result.value.id });
       trackEvent("conversation_create_success", { correlationId, properties: { conversationId: result.value.id } });
+      if (currentUser) {
+        recordUsageEvent("conversation_created", currentUser.userId);
+      }
       router.refresh();
       router.replace("/conversations");
     });
-  }, [router]);
+  }, [router, currentUser]);
 
   if (state.status === "error") {
     return (

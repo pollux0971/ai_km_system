@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConversation, getConversation } from "./conversations";
-import { deleteMessagesForConversation, listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "./messages";
+import { deleteMessagesForConversation, listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback } from "./messages";
 
 describe("listMessages (E03-S009)", () => {
   it("resolves with an empty list for a conversation with no messages", async () => {
@@ -425,5 +425,126 @@ describe("deleteMessagesForConversation (E03-S025)", () => {
     const result = await deleteMessagesForConversation("does-not-exist");
 
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("submitAnswerFeedback (E13-S001)", () => {
+  it("sets feedback to 'OK' on an assistant reply and persists it", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    const result = await submitAnswerFeedback(reply.value.id, "OK");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.feedback).toBe("OK");
+      expect(result.value.id).toBe(reply.value.id);
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedback).toBe("OK");
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist", async () => {
+    const result = await submitAnswerFeedback("does-not-exist", "OK");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR when the target message is a user message, not an assistant reply, and does not set feedback", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const userMessage = await sendMessage(conversation.value.id, "保固期限是多久？", []);
+    expect(userMessage.ok).toBe(true);
+    if (!userMessage.ok) return;
+
+    const result = await submitAnswerFeedback(userMessage.value.id, "OK");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === userMessage.value.id)?.feedback).toBeUndefined();
+    }
+  });
+
+  it("is idempotent — submitting the same verdict twice does not create a duplicate record or change the outcome", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitAnswerFeedback(reply.value.id, "OK");
+    const second = await submitAnswerFeedback(reply.value.id, "OK");
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value.feedback).toBe("OK");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.feedback).toBe("OK");
+    }
+  });
+
+  it("does not affect other messages' feedback", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const first = await receiveAssistantReply(conversation.value.id, "第一則回覆");
+    const second = await receiveAssistantReply(conversation.value.id, "第二則回覆");
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    await submitAnswerFeedback(first.value.id, "OK");
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === second.value.id)?.feedback).toBeUndefined();
+    }
+  });
+
+  it("is reflected in listMessages — the row is updated in place, not duplicated", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.content).toBe("這是模擬回覆內容。");
+    }
   });
 });

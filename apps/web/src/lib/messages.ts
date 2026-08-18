@@ -51,7 +51,20 @@ import { getConversation, touchConversationLastMessage } from "./conversations";
  * how a mock classifies them). User messages never have a `state` — the
  * enum classifies ANSWER quality, and only assistant replies are
  * answers.
+ *
+ * `feedback` (E13-S001 "Answer OK feedback") is optional for the same
+ * reason as `revisions`/`state` — every pre-S001 fixture simply omits
+ * it, and message-thread.tsx treats an absent `feedback` as "not yet
+ * given" at render time. Only `"OK"` exists today; E13-S002 "Answer NG
+ * feedback" is a separate, not-yet-built story — this codebase's
+ * established incremental pattern (see `state`'s own history above) is
+ * to widen a field's union once the story that needs the next value
+ * actually lands, not to speculatively pre-build it. Like `state`, only
+ * assistant replies are ever given feedback — a user's own message isn't
+ * an "answer" to react to.
  */
+export type AnswerFeedbackVerdict = "OK";
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -61,6 +74,7 @@ export interface Message {
   createdAt: string;
   revisions?: string[];
   state?: AnswerState;
+  feedback?: AnswerFeedbackVerdict;
 }
 
 const STORAGE_KEY = "ai-km:mock-messages";
@@ -211,6 +225,40 @@ export async function reviseMessage(messageId: string, newContent: string, state
   await touchConversationLastMessage(existing.conversationId, newContent, new Date().toISOString());
 
   return { ok: true, value: revised };
+}
+
+/**
+ * E13-S001 "Answer OK feedback". Fails closed with NOT_FOUND for a
+ * nonexistent messageId (same "real, deterministic failure path" reason
+ * sendMessage/receiveAssistantReply/reviseMessage already give) and with
+ * VALIDATION_ERROR for a message that exists but isn't an assistant
+ * reply — feedback reacts to an ANSWER, and a user's own message was
+ * never one; this keeps the check fail-closed rather than silently
+ * accepting or silently no-op-ing on a target the caller never should
+ * have been able to construct through the real UI in the first place
+ * (message-thread.tsx only ever renders the feedback control on
+ * `role === "assistant"` entries).
+ *
+ * Idempotent by construction: this simply upserts the `feedback` field
+ * on the existing row (same update-in-place shape as reviseMessage),
+ * never appends a new record, so submitting the same verdict twice for
+ * the same message produces the identical persisted state, not a
+ * duplicate side effect (Functional AC 5).
+ */
+export async function submitAnswerFeedback(messageId: string, verdict: AnswerFeedbackVerdict): Promise<Result<Message, ApiError>> {
+  const messages = readStore();
+  const existing = messages.find((message) => message.id === messageId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } };
+  }
+  if (existing.role !== "assistant") {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "只能對 AI 回答提供回饋。" } };
+  }
+
+  const updated: Message = { ...existing, feedback: verdict };
+  writeStore(messages.map((message) => (message.id === messageId ? updated : message)));
+
+  return { ok: true, value: updated };
 }
 
 /**

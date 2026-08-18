@@ -4,7 +4,7 @@ import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
 import { MOCK_FILE_PROCESSING_FAILURE_TRIGGER, simulateFileProcessing } from "@/lib/file-processing";
 import { runGenerationPhases } from "@/lib/generation-status";
-import { listMessages, receiveAssistantReply, reviseMessage, sendMessage } from "@/lib/messages";
+import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback } from "@/lib/messages";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -13,6 +13,7 @@ vi.mock("@/lib/messages", () => ({
   sendMessage: vi.fn(),
   receiveAssistantReply: vi.fn(),
   reviseMessage: vi.fn(),
+  submitAnswerFeedback: vi.fn(),
 }));
 
 vi.mock("@/lib/streaming", () => ({
@@ -58,6 +59,7 @@ const mockedListMessages = vi.mocked(listMessages);
 const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
 const mockedReviseMessage = vi.mocked(reviseMessage);
+const mockedSubmitAnswerFeedback = vi.mocked(submitAnswerFeedback);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
 const mockedShouldSimulateStreamDisconnect = vi.mocked(shouldSimulateStreamDisconnect);
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
@@ -107,6 +109,7 @@ beforeEach(() => {
   });
   mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
   mockedReviseMessage.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
+  mockedSubmitAnswerFeedback.mockReset();
 });
 
 function submitViaComposer(content: string) {
@@ -1717,6 +1720,148 @@ describe("MessageThread copy answer action (E03-S027)", () => {
     // slots, not one shared one that only ever reflects the latest click.
     await waitFor(() => expect(within(items[1]!).getByRole("button", { name: "已複製" })).toBeInTheDocument());
     expect(within(items[3]!).getByRole("button", { name: "已複製" })).toBeInTheDocument();
+  });
+});
+
+describe("MessageThread answer OK feedback (E13-S001)", () => {
+  it("shows a 有幫助 button on every settled assistant reply (not just the last one), but not on the user's own message", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        { id: "a2", conversationId: "c1", role: "assistant", content: "第二輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("第二輪回覆");
+    expect(screen.getAllByRole("button", { name: "有幫助" })).toHaveLength(2);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).not.toHaveTextContent("有幫助");
+    expect(items[1]).toHaveTextContent("有幫助");
+    expect(items[2]).not.toHaveTextContent("有幫助");
+    expect(items[3]).toHaveTextContent("有幫助");
+  });
+
+  it("clicking 有幫助 submits OK feedback for that message and shows 已回饋：有幫助", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
+    mockedSubmitAnswerFeedback.mockResolvedValue({
+      ok: true,
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", feedback: "OK" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "有幫助" }));
+
+    await waitFor(() => expect(mockedSubmitAnswerFeedback).toHaveBeenCalledWith("a1", "OK"));
+    expect(await screen.findByRole("button", { name: "已回饋：有幫助" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "有幫助" })).not.toBeInTheDocument();
+  });
+
+  it("renders 已回饋：有幫助 immediately for a message that already has feedback recorded (e.g. after reload)", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "第一輪回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          feedback: "OK",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByRole("button", { name: "已回饋：有幫助" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "有幫助" })).not.toBeInTheDocument();
+  });
+
+  it("giving feedback on one message does not mark a different message as 已回饋：有幫助", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        { id: "a2", conversationId: "c1", role: "assistant", content: "第二輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
+      ],
+    });
+    mockedSubmitAnswerFeedback.mockResolvedValue({
+      ok: true,
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", feedback: "OK" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第二輪回覆");
+
+    const feedbackButtons = screen.getAllByRole("button", { name: "有幫助" });
+    fireEvent.click(feedbackButtons[0]!);
+
+    expect(await screen.findByRole("button", { name: "已回饋：有幫助" })).toBeInTheDocument();
+    // Exactly one 有幫助 button remains — the other assistant reply is untouched.
+    expect(screen.getAllByRole("button", { name: "有幫助" })).toHaveLength(1);
+  });
+
+  it("disables the button while the feedback submission is in flight", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
+    let resolveSubmit!: (value: Awaited<ReturnType<typeof submitAnswerFeedback>>) => void;
+    mockedSubmitAnswerFeedback.mockReturnValue(new Promise((resolve) => (resolveSubmit = resolve)));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "有幫助" }));
+
+    expect(screen.getByRole("button", { name: "有幫助" })).toBeDisabled();
+
+    resolveSubmit({
+      ok: true,
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", feedback: "OK" },
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "已回饋：有幫助" })).toBeInTheDocument());
+  });
+
+  it("shows a distinct error message and keeps the 有幫助 button enabled (for retry) when submission fails", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
+    mockedSubmitAnswerFeedback.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "有幫助" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("回饋送出失敗，請再試一次。");
+    expect(screen.getByRole("button", { name: "有幫助" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "已回饋：有幫助" })).not.toBeInTheDocument();
   });
 });
 

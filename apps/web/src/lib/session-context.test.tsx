@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { CurrentUserProvider, useCurrentUser } from "./session-context";
+import { CurrentUserProvider, useCurrentUser, useOptionalCurrentUser } from "./session-context";
 
 const session = {
   userId: "u1",
@@ -21,5 +21,21 @@ describe("useCurrentUser", () => {
     expect(() => renderHook(() => useCurrentUser())).toThrow(
       "useCurrentUser() must be called within the authenticated (app) shell",
     );
+  });
+});
+
+describe("useOptionalCurrentUser (E13-S009)", () => {
+  it("returns the session provided by CurrentUserProvider", () => {
+    const { result } = renderHook(() => useOptionalCurrentUser(), {
+      wrapper: ({ children }) => <CurrentUserProvider value={session}>{children}</CurrentUserProvider>,
+    });
+
+    expect(result.current).toEqual(session);
+  });
+
+  it("returns null (not a throw) outside a CurrentUserProvider", () => {
+    const { result } = renderHook(() => useOptionalCurrentUser());
+
+    expect(result.current).toBeNull();
   });
 });

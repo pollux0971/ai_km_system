@@ -6,7 +6,7 @@ import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState, type AnswerState } from "@/lib/answer-state";
 import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
-import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback, type Message } from "@/lib/messages";
+import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback, type AnswerFeedbackVerdict, type Message } from "@/lib/messages";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
@@ -374,9 +374,21 @@ const logger = createLogger("web:message-thread");
  * plumbing. `feedbackPendingIds`/`feedbackErrorIds` (both keyed by
  * messageId, same "no shared slot" precedent S27's independent review
  * already established for `copyStatuses`) track only the transient
- * in-flight/error UI, never the verdict itself. Only `"OK"` is wired
- * today — E13-S002 "Answer NG feedback" is a separate, not-yet-built
- * story.
+ * in-flight/error UI, never the verdict itself.
+ *
+ * E13-S002 "Answer NG feedback" adds the sibling "沒有幫助" button right
+ * next to it, sharing `handleFeedback` (now parameterized by verdict) and
+ * the same `feedbackPendingIds`/`feedbackErrorIds` state — a message can
+ * only ever have one feedback submission in flight at a time (both
+ * buttons render disabled together while either is pending), so there is
+ * no need for verdict-specific tracking. OK and NG are ONE verdict field,
+ * not two independent toggles: once `entry.message.feedback` holds either
+ * value, BOTH buttons become permanently disabled (`feedback != null`,
+ * not `=== "OK"`), matching S001's own "no undo feedback" design applied
+ * symmetrically now that a second button exists. Each button's own label
+ * only flips to its "已回饋：..." form when it's the one that matches the
+ * recorded verdict — the other stays at its plain label, just disabled,
+ * so the UI never claims a verdict was given that wasn't.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -708,10 +720,10 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     }
   }
 
-  async function handleFeedback(messageId: string) {
+  async function handleFeedback(messageId: string, verdict: AnswerFeedbackVerdict) {
     const correlationId = crypto.randomUUID();
-    logger.info("submitting answer feedback", { correlationId, conversationId, messageId, verdict: "OK" });
-    trackEvent("conversation_answer_feedback_attempt", { correlationId, properties: { conversationId, messageId, verdict: "OK" } });
+    logger.info("submitting answer feedback", { correlationId, conversationId, messageId, verdict });
+    trackEvent("conversation_answer_feedback_attempt", { correlationId, properties: { conversationId, messageId, verdict } });
 
     setFeedbackPendingIds((previous) => new Set(previous).add(messageId));
     setFeedbackErrorIds((previous) => {
@@ -721,7 +733,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       return next;
     });
 
-    const result = await submitAnswerFeedback(messageId, "OK");
+    const result = await submitAnswerFeedback(messageId, verdict);
 
     setFeedbackPendingIds((previous) => {
       const next = new Set(previous);
@@ -730,14 +742,14 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     });
 
     if (!result.ok) {
-      logger.error("failed to submit answer feedback", { correlationId, conversationId, messageId, code: result.error.code });
-      trackEvent("conversation_answer_feedback_failure", { correlationId, properties: { conversationId, messageId, code: result.error.code } });
+      logger.error("failed to submit answer feedback", { correlationId, conversationId, messageId, verdict, code: result.error.code });
+      trackEvent("conversation_answer_feedback_failure", { correlationId, properties: { conversationId, messageId, verdict, code: result.error.code } });
       setFeedbackErrorIds((previous) => new Set(previous).add(messageId));
       return;
     }
 
-    logger.info("answer feedback submitted", { correlationId, conversationId, messageId, verdict: "OK" });
-    trackEvent("conversation_answer_feedback_success", { correlationId, properties: { conversationId, messageId, verdict: "OK" } });
+    logger.info("answer feedback submitted", { correlationId, conversationId, messageId, verdict });
+    trackEvent("conversation_answer_feedback_success", { correlationId, properties: { conversationId, messageId, verdict } });
     setDisplayMessages((previous) =>
       previous.map((entry) => (entry.kind === "sent" && entry.message.id === messageId ? { kind: "sent", message: result.value } : entry)),
     );
@@ -837,10 +849,17 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                     {copyStatuses.get(entry.message.id) === "failed" && <span role="alert">複製失敗，請手動選取複製。</span>}
                     <button
                       type="button"
-                      onClick={() => handleFeedback(entry.message.id)}
-                      disabled={entry.message.feedback === "OK" || feedbackPendingIds.has(entry.message.id)}
+                      onClick={() => handleFeedback(entry.message.id, "OK")}
+                      disabled={entry.message.feedback != null || feedbackPendingIds.has(entry.message.id)}
                     >
                       {entry.message.feedback === "OK" ? "已回饋：有幫助" : "有幫助"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleFeedback(entry.message.id, "NG")}
+                      disabled={entry.message.feedback != null || feedbackPendingIds.has(entry.message.id)}
+                    >
+                      {entry.message.feedback === "NG" ? "已回饋：沒有幫助" : "沒有幫助"}
                     </button>
                     {feedbackErrorIds.has(entry.message.id) && <span role="alert">回饋送出失敗，請再試一次。</span>}
                   </>

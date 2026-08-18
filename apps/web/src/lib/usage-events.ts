@@ -1,3 +1,5 @@
+import type { AnswerState } from "./answer-state";
+
 /**
  * E13-S009: usage event instrumentation. E11-S021 (Usage dashboard)
  * already established that `getUsageMetrics()` must stay honestly at
@@ -32,18 +34,64 @@
  * longer exists, so instrumentation sits at each route's own final
  * success point, not at createConversation() itself.
  *
- * Computing DAU or wiring either event into the admin dashboard remains
- * out of scope (E13-S012's job, per Atomic Story Boundary's "one story,
- * one capability" rule) — a future story can derive "was this user active
- * today" from the same event stream persisted here, without this story
- * inventing any aggregation logic of its own.
+ * E13-S011 adds `"rag_answer_outcome"` — a per-answer quality signal,
+ * recorded once per successfully-persisted assistant reply (message-
+ * thread.tsx's runStream, right where it already fires
+ * `conversation_message_stream_success`). This is deliberately NOT an
+ * attempt to build real RAG evaluation (retrieval recall, forbidden-
+ * source leak rate, etc — TESTING_POLICY.md's L6): that is E04 (RAG &
+ * Conversation Intelligence)'s domain, explicitly owned by Team B
+ * (readme_zh.md: "RAG 是獨立 Domain"; SOURCE_BASELINE.md's E04-S21
+ * Abstention / E04-S28 Evaluation Dataset / E04-S29 Retrieval Evaluation
+ * are all Team B stories), and this codebase's RAG pipeline itself is a
+ * mock (streaming.ts's MOCK_REPLY). What IS genuinely available to Team A
+ * without inventing anything is the two RAG-adjacent facts already
+ * surfaced by E03-S021's real, already-approved `AnswerState`
+ * classification (ANSWERED/PARTIAL/NO_EVIDENCE/ERROR/PERMISSION_DENIED/
+ * SOURCE_UNAVAILABLE — NO_EVIDENCE is this codebase's honest stand-in for
+ * "abstained") and the `[N]` citation markers already rendered in the
+ * reply content (E03-S014's citation badges). Recording those two
+ * observable facts per answer — not computing any cross-answer rate or
+ * aggregate — is the whole of this story's scope; `countDistinctCitations`
+ * below is a pure counting function, not a leak-rate calculator.
+ *
+ * Computing DAU, wiring events into the admin dashboard, or any
+ * cross-answer aggregation remains out of scope (E13-S012's job, per
+ * Atomic Story Boundary's "one story, one capability" rule) — a future
+ * story can derive whatever aggregate metrics it needs from the same
+ * event stream persisted here, without this story inventing any
+ * aggregation logic of its own.
  */
-export type UsageEventName = "conversation_message_sent" | "conversation_created";
+export type UsageEventName = "conversation_message_sent" | "conversation_created" | "rag_answer_outcome";
 
 export interface UsageEvent {
   name: UsageEventName;
   userId: string;
   occurredAt: string;
+  /** Only populated for "rag_answer_outcome" events. */
+  answerState?: AnswerState;
+  /** Only populated for "rag_answer_outcome" events. */
+  citationCount?: number;
+}
+
+/**
+ * Independent regex, not imported from message-content.tsx (a "use
+ * client" component) — same "pattern-consistent, not shared" precedent
+ * messages.ts's own CITATION_ID_PATTERN doc comment already establishes
+ * for this exact `[N]` marker format. Counts DISTINCT ids (a citation
+ * cited twice in one answer is one source, not two) — matching how a
+ * real citation-correctness signal would be defined, not raw marker
+ * occurrences.
+ */
+const CITATION_ID_PATTERN = /\[(\d+)\]/g;
+
+export function countDistinctCitations(content: string): number {
+  const ids = new Set<string>();
+  for (const match of content.matchAll(CITATION_ID_PATTERN)) {
+    const id = match[1];
+    if (id !== undefined) ids.add(id);
+  }
+  return ids.size;
 }
 
 const STORAGE_KEY = "ai-km:mock-usage-events";
@@ -71,11 +119,20 @@ function writeStore(events: UsageEvent[]): void {
  * documents (AC 4/5: a dependency issue here must not corrupt an
  * unrelated user action, e.g. a full sessionStorage must not make
  * message sending itself appear to fail).
+ *
+ * `details` is optional and only meaningful for `"rag_answer_outcome"` —
+ * `conversation_message_sent`/`conversation_created` callers pass
+ * nothing, leaving `answerState`/`citationCount` undefined on the
+ * persisted event rather than defaulted to some stray value.
  */
-export function recordUsageEvent(name: UsageEventName, userId: string): void {
+export function recordUsageEvent(
+  name: UsageEventName,
+  userId: string,
+  details?: { answerState?: AnswerState; citationCount?: number },
+): void {
   try {
     const events = readStore();
-    events.push({ name, userId, occurredAt: new Date().toISOString() });
+    events.push({ name, userId, occurredAt: new Date().toISOString(), ...details });
     writeStore(events);
   } catch {
     // Swallowed deliberately — see doc comment above.

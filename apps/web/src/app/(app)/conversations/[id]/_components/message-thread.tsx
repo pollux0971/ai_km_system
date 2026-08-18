@@ -25,7 +25,7 @@ import {
 import { useOptionalCurrentUser } from "@/lib/session-context";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
-import { recordUsageEvent } from "@/lib/usage-events";
+import { countDistinctCitations, recordUsageEvent } from "@/lib/usage-events";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
 import { ConversationContextIndicator } from "./conversation-context-indicator";
 import { MessageComposer } from "./message-composer";
@@ -704,6 +704,18 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
     logger.info("assistant reply received", { correlationId, conversationId, messageId: result.value.id });
     trackEvent("conversation_message_stream_success", { correlationId, properties: { messageId: result.value.id } });
+    // E13-S011: record the RAG outcome for THIS finalized reply — same
+    // "record once, at the real final success point" rule S009/S010
+    // already established (no session → skip, matching every other
+    // recordUsageEvent call site in this component). Covers both a
+    // brand-new answer and a regenerate (reviseTarget above), since each
+    // is its own distinct answer with its own outcome to record.
+    if (currentUser) {
+      recordUsageEvent("rag_answer_outcome", currentUser.userId, {
+        answerState: result.value.state ?? "ANSWERED",
+        citationCount: countDistinctCitations(result.value.content),
+      });
+    }
     setDisplayMessages((previous) =>
       previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
     );

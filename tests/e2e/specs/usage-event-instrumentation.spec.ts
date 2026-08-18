@@ -50,9 +50,16 @@ test("E13-S009: sending a message persists a conversation_message_sent usage eve
   await page.getByRole("button", { name: "送出" }).click();
   await waitForThreadToSettle(page);
 
+  // E13-S011 note: a real send also completes streaming and persists its
+  // own distinct rag_answer_outcome event at the same call site this test
+  // already waits on (waitForThreadToSettle) — filtering to THIS event
+  // name keeps testing the original claim ("conversation_message_sent
+  // itself isn't double-recorded") precisely, without this test also
+  // needing to know about a second, unrelated event type.
   const events = await readUsageEvents(page);
-  expect(events).toHaveLength(1);
-  expect(events[0]).toMatchObject({ name: "conversation_message_sent", userId: MOCK_VALID_USER_ID });
+  const sentEvents = events.filter((event) => event.name === "conversation_message_sent");
+  expect(sentEvents).toHaveLength(1);
+  expect(sentEvents[0]).toMatchObject({ name: "conversation_message_sent", userId: MOCK_VALID_USER_ID });
 });
 
 test("E13-S009: a failed send never persists a usage event, and each real send only ever adds exactly one", async ({ page }) => {
@@ -63,13 +70,16 @@ test("E13-S009: a failed send never persists a usage event, and each real send o
   await page.getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
+  // Same E13-S011 scoping note as the test above.
+  const sentEventCount = async () => (await readUsageEvents(page)).filter((event) => event.name === "conversation_message_sent").length;
+
   await page.getByLabel("訊息").fill("第一個問題");
   await page.getByRole("button", { name: "送出" }).click();
   await waitForThreadToSettle(page);
-  expect(await readUsageEvents(page)).toHaveLength(1);
+  expect(await sentEventCount()).toBe(1);
 
   await page.getByLabel("訊息").fill("第二個問題");
   await page.getByRole("button", { name: "送出" }).click();
   await waitForThreadToSettle(page);
-  expect(await readUsageEvents(page)).toHaveLength(2);
+  expect(await sentEventCount()).toBe(2);
 });

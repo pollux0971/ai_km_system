@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { listUsageEvents, recordUsageEvent } from "./usage-events";
+import { countDistinctCitations, listUsageEvents, recordUsageEvent } from "./usage-events";
 
 describe("recordUsageEvent / listUsageEvents (E13-S009)", () => {
   beforeEach(() => {
@@ -80,5 +80,60 @@ describe("recordUsageEvent / listUsageEvents — conversation_created (E13-S010)
 
     const events = listUsageEvents();
     expect(events.map((event) => event.name)).toEqual(["conversation_created", "conversation_message_sent"]);
+  });
+});
+
+describe("recordUsageEvent / listUsageEvents — rag_answer_outcome (E13-S011)", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("accepts rag_answer_outcome as a distinct event name, persisting its answerState and citationCount", () => {
+    recordUsageEvent("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 1 });
+
+    const events = listUsageEvents();
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event) throw new Error("expected an event");
+    expect(event.name).toBe("rag_answer_outcome");
+    expect(event.userId).toBe("u1");
+    expect(event.answerState).toBe("ANSWERED");
+    expect(event.citationCount).toBe(1);
+  });
+
+  it("persists a non-ANSWERED state (e.g. NO_EVIDENCE) and a zero citationCount distinctly, not defaulted to ANSWERED/1", () => {
+    recordUsageEvent("rag_answer_outcome", "u1", { answerState: "NO_EVIDENCE", citationCount: 0 });
+
+    const [event] = listUsageEvents();
+    if (!event) throw new Error("expected an event");
+    expect(event.answerState).toBe("NO_EVIDENCE");
+    expect(event.citationCount).toBe(0);
+  });
+
+  it("leaves answerState/citationCount undefined for events recorded without details (conversation_message_sent/conversation_created), not populated with stray values", () => {
+    recordUsageEvent("conversation_message_sent", "u1");
+
+    const [event] = listUsageEvents();
+    if (!event) throw new Error("expected an event");
+    expect(event.answerState).toBeUndefined();
+    expect(event.citationCount).toBeUndefined();
+  });
+});
+
+describe("countDistinctCitations (E13-S011)", () => {
+  it("returns 0 for content with no citation markers", () => {
+    expect(countDistinctCitations("這是一段沒有引用的回答。")).toBe(0);
+  });
+
+  it("returns 1 for content with a single citation marker", () => {
+    expect(countDistinctCitations("這是回答內容。[1]")).toBe(1);
+  });
+
+  it("counts distinct citation ids, not raw marker occurrences — a repeated [1] still counts once", () => {
+    expect(countDistinctCitations("先引用一次 [1]，後面又引用了同一個來源 [1]。")).toBe(1);
+  });
+
+  it("counts multiple distinct citation ids", () => {
+    expect(countDistinctCitations("第一個來源 [1]，第二個來源 [2]，第三個來源 [3]。")).toBe(3);
   });
 });

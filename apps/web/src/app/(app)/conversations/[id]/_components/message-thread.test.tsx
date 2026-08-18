@@ -82,9 +82,16 @@ vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
 
-vi.mock("@/lib/usage-events", () => ({
-  recordUsageEvent: vi.fn(),
-}));
+// E13-S011: importOriginal (not a plain synchronous factory like this
+// file's other mocks) so the real, pure `countDistinctCitations` stays
+// callable — a full replacement would make it undefined the moment
+// message-thread.tsx imports it, same trap E13-S007's EVIDENCE already
+// documented for a different module's mock. Only `recordUsageEvent`
+// itself needs to be a spy.
+vi.mock("@/lib/usage-events", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/usage-events")>();
+  return { ...actual, recordUsageEvent: vi.fn() };
+});
 
 const mockedListMessages = vi.mocked(listMessages);
 const mockedSendMessage = vi.mocked(sendMessage);
@@ -2751,7 +2758,14 @@ describe("MessageThread usage event instrumentation (E13-S009)", () => {
     submitViaComposer("你好");
 
     await waitFor(() => expect(mockedRecordUsageEvent).toHaveBeenCalledWith("conversation_message_sent", "u1"));
-    expect(mockedRecordUsageEvent).toHaveBeenCalledTimes(1);
+    // E13-S011 note: toHaveBeenCalledTimes on the whole mock would now
+    // also count the co-occurring rag_answer_outcome call this same
+    // send→stream flow triggers (a distinct, unrelated event sharing
+    // this mock) — filtering to calls whose first arg is THIS event name
+    // keeps testing the original claim ("not double-recorded") precisely,
+    // without asserting something about a second event this test was
+    // never about.
+    expect(mockedRecordUsageEvent.mock.calls.filter((call) => call[0] === "conversation_message_sent")).toHaveLength(1);
   });
 
   it("does not record a usage event when the send fails", async () => {
@@ -2779,7 +2793,12 @@ describe("MessageThread usage event instrumentation (E13-S009)", () => {
     mockedSendMessage.mockResolvedValueOnce({ ok: true, value: SENT_MESSAGE });
     fireEvent.click(screen.getByRole("button", { name: "重新傳送" }));
 
-    await waitFor(() => expect(mockedRecordUsageEvent).toHaveBeenCalledTimes(1));
+    // Same E13-S011 scoping note as the test above — count only THIS
+    // event name's calls, since a successful send also triggers a
+    // distinct rag_answer_outcome call on the same shared mock.
+    await waitFor(() =>
+      expect(mockedRecordUsageEvent.mock.calls.filter((call) => call[0] === "conversation_message_sent")).toHaveLength(1),
+    );
     expect(mockedRecordUsageEvent).toHaveBeenCalledWith("conversation_message_sent", "u1");
   });
 
@@ -3243,5 +3262,147 @@ describe("MessageThread message retry UX (E03-S032)", () => {
     // "actually re-attempted" precedent the pre-existing S12 stream-
     // failed retry test already establishes.
     expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("MessageThread RAG outcome analytics (E13-S011)", () => {
+  const SENT_MESSAGE = {
+    id: "m1",
+    conversationId: "c1",
+    role: "user" as const,
+    content: "你好",
+    attachmentNames: [],
+    createdAt: "2026-08-14T00:00:00.000Z",
+  };
+
+  it("records a rag_answer_outcome event with the finalized answerState and citation count once an answer is actually persisted", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "第一個來源 [1]，第二個來源 [2]。", state: "ANSWERED" },
+    });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() =>
+      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 2 }),
+    );
+  });
+
+  it("records rag_answer_outcome exactly once for a single successfully-persisted answer — never double-counted", async () => {
+    // toHaveBeenCalledWith above only proves ONE call matched these args —
+    // it says nothing about whether rag_answer_outcome was ALSO recorded
+    // a second (or third) time for the same answer. Filtering to this
+    // event name specifically (same precision the S009 tests already use
+    // for conversation_message_sent, and the same technique this story's
+    // own EVIDENCE documents applying to those existing tests) is what
+    // actually proves no duplicate side effect for THIS event.
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "唯一的一個來源 [1]。", state: "ANSWERED" },
+    });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() =>
+      expect(mockedRecordUsageEvent.mock.calls.filter((call) => call[0] === "rag_answer_outcome")).toHaveLength(1),
+    );
+  });
+
+  it("records citationCount 0 for an answer with no citation markers", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "沒有引用來源的回答。", state: "ANSWERED" },
+    });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() =>
+      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 0 }),
+    );
+  });
+
+  it("records the answer's real non-ANSWERED classification (e.g. NO_EVIDENCE) rather than defaulting to ANSWERED", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "（模擬回覆）找不到足夠企業資料支持此答案。", state: "NO_EVIDENCE" },
+    });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer(`保固期限是多久？ ${MOCK_ANSWER_STATE_TRIGGERS.NO_EVIDENCE}`);
+
+    await waitFor(() =>
+      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "NO_EVIDENCE", citationCount: 0 }),
+    );
+  });
+
+  it("does not record a rag_answer_outcome event when persisting the reply fails", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    expect(await screen.findByText("AI 回覆失敗")).toBeInTheDocument();
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalledWith("rag_answer_outcome", expect.anything(), expect.anything());
+  });
+
+  it("does not record a rag_answer_outcome event (and does not crash) when rendered outside a session provider", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答 [1]" } });
+
+    renderWithSession(null);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(screen.queryByText("傳送中…")).not.toBeInTheDocument());
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalledWith("rag_answer_outcome", expect.anything(), expect.anything());
+  });
+
+  it("records its own rag_answer_outcome event for a regenerated reply (via 重新產生, in-place update)", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [{ id: "a1", conversationId: "c1", role: "assistant" as const, content: "原始回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" }],
+    });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "重新產生的回覆，引用了一個來源 [1]。";
+    });
+    mockedReviseMessage.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "a1",
+        conversationId: "c1",
+        role: "assistant",
+        content: "重新產生的回覆，引用了一個來源 [1]。",
+        attachmentNames: [],
+        createdAt: "2026-08-14T00:00:01.000Z",
+        revisions: ["原始回覆"],
+      },
+    });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("原始回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
+
+    await waitFor(() =>
+      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 1 }),
+    );
   });
 });

@@ -1793,6 +1793,42 @@ describe("MessageThread answer OK feedback (E13-S001)", () => {
     expect(screen.queryByRole("button", { name: "有幫助" })).not.toBeInTheDocument();
   });
 
+  it("disables the 已回饋：有幫助 button once feedback has been given, so it cannot be submitted again", async () => {
+    // Independent review MAJOR finding: every other test in this
+    // describe block that reaches the "已回饋：有幫助" label only
+    // asserted the button's accessible name, never .toBeDisabled() —
+    // an adversarial mutation removing the `entry.message.feedback ===
+    // "OK"` half of message-thread.tsx's disabled condition (leaving
+    // only the in-flight-pending half) passed all 91 pre-existing
+    // tests unnoticed, meaning a real regression that lets an
+    // already-given verdict be resubmitted had zero coverage. This
+    // test closes that gap directly.
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "第一輪回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          feedback: "OK",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    const feedbackButton = screen.getByRole("button", { name: "已回饋：有幫助" });
+    expect(feedbackButton).toBeDisabled();
+
+    fireEvent.click(feedbackButton);
+    expect(mockedSubmitAnswerFeedback).not.toHaveBeenCalled();
+  });
+
   it("giving feedback on one message does not mark a different message as 已回饋：有幫助", async () => {
     mockedListMessages.mockResolvedValue({
       ok: true,

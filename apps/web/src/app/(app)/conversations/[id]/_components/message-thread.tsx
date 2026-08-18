@@ -15,6 +15,7 @@ import {
   reviseMessage,
   sendMessage,
   submitAnswerFeedback,
+  submitCitationFeedback,
   submitFeedbackComment,
   submitFeedbackReason,
   type AnswerFeedbackVerdict,
@@ -457,6 +458,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
   const [previewCitationId, setPreviewCitationId] = useState<string | null>(null);
+  const [previewMessageId, setPreviewMessageId] = useState<string | null>(null);
+  const [citationFeedbackPendingKeys, setCitationFeedbackPendingKeys] = useState<Set<string>>(new Set());
+  const [citationFeedbackErrorKeys, setCitationFeedbackErrorKeys] = useState<Set<string>>(new Set());
   const [copyStatuses, setCopyStatuses] = useState<Map<string, "pending" | "copied" | "failed">>(new Map());
   const [feedbackPendingIds, setFeedbackPendingIds] = useState<Set<string>>(new Set());
   const [feedbackErrorIds, setFeedbackErrorIds] = useState<Set<string>>(new Set());
@@ -897,16 +901,61 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     );
   }
 
-  function handleCitationClick(citationId: string) {
+  function handleCitationClick(citationId: string, messageId: string | null) {
     setPreviewCitationId(citationId);
+    setPreviewMessageId(messageId);
   }
 
   function handleClosePreview() {
     setPreviewCitationId(null);
+    setPreviewMessageId(null);
+  }
+
+  async function handleCitationFeedback(messageId: string, citationId: string, verdict: AnswerFeedbackVerdict) {
+    const key = `${messageId}:${citationId}`;
+    const correlationId = crypto.randomUUID();
+    logger.info("submitting citation feedback", { correlationId, conversationId, messageId, citationId, verdict });
+    trackEvent("conversation_citation_feedback_attempt", { correlationId, properties: { conversationId, messageId, citationId, verdict } });
+
+    setCitationFeedbackPendingKeys((previous) => new Set(previous).add(key));
+    setCitationFeedbackErrorKeys((previous) => {
+      if (!previous.has(key)) return previous;
+      const next = new Set(previous);
+      next.delete(key);
+      return next;
+    });
+
+    const result = await submitCitationFeedback(messageId, citationId, verdict);
+
+    setCitationFeedbackPendingKeys((previous) => {
+      const next = new Set(previous);
+      next.delete(key);
+      return next;
+    });
+
+    if (!result.ok) {
+      logger.error("failed to submit citation feedback", { correlationId, conversationId, messageId, citationId, verdict, code: result.error.code });
+      trackEvent("conversation_citation_feedback_failure", {
+        correlationId,
+        properties: { conversationId, messageId, citationId, verdict, code: result.error.code },
+      });
+      setCitationFeedbackErrorKeys((previous) => new Set(previous).add(key));
+      return;
+    }
+
+    logger.info("citation feedback submitted", { correlationId, conversationId, messageId, citationId, verdict });
+    trackEvent("conversation_citation_feedback_success", { correlationId, properties: { conversationId, messageId, citationId, verdict } });
+    setDisplayMessages((previous) =>
+      previous.map((entry) => (entry.kind === "sent" && entry.message.id === messageId ? { kind: "sent", message: result.value } : entry)),
+    );
   }
 
   const isTurnInFlight = displayMessages.some((entry) => entry.kind === "pending" || entry.kind === "streaming");
   const sentMessageCount = displayMessages.filter((entry) => entry.kind === "sent").length;
+
+  const previewMessageEntry = displayMessages.find((entry) => entry.kind === "sent" && entry.message.id === previewMessageId);
+  const previewMessage = previewMessageEntry && previewMessageEntry.kind === "sent" ? previewMessageEntry.message : undefined;
+  const previewCitationFeedbackKey = previewMessageId != null && previewCitationId != null ? `${previewMessageId}:${previewCitationId}` : null;
 
   if (loadState === "loading") {
     return (
@@ -959,7 +1008,11 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
               <li key={key}>
                 <span>{roleLabel}</span>
                 <span>
-                  <MessageContent content={content} withCitations={role === "assistant"} onCitationClick={handleCitationClick} />
+                  <MessageContent
+                    content={content}
+                    withCitations={role === "assistant"}
+                    onCitationClick={(citationId) => handleCitationClick(citationId, entry.kind === "sent" ? entry.message.id : null)}
+                  />
                 </span>
                 {entry.kind === "sent" &&
                   role === "assistant" &&
@@ -1120,7 +1173,19 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
           })}
         </ul>
       )}
-      <CitationPreviewDrawer citationId={previewCitationId} onClose={handleClosePreview} />
+      <CitationPreviewDrawer
+        citationId={previewCitationId}
+        onClose={handleClosePreview}
+        messageId={previewMessageId}
+        feedbackVerdict={previewCitationId != null ? previewMessage?.citationFeedback?.[previewCitationId] : undefined}
+        feedbackPending={previewCitationFeedbackKey != null && citationFeedbackPendingKeys.has(previewCitationFeedbackKey)}
+        feedbackError={previewCitationFeedbackKey != null && citationFeedbackErrorKeys.has(previewCitationFeedbackKey)}
+        onSubmitFeedback={(verdict) => {
+          if (previewMessageId != null && previewCitationId != null) {
+            handleCitationFeedback(previewMessageId, previewCitationId, verdict);
+          }
+        }}
+      />
       {displayMessages.length > 0 && <ConversationContextIndicator messageCount={sentMessageCount} />}
       <MessageComposer conversationId={conversationId} onSubmit={handleComposerSubmit} disabled={isTurnInFlight} />
     </div>

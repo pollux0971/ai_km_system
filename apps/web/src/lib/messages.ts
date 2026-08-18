@@ -104,6 +104,20 @@ import { getConversation, touchConversationLastMessage } from "./conversations";
  * schema validation"), but no length appears anywhere in
  * AI_KM_BMAD_High_Granularity/; 500 is picked as a generous-but-bounded
  * free-text size for a supplementary comment, not a full document.
+ *
+ * `citationFeedback` (E13-S005 "citation-specific feedback") is again a
+ * Team-A ASSUMPTION on shape — same "epic file gives this story nothing
+ * beyond its title" situation as S003/S004 (confirmed by grep). Unlike
+ * S001-S004's whole-answer feedback (one verdict per message),
+ * "citation-specific" by its own name targets an individual `[N]`
+ * citation marker within a message's content (see message-content.tsx's
+ * CITATION_PATTERN), of which a single assistant reply can contain
+ * several distinct ones — so this is a map keyed by citationId, not a
+ * single field, mirroring how `MOCK_CITATION_SOURCES` in lib/citations.ts
+ * is itself keyed by citation id. Reuses `AnswerFeedbackVerdict` ("OK" |
+ * "NG") rather than inventing a parallel citation-specific verdict type —
+ * "was this specific source helpful/accurate" is the same OK/NG shape as
+ * "was this whole answer helpful", just scoped narrower.
  */
 export type AnswerFeedbackVerdict = "OK" | "NG";
 
@@ -131,6 +145,7 @@ export interface Message {
   feedback?: AnswerFeedbackVerdict;
   feedbackReason?: FeedbackReason;
   feedbackComment?: string;
+  citationFeedback?: Record<string, AnswerFeedbackVerdict>;
 }
 
 const STORAGE_KEY = "ai-km:mock-messages";
@@ -399,6 +414,75 @@ export async function submitFeedbackComment(messageId: string, comment: string):
   }
 
   const updated: Message = { ...existing, feedbackComment: trimmed };
+  writeStore(messages.map((message) => (message.id === messageId ? updated : message)));
+
+  return { ok: true, value: updated };
+}
+
+/**
+ * Mirrors message-content.tsx's own `CITATION_PATTERN` marker parsing
+ * (`/(\[\d+\])/g`) so submitCitationFeedback below can validate that a
+ * caller-supplied citationId genuinely appears in THIS message's content
+ * before accepting feedback for it — Security Acceptance's "所有外部輸入均
+ * 做 schema validation" applied to citationId specifically, rather than
+ * trusting any string the caller passes. Kept as an independent regex
+ * here (not imported from message-content.tsx, a "use client" component)
+ * rather than shared — this lib module has no existing precedent of
+ * importing FROM a component file, and the two use cases (render vs.
+ * validate) don't need to share code, just stay pattern-consistent.
+ */
+const CITATION_ID_PATTERN = /\[(\d+)\]/g;
+
+function extractCitationIds(content: string): Set<string> {
+  const ids = new Set<string>();
+  for (const match of content.matchAll(CITATION_ID_PATTERN)) {
+    const id = match[1];
+    if (id !== undefined) ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * E13-S005 "citation-specific feedback". Fails closed with NOT_FOUND for
+ * a nonexistent messageId and VALIDATION_ERROR for a non-assistant
+ * message, mirroring submitAnswerFeedback's own checks (a user's own
+ * message was never an "answer" with citations to react to). Additionally
+ * fails closed with VALIDATION_ERROR when citationId isn't one of the
+ * `[N]` markers actually present in this message's own content — without
+ * this check, a caller could record feedback against a citation id that
+ * was never shown to the user for this message at all, which would be
+ * accepting an externally-supplied id with no real corresponding UI
+ * affordance to have produced it.
+ *
+ * Same idempotent-upsert shape as submitAnswerFeedback/submitFeedbackReason/
+ * submitFeedbackComment: updates (merges into) the `citationFeedback`
+ * record in place, so submitting the same verdict for the same
+ * (messageId, citationId) pair twice produces identical persisted state
+ * (Functional AC 5), and is scoped to ONLY the targeted citationId within
+ * the record — feedback on one citation never touches another citation's
+ * entry in the same message's `citationFeedback` map. Allows switching
+ * verdicts at the data layer (no additional guard), same trust boundary
+ * S001-S004 already established: message-thread.tsx's UI is what enforces
+ * "no undo once given".
+ */
+export async function submitCitationFeedback(
+  messageId: string,
+  citationId: string,
+  verdict: AnswerFeedbackVerdict,
+): Promise<Result<Message, ApiError>> {
+  const messages = readStore();
+  const existing = messages.find((message) => message.id === messageId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } };
+  }
+  if (existing.role !== "assistant") {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "只能對 AI 回答的引用提供回饋。" } };
+  }
+  if (!extractCitationIds(existing.content).has(citationId)) {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "這則訊息沒有這個引用來源。" } };
+  }
+
+  const updated: Message = { ...existing, citationFeedback: { ...(existing.citationFeedback ?? {}), [citationId]: verdict } };
   writeStore(messages.map((message) => (message.id === messageId ? updated : message)));
 
   return { ok: true, value: updated };

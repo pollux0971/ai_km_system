@@ -10,6 +10,7 @@ import {
   reviseMessage,
   sendMessage,
   submitAnswerFeedback,
+  submitCitationFeedback,
   submitFeedbackComment,
   submitFeedbackReason,
   type AnswerFeedbackVerdict,
@@ -24,6 +25,7 @@ vi.mock("@/lib/messages", () => ({
   receiveAssistantReply: vi.fn(),
   reviseMessage: vi.fn(),
   submitAnswerFeedback: vi.fn(),
+  submitCitationFeedback: vi.fn(),
   submitFeedbackReason: vi.fn(),
   submitFeedbackComment: vi.fn(),
   // Plain data, not vi.fn() — mirrors this file's established convention
@@ -83,6 +85,7 @@ const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
 const mockedReviseMessage = vi.mocked(reviseMessage);
 const mockedSubmitAnswerFeedback = vi.mocked(submitAnswerFeedback);
+const mockedSubmitCitationFeedback = vi.mocked(submitCitationFeedback);
 const mockedSubmitFeedbackReason = vi.mocked(submitFeedbackReason);
 const mockedSubmitFeedbackComment = vi.mocked(submitFeedbackComment);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
@@ -135,6 +138,7 @@ beforeEach(() => {
   mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
   mockedReviseMessage.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
   mockedSubmitAnswerFeedback.mockReset();
+  mockedSubmitCitationFeedback.mockReset();
   mockedSubmitFeedbackReason.mockReset();
   mockedSubmitFeedbackComment.mockReset();
 });
@@ -2498,6 +2502,134 @@ describe("MessageThread free-text feedback (E13-S004)", () => {
     // a2's comment box: completely untouched, still fully interactive.
     expect(within(items[3]!).getByLabelText("留言")).toBeEnabled();
     expect(within(items[3]!).queryByText(/已送出留言/)).not.toBeInTheDocument();
+  });
+});
+
+// Uses the REAL lib/citations.ts (not mocked, same as the E03-S014
+// citation preview block above) — getCitationSource("1")/("2") both
+// resolve to real mock sources, so these tests exercise the actual
+// click → drawer → feedback UI wiring end to end.
+describe("MessageThread citation-specific feedback (E13-S005)", () => {
+  const A1_TWO_CITATIONS = {
+    id: "a1",
+    conversationId: "c1",
+    role: "assistant" as const,
+    content: "本季成長 12%[1]，去年為 8%[2]",
+    attachmentNames: [],
+    createdAt: "2026-08-14T00:00:01.000Z",
+  };
+
+  it("shows 此引用有幫助/此引用不準確 buttons in the preview drawer for a settled assistant message's citation", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [A1_TWO_CITATIONS] });
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+
+    expect(await screen.findByRole("button", { name: "此引用有幫助" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "此引用不準確" })).toBeInTheDocument();
+  });
+
+  it("clicking 此引用有幫助 submits OK citation feedback for the correct (messageId, citationId) pair and shows 已回饋：此引用有幫助", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [A1_TWO_CITATIONS] });
+    mockedSubmitCitationFeedback.mockResolvedValue({ ok: true, value: { ...A1_TWO_CITATIONS, citationFeedback: { "1": "OK" } } });
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "此引用有幫助" }));
+
+    await waitFor(() => expect(mockedSubmitCitationFeedback).toHaveBeenCalledWith("a1", "1", "OK"));
+    expect(await screen.findByRole("button", { name: "已回饋：此引用有幫助" })).toBeInTheDocument();
+  });
+
+  it("renders 已回饋：此引用有幫助 immediately for a citation that already has feedback recorded (e.g. after reload)", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [{ ...A1_TWO_CITATIONS, citationFeedback: { "1": "OK" } }] });
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+
+    expect(await screen.findByRole("button", { name: "已回饋：此引用有幫助" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "此引用有幫助" })).not.toBeInTheDocument();
+  });
+
+  it("disables BOTH citation feedback buttons once feedback has been given, so it cannot be submitted again", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [{ ...A1_TWO_CITATIONS, citationFeedback: { "1": "OK" } }] });
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+
+    const givenButton = await screen.findByRole("button", { name: "已回饋：此引用有幫助" });
+    const ngButton = screen.getByRole("button", { name: "此引用不準確" });
+    expect(givenButton).toBeDisabled();
+    expect(ngButton).toBeDisabled();
+
+    fireEvent.click(givenButton);
+    expect(mockedSubmitCitationFeedback).not.toHaveBeenCalled();
+  });
+
+  it("giving feedback on one citation does not mark a DIFFERENT citation within the SAME message as already-given", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [A1_TWO_CITATIONS] });
+    mockedSubmitCitationFeedback.mockResolvedValue({ ok: true, value: { ...A1_TWO_CITATIONS, citationFeedback: { "1": "OK" } } });
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "此引用有幫助" }));
+    await screen.findByRole("button", { name: "已回饋：此引用有幫助" });
+
+    fireEvent.click(screen.getByRole("button", { name: "關閉" }));
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 2" }));
+
+    // Citation "2" was never given feedback — still shows the un-given label, not "已回饋".
+    expect(await screen.findByRole("button", { name: "此引用有幫助" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "已回饋：此引用有幫助" })).not.toBeInTheDocument();
+  });
+
+  it("giving feedback on a citation in one message does not affect the SAME citationId in a different message", async () => {
+    const a1 = { ...A1_TWO_CITATIONS, id: "a1", content: "第一則回覆[1]" };
+    const a2 = { ...A1_TWO_CITATIONS, id: "a2", content: "第二則回覆[1]" };
+    mockedListMessages.mockResolvedValue({ ok: true, value: [a1, a2] });
+    mockedSubmitCitationFeedback.mockResolvedValue({ ok: true, value: { ...a1, citationFeedback: { "1": "OK" } } });
+
+    render(<MessageThread conversationId="c1" />);
+    const citationButtons = await screen.findAllByRole("button", { name: "檢視引用來源 1" });
+    expect(citationButtons).toHaveLength(2);
+
+    fireEvent.click(citationButtons[0]!); // a1's citation "1"
+    fireEvent.click(await screen.findByRole("button", { name: "此引用有幫助" }));
+    await screen.findByRole("button", { name: "已回饋：此引用有幫助" });
+    fireEvent.click(screen.getByRole("button", { name: "關閉" }));
+
+    fireEvent.click(screen.getAllByRole("button", { name: "檢視引用來源 1" })[1]!); // a2's citation "1"
+    expect(await screen.findByRole("button", { name: "此引用有幫助" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "已回饋：此引用有幫助" })).not.toBeInTheDocument();
+  });
+
+  it("disables the citation feedback buttons while the submission is in flight", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [A1_TWO_CITATIONS] });
+    let resolveSubmit!: (value: Awaited<ReturnType<typeof submitCitationFeedback>>) => void;
+    mockedSubmitCitationFeedback.mockReturnValue(new Promise((resolve) => (resolveSubmit = resolve)));
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "此引用有幫助" }));
+
+    expect(screen.getByRole("button", { name: "此引用有幫助" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "此引用不準確" })).toBeDisabled();
+
+    resolveSubmit({ ok: true, value: { ...A1_TWO_CITATIONS, citationFeedback: { "1": "OK" } } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "已回饋：此引用有幫助" })).toBeInTheDocument());
+  });
+
+  it("shows an error message and keeps buttons enabled (for retry) when the citation feedback submission fails", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [A1_TWO_CITATIONS] });
+    mockedSubmitCitationFeedback.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "找不到這個引用。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "此引用有幫助" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("回饋送出失敗，請再試一次。");
+    expect(screen.getByRole("button", { name: "此引用有幫助" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "已回饋：此引用有幫助" })).not.toBeInTheDocument();
   });
 });
 

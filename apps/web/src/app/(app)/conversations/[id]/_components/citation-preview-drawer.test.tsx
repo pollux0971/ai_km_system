@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
 import { getCitationSource } from "@/lib/citations";
 import { trackEvent } from "@/lib/telemetry";
@@ -191,5 +191,114 @@ describe("CitationPreviewDrawer permission-denied handling (E03-S016)", () => {
       expect.objectContaining({ properties: expect.objectContaining({ citationId: "3", code: "FORBIDDEN" }) }),
     );
     expect(mockedTrackEvent).not.toHaveBeenCalledWith("conversation_citation_preview_success", expect.anything());
+  });
+});
+
+describe("CitationPreviewDrawer citation feedback (E13-S005)", () => {
+  it("does not render feedback buttons when messageId is omitted (not yet a real persisted answer), even once loaded", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} />);
+    await screen.findByText("來源檔案 1");
+
+    expect(screen.queryByRole("button", { name: "此引用有幫助" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "此引用不準確" })).not.toBeInTheDocument();
+  });
+
+  it("renders 此引用有幫助/此引用不準確 buttons once loaded, when messageId is provided", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} messageId="a1" />);
+    await screen.findByText("來源檔案 1");
+
+    expect(screen.getByRole("button", { name: "此引用有幫助" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "此引用不準確" })).toBeInTheDocument();
+  });
+
+  it("clicking 此引用有幫助 calls onSubmitFeedback with 'OK'", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+    const onSubmitFeedback = vi.fn();
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} messageId="a1" onSubmitFeedback={onSubmitFeedback} />);
+    await screen.findByText("來源檔案 1");
+    fireEvent.click(screen.getByRole("button", { name: "此引用有幫助" }));
+
+    expect(onSubmitFeedback).toHaveBeenCalledWith("OK");
+  });
+
+  it("clicking 此引用不準確 calls onSubmitFeedback with 'NG'", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+    const onSubmitFeedback = vi.fn();
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} messageId="a1" onSubmitFeedback={onSubmitFeedback} />);
+    await screen.findByText("來源檔案 1");
+    fireEvent.click(screen.getByRole("button", { name: "此引用不準確" }));
+
+    expect(onSubmitFeedback).toHaveBeenCalledWith("NG");
+  });
+
+  it("shows 已回饋：此引用有幫助 and disables BOTH buttons once feedbackVerdict is 'OK' (no undo, no switching)", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} messageId="a1" feedbackVerdict="OK" />);
+    await screen.findByText("來源檔案 1");
+
+    const okButton = screen.getByRole("button", { name: "已回饋：此引用有幫助" });
+    const ngButton = screen.getByRole("button", { name: "此引用不準確" });
+    expect(okButton).toBeDisabled();
+    expect(ngButton).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "此引用有幫助" })).not.toBeInTheDocument();
+  });
+
+  it("shows 已回饋：此引用不準確 and disables BOTH buttons once feedbackVerdict is 'NG' (the symmetric direction)", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} messageId="a1" feedbackVerdict="NG" />);
+    await screen.findByText("來源檔案 1");
+
+    const ngButton = screen.getByRole("button", { name: "已回饋：此引用不準確" });
+    const okButton = screen.getByRole("button", { name: "此引用有幫助" });
+    expect(ngButton).toBeDisabled();
+    expect(okButton).toBeDisabled();
+  });
+
+  it("does not call onSubmitFeedback when a disabled already-given feedback button is clicked", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+    const onSubmitFeedback = vi.fn();
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} messageId="a1" feedbackVerdict="OK" onSubmitFeedback={onSubmitFeedback} />);
+    await screen.findByText("來源檔案 1");
+    fireEvent.click(screen.getByRole("button", { name: "已回饋：此引用有幫助" }));
+
+    expect(onSubmitFeedback).not.toHaveBeenCalled();
+  });
+
+  it("disables both feedback buttons while feedbackPending is true", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} messageId="a1" feedbackPending />);
+    await screen.findByText("來源檔案 1");
+
+    expect(screen.getByRole("button", { name: "此引用有幫助" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "此引用不準確" })).toBeDisabled();
+  });
+
+  it("shows an alert message when feedbackError is true", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: true, value: MOCK_SOURCE_1 });
+
+    render(<CitationPreviewDrawer citationId="1" onClose={() => {}} messageId="a1" feedbackError />);
+    await screen.findByText("來源檔案 1");
+
+    expect(screen.getByRole("alert")).toHaveTextContent("回饋送出失敗，請再試一次。");
+  });
+
+  it("never renders citation feedback buttons for a FORBIDDEN citation, even with messageId provided (deny-wins)", async () => {
+    mockedGetCitationSource.mockResolvedValue({ ok: false, error: { code: "FORBIDDEN", message: "forbidden" } });
+
+    render(<CitationPreviewDrawer citationId="3" onClose={() => {}} messageId="a1" />);
+    await screen.findByRole("alert");
+
+    expect(screen.queryByRole("button", { name: "此引用有幫助" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "此引用不準確" })).not.toBeInTheDocument();
   });
 });

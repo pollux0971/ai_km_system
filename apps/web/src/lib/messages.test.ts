@@ -8,6 +8,7 @@ import {
   reviseMessage,
   sendMessage,
   submitAnswerFeedback,
+  submitCitationFeedback,
   submitFeedbackComment,
   submitFeedbackReason,
 } from "./messages";
@@ -1072,6 +1073,201 @@ describe("submitFeedbackComment (E13-S004)", () => {
     expect(list.ok).toBe(true);
     if (list.ok) {
       expect(list.value.find((m) => m.id === second.value.id)?.feedbackComment).toBeUndefined();
+    }
+  });
+});
+
+describe("submitCitationFeedback (E13-S005)", () => {
+  it("sets citationFeedback['1'] to 'OK' on an assistant reply containing a [1] marker, and persists it", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    const result = await submitCitationFeedback(reply.value.id, "1", "OK");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.citationFeedback).toEqual({ "1": "OK" });
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.citationFeedback).toEqual({ "1": "OK" });
+    }
+  });
+
+  it("sets citationFeedback['1'] to 'NG' just as validly as 'OK'", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    const result = await submitCitationFeedback(reply.value.id, "1", "NG");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.citationFeedback).toEqual({ "1": "NG" });
+    }
+  });
+
+  it("fails closed with NOT_FOUND for a messageId that doesn't exist", async () => {
+    const result = await submitCitationFeedback("does-not-exist", "1", "OK");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR when the target message is a user message, not an assistant reply, and does not set citationFeedback", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const userMessage = await sendMessage(conversation.value.id, "請看附錄 [1] 的說明", []);
+    expect(userMessage.ok).toBe(true);
+    if (!userMessage.ok) return;
+
+    const result = await submitCitationFeedback(userMessage.value.id, "1", "OK");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === userMessage.value.id)?.citationFeedback).toBeUndefined();
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR for a citationId that isn't actually present in the message's content, and does not set citationFeedback", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    const result = await submitCitationFeedback(reply.value.id, "99", "OK");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.citationFeedback).toBeUndefined();
+    }
+  });
+
+  it("is idempotent — submitting the same verdict for the same citation twice does not create a duplicate record or change the outcome", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitCitationFeedback(reply.value.id, "1", "OK");
+    const second = await submitCitationFeedback(reply.value.id, "1", "OK");
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value.citationFeedback).toEqual({ "1": "OK" });
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value.find((m) => m.id === reply.value.id)?.citationFeedback).toEqual({ "1": "OK" });
+    }
+  });
+
+  it("scopes feedback to only the targeted citationId — giving feedback on citation [1] does not affect citation [2] within the SAME message", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]，去年為 8%[2]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    const result = await submitCitationFeedback(reply.value.id, "1", "NG");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.citationFeedback).toEqual({ "1": "NG" });
+      expect(result.value.citationFeedback?.["2"]).toBeUndefined();
+    }
+  });
+
+  it("allows giving independent feedback to two different citations within the same message, without either overwriting the other", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]，去年為 8%[2]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitCitationFeedback(reply.value.id, "1", "OK");
+    const second = await submitCitationFeedback(reply.value.id, "2", "NG");
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value.citationFeedback).toEqual({ "1": "OK", "2": "NG" });
+    }
+  });
+
+  it("does not affect a different message's citationFeedback", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const first = await receiveAssistantReply(conversation.value.id, "第一則回覆[1]");
+    const second = await receiveAssistantReply(conversation.value.id, "第二則回覆[1]");
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    await submitCitationFeedback(first.value.id, "1", "OK");
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === second.value.id)?.citationFeedback).toBeUndefined();
+    }
+  });
+
+  it("allows switching a citation's verdict from OK to NG at the data layer (message-thread.tsx's UI is what enforces no-undo)", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitCitationFeedback(reply.value.id, "1", "OK");
+    const second = await submitCitationFeedback(reply.value.id, "1", "NG");
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value.citationFeedback).toEqual({ "1": "NG" });
     }
   });
 });

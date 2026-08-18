@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { CITATION_ERROR_MESSAGES, getCitationSource, type CitationSource } from "@/lib/citations";
+import type { AnswerFeedbackVerdict } from "@/lib/messages";
 import { trackEvent } from "@/lib/telemetry";
 
 const logger = createLogger("web:citation-preview-drawer");
@@ -59,10 +60,42 @@ const logger = createLogger("web:citation-preview-drawer");
  * branch and the `kind === "loaded"` branch (the only place File/Page/
  * Snippet ever render) are mutually exclusive by construction — a
  * FORBIDDEN result can never reach the `<dl>`.
+ *
+ * E13-S005 "citation-specific feedback" adds an OK/NG feedback pair,
+ * rendered only inside the `kind === "loaded"` branch alongside File/
+ * Page/Snippet — same deny-wins structural guarantee already established
+ * for that content: a FORBIDDEN/NOT_FOUND/loading state can never reach
+ * these buttons either, since they live in the same mutually-exclusive
+ * branch. This component stays presentational for feedback the same way
+ * it already is for the citation source lookup itself — `messageId`/
+ * `feedbackVerdict`/`feedbackPending`/`feedbackError` are all owned and
+ * computed by message-thread.tsx (which already owns every other
+ * feedback mutation's pending/error tracking), not local state here.
+ * `messageId` is `null` (hiding the buttons entirely, not just disabling
+ * them) when the citation belongs to a still-in-flight streaming/pending
+ * entry with no real persisted Message id yet to attach feedback to —
+ * mirrors message-thread.tsx's own `entry.kind === "sent"` gate on its
+ * whole-answer feedback buttons.
  */
 type LoadState = { kind: "loading" } | { kind: "error"; code: string } | { kind: "loaded"; source: CitationSource };
 
-export function CitationPreviewDrawer({ citationId, onClose }: { citationId: string | null; onClose: () => void }) {
+export function CitationPreviewDrawer({
+  citationId,
+  onClose,
+  messageId = null,
+  feedbackVerdict,
+  feedbackPending = false,
+  feedbackError = false,
+  onSubmitFeedback = () => {},
+}: {
+  citationId: string | null;
+  onClose: () => void;
+  messageId?: string | null;
+  feedbackVerdict?: AnswerFeedbackVerdict;
+  feedbackPending?: boolean;
+  feedbackError?: boolean;
+  onSubmitFeedback?: (verdict: AnswerFeedbackVerdict) => void;
+}) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
 
   useEffect(() => {
@@ -117,6 +150,17 @@ export function CitationPreviewDrawer({ citationId, onClose }: { citationId: str
             <dd>{state.source.snippet}</dd>
           </dl>
           <Link href={`/citations/${state.source.id}`}>開啟原始來源</Link>
+          {messageId !== null && (
+            <div>
+              <button type="button" onClick={() => onSubmitFeedback("OK")} disabled={feedbackVerdict != null || feedbackPending}>
+                {feedbackVerdict === "OK" ? "已回饋：此引用有幫助" : "此引用有幫助"}
+              </button>
+              <button type="button" onClick={() => onSubmitFeedback("NG")} disabled={feedbackVerdict != null || feedbackPending}>
+                {feedbackVerdict === "NG" ? "已回饋：此引用不準確" : "此引用不準確"}
+              </button>
+              {feedbackError && <span role="alert">回饋送出失敗，請再試一次。</span>}
+            </div>
+          )}
         </>
       )}
     </div>

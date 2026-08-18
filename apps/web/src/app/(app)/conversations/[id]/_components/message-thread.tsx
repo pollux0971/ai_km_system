@@ -22,6 +22,7 @@ import {
   type FeedbackReason,
   type Message,
 } from "@/lib/messages";
+import { listFeedbackKnowledgeCandidates, submitFeedbackKnowledgeCandidate } from "@/lib/feedback-knowledge-candidates";
 import { useOptionalCurrentUser } from "@/lib/session-context";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
@@ -473,6 +474,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
   const [feedbackComments, setFeedbackComments] = useState<Map<string, string>>(new Map());
   const [feedbackCommentPendingIds, setFeedbackCommentPendingIds] = useState<Set<string>>(new Set());
   const [feedbackCommentErrorIds, setFeedbackCommentErrorIds] = useState<Set<string>>(new Set());
+  const [knowledgeCandidateIds, setKnowledgeCandidateIds] = useState<Set<string>>(new Set());
+  const [knowledgeCandidatePendingIds, setKnowledgeCandidatePendingIds] = useState<Set<string>>(new Set());
+  const [knowledgeCandidateErrorIds, setKnowledgeCandidateErrorIds] = useState<Set<string>>(new Set());
   const stoppedRef = useRef<Set<string>>(new Set());
   const copyResetTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -501,6 +505,16 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
         return;
       }
       setDisplayMessages(result.value.map((message) => ({ kind: "sent", message })));
+      // Restores the "already flagged" lock across a remount/reload —
+      // unlike feedback/feedbackReason/feedbackComment (stored ON the
+      // Message itself, so listMessages() above already reflects them),
+      // a flagged candidate lives in its own separate collection
+      // (feedback-knowledge-candidates.ts), so this component's own
+      // local knowledgeCandidateIds state must be re-derived from it
+      // here rather than starting fresh every mount.
+      setKnowledgeCandidateIds(
+        new Set(listFeedbackKnowledgeCandidates().filter((candidate) => candidate.conversationId === conversationId).map((candidate) => candidate.sourceMessageId)),
+      );
       setLoadState("loaded");
     });
 
@@ -931,6 +945,42 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     );
   }
 
+  async function handleFlagKnowledgeCandidate(message: Message) {
+    const correlationId = crypto.randomUUID();
+    logger.info("flagging knowledge candidate", { correlationId, conversationId, messageId: message.id });
+    trackEvent("conversation_knowledge_candidate_attempt", { correlationId, properties: { conversationId, messageId: message.id } });
+
+    setKnowledgeCandidatePendingIds((previous) => new Set(previous).add(message.id));
+    setKnowledgeCandidateErrorIds((previous) => {
+      if (!previous.has(message.id)) return previous;
+      const next = new Set(previous);
+      next.delete(message.id);
+      return next;
+    });
+
+    const result = await submitFeedbackKnowledgeCandidate(message);
+
+    setKnowledgeCandidatePendingIds((previous) => {
+      const next = new Set(previous);
+      next.delete(message.id);
+      return next;
+    });
+
+    if (!result.ok) {
+      logger.error("failed to flag knowledge candidate", { correlationId, conversationId, messageId: message.id, code: result.error.code });
+      trackEvent("conversation_knowledge_candidate_failure", {
+        correlationId,
+        properties: { conversationId, messageId: message.id, code: result.error.code },
+      });
+      setKnowledgeCandidateErrorIds((previous) => new Set(previous).add(message.id));
+      return;
+    }
+
+    logger.info("knowledge candidate flagged", { correlationId, conversationId, messageId: message.id, candidateId: result.value.id });
+    trackEvent("conversation_knowledge_candidate_success", { correlationId, properties: { conversationId, messageId: message.id } });
+    setKnowledgeCandidateIds((previous) => new Set(previous).add(message.id));
+  }
+
   function handleCitationClick(citationId: string, messageId: string | null) {
     setPreviewCitationId(citationId);
     setPreviewMessageId(messageId);
@@ -1147,6 +1197,18 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                         {entry.message.feedbackComment != null && <span>已送出留言：{entry.message.feedbackComment}</span>}
                         {feedbackCommentErrorIds.has(entry.message.id) && <span role="alert">留言送出失敗，請再試一次。</span>}
                       </fieldset>
+                    )}
+                    {entry.message.feedback === "NG" && entry.message.feedbackReason != null && entry.message.feedbackComment != null && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => handleFlagKnowledgeCandidate(entry.message)}
+                          disabled={knowledgeCandidateIds.has(entry.message.id) || knowledgeCandidatePendingIds.has(entry.message.id)}
+                        >
+                          {knowledgeCandidateIds.has(entry.message.id) ? "已標記為知識落差候選" : "標記為知識落差候選"}
+                        </button>
+                        {knowledgeCandidateErrorIds.has(entry.message.id) && <span role="alert">標記失敗，請再試一次。</span>}
+                      </div>
                     )}
                   </>
                 )}

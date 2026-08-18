@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
 import { MOCK_FILE_PROCESSING_FAILURE_TRIGGER, simulateFileProcessing } from "@/lib/file-processing";
+import { listFeedbackKnowledgeCandidates, submitFeedbackKnowledgeCandidate } from "@/lib/feedback-knowledge-candidates";
 import { runGenerationPhases } from "@/lib/generation-status";
 import { CurrentUserProvider } from "@/lib/session-context";
 import {
@@ -93,6 +94,11 @@ vi.mock("@/lib/usage-events", async (importOriginal) => {
   return { ...actual, recordUsageEvent: vi.fn() };
 });
 
+vi.mock("@/lib/feedback-knowledge-candidates", () => ({
+  submitFeedbackKnowledgeCandidate: vi.fn(),
+  listFeedbackKnowledgeCandidates: vi.fn(),
+}));
+
 const mockedListMessages = vi.mocked(listMessages);
 const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
@@ -107,6 +113,8 @@ const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
 const mockedTrackEvent = vi.mocked(trackEvent);
 const mockedSimulateFileProcessing = vi.mocked(simulateFileProcessing);
 const mockedRecordUsageEvent = vi.mocked(recordUsageEvent);
+const mockedSubmitFeedbackKnowledgeCandidate = vi.mocked(submitFeedbackKnowledgeCandidate);
+const mockedListFeedbackKnowledgeCandidates = vi.mocked(listFeedbackKnowledgeCandidates);
 
 const DEFAULT_ASSISTANT_MESSAGE = {
   id: "assistant-default",
@@ -156,6 +164,9 @@ beforeEach(() => {
   mockedSubmitFeedbackReason.mockReset();
   mockedSubmitFeedbackComment.mockReset();
   mockedRecordUsageEvent.mockReset();
+  mockedSubmitFeedbackKnowledgeCandidate.mockReset();
+  mockedListFeedbackKnowledgeCandidates.mockReset();
+  mockedListFeedbackKnowledgeCandidates.mockReturnValue([]);
 });
 
 function submitViaComposer(content: string) {
@@ -3460,5 +3471,242 @@ describe("MessageThread latency instrumentation (E13-S013)", () => {
     if (!call) throw new Error("expected a rag_answer_outcome call");
     const details = call[2] as { latencyMs?: number };
     expect(details.latencyMs).toBeGreaterThanOrEqual(35);
+  });
+});
+
+describe("MessageThread feedback-to-knowledge-candidate flow (E13-S015)", () => {
+  const DEFAULT_QUALIFYING_MESSAGE: {
+    id: string;
+    conversationId: string;
+    role: "assistant";
+    content: string;
+    attachmentNames: string[];
+    createdAt: string;
+    feedback: AnswerFeedbackVerdict;
+    feedbackReason: FeedbackReason;
+    feedbackComment: string;
+  } = {
+    id: "a1",
+    conversationId: "c1",
+    role: "assistant",
+    content: "第一輪回覆",
+    attachmentNames: [],
+    createdAt: "2026-08-18T00:00:01.000Z",
+    feedback: "NG",
+    feedbackReason: "INCORRECT",
+    feedbackComment: "答案裡的日期是錯的",
+  };
+
+  function qualifyingMessage(overrides: Partial<typeof DEFAULT_QUALIFYING_MESSAGE> = {}) {
+    return { ...DEFAULT_QUALIFYING_MESSAGE, ...overrides };
+  }
+
+  it("does not render the flag button before NG feedback has been given", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [SENT_USER_MESSAGE, { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" }],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.queryByRole("button", { name: "標記為知識落差候選" })).not.toBeInTheDocument();
+  });
+
+  it("does not render the flag button for OK feedback, even with a comment", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [SENT_USER_MESSAGE, qualifyingMessage({ feedback: "OK", feedbackReason: undefined as unknown as FeedbackReason, feedbackComment: "特別有幫助" })],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.queryByRole("button", { name: "標記為知識落差候選" })).not.toBeInTheDocument();
+  });
+
+  it("does not render the flag button for NG feedback with a reason but no comment yet", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [SENT_USER_MESSAGE, qualifyingMessage({ feedbackComment: undefined as unknown as string })],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.queryByRole("button", { name: "標記為知識落差候選" })).not.toBeInTheDocument();
+  });
+
+  it("renders an enabled flag button once NG feedback + reason + comment are all present", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, qualifyingMessage()] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByRole("button", { name: "標記為知識落差候選" })).toBeEnabled();
+  });
+
+  it("clicking the flag button submits the candidate and locks the button afterward", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, qualifyingMessage()] });
+    mockedSubmitFeedbackKnowledgeCandidate.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "kc1",
+        sourceMessageId: "a1",
+        conversationId: "c1",
+        answerContent: "第一輪回覆",
+        reason: "INCORRECT",
+        comment: "答案裡的日期是錯的",
+        createdAt: "2026-08-18T00:00:02.000Z",
+      },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "標記為知識落差候選" }));
+
+    await waitFor(() => expect(mockedSubmitFeedbackKnowledgeCandidate).toHaveBeenCalledWith(qualifyingMessage()));
+    await waitFor(() => expect(screen.getByRole("button", { name: "已標記為知識落差候選" })).toBeDisabled());
+  });
+
+  it("clicking the already-disabled flag button after a candidate is recorded does not submit again", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, qualifyingMessage()] });
+    mockedSubmitFeedbackKnowledgeCandidate.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "kc1",
+        sourceMessageId: "a1",
+        conversationId: "c1",
+        answerContent: "第一輪回覆",
+        reason: "INCORRECT",
+        comment: "答案裡的日期是錯的",
+        createdAt: "2026-08-18T00:00:02.000Z",
+      },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "標記為知識落差候選" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "已標記為知識落差候選" })).toBeDisabled());
+
+    fireEvent.click(screen.getByRole("button", { name: "已標記為知識落差候選" }));
+    expect(mockedSubmitFeedbackKnowledgeCandidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a distinct error message and re-enables the flag button (for retry) when submission fails", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, qualifyingMessage()] });
+    mockedSubmitFeedbackKnowledgeCandidate.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "請先填寫留言說明。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "標記為知識落差候選" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("標記失敗，請再試一次。");
+    expect(screen.getByRole("button", { name: "標記為知識落差候選" })).toBeEnabled();
+  });
+
+  it("disables the flag button while submission is in flight", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, qualifyingMessage()] });
+    let resolveSubmit!: (value: Awaited<ReturnType<typeof submitFeedbackKnowledgeCandidate>>) => void;
+    mockedSubmitFeedbackKnowledgeCandidate.mockReturnValue(new Promise((resolve) => (resolveSubmit = resolve)));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "標記為知識落差候選" }));
+
+    expect(screen.getByRole("button", { name: "標記為知識落差候選" })).toBeDisabled();
+
+    resolveSubmit({
+      ok: true,
+      value: {
+        id: "kc1",
+        sourceMessageId: "a1",
+        conversationId: "c1",
+        answerContent: "第一輪回覆",
+        reason: "INCORRECT",
+        comment: "答案裡的日期是錯的",
+        createdAt: "2026-08-18T00:00:02.000Z",
+      },
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "已標記為知識落差候選" })).toBeDisabled());
+  });
+
+  it("flagging one message's candidate does not affect a different message's flag button", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        qualifyingMessage({ id: "a1", content: "第一輪回覆" }),
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-18T00:00:02.000Z" },
+        qualifyingMessage({ id: "a2", content: "第二輪回覆", createdAt: "2026-08-18T00:00:03.000Z" }),
+      ],
+    });
+    mockedSubmitFeedbackKnowledgeCandidate.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "kc1",
+        sourceMessageId: "a1",
+        conversationId: "c1",
+        answerContent: "第一輪回覆",
+        reason: "INCORRECT",
+        comment: "答案裡的日期是錯的",
+        createdAt: "2026-08-18T00:00:02.000Z",
+      },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第二輪回覆");
+
+    const items = screen.getAllByRole("listitem");
+    fireEvent.click(within(items[1]!).getByRole("button", { name: "標記為知識落差候選" }));
+
+    await waitFor(() => expect(within(items[1]!).getByRole("button", { name: "已標記為知識落差候選" })).toBeDisabled());
+    // a2's flag button: completely untouched, still enabled.
+    expect(within(items[3]!).getByRole("button", { name: "標記為知識落差候選" })).toBeEnabled();
+  });
+
+  it("shows an already-locked flag button on initial load when a candidate was already flagged in a prior session (survives remount, not just local state)", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, qualifyingMessage()] });
+    mockedListFeedbackKnowledgeCandidates.mockReturnValue([
+      {
+        id: "kc1",
+        sourceMessageId: "a1",
+        conversationId: "c1",
+        answerContent: "第一輪回覆",
+        reason: "INCORRECT",
+        comment: "答案裡的日期是錯的",
+        createdAt: "2026-08-18T00:00:02.000Z",
+      },
+    ]);
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByRole("button", { name: "已標記為知識落差候選" })).toBeDisabled();
+    expect(mockedSubmitFeedbackKnowledgeCandidate).not.toHaveBeenCalled();
+  });
+
+  it("does not lock the flag button for a candidate belonging to a different conversation", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, qualifyingMessage()] });
+    mockedListFeedbackKnowledgeCandidates.mockReturnValue([
+      {
+        id: "kc-other",
+        sourceMessageId: "a1",
+        conversationId: "some-other-conversation",
+        answerContent: "不同對話的回覆",
+        reason: "OFF_TOPIC",
+        comment: "不相關的說明",
+        createdAt: "2026-08-18T00:00:02.000Z",
+      },
+    ]);
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByRole("button", { name: "標記為知識落差候選" })).toBeEnabled();
   });
 });

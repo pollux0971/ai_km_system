@@ -43,14 +43,18 @@ test("E03-S026: archiving a conversation moves it from the active list to the ar
   await page.getByRole("button", { name: "已封存對話" }).click();
   await expect(page.getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
 
-  await page.getByRole("link", { name: "設備 E-204 錯誤代碼排查" }).click();
+  await page.getByRole("main").getByRole("link", { name: "設備 E-204 錯誤代碼排查" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
   await page.getByRole("button", { name: "取消封存" }).click();
   await expect(page.getByRole("button", { name: "封存對話" })).toBeVisible();
 
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await expect(page.getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
+  // Scoped to <main> — once unarchived, the conversation reappears in
+  // BOTH the sidebar's "歷史對話" rail and this page's own active list,
+  // so an unscoped getByText is ambiguous (same collision the other E03
+  // specs' own mainContent()/main helpers already document).
+  await expect(page.getByRole("main").getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
 });
 
 test("E03-S026: an archived conversation no longer appears in the Home Dashboard's Recent Conversations widget", async ({

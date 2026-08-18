@@ -310,7 +310,7 @@ export default function KnowledgeDocumentUpload({
   }
 
   return (
-    <div style={{ marginBottom: 24, paddingBottom: 24, borderBottom: "1px solid #e5e5e5" }}>
+    <div style={{ marginBottom: 24, paddingBottom: 24, borderBottom: "1px solid var(--border)" }}>
       <label htmlFor={inputId}>上傳文件</label>
       <br />
       <input

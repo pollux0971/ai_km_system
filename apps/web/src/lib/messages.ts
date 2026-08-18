@@ -433,7 +433,14 @@ export async function submitFeedbackComment(messageId: string, comment: string):
  */
 const CITATION_ID_PATTERN = /\[(\d+)\]/g;
 
-function extractCitationIds(content: string): Set<string> {
+/**
+ * Exported (ux/enterprise-polish) for the conversation rail's related-
+ * content panel, which lists the distinct citation sources a
+ * conversation's assistant replies actually reference — same parse the
+ * citation-feedback validation below already trusts, not a second
+ * diverging regex.
+ */
+export function extractCitationIds(content: string): Set<string> {
   const ids = new Set<string>();
   for (const match of content.matchAll(CITATION_ID_PATTERN)) {
     const id = match[1];

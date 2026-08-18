@@ -27,7 +27,7 @@ async function openConversation(page: import("@playwright/test").Page) {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
@@ -44,7 +44,7 @@ test("E03-S011: sending a message shows the Searching/Reading/Generating phases 
   // Once real reply text starts arriving, the phase label gives way to
   // the generic streaming indicator, then the settled reply.
   await expect(page.getByText("生成中…")).not.toBeVisible({ timeout: 15000 });
-  const items = page.getByRole("main").getByRole("listitem");
+  const items = page.getByRole("list", { name: "對話串" }).getByRole("listitem");
   await expect(items).toHaveCount(2);
   await expect(items.nth(1)).toContainText("模擬回覆");
 });

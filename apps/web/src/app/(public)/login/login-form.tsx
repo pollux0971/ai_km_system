@@ -108,7 +108,7 @@ export default function LoginForm() {
   }
 
   return (
-    <main style={{ padding: 32, maxWidth: 360 }}>
+    <main className="login-card">
       <h1>登入</h1>
 
       <form onSubmit={handleSubmit} noValidate>

@@ -43,7 +43,10 @@ test("E01-S008: Recent Conversations widget shows sample conversations and a vie
 }) => {
   await login(page);
 
-  await expect(page.getByText("產品保固政策詢問")).toBeVisible();
+  // Scoped to <main> — the sidebar's own "歷史對話" rail links to the same
+  // seeded conversation by the same title, so an unscoped getByText here
+  // is ambiguous.
+  await expect(dashboardMain(page).getByText("產品保固政策詢問")).toBeVisible();
   await expect(page.getByRole("link", { name: "查看全部對話" })).toHaveAttribute("href", "/conversations");
 });
 

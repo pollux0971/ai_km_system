@@ -27,7 +27,7 @@ test("E03-S006: the message composer is present and its submit button starts dis
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
   await expect(page.getByLabel("訊息")).toHaveValue("");
@@ -39,7 +39,7 @@ test("E03-S006: typing enables submit, and submitting clears the draft back to e
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
   await page.getByLabel("訊息").fill("你好，我想詢問保固期限。");
@@ -56,7 +56,7 @@ test("E03-S006: whitespace-only input never enables submit", async ({ page }) =>
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
   await page.getByLabel("訊息").fill("   ");

@@ -27,10 +27,14 @@ export function RoleGuard({ children }: { children: ReactNode }) {
     requiredRoles === undefined || requiredRoles === "all" || requiredRoles.some((role) => user.roles.includes(role));
 
   if (!allowed) {
+    // <main>, not <div> (ux/enterprise-polish): AppShell no longer wraps
+    // pages in a main landmark (each page owns its own), so a denied
+    // route would otherwise render its FORBIDDEN alert outside ANY
+    // landmark — the denial screen IS this page's main content.
     return (
-      <div style={{ padding: 32 }}>
+      <main style={{ padding: 32 }}>
         <ErrorMessage code="FORBIDDEN" />
-      </div>
+      </main>
     );
   }
 

@@ -175,7 +175,7 @@ export default function KnowledgeDocumentBulkActions({
   }
 
   return (
-    <div role="group" aria-label="批次操作" style={{ marginBottom: 16, padding: 8, border: "1px solid #e5e5e5" }}>
+    <div role="group" aria-label="批次操作" style={{ marginBottom: 16, padding: 8, border: "1px solid var(--border)" }}>
       <span>已選擇 {documentIds.length} 份文件</span>
       <button type="button" onClick={handleBulkArchiveToggle} disabled={pending}>
         {viewingArchived ? "取消封存所選文件" : "封存所選文件"}

@@ -66,7 +66,10 @@ test("E03-S001: conversation list shows the seeded conversations", async ({ page
   await page.waitForURL((url) => url.pathname === "/conversations");
 
   await expect(page.getByRole("heading", { name: "對話", level: 1 })).toBeVisible();
-  await expect(page.getByText("產品保固政策詢問")).toBeVisible();
+  // Scoped to <main> — the sidebar's own "歷史對話" rail also links to
+  // this same conversation by the same title, so an unscoped getByText
+  // here is ambiguous.
+  await expect(page.getByRole("main").getByText("產品保固政策詢問")).toBeVisible();
 });
 
 test("E03-S001: starting a new conversation creates it and lands back on the list showing it", async ({ page }) => {
@@ -74,7 +77,10 @@ test("E03-S001: starting a new conversation creates it and lands back on the lis
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
-  await page.getByRole("link", { name: "開始新對話" }).click();
+  // Scoped to <main> — the sidebar renders its own "開始新對話" link too
+  // (class="sidebar-new-chat"), so an unscoped getByRole here is
+  // ambiguous between it and this page's own "開始新對話" link.
+  await page.getByRole("main").getByRole("link", { name: "開始新對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
   await expect(page.getByRole("heading", { name: "對話", level: 1 })).toBeVisible();

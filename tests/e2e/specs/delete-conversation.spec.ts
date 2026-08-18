@@ -24,7 +24,7 @@ async function openConversation(page: import("@playwright/test").Page) {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
@@ -53,5 +53,8 @@ test("E03-S025: 取消 dismisses the confirmation without deleting anything", as
   await page.waitForURL((url) => url.pathname === "/");
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await expect(page.getByText("產品保固政策詢問")).toBeVisible();
+  // Scoped to <main> — the sidebar's own "歷史對話" rail also links to
+  // this same conversation by the same title, so an unscoped getByText
+  // here is ambiguous.
+  await expect(page.getByRole("main").getByText("產品保固政策詢問")).toBeVisible();
 });

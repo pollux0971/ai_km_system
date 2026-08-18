@@ -42,7 +42,7 @@ test("E13-S013: a real answer persists a non-negative latencyMs on its rag_answe
 
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
   await page.getByLabel("訊息").fill("保固期限是多久？");

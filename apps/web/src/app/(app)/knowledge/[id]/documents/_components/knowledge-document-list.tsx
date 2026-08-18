@@ -432,7 +432,7 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
       {documents.length > 0 && (
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
           {documents.map((document) => (
-            <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+            <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
               <input
                 type="checkbox"
                 aria-label={`選取 ${document.name}`}

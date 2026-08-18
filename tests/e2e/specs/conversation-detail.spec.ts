@@ -33,6 +33,15 @@ function sidebarNav(page: import("@playwright/test").Page) {
   return page.getByRole("navigation", { name: "主導覽" });
 }
 
+// ux/enterprise-polish moved the ModeSwitch buttons into a popover behind
+// this trigger (conversation-mode-menu.tsx) — the panel must be opened
+// before either mode button is visible/clickable. Once opened it stays
+// open for the rest of the test (no auto-close), but a full page
+// navigation remounts the composer and closes it again.
+async function openModeMenu(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: /^對話模式：/ }).click();
+}
+
 test("E03-S002: opening a conversation shows its title and current mode", async ({ page }) => {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
@@ -42,10 +51,14 @@ test("E03-S002: opening a conversation shows its title and current mode", async 
   // pagination (CONVERSATIONS_PAGE_SIZE=2) — this seed conversation is
   // 3rd, so it's on page 2, not visible on the initial page-1 view.
   await page.getByRole("button", { name: "下一頁" }).click();
-  await page.getByRole("link", { name: "Q3 銷售報表彙整" }).click();
+  // Scoped to <main> — the sidebar's "歷史對話" rail also links to this
+  // same conversation by the same title, so an unscoped getByRole here
+  // is ambiguous.
+  await page.getByRole("main").getByRole("link", { name: "Q3 銷售報表彙整" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
   await expect(page.getByRole("heading", { name: "Q3 銷售報表彙整", level: 1 })).toBeVisible();
+  await openModeMenu(page);
   await expect(page.getByRole("button", { name: "進階模式" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "一般模式" })).toHaveAttribute("aria-pressed", "false");
 });
@@ -56,10 +69,11 @@ test("E03-S002: switching mode persists across leaving and returning to the conv
   await page.waitForURL((url) => url.pathname === "/conversations");
 
   // Seed data: "產品保固政策詢問" is mode "normal".
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
   const conversationUrl = page.url();
 
+  await openModeMenu(page);
   await expect(page.getByRole("button", { name: "一般模式" })).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "進階模式" }).click();
@@ -69,8 +83,9 @@ test("E03-S002: switching mode persists across leaving and returning to the conv
   await page.waitForURL((url) => url.pathname === "/");
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL(conversationUrl);
 
+  await openModeMenu(page);
   await expect(page.getByRole("button", { name: "進階模式" })).toHaveAttribute("aria-pressed", "true");
 });

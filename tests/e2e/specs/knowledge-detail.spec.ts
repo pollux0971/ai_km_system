@@ -44,10 +44,21 @@ async function openKnowledgeList(page: import("@playwright/test").Page) {
   await page.waitForURL((url) => url.pathname === "/knowledge");
 }
 
+// ux/enterprise-polish added a sidebar "歷史對話" rail listing every
+// active conversation's title — the seeded "產品保固政策詢問" conversation
+// makes an unscoped getByRole("link", { name: "產品保固政策" }) ambiguous
+// (substring match against both the sidebar link and this page's own
+// knowledge base link). Scoped to <main>, matching this codebase's
+// established fix for the same collision (see home-dashboard.spec.ts's
+// dashboardMain).
+function mainContent(page: import("@playwright/test").Page) {
+  return page.getByRole("main");
+}
+
 test("E05-S005: clicking a knowledge base's name shows its detail page", async ({ page }) => {
   await openKnowledgeList(page);
 
-  await page.getByRole("link", { name: "產品保固政策" }).click();
+  await mainContent(page).getByRole("link", { name: "產品保固政策" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
 
   await expect(page.getByRole("heading", { name: "產品保固政策", level: 1 })).toBeVisible();
@@ -70,7 +81,7 @@ test("E05-S028: 處理失敗文件數/已封存文件數 genuinely reflect a mix
   page,
 }) => {
   await openKnowledgeList(page);
-  await page.getByRole("link", { name: "產品保固政策" }).click();
+  await mainContent(page).getByRole("link", { name: "產品保固政策" }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
 
   await expect(page.getByText("文件:", { exact: false })).toContainText("3 份文件");

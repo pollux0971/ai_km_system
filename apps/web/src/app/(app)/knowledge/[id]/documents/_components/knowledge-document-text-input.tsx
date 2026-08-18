@@ -100,7 +100,7 @@ export default function KnowledgeDocumentTextInput({
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ marginBottom: 24, paddingBottom: 24, borderBottom: "1px solid #e5e5e5" }}
+      style={{ marginBottom: 24, paddingBottom: 24, borderBottom: "1px solid var(--border)" }}
     >
       <label htmlFor={titleId}>標題</label>
       <br />

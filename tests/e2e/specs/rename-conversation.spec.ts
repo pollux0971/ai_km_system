@@ -23,7 +23,7 @@ async function openConversation(page: import("@playwright/test").Page) {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
@@ -44,9 +44,12 @@ test("E03-S024: renaming a conversation updates the heading and persists across 
   await page.waitForURL((url) => url.pathname === "/conversations");
 
   // The new title also appears in the list — same underlying store.
-  await expect(page.getByText("2026 年保固政策彙整")).toBeVisible();
+  // Scoped to <main> — the sidebar's own "歷史對話" rail also picks up the
+  // renamed title (once its own async refetch resolves), so an unscoped
+  // getByText here is ambiguous.
+  await expect(page.getByRole("main").getByText("2026 年保固政策彙整")).toBeVisible();
 
-  await page.getByText("2026 年保固政策彙整").click();
+  await page.getByRole("main").getByText("2026 年保固政策彙整").click();
   await page.waitForURL(conversationUrl);
   await expect(page.getByRole("heading", { name: "2026 年保固政策彙整", level: 1 })).toBeVisible();
 });

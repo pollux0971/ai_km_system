@@ -42,7 +42,10 @@ test("E13-S010: starting a new conversation from the zero-interaction route pers
 
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "開始新對話" }).click();
+  // Scoped to <main> — the sidebar renders its own "開始新對話" link too
+  // (class="sidebar-new-chat"), so an unscoped getByRole here is
+  // ambiguous between it and this page's own "開始新對話" link.
+  await page.getByRole("main").getByRole("link", { name: "開始新對話" }).click();
   // Waits for the intermediate /conversations/new URL first — waiting
   // directly for "/conversations" here would resolve immediately against
   // the CURRENT (pre-click) URL, since it's the same pathname we started

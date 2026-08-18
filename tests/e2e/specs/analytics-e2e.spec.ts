@@ -83,7 +83,7 @@ function sidebarNav(page: import("@playwright/test").Page) {
 // for why an unscoped page.getByRole("listitem") collides with the
 // sidebar nav's own <ul>/<li> structure.
 function messageItems(page: import("@playwright/test").Page) {
-  return page.getByRole("main").getByRole("listitem");
+  return page.getByRole("list", { name: "對話串" }).getByRole("listitem");
 }
 
 async function waitForThreadToSettle(page: import("@playwright/test").Page) {
@@ -94,7 +94,7 @@ async function openConversation(page: import("@playwright/test").Page) {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
@@ -193,7 +193,7 @@ test("E13-S017: a real multi-message session with feedback, comments, citation f
   await page.waitForURL((url) => url.pathname === "/");
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL(conversationUrl);
   await waitForThreadToSettle(page);
 

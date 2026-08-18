@@ -41,7 +41,8 @@ import Link from "next/link";
  * the same way, now that /settings exists. E11-S021 "Usage dashboard"
  * adds "使用量儀表板" the same way, now that /usage exists. E11-S022
  * "System health dashboard" adds "系統健康儀表板" the same way, now
- * that /health exists.
+ * that /health exists. E13-S013 "Latency dashboard" adds "延遲儀表板"
+ * the same way, now that /latency exists.
  */
 export default function AdminHomePage() {
   return (
@@ -92,6 +93,9 @@ export default function AdminHomePage() {
       </p>
       <p>
         <Link href="/health">系統健康儀表板</Link>
+      </p>
+      <p>
+        <Link href="/latency">延遲儀表板</Link>
       </p>
     </main>
   );

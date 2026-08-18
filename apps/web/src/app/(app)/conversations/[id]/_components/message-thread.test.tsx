@@ -10,6 +10,7 @@ import {
   reviseMessage,
   sendMessage,
   submitAnswerFeedback,
+  submitFeedbackComment,
   submitFeedbackReason,
   type AnswerFeedbackVerdict,
   type FeedbackReason,
@@ -24,6 +25,7 @@ vi.mock("@/lib/messages", () => ({
   reviseMessage: vi.fn(),
   submitAnswerFeedback: vi.fn(),
   submitFeedbackReason: vi.fn(),
+  submitFeedbackComment: vi.fn(),
   // Plain data, not vi.fn() — mirrors this file's established convention
   // (see the generation-status mock's own doc comment) of duplicating
   // inert constant/label values rather than vi.importActual'ing them.
@@ -34,6 +36,7 @@ vi.mock("@/lib/messages", () => ({
     OFF_TOPIC: "答案離題",
     OTHER: "其他",
   },
+  MAX_FEEDBACK_COMMENT_LENGTH: 500,
 }));
 
 vi.mock("@/lib/streaming", () => ({
@@ -81,6 +84,7 @@ const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
 const mockedReviseMessage = vi.mocked(reviseMessage);
 const mockedSubmitAnswerFeedback = vi.mocked(submitAnswerFeedback);
 const mockedSubmitFeedbackReason = vi.mocked(submitFeedbackReason);
+const mockedSubmitFeedbackComment = vi.mocked(submitFeedbackComment);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
 const mockedShouldSimulateStreamDisconnect = vi.mocked(shouldSimulateStreamDisconnect);
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
@@ -132,6 +136,7 @@ beforeEach(() => {
   mockedReviseMessage.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
   mockedSubmitAnswerFeedback.mockReset();
   mockedSubmitFeedbackReason.mockReset();
+  mockedSubmitFeedbackComment.mockReset();
 });
 
 function submitViaComposer(content: string) {
@@ -2321,6 +2326,178 @@ describe("MessageThread feedback reason selector (E13-S003)", () => {
     // a2's selector: completely untouched, still fully interactive.
     expect(within(items[3]!).getByRole("radio", { name: "答案不正確" })).toBeEnabled();
     expect(within(items[3]!).queryByText(/已選擇原因/)).not.toBeInTheDocument();
+  });
+});
+
+describe("MessageThread free-text feedback (E13-S004)", () => {
+  const DEFAULT_OK_MESSAGE: {
+    id: string;
+    conversationId: string;
+    role: "assistant";
+    content: string;
+    attachmentNames: string[];
+    createdAt: string;
+    feedback: AnswerFeedbackVerdict;
+    feedbackComment?: string;
+  } = {
+    id: "a1",
+    conversationId: "c1",
+    role: "assistant",
+    content: "第一輪回覆",
+    attachmentNames: [],
+    createdAt: "2026-08-14T00:00:01.000Z",
+    feedback: "OK",
+  };
+
+  function okMessage(overrides: Partial<typeof DEFAULT_OK_MESSAGE> = {}) {
+    return { ...DEFAULT_OK_MESSAGE, ...overrides };
+  }
+
+  it("does not render a comment box when no feedback has been given yet", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [SENT_USER_MESSAGE, { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" }],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.queryByText("還有什麼想補充的嗎？")).not.toBeInTheDocument();
+  });
+
+  it("renders a comment box once OK feedback has been given, and the submit button starts disabled", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage()] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByText("還有什麼想補充的嗎？")).toBeInTheDocument();
+    expect(screen.getByLabelText("留言")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "送出留言" })).toBeDisabled();
+  });
+
+  it("renders a comment box once NG feedback has been given (not gated to OK-only)", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage({ feedback: "NG" })] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByText("還有什麼想補充的嗎？")).toBeInTheDocument();
+  });
+
+  it("enables the submit button once non-whitespace text is typed, and clicking it submits that comment", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage()] });
+    mockedSubmitFeedbackComment.mockResolvedValue({ ok: true, value: okMessage({ feedbackComment: "這個答案很清楚" }) });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.change(screen.getByLabelText("留言"), { target: { value: "這個答案很清楚" } });
+    expect(screen.getByRole("button", { name: "送出留言" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "送出留言" }));
+
+    await waitFor(() => expect(mockedSubmitFeedbackComment).toHaveBeenCalledWith("a1", "這個答案很清楚"));
+  });
+
+  it("keeps the submit button disabled for whitespace-only text", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage()] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.change(screen.getByLabelText("留言"), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "送出留言" })).toBeDisabled();
+  });
+
+  it("keeps the submit button disabled for text exceeding MAX_FEEDBACK_COMMENT_LENGTH", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage()] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.change(screen.getByLabelText("留言"), { target: { value: "a".repeat(501) } });
+    expect(screen.getByRole("button", { name: "送出留言" })).toBeDisabled();
+  });
+
+  it("locks the comment box (textarea + submit button disabled) and shows the stored comment once one has been recorded", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage({ feedbackComment: "已經送出的留言" })] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByLabelText("留言")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "送出留言" })).toBeDisabled();
+    expect(screen.getByText("已送出留言：已經送出的留言")).toBeInTheDocument();
+  });
+
+  it("clicking the already-disabled submit button after a comment is recorded does not call submitFeedbackComment again", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage({ feedbackComment: "已經送出的留言" })] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "送出留言" }));
+    expect(mockedSubmitFeedbackComment).not.toHaveBeenCalled();
+  });
+
+  it("disables the textarea and submit button while a comment submission is in flight", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage()] });
+    let resolveSubmit!: (value: Awaited<ReturnType<typeof submitFeedbackComment>>) => void;
+    mockedSubmitFeedbackComment.mockReturnValue(new Promise((resolve) => (resolveSubmit = resolve)));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.change(screen.getByLabelText("留言"), { target: { value: "送出中的留言" } });
+    fireEvent.click(screen.getByRole("button", { name: "送出留言" }));
+
+    expect(screen.getByLabelText("留言")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "送出留言" })).toBeDisabled();
+
+    resolveSubmit({ ok: true, value: okMessage({ feedbackComment: "送出中的留言" }) });
+    await waitFor(() => expect(screen.getByText("已送出留言：送出中的留言")).toBeInTheDocument());
+  });
+
+  it("shows a distinct error message and re-enables the comment box (for retry) when a comment submission fails", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, okMessage()] });
+    mockedSubmitFeedbackComment.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "留言不得為空白。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.change(screen.getByLabelText("留言"), { target: { value: "會失敗的留言" } });
+    fireEvent.click(screen.getByRole("button", { name: "送出留言" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("留言送出失敗，請再試一次。");
+    expect(screen.getByLabelText("留言")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "送出留言" })).toBeEnabled();
+    expect(screen.queryByText(/已送出留言/)).not.toBeInTheDocument();
+  });
+
+  it("typing/submitting a comment for one message does not affect a different message's comment box", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        okMessage({ id: "a1", content: "第一輪回覆" }),
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        okMessage({ id: "a2", content: "第二輪回覆", createdAt: "2026-08-14T00:00:03.000Z" }),
+      ],
+    });
+    mockedSubmitFeedbackComment.mockResolvedValue({ ok: true, value: okMessage({ id: "a1", content: "第一輪回覆", feedbackComment: "只給第一則的留言" }) });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第二輪回覆");
+
+    const items = screen.getAllByRole("listitem");
+    fireEvent.change(within(items[1]!).getByLabelText("留言"), { target: { value: "只給第一則的留言" } });
+    fireEvent.click(within(items[1]!).getByRole("button", { name: "送出留言" }));
+
+    await waitFor(() => expect(within(items[1]!).getByText("已送出留言：只給第一則的留言")).toBeInTheDocument());
+    // a2's comment box: completely untouched, still fully interactive.
+    expect(within(items[3]!).getByLabelText("留言")).toBeEnabled();
+    expect(within(items[3]!).queryByText(/已送出留言/)).not.toBeInTheDocument();
   });
 });
 

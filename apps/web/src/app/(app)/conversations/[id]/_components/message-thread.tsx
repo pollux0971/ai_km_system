@@ -6,7 +6,7 @@ import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState, type AnswerState } from "@/lib/answer-state";
 import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
-import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, type Message } from "@/lib/messages";
+import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback, type Message } from "@/lib/messages";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
@@ -357,6 +357,26 @@ const logger = createLogger("web:message-thread");
  * mechanism has always been verified at; inventing a new mock-trigger
  * mechanism just to force an E2E path here would be new scope nothing
  * asks for.
+ *
+ * E13-S001 "Answer OK feedback" adds a "有幫助" button to EVERY settled
+ * (`kind: "sent"`) assistant reply, alongside S27's "複製" — SOURCE_BASELINE's
+ * golden flow ends "...→ Show Citation → User Verify → OK / NG → Feedback
+ * Loop", i.e. this reacts to an already-shown answer exactly like copying
+ * does, not a new interaction shape. Unlike `copyStatuses` (purely
+ * transient UI feedback that never survives a reload), the verdict itself
+ * is real, persisted mutation state living on the `Message` row
+ * (`feedback?: AnswerFeedbackVerdict`, see lib/messages.ts) — so once
+ * given, the button is a disabled, differently-labeled "已回饋：有幫助"
+ * rather than auto-reverting like "已複製" does; there's no "undo
+ * feedback" AC, and reflecting `entry.message.feedback` directly (rather
+ * than separate local state) means a reload showing the same persisted
+ * value automatically renders the same disabled label with no extra
+ * plumbing. `feedbackPendingIds`/`feedbackErrorIds` (both keyed by
+ * messageId, same "no shared slot" precedent S27's independent review
+ * already established for `copyStatuses`) track only the transient
+ * in-flight/error UI, never the verdict itself. Only `"OK"` is wired
+ * today — E13-S002 "Answer NG feedback" is a separate, not-yet-built
+ * story.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -374,6 +394,8 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
   const [previewCitationId, setPreviewCitationId] = useState<string | null>(null);
   const [copyStatuses, setCopyStatuses] = useState<Map<string, "pending" | "copied" | "failed">>(new Map());
+  const [feedbackPendingIds, setFeedbackPendingIds] = useState<Set<string>>(new Set());
+  const [feedbackErrorIds, setFeedbackErrorIds] = useState<Set<string>>(new Set());
   const stoppedRef = useRef<Set<string>>(new Set());
   const copyResetTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -686,6 +708,41 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     }
   }
 
+  async function handleFeedback(messageId: string) {
+    const correlationId = crypto.randomUUID();
+    logger.info("submitting answer feedback", { correlationId, conversationId, messageId, verdict: "OK" });
+    trackEvent("conversation_answer_feedback_attempt", { correlationId, properties: { conversationId, messageId, verdict: "OK" } });
+
+    setFeedbackPendingIds((previous) => new Set(previous).add(messageId));
+    setFeedbackErrorIds((previous) => {
+      if (!previous.has(messageId)) return previous;
+      const next = new Set(previous);
+      next.delete(messageId);
+      return next;
+    });
+
+    const result = await submitAnswerFeedback(messageId, "OK");
+
+    setFeedbackPendingIds((previous) => {
+      const next = new Set(previous);
+      next.delete(messageId);
+      return next;
+    });
+
+    if (!result.ok) {
+      logger.error("failed to submit answer feedback", { correlationId, conversationId, messageId, code: result.error.code });
+      trackEvent("conversation_answer_feedback_failure", { correlationId, properties: { conversationId, messageId, code: result.error.code } });
+      setFeedbackErrorIds((previous) => new Set(previous).add(messageId));
+      return;
+    }
+
+    logger.info("answer feedback submitted", { correlationId, conversationId, messageId, verdict: "OK" });
+    trackEvent("conversation_answer_feedback_success", { correlationId, properties: { conversationId, messageId, verdict: "OK" } });
+    setDisplayMessages((previous) =>
+      previous.map((entry) => (entry.kind === "sent" && entry.message.id === messageId ? { kind: "sent", message: result.value } : entry)),
+    );
+  }
+
   function handleCitationClick(citationId: string) {
     setPreviewCitationId(citationId);
   }
@@ -778,6 +835,14 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                       {copyStatuses.get(entry.message.id) === "copied" ? "已複製" : "複製"}
                     </button>
                     {copyStatuses.get(entry.message.id) === "failed" && <span role="alert">複製失敗，請手動選取複製。</span>}
+                    <button
+                      type="button"
+                      onClick={() => handleFeedback(entry.message.id)}
+                      disabled={entry.message.feedback === "OK" || feedbackPendingIds.has(entry.message.id)}
+                    >
+                      {entry.message.feedback === "OK" ? "已回饋：有幫助" : "有幫助"}
+                    </button>
+                    {feedbackErrorIds.has(entry.message.id) && <span role="alert">回饋送出失敗，請再試一次。</span>}
                   </>
                 )}
                 {entry.kind === "sent" && role === "assistant" && isLastEntry && (

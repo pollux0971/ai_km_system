@@ -31,8 +31,8 @@ mock 也做不了才標 `blocked-team-b`。
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 25 | 25 | 0 | 0 | 0 | 0 |
-| E13 Feedback & Analytics | 17 | 0 | 0 | 0 | 0 | 17 |
-| **合計** | **175** | 157 | 0 | 0 | 1 | 17 |
+| E13 Feedback & Analytics | 17 | 0 | 1 | 0 | 0 | 16 |
+| **合計** | **175** | 157 | 1 | 0 | 1 | 16 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -228,7 +228,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E13-S001 | todo | | | |
+| E13-S001 | done | story/E13-S001-answer-ok-feedback | [E13-S001.md](E13-S001.md) | Answer OK feedback；`Message.feedback?: "OK"` optional 欄位（漸進式擴充,同 state/revisions 先例）+ `submitAnswerFeedback()`；message-thread.tsx 新增「有幫助」按鈕,緊鄰 S027「複製」。FIX 1 次:E2E 用真正 `page.reload()` 誤觸「mock session 無 cookie/localStorage,硬重整會登出」既有陷阱,改用 rename-conversation.spec.ts 同款 in-app 導覽修正（窄例外,已誠實記錄前後差異）。unit 1366/1366（淨增 12）、E2E 235/235（淨增 2）。待 /story-review 獨立審核。 |
 | E13-S002 | todo | | | |
 | E13-S003 | todo | | | |
 | E13-S004 | todo | | | |

@@ -1271,3 +1271,115 @@ describe("submitCitationFeedback (E13-S005)", () => {
     }
   });
 });
+
+/**
+ * E13-S006 "feedback submission state". S001-S005 each already proved its
+ * OWN pending/error/success lifecycle in isolation (loading/success/
+ * validation-error/permission-denied are all covered per-dimension, and
+ * message-thread.test.tsx's `feedbackErrorIds`/`feedbackReasonErrorIds`/
+ * `feedbackCommentErrorIds`/`citationFeedbackErrorKeys` tests already
+ * exercise the generic `!result.ok` → error-UI path with mocked failures
+ * standing in for Functional AC 4's "dependency timeout/unavailable" —
+ * this codebase's established precedent (see sendMessage/
+ * receiveAssistantReply's own doc comments) is a real, deterministic
+ * failure trigger rather than a randomly-simulated one, and the existing
+ * NOT_FOUND/VALIDATION_ERROR-triggered component tests already prove the
+ * UI treats ANY `!result.ok` uniformly (shows error, never marks
+ * success) regardless of the specific ApiError.code — so re-deriving
+ * that same proof with a hypothetical DEPENDENCY_ERROR code here would
+ * be repackaging already-completed S001-S005 coverage as new work, not
+ * a distinct capability (see docs/stories/E13-S006.md for the full
+ * inventory this conclusion is based on).
+ *
+ * What is NOT yet proven anywhere: whether the four independent
+ * dimensions (feedback/feedbackReason/feedbackComment/citationFeedback)
+ * genuinely compose correctly on ONE message — every prior test used a
+ * fixture with at most one or two of these populated at once. This
+ * block is that composition proof, the single new verifiable capability
+ * this story actually adds.
+ */
+describe("feedback submission state composition (E13-S006)", () => {
+  it("lets all four feedback dimensions coexist on the same message, each submitted independently, with no dimension overwriting another", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]，去年為 8%[2]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitAnswerFeedback(reply.value.id, "NG");
+    await submitFeedbackReason(reply.value.id, "INCOMPLETE");
+    await submitFeedbackComment(reply.value.id, "少了去年同期的比較基準");
+    await submitCitationFeedback(reply.value.id, "1", "OK");
+    const final = await submitCitationFeedback(reply.value.id, "2", "NG");
+
+    expect(final.ok).toBe(true);
+    if (final.ok) {
+      expect(final.value.feedback).toBe("NG");
+      expect(final.value.feedbackReason).toBe("INCOMPLETE");
+      expect(final.value.feedbackComment).toBe("少了去年同期的比較基準");
+      expect(final.value.citationFeedback).toEqual({ "1": "OK", "2": "NG" });
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      const persisted = list.value.find((m) => m.id === reply.value.id);
+      expect(persisted?.feedback).toBe("NG");
+      expect(persisted?.feedbackReason).toBe("INCOMPLETE");
+      expect(persisted?.feedbackComment).toBe("少了去年同期的比較基準");
+      expect(persisted?.citationFeedback).toEqual({ "1": "OK", "2": "NG" });
+    }
+  });
+
+  it("re-submitting one dimension (a citation verdict) after all four are already set does not disturb the other three", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitAnswerFeedback(reply.value.id, "OK");
+    await submitFeedbackComment(reply.value.id, "很清楚");
+    await submitCitationFeedback(reply.value.id, "1", "OK");
+
+    const resubmitted = await submitCitationFeedback(reply.value.id, "1", "NG");
+
+    expect(resubmitted.ok).toBe(true);
+    if (resubmitted.ok) {
+      expect(resubmitted.value.citationFeedback).toEqual({ "1": "NG" });
+      expect(resubmitted.value.feedback).toBe("OK");
+      expect(resubmitted.value.feedbackComment).toBe("很清楚");
+      expect(resubmitted.value.feedbackReason).toBeUndefined();
+    }
+  });
+
+  it("giving all four feedback dimensions on one message does not leak into a second, untouched message in the same conversation", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const first = await receiveAssistantReply(conversation.value.id, "本季成長 12%[1]");
+    const second = await receiveAssistantReply(conversation.value.id, "去年為 8%[1]");
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    await submitAnswerFeedback(first.value.id, "NG");
+    await submitFeedbackReason(first.value.id, "OFF_TOPIC");
+    await submitFeedbackComment(first.value.id, "答非所問");
+    await submitCitationFeedback(first.value.id, "1", "NG");
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      const untouched = list.value.find((m) => m.id === second.value.id);
+      expect(untouched?.feedback).toBeUndefined();
+      expect(untouched?.feedbackReason).toBeUndefined();
+      expect(untouched?.feedbackComment).toBeUndefined();
+      expect(untouched?.citationFeedback).toBeUndefined();
+    }
+  });
+});

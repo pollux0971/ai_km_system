@@ -2633,6 +2633,84 @@ describe("MessageThread citation-specific feedback (E13-S005)", () => {
   });
 });
 
+/**
+ * E13-S006 "feedback submission state" — see messages.test.ts's own
+ * "feedback submission state composition" describe block for why this
+ * story's scope is the CROSS-dimension composition proof, not a redo of
+ * S001-S005's already-covered per-dimension pending/error/success states.
+ * A message-level verdict submission and a citation feedback submission
+ * are the one pair of dimensions that can genuinely be in flight at the
+ * same time on the same message through the real UI (the reason
+ * fieldset and comment textarea both only render once `feedback` is
+ * already PERSISTED, not merely pending, so they can never overlap with
+ * a still-pending verdict submission — see message-thread.tsx's own
+ * gating conditions) — this is that composition proof.
+ */
+describe("MessageThread feedback submission state composition (E13-S006)", () => {
+  const A1_ONE_CITATION = {
+    id: "a1",
+    conversationId: "c1",
+    role: "assistant" as const,
+    content: "本季成長 12%[1]",
+    attachmentNames: [],
+    createdAt: "2026-08-14T00:00:01.000Z",
+  };
+
+  it("a pending verdict submission and a pending citation feedback submission on the SAME message resolve independently, neither blocking the other's pending/disabled state", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [A1_ONE_CITATION] });
+    let resolveVerdict!: (value: Awaited<ReturnType<typeof submitAnswerFeedback>>) => void;
+    let resolveCitation!: (value: Awaited<ReturnType<typeof submitCitationFeedback>>) => void;
+    mockedSubmitAnswerFeedback.mockReturnValue(new Promise((resolve) => (resolveVerdict = resolve)));
+    mockedSubmitCitationFeedback.mockReturnValue(new Promise((resolve) => (resolveCitation = resolve)));
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "有幫助" }));
+    fireEvent.click(await screen.findByRole("button", { name: "此引用有幫助" }));
+
+    // Both submissions are in flight at once — both disabled, neither resolved yet.
+    expect(screen.getByRole("button", { name: "有幫助" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "此引用有幫助" })).toBeDisabled();
+
+    // Resolve only the citation feedback — the still-pending verdict must be unaffected.
+    resolveCitation({ ok: true, value: { ...A1_ONE_CITATION, citationFeedback: { "1": "OK" } } });
+    expect(await screen.findByRole("button", { name: "已回饋：此引用有幫助" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "有幫助" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "已回饋：有幫助" })).not.toBeInTheDocument();
+
+    // Now resolve the verdict too — it settles correctly, and the already-resolved
+    // citation feedback (now persisted on the message) remains untouched.
+    resolveVerdict({ ok: true, value: { ...A1_ONE_CITATION, feedback: "OK", citationFeedback: { "1": "OK" } } });
+    expect(await screen.findByRole("button", { name: "已回饋：有幫助" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "已回饋：此引用有幫助" })).toBeInTheDocument();
+  });
+
+  it("a citation feedback submission failure shows its own error only inside the drawer, leaving the message row's own verdict feedback error-free and still submittable", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [A1_ONE_CITATION] });
+    mockedSubmitCitationFeedback.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "找不到這個引用。" } });
+    mockedSubmitAnswerFeedback.mockResolvedValue({
+      ok: true,
+      value: { ...A1_ONE_CITATION, feedback: "OK" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視引用來源 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "此引用有幫助" }));
+
+    const drawer = await screen.findByRole("region", { name: "引用來源預覽" });
+    expect(within(drawer).getByRole("alert")).toHaveTextContent("回饋送出失敗，請再試一次。");
+
+    // The message row itself (outside the drawer) has no error alert of its own —
+    // the citation feedback failure is scoped to the drawer, not leaked onto the
+    // message-level verdict buttons' independent error-tracking state.
+    const messageItem = screen.getByRole("listitem");
+    expect(within(messageItem).queryByRole("alert")).not.toBeInTheDocument();
+
+    fireEvent.click(within(messageItem).getByRole("button", { name: "有幫助" }));
+    expect(await within(messageItem).findByRole("button", { name: "已回饋：有幫助" })).toBeInTheDocument();
+  });
+});
+
 function submitViaComposerWithFile(content: string, fileName: string) {
   fireEvent.change(screen.getByLabelText("附件"), {
     target: { files: [new File(["x"], fileName, { type: "text/plain" })] },

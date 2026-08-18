@@ -34,3 +34,22 @@ test("E11-S017: visiting an unknown feedback id shows a distinct not-found state
 
   await expect(page.getByText("找不到這筆回饋。", { exact: true })).toBeVisible();
 });
+
+/**
+ * E13-S007 "feedback queue filter" — the filter controls only make sense
+ * once there is something to filter (feedback-list.tsx's own doc comment
+ * explains why); real production coverage here is the honest negative:
+ * the genuinely-empty queue (the only real state today, same underlying
+ * reason as E11-S016's test above) does NOT show filter controls at all,
+ * rather than showing a filter UI with nothing behind it. Filter *logic*
+ * itself is proven with fixture data at the lib/component test layers
+ * (feedback.test.ts, feedback-list.test.tsx) — there is no honest way to
+ * exercise it end-to-end while listFeedback() always returns [].
+ */
+test("E13-S007: the genuinely-empty feedback queue shows no filter controls", async ({ page }) => {
+  await page.goto("/feedback");
+
+  await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("依判斷篩選")).toHaveCount(0);
+  await expect(page.getByLabel("只顯示有填寫原因的回饋")).toHaveCount(0);
+});

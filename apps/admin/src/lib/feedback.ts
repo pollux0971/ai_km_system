@@ -45,3 +45,34 @@ export async function listFeedback(): Promise<Result<FeedbackItem[], ApiError>> 
 export async function getFeedback(_id: string): Promise<Result<FeedbackItem | null, ApiError>> {
   return { ok: true, value: null };
 }
+
+/**
+ * E13-S007 "feedback queue filter". A pure narrowing function, not a new
+ * data source — `listFeedback()` above still always returns an empty
+ * list (the E11-S016 honesty constraint this story does not touch), so
+ * there is nothing real to filter in production today. This function's
+ * correctness is proven with fixture data at the unit-test layer, same
+ * technique `feedback-list.test.tsx`'s own "loaded" tests already use to
+ * verify `FeedbackList`'s render logic despite the same always-empty
+ * constraint — the UI only ever calls this on whatever `listFeedback()`
+ * actually returned, never on fabricated data.
+ */
+export interface FeedbackFilterCriteria {
+  verdict?: FeedbackItem["verdict"];
+  hasReason?: boolean;
+}
+
+export function filterFeedback(items: FeedbackItem[], criteria: FeedbackFilterCriteria): FeedbackItem[] {
+  return items.filter((item) => {
+    if (criteria.verdict !== undefined && item.verdict !== criteria.verdict) {
+      return false;
+    }
+    if (criteria.hasReason !== undefined) {
+      const itemHasReason = item.reason != null && item.reason !== "";
+      if (itemHasReason !== criteria.hasReason) {
+        return false;
+      }
+    }
+    return true;
+  });
+}

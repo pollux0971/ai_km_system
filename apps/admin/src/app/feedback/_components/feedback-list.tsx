@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
-import { listFeedback, type FeedbackItem } from "@/lib/feedback";
+import { filterFeedback, listFeedback, type FeedbackFilterCriteria, type FeedbackItem } from "@/lib/feedback";
 
 const logger = createLogger("admin:feedback-list");
 
@@ -24,9 +24,20 @@ const VERDICT_LABEL: Record<FeedbackItem["verdict"], string> = {
  * below, now that the route actually exists — same "don't invent
  * structure ahead of the story that owns it" discipline user-list.tsx's
  * own doc comment already establishes for E11-S002 vs. E11-S003.
+ *
+ * E13-S007 "feedback queue filter" — narrows the already-loaded `items`
+ * client-side via `filterFeedback` (a pure function, no new fetch). The
+ * filter controls only render once real items exist to filter; while the
+ * queue is genuinely empty (today's only real production state) there is
+ * nothing to filter, so showing the controls would be misleading UI
+ * chrome. A filter narrowing a non-empty list down to zero matches shows
+ * a distinct message ("沒有符合篩選條件的回饋。") from the genuinely-empty
+ * queue message ("尚無回饋。") — conflating "nothing exists" with
+ * "nothing matches your filter" would misrepresent which one is true.
  */
 export default function FeedbackList() {
   const [state, setState] = useState<State>({ status: "loading" });
+  const [criteria, setCriteria] = useState<FeedbackFilterCriteria>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -63,21 +74,73 @@ export default function FeedbackList() {
     return <EmptyState message="尚無回饋。" />;
   }
 
+  return <LoadedFeedbackList items={state.items} criteria={criteria} onCriteriaChange={setCriteria} />;
+}
+
+function LoadedFeedbackList({
+  items,
+  criteria,
+  onCriteriaChange,
+}: {
+  items: FeedbackItem[];
+  criteria: FeedbackFilterCriteria;
+  onCriteriaChange: (criteria: FeedbackFilterCriteria) => void;
+}) {
+  const filtered = useMemo(() => filterFeedback(items, criteria), [items, criteria]);
+
   return (
-    <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-      {state.items.map((item) => (
-        <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
-          <p>
-            <Link href={`/feedback/${item.id}`}>
-              <strong>{VERDICT_LABEL[item.verdict]}</strong>
-            </Link>
-          </p>
-          {item.reason && <p>{item.reason}</p>}
-          <p>
-            <time dateTime={item.submittedAt}>{new Date(item.submittedAt).toLocaleString("zh-TW")}</time>
-          </p>
-        </li>
-      ))}
-    </ul>
+    <div>
+      <fieldset style={{ border: "none", padding: 0, marginBottom: 16 }}>
+        <legend style={{ marginBottom: 8 }}>篩選</legend>
+        <p>
+          <label htmlFor="feedback-verdict-filter">依判斷篩選</label>
+          <select
+            id="feedback-verdict-filter"
+            value={criteria.verdict ?? ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              onCriteriaChange({ ...criteria, verdict: value === "" ? undefined : (value as FeedbackItem["verdict"]) });
+            }}
+          >
+            <option value="">全部</option>
+            <option value="ok">只看 OK</option>
+            <option value="ng">只看 NG</option>
+          </select>
+        </p>
+        <p>
+          <label htmlFor="feedback-has-reason-filter">
+            <input
+              id="feedback-has-reason-filter"
+              type="checkbox"
+              checked={criteria.hasReason === true}
+              onChange={(event) => {
+                onCriteriaChange({ ...criteria, hasReason: event.target.checked ? true : undefined });
+              }}
+            />
+            只顯示有填寫原因的回饋
+          </label>
+        </p>
+      </fieldset>
+
+      {filtered.length === 0 ? (
+        <EmptyState message="沒有符合篩選條件的回饋。" />
+      ) : (
+        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {filtered.map((item) => (
+            <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+              <p>
+                <Link href={`/feedback/${item.id}`}>
+                  <strong>{VERDICT_LABEL[item.verdict]}</strong>
+                </Link>
+              </p>
+              {item.reason && <p>{item.reason}</p>}
+              <p>
+                <time dateTime={item.submittedAt}>{new Date(item.submittedAt).toLocaleString("zh-TW")}</time>
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

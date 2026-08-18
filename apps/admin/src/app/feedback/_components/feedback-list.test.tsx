@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import FeedbackList from "./feedback-list";
 import { listFeedback } from "@/lib/feedback";
 
-vi.mock("@/lib/feedback", () => ({
-  listFeedback: vi.fn(),
-}));
+vi.mock("@/lib/feedback", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/feedback")>();
+  return {
+    ...actual,
+    listFeedback: vi.fn(),
+  };
+});
 
 const mockedListFeedback = vi.mocked(listFeedback);
 
@@ -126,5 +130,117 @@ describe("FeedbackList links to detail pages (E11-S017)", () => {
 
     const link = await screen.findByRole("link", { name: /OK/ });
     expect(link).toHaveAttribute("href", "/feedback/f1");
+  });
+});
+
+describe("FeedbackList queue filter (E13-S007)", () => {
+  const MIXED: import("@/lib/feedback").FeedbackItem[] = [
+    { id: "f1", verdict: "ok", reason: "回答完全解決問題", submittedAt: "2026-08-17T01:00:00.000Z" },
+    { id: "f2", verdict: "ng", reason: "答案不正確", submittedAt: "2026-08-17T02:00:00.000Z" },
+    { id: "f3", verdict: "ok", submittedAt: "2026-08-17T03:00:00.000Z" },
+    { id: "f4", verdict: "ng", submittedAt: "2026-08-17T04:00:00.000Z" },
+  ];
+
+  it("shows filter controls once the list has loaded", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: MIXED });
+
+    render(<FeedbackList />);
+
+    expect(await screen.findByLabelText("依判斷篩選")).toBeInTheDocument();
+    expect(screen.getByLabelText("只顯示有填寫原因的回饋")).toBeInTheDocument();
+  });
+
+  it("does not show filter controls while the genuinely-empty production state is showing", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: [] });
+
+    render(<FeedbackList />);
+
+    await screen.findByText("尚無回饋。");
+    expect(screen.queryByLabelText("依判斷篩選")).not.toBeInTheDocument();
+  });
+
+  it("filters out NG items when 依判斷篩選 is set to OK", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: MIXED });
+
+    render(<FeedbackList />);
+    await screen.findByLabelText("依判斷篩選");
+
+    fireEvent.change(screen.getByLabelText("依判斷篩選"), { target: { value: "ok" } });
+
+    const list = within(screen.getByRole("list"));
+    expect(list.getAllByText("OK")).toHaveLength(2);
+    expect(list.queryByText("NG")).not.toBeInTheDocument();
+  });
+
+  it("filters out OK items when 依判斷篩選 is set to NG", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: MIXED });
+
+    render(<FeedbackList />);
+    await screen.findByLabelText("依判斷篩選");
+
+    fireEvent.change(screen.getByLabelText("依判斷篩選"), { target: { value: "ng" } });
+
+    const list = within(screen.getByRole("list"));
+    expect(list.getAllByText("NG")).toHaveLength(2);
+    expect(list.queryByText("OK")).not.toBeInTheDocument();
+  });
+
+  it("shows every item again after switching 依判斷篩選 back to 全部", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: MIXED });
+
+    render(<FeedbackList />);
+    await screen.findByLabelText("依判斷篩選");
+
+    fireEvent.change(screen.getByLabelText("依判斷篩選"), { target: { value: "ok" } });
+    expect(within(screen.getByRole("list")).queryByText("NG")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("依判斷篩選"), { target: { value: "" } });
+
+    const list = within(screen.getByRole("list"));
+    expect(list.getAllByText("OK")).toHaveLength(2);
+    expect(list.getAllByText("NG")).toHaveLength(2);
+  });
+
+  it("keeps only items with a reason when 只顯示有填寫原因的回饋 is checked", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: MIXED });
+
+    render(<FeedbackList />);
+    await screen.findByLabelText("只顯示有填寫原因的回饋");
+
+    fireEvent.click(screen.getByLabelText("只顯示有填寫原因的回饋"));
+
+    const list = within(screen.getByRole("list"));
+    expect(list.getByText("回答完全解決問題")).toBeInTheDocument();
+    expect(list.getByText("答案不正確")).toBeInTheDocument();
+    expect(list.getAllByText(/^(OK|NG)$/)).toHaveLength(2);
+  });
+
+  it("combines verdict and reason filters (intersection, not union)", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: MIXED });
+
+    render(<FeedbackList />);
+    await screen.findByLabelText("依判斷篩選");
+
+    fireEvent.change(screen.getByLabelText("依判斷篩選"), { target: { value: "ng" } });
+    fireEvent.click(screen.getByLabelText("只顯示有填寫原因的回饋"));
+
+    const list = within(screen.getByRole("list"));
+    expect(list.getByText("答案不正確")).toBeInTheDocument();
+    expect(list.getAllByText(/^(OK|NG)$/)).toHaveLength(1);
+  });
+
+  it("shows a distinct no-match message (not the genuine-empty-queue message) when a filter matches nothing", async () => {
+    mockedListFeedback.mockResolvedValue({
+      ok: true,
+      value: [{ id: "f1", verdict: "ok", submittedAt: "2026-08-17T01:00:00.000Z" }],
+    });
+
+    render(<FeedbackList />);
+    await screen.findByLabelText("依判斷篩選");
+
+    fireEvent.change(screen.getByLabelText("依判斷篩選"), { target: { value: "ng" } });
+
+    expect(await screen.findByText("沒有符合篩選條件的回饋。")).toBeInTheDocument();
+    expect(screen.queryByText("尚無回饋。")).not.toBeInTheDocument();
   });
 });

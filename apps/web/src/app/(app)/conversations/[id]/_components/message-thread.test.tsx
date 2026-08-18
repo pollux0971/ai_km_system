@@ -1901,6 +1901,244 @@ describe("MessageThread answer OK feedback (E13-S001)", () => {
   });
 });
 
+describe("MessageThread answer NG feedback (E13-S002)", () => {
+  it("shows a 沒有幫助 button alongside 有幫助 on every settled assistant reply, but not on the user's own message", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        { id: "a2", conversationId: "c1", role: "assistant", content: "第二輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+
+    await screen.findByText("第二輪回覆");
+    expect(screen.getAllByRole("button", { name: "沒有幫助" })).toHaveLength(2);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).not.toHaveTextContent("沒有幫助");
+    expect(items[1]).toHaveTextContent("沒有幫助");
+    expect(items[2]).not.toHaveTextContent("沒有幫助");
+    expect(items[3]).toHaveTextContent("沒有幫助");
+  });
+
+  it("clicking 沒有幫助 submits NG feedback for that message and shows 已回饋：沒有幫助", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
+    mockedSubmitAnswerFeedback.mockResolvedValue({
+      ok: true,
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", feedback: "NG" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "沒有幫助" }));
+
+    await waitFor(() => expect(mockedSubmitAnswerFeedback).toHaveBeenCalledWith("a1", "NG"));
+    expect(await screen.findByRole("button", { name: "已回饋：沒有幫助" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "沒有幫助" })).not.toBeInTheDocument();
+  });
+
+  it("renders 已回饋：沒有幫助 immediately for a message that already has NG feedback recorded (e.g. after reload)", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "第一輪回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          feedback: "NG",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByRole("button", { name: "已回饋：沒有幫助" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "沒有幫助" })).not.toBeInTheDocument();
+  });
+
+  it("once OK feedback has been given, disables the 沒有幫助 button too — a verdict is a single choice, not two independent toggles", async () => {
+    // Design decision (documented in EVIDENCE): OK/NG share ONE
+    // `Message.feedback` field, not two independent booleans, mirroring
+    // SOURCE_BASELINE's golden flow "...→ OK / NG → Feedback Loop"
+    // (a single either/or judgment). Once either verdict is recorded,
+    // BOTH buttons become permanently non-clickable — same "no undo
+    // feedback" invariant E13-S001 already established for its own
+    // button, just applied symmetrically now that a second button exists.
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "第一輪回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          feedback: "OK",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    const ngButton = screen.getByRole("button", { name: "沒有幫助" });
+    expect(ngButton).toBeDisabled();
+
+    fireEvent.click(ngButton);
+    expect(mockedSubmitAnswerFeedback).not.toHaveBeenCalled();
+  });
+
+  it("once NG feedback has been given, disables the 有幫助 button too", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "第一輪回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          feedback: "NG",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    const okButton = screen.getByRole("button", { name: "有幫助" });
+    expect(okButton).toBeDisabled();
+
+    fireEvent.click(okButton);
+    expect(mockedSubmitAnswerFeedback).not.toHaveBeenCalled();
+  });
+
+  it("disables the 已回饋：沒有幫助 button once NG feedback has been given, so it cannot be submitted again", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "第一輪回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          feedback: "NG",
+        },
+      ],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    const feedbackButton = screen.getByRole("button", { name: "已回饋：沒有幫助" });
+    expect(feedbackButton).toBeDisabled();
+
+    fireEvent.click(feedbackButton);
+    expect(mockedSubmitAnswerFeedback).not.toHaveBeenCalled();
+  });
+
+  it("giving NG feedback on one message does not mark a different message as 已回饋：沒有幫助", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        { id: "a2", conversationId: "c1", role: "assistant", content: "第二輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
+      ],
+    });
+    mockedSubmitAnswerFeedback.mockResolvedValue({
+      ok: true,
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", feedback: "NG" },
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第二輪回覆");
+
+    const feedbackButtons = screen.getAllByRole("button", { name: "沒有幫助" });
+    fireEvent.click(feedbackButtons[0]!);
+
+    await screen.findByRole("button", { name: "已回饋：沒有幫助" });
+    const items = screen.getAllByRole("listitem");
+    // a1's row: verdict recorded, both its buttons disabled (OK stays
+    // labeled 有幫助 since NG — not OK — was given; NG flips to 已回饋).
+    expect(within(items[1]!).getByRole("button", { name: "有幫助" })).toBeDisabled();
+    expect(within(items[1]!).getByRole("button", { name: "已回饋：沒有幫助" })).toBeDisabled();
+    // a2's row: completely untouched, both buttons still enabled.
+    expect(within(items[3]!).getByRole("button", { name: "有幫助" })).toBeEnabled();
+    expect(within(items[3]!).getByRole("button", { name: "沒有幫助" })).toBeEnabled();
+  });
+
+  it("disables both 有幫助 and 沒有幫助 while an NG submission is in flight", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
+    let resolveSubmit!: (value: Awaited<ReturnType<typeof submitAnswerFeedback>>) => void;
+    mockedSubmitAnswerFeedback.mockReturnValue(new Promise((resolve) => (resolveSubmit = resolve)));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "沒有幫助" }));
+
+    expect(screen.getByRole("button", { name: "沒有幫助" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "有幫助" })).toBeDisabled();
+
+    resolveSubmit({
+      ok: true,
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", feedback: "NG" },
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "已回饋：沒有幫助" })).toBeInTheDocument());
+  });
+
+  it("shows a distinct error message and keeps both buttons enabled (for retry) when an NG submission fails", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
+    mockedSubmitAnswerFeedback.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "沒有幫助" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("回饋送出失敗，請再試一次。");
+    expect(screen.getByRole("button", { name: "沒有幫助" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "有幫助" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "已回饋：沒有幫助" })).not.toBeInTheDocument();
+  });
+});
+
 function submitViaComposerWithFile(content: string, fileName: string) {
   fireEvent.change(screen.getByLabelText("附件"), {
     target: { files: [new File(["x"], fileName, { type: "text/plain" })] },

@@ -55,15 +55,19 @@ import { getConversation, touchConversationLastMessage } from "./conversations";
  * `feedback` (E13-S001 "Answer OK feedback") is optional for the same
  * reason as `revisions`/`state` — every pre-S001 fixture simply omits
  * it, and message-thread.tsx treats an absent `feedback` as "not yet
- * given" at render time. Only `"OK"` exists today; E13-S002 "Answer NG
- * feedback" is a separate, not-yet-built story — this codebase's
- * established incremental pattern (see `state`'s own history above) is
- * to widen a field's union once the story that needs the next value
- * actually lands, not to speculatively pre-build it. Like `state`, only
- * assistant replies are ever given feedback — a user's own message isn't
- * an "answer" to react to.
+ * given" at render time. Like `state`, only assistant replies are ever
+ * given feedback — a user's own message isn't an "answer" to react to.
+ *
+ * `"NG"` (E13-S002 "Answer NG feedback") widens the union to its full,
+ * final shape — SOURCE_BASELINE's golden flow "...→ OK / NG → Feedback
+ * Loop" names both as the only two verdicts, so unlike `state` (which
+ * has kept growing across multiple stories), there is no third value to
+ * anticipate here. `submitAnswerFeedback` itself needed zero logic
+ * changes for this: it already took `verdict: AnswerFeedbackVerdict`
+ * generically and does a plain upsert regardless of value, so widening
+ * the type is the entire lib-level change.
  */
-export type AnswerFeedbackVerdict = "OK";
+export type AnswerFeedbackVerdict = "OK" | "NG";
 
 export interface Message {
   id: string;
@@ -228,22 +232,30 @@ export async function reviseMessage(messageId: string, newContent: string, state
 }
 
 /**
- * E13-S001 "Answer OK feedback". Fails closed with NOT_FOUND for a
- * nonexistent messageId (same "real, deterministic failure path" reason
- * sendMessage/receiveAssistantReply/reviseMessage already give) and with
- * VALIDATION_ERROR for a message that exists but isn't an assistant
- * reply — feedback reacts to an ANSWER, and a user's own message was
- * never one; this keeps the check fail-closed rather than silently
- * accepting or silently no-op-ing on a target the caller never should
- * have been able to construct through the real UI in the first place
- * (message-thread.tsx only ever renders the feedback control on
- * `role === "assistant"` entries).
+ * E13-S001 "Answer OK feedback" / E13-S002 "Answer NG feedback" share this
+ * one function — `verdict` was always generic over `AnswerFeedbackVerdict`,
+ * so S002 needed zero changes here beyond the type widening on that alias.
+ * Fails closed with NOT_FOUND for a nonexistent messageId (same "real,
+ * deterministic failure path" reason sendMessage/receiveAssistantReply/
+ * reviseMessage already give) and with VALIDATION_ERROR for a message that
+ * exists but isn't an assistant reply — feedback reacts to an ANSWER, and
+ * a user's own message was never one; this keeps the check fail-closed
+ * rather than silently accepting or silently no-op-ing on a target the
+ * caller never should have been able to construct through the real UI in
+ * the first place (message-thread.tsx only ever renders the feedback
+ * controls on `role === "assistant"` entries).
  *
  * Idempotent by construction: this simply upserts the `feedback` field
  * on the existing row (same update-in-place shape as reviseMessage),
  * never appends a new record, so submitting the same verdict twice for
  * the same message produces the identical persisted state, not a
- * duplicate side effect (Functional AC 5).
+ * duplicate side effect (Functional AC 5). It also allows switching
+ * verdicts (OK→NG or NG→OK) at the data layer — message-thread.tsx's UI
+ * is what enforces "no undo once given" (both buttons become disabled
+ * once either verdict is recorded), the same trust boundary already
+ * established by S001 for its own single button; this function has no
+ * additional guard against being called with a different verdict than
+ * whatever is already stored, matching S001's plain-upsert precedent.
  */
 export async function submitAnswerFeedback(messageId: string, verdict: AnswerFeedbackVerdict): Promise<Result<Message, ApiError>> {
   const messages = readStore();

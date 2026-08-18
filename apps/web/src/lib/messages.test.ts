@@ -548,3 +548,105 @@ describe("submitAnswerFeedback (E13-S001)", () => {
     }
   });
 });
+
+describe("submitAnswerFeedback NG verdict (E13-S002)", () => {
+  it("sets feedback to 'NG' on an assistant reply and persists it", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    const result = await submitAnswerFeedback(reply.value.id, "NG");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.feedback).toBe("NG");
+      expect(result.value.id).toBe(reply.value.id);
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedback).toBe("NG");
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist, same as the OK verdict path", async () => {
+    const result = await submitAnswerFeedback("does-not-exist", "NG");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR when the target is a user message, not an assistant reply", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const userMessage = await sendMessage(conversation.value.id, "保固期限是多久？", []);
+    expect(userMessage.ok).toBe(true);
+    if (!userMessage.ok) return;
+
+    const result = await submitAnswerFeedback(userMessage.value.id, "NG");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("is idempotent — submitting NG twice does not create a duplicate record or change the outcome", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitAnswerFeedback(reply.value.id, "NG");
+    const second = await submitAnswerFeedback(reply.value.id, "NG");
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value.feedback).toBe("NG");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.feedback).toBe("NG");
+    }
+  });
+
+  it("upserts the same row when switching verdicts — the store never accumulates more than one feedback record per message", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    await submitAnswerFeedback(reply.value.id, "OK");
+    const switched = await submitAnswerFeedback(reply.value.id, "NG");
+
+    expect(switched.ok).toBe(true);
+    if (switched.ok) {
+      expect(switched.value.feedback).toBe("NG");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.feedback).toBe("NG");
+    }
+  });
+});

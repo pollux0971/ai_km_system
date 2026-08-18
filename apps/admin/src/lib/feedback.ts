@@ -17,10 +17,13 @@ import type { ApiError, Result } from "@ai-km/types";
  * feedback content either way.
  *
  * `FeedbackItem`'s shape below is Team A's own provisional DISPLAY
- * shape for this queue shell — deliberately minimal (verdict + optional
- * reason, matching only E13-S001/S002/S003's scope), not a claim about
- * what E13-S004's free-text or E13-S005's citation-specific fields will
- * eventually add. `listFeedback()` always returns an empty list — the
+ * shape for this queue shell — originally verdict + optional reason
+ * only (matching E13-S001/S002/S003's scope at the time E11-S016 was
+ * written). E13-S008 "feedback detail view" extends it with `comment`
+ * (E13-S004 free-text feedback) and `citationFeedback` (E13-S005
+ * citation-specific feedback), both of which now exist in apps/web's
+ * `Message` shape. Both new fields are optional, backward-compatible
+ * additions — `listFeedback()` still always returns an empty list, the
  * one honest answer today — no write path exists, since admins cannot
  * legitimately fabricate a user's feedback.
  */
@@ -28,6 +31,8 @@ export interface FeedbackItem {
   id: string;
   verdict: "ok" | "ng";
   reason?: string;
+  comment?: string;
+  citationFeedback?: { citationId: string; verdict: "ok" | "ng" }[];
   submittedAt: string;
 }
 

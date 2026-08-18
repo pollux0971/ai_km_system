@@ -53,3 +53,23 @@ test("E13-S007: the genuinely-empty feedback queue shows no filter controls", as
   await expect(page.getByLabel("依判斷篩選")).toHaveCount(0);
   await expect(page.getByLabel("只顯示有填寫原因的回饋")).toHaveCount(0);
 });
+
+/**
+ * E13-S008 "feedback detail view" — same honest-negative shape S007's
+ * test above already establishes for the queue: the comment and
+ * citation-feedback sections only make sense once a real FeedbackItem
+ * carries those optional fields (feedback-detail.tsx's own doc comment
+ * explains why), and getFeedback(id) is unconditionally null in
+ * production today, same underlying reason as every other test in this
+ * file. Real coverage here is the honest negative — the not-found page
+ * does not leak either new section's markup.
+ */
+test("E13-S008: the not-found feedback detail page shows no comment or citation-feedback section", async ({
+  page,
+}) => {
+  await page.goto("/feedback/this-feedback-does-not-exist");
+
+  await expect(page.getByText("找不到這筆回饋。", { exact: true })).toBeVisible();
+  await expect(page.getByText("留言", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "引用回饋" })).toHaveCount(0);
+});

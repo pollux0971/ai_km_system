@@ -55,12 +55,26 @@ import type { AnswerState } from "./answer-state";
  * aggregate — is the whole of this story's scope; `countDistinctCitations`
  * below is a pure counting function, not a leak-rate calculator.
  *
- * Computing DAU, wiring events into the admin dashboard, or any
- * cross-answer aggregation remains out of scope (E13-S012's job, per
- * Atomic Story Boundary's "one story, one capability" rule) — a future
- * story can derive whatever aggregate metrics it needs from the same
- * event stream persisted here, without this story inventing any
- * aggregation logic of its own.
+ * E13-S012 adds the aggregation layer these three prior stories all
+ * deliberately deferred: `computeDAU`/`computeQuestionsAsked` below.
+ * Both are pure functions over an already-fetched `UsageEvent[]` — no
+ * new storage, no new event type, no new instrumentation call site.
+ *
+ * Where this aggregation runs, and where it does NOT: `usage-metrics.ts`
+ * (apps/admin, E11-S021) explicitly named "E13-S012 DAU/questions
+ * dashboard" as its own real-data source, but apps/admin and apps/web
+ * are two independent Next.js apps with no real backend between them —
+ * each has its own origin-scoped sessionStorage, and nothing in this
+ * codebase lets apps/admin read apps/web's `listUsageEvents()`. That is
+ * the exact same cross-app boundary E11-S016/E13-S007/E13-S008 already
+ * established for Feedback, and it does not change here: this story
+ * does NOT touch `apps/admin`, and `getUsageMetrics()` stays honestly
+ * at `{ 0, 0 }`. What this story CAN honestly deliver — and does — is
+ * proving the aggregation math itself is correct at the one place the
+ * real data actually lives (apps/web), so that a future story wiring a
+ * real cross-app data path (most plausibly a Team B-provided API) has
+ * correct, tested aggregation logic ready to consume rather than having
+ * to invent and prove it from scratch.
  */
 export type UsageEventName = "conversation_message_sent" | "conversation_created" | "rag_answer_outcome";
 
@@ -139,7 +153,39 @@ export function recordUsageEvent(
   }
 }
 
-/** All recorded usage events, oldest first. Read-only accessor for future aggregation stories (E13-S010/S012). */
+/** All recorded usage events, oldest first. Read-only accessor for aggregation (E13-S012). */
 export function listUsageEvents(): UsageEvent[] {
   return readStore();
+}
+
+/**
+ * "Questions asked" (E11-S021's own metric name): total number of
+ * conversation_message_sent events in the given event list. Every such
+ * event is one real send, so this is a plain count, not a distinct-user
+ * count — a user asking 5 questions contributes 5, not 1 (that
+ * distinction belongs to DAU below).
+ */
+export function computeQuestionsAsked(events: UsageEvent[]): number {
+  return events.filter((event) => event.name === "conversation_message_sent").length;
+}
+
+/**
+ * "Daily active users": count of distinct userIds with at least one
+ * usage event (any event name) on referenceDate's UTC calendar day —
+ * the exact derivation E13-S009's own doc comment already named as its
+ * design direction ("this user today had any usage event = active"),
+ * now implemented. Comparing by UTC calendar day (not a rolling
+ * 24-hour window) matches this codebase's established UTC-storage
+ * convention for time fields (occurredAt is already an ISO/UTC
+ * timestamp) and gives a stable, unambiguous "today" boundary.
+ */
+export function computeDAU(events: UsageEvent[], referenceDate: Date): number {
+  const referenceDay = referenceDate.toISOString().slice(0, 10);
+  const activeUserIds = new Set<string>();
+  for (const event of events) {
+    if (event.occurredAt.slice(0, 10) === referenceDay) {
+      activeUserIds.add(event.userId);
+    }
+  }
+  return activeUserIds.size;
 }

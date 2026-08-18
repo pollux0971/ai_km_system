@@ -31,8 +31,8 @@ mock 也做不了才標 `blocked-team-b`。
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 25 | 25 | 0 | 0 | 0 | 0 |
-| E13 Feedback & Analytics | 17 | 0 | 1 | 0 | 0 | 16 |
-| **合計** | **175** | 157 | 1 | 0 | 1 | 16 |
+| E13 Feedback & Analytics | 17 | 1 | 0 | 0 | 0 | 16 |
+| **合計** | **175** | 158 | 0 | 0 | 1 | 16 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -228,7 +228,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E13-S001 | done | story/E13-S001-answer-ok-feedback | [E13-S001.md](E13-S001.md) | Answer OK feedback；`Message.feedback?: "OK"` optional 欄位（漸進式擴充,同 state/revisions 先例）+ `submitAnswerFeedback()`；message-thread.tsx 新增「有幫助」按鈕,緊鄰 S027「複製」。FIX 1 次:E2E 用真正 `page.reload()` 誤觸「mock session 無 cookie/localStorage,硬重整會登出」既有陷阱,改用 rename-conversation.spec.ts 同款 in-app 導覽修正（窄例外,已誠實記錄前後差異）。unit 1366/1366（淨增 12）、E2E 235/235（淨增 2）。待 /story-review 獨立審核。 |
+| E13-S001 | approved | story/E13-S001-answer-ok-feedback | [E13-S001.md](E13-S001.md) | Answer OK feedback;`Message.feedback?: "OK"` optional 欄位(漸進式擴充,同 state/revisions 先例)+ `submitAnswerFeedback()`;message-thread.tsx 新增「有幫助」按鈕,緊鄰 S027「複製」。FIX 1 次:E2E 用真正 `page.reload()` 誤觸「mock session 無 cookie/localStorage,硬重整會登出」既有陷阱,改用 rename-conversation.spec.ts 同款 in-app 導覽修正(窄例外,已誠實記錄前後差異)。獨立審核 Round 1 REQUEST-CHANGES(1 個 MAJOR:「已回饋」按鈕的 disabled 狀態——防止重複送出——完全沒有測試覆蓋,審查者對抗性突變移除該條件後 91 個測試全過,未命中);DEV 新增 1 個斷言 `.toBeDisabled()` 的測試(純新增,未動既有斷言),同一突變下精準命中該新測試、其餘 91 個不受影響。Round 2 獨立複驗 APPROVE(0 個 finding):`--force` 全量重跑 typecheck 20/20、lint 20/20,unit web 105/105 檔案 1367/1367 tests、admin 44/44 檔案 308/308 tests,E2E 235/235(含本 story 2 個測試皆穩定通過);數字與 DEV 自報完全一致。diff 邊界確認乾淨(僅 apps/web/src/lib/messages.ts+test、message-thread.tsx+test、新增 tests/e2e/specs/answer-ok-feedback.spec.ts、docs,`apps/api`/`apps/worker-*`/`services/*`/`db/*`/`contracts/`/`AI_KM_BMAD_High_Granularity/` 零命中)。**E13 第一個 story。** |
 | E13-S002 | todo | | | |
 | E13-S003 | todo | | | |
 | E13-S004 | todo | | | |

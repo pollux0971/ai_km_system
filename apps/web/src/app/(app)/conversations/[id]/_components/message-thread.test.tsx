@@ -3292,6 +3292,30 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     );
   });
 
+  it("records rag_answer_outcome exactly once for a single successfully-persisted answer — never double-counted", async () => {
+    // toHaveBeenCalledWith above only proves ONE call matched these args —
+    // it says nothing about whether rag_answer_outcome was ALSO recorded
+    // a second (or third) time for the same answer. Filtering to this
+    // event name specifically (same precision the S009 tests already use
+    // for conversation_message_sent, and the same technique this story's
+    // own EVIDENCE documents applying to those existing tests) is what
+    // actually proves no duplicate side effect for THIS event.
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "唯一的一個來源 [1]。", state: "ANSWERED" },
+    });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() =>
+      expect(mockedRecordUsageEvent.mock.calls.filter((call) => call[0] === "rag_answer_outcome")).toHaveLength(1),
+    );
+  });
+
   it("records citationCount 0 for an answer with no citation markers", async () => {
     mockedListMessages.mockResolvedValue({ ok: true, value: [] });
     mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });

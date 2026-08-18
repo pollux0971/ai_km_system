@@ -21,3 +21,14 @@ export function useCurrentUser(): AuthSession {
   }
   return session;
 }
+
+/**
+ * E13-S009: non-throwing variant for call sites (e.g. message-thread.tsx)
+ * that treat the current user as an optional enhancement — usage-event
+ * instrumentation should degrade to "don't record" rather than crash the
+ * whole component when no provider is present, unlike useCurrentUser()'s
+ * every other caller, which genuinely cannot function without a session.
+ */
+export function useOptionalCurrentUser(): AuthSession | null {
+  return useContext(CurrentUserContext);
+}

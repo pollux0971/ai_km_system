@@ -22,8 +22,10 @@ import {
   type FeedbackReason,
   type Message,
 } from "@/lib/messages";
+import { useOptionalCurrentUser } from "@/lib/session-context";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
+import { recordUsageEvent } from "@/lib/usage-events";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
 import { ConversationContextIndicator } from "./conversation-context-indicator";
 import { MessageComposer } from "./message-composer";
@@ -455,6 +457,7 @@ type DisplayMessage =
 type LoadState = "loading" | "error" | "loaded";
 
 export function MessageThread({ conversationId }: { conversationId: string }) {
+  const currentUser = useOptionalCurrentUser();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
   const [previewCitationId, setPreviewCitationId] = useState<string | null>(null);
@@ -546,6 +549,16 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
     logger.info("message sent", { correlationId, conversationId, messageId: result.value.id });
     trackEvent("conversation_message_send_success", { correlationId, properties: { messageId: result.value.id } });
+    // E13-S009: only a genuinely successful send counts as a "question
+    // asked" usage event — a failed attempt (handled above, `return`s
+    // before reaching here) or a retry of one must not be double-counted,
+    // since each retry that eventually succeeds only ever reaches this
+    // line once. No session (currentUser === null) means this render
+    // tree isn't under SessionGate (e.g. a unit test) — silently skip
+    // rather than attribute the event to no one.
+    if (currentUser) {
+      recordUsageEvent("conversation_message_sent", currentUser.userId);
+    }
     setDisplayMessages((previous) =>
       previous.map((entry) => (entry.kind === "pending" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
     );

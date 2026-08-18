@@ -4,6 +4,7 @@ import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
 import { MOCK_FILE_PROCESSING_FAILURE_TRIGGER, simulateFileProcessing } from "@/lib/file-processing";
 import { runGenerationPhases } from "@/lib/generation-status";
+import { CurrentUserProvider } from "@/lib/session-context";
 import {
   listMessages,
   receiveAssistantReply,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/messages";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
+import { recordUsageEvent } from "@/lib/usage-events";
 
 vi.mock("@/lib/messages", () => ({
   listMessages: vi.fn(),
@@ -80,6 +82,10 @@ vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
 
+vi.mock("@/lib/usage-events", () => ({
+  recordUsageEvent: vi.fn(),
+}));
+
 const mockedListMessages = vi.mocked(listMessages);
 const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
@@ -93,6 +99,7 @@ const mockedShouldSimulateStreamDisconnect = vi.mocked(shouldSimulateStreamDisco
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
 const mockedTrackEvent = vi.mocked(trackEvent);
 const mockedSimulateFileProcessing = vi.mocked(simulateFileProcessing);
+const mockedRecordUsageEvent = vi.mocked(recordUsageEvent);
 
 const DEFAULT_ASSISTANT_MESSAGE = {
   id: "assistant-default",
@@ -141,6 +148,7 @@ beforeEach(() => {
   mockedSubmitCitationFeedback.mockReset();
   mockedSubmitFeedbackReason.mockReset();
   mockedSubmitFeedbackComment.mockReset();
+  mockedRecordUsageEvent.mockReset();
 });
 
 function submitViaComposer(content: string) {
@@ -2708,6 +2716,83 @@ describe("MessageThread feedback submission state composition (E13-S006)", () =>
 
     fireEvent.click(within(messageItem).getByRole("button", { name: "有幫助" }));
     expect(await within(messageItem).findByRole("button", { name: "已回饋：有幫助" })).toBeInTheDocument();
+  });
+});
+
+const FIXTURE_SESSION = { userId: "u1", roles: ["general_user"], expiresAt: "2099-01-01T00:00:00.000Z" };
+
+function renderWithSession(session: typeof FIXTURE_SESSION | null, conversationId = "c1") {
+  if (session === null) {
+    return render(<MessageThread conversationId={conversationId} />);
+  }
+  return render(
+    <CurrentUserProvider value={session}>
+      <MessageThread conversationId={conversationId} />
+    </CurrentUserProvider>,
+  );
+}
+
+describe("MessageThread usage event instrumentation (E13-S009)", () => {
+  const SENT_MESSAGE = {
+    id: "m1",
+    conversationId: "c1",
+    role: "user" as const,
+    content: "你好",
+    attachmentNames: [],
+    createdAt: "2026-08-14T00:00:00.000Z",
+  };
+
+  it("records a conversation_message_sent usage event for the current user once a message send actually succeeds", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(mockedRecordUsageEvent).toHaveBeenCalledWith("conversation_message_sent", "u1"));
+    expect(mockedRecordUsageEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not record a usage event when the send fails", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await screen.findByText("傳送失敗");
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalled();
+  });
+
+  it("records exactly one usage event when a retry after a failure eventually succeeds — never double-counted", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+    await screen.findByText("傳送失敗");
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalled();
+
+    mockedSendMessage.mockResolvedValueOnce({ ok: true, value: SENT_MESSAGE });
+    fireEvent.click(screen.getByRole("button", { name: "重新傳送" }));
+
+    await waitFor(() => expect(mockedRecordUsageEvent).toHaveBeenCalledTimes(1));
+    expect(mockedRecordUsageEvent).toHaveBeenCalledWith("conversation_message_sent", "u1");
+  });
+
+  it("does not record a usage event (and does not crash) when rendered outside a session provider", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+
+    renderWithSession(null);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(screen.queryByText("傳送中…")).not.toBeInTheDocument());
+    expect(mockedRecordUsageEvent).not.toHaveBeenCalled();
   });
 });
 

@@ -73,3 +73,73 @@ describe("FeedbackDetail (E11-S017)", () => {
     expect(mockedGetFeedback).toHaveBeenCalledWith("f1");
   });
 });
+
+describe("FeedbackDetail free-text comment (E13-S008)", () => {
+  it("shows the free-text comment when the feedback item has one", async () => {
+    mockedGetFeedback.mockResolvedValue({
+      ok: true,
+      value: { ...sampleFeedback, comment: "希望能引用最新版本的政策文件" },
+    });
+
+    render(<FeedbackDetail feedbackId="f1" />);
+
+    expect(await screen.findByText("希望能引用最新版本的政策文件")).toBeInTheDocument();
+  });
+
+  it("does not render a comment section when the feedback item has no comment", async () => {
+    mockedGetFeedback.mockResolvedValue({ ok: true, value: sampleFeedback });
+
+    render(<FeedbackDetail feedbackId="f1" />);
+
+    await screen.findByText("OK");
+    expect(screen.queryByText("留言")).not.toBeInTheDocument();
+  });
+});
+
+describe("FeedbackDetail citation-specific feedback (E13-S008)", () => {
+  it("lists each citation's own verdict when citationFeedback is present", async () => {
+    mockedGetFeedback.mockResolvedValue({
+      ok: true,
+      value: {
+        ...sampleFeedback,
+        citationFeedback: [
+          { citationId: "1", verdict: "ok" },
+          { citationId: "2", verdict: "ng" },
+        ],
+      },
+    });
+
+    render(<FeedbackDetail feedbackId="f1" />);
+
+    await screen.findByText("OK");
+    const list = screen.getByRole("list", { name: "引用回饋" });
+    expect(list).toBeInTheDocument();
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent("引用 1");
+    expect(items[0]).toHaveTextContent("OK");
+    expect(items[1]).toHaveTextContent("引用 2");
+    expect(items[1]).toHaveTextContent("NG");
+  });
+
+  it("does not render a citation-feedback section when citationFeedback is absent", async () => {
+    mockedGetFeedback.mockResolvedValue({ ok: true, value: sampleFeedback });
+
+    render(<FeedbackDetail feedbackId="f1" />);
+
+    await screen.findByText("OK");
+    expect(screen.queryByRole("list", { name: "引用回饋" })).not.toBeInTheDocument();
+  });
+
+  it("does not render a citation-feedback section when citationFeedback is an empty array", async () => {
+    mockedGetFeedback.mockResolvedValue({
+      ok: true,
+      value: { ...sampleFeedback, citationFeedback: [] },
+    });
+
+    render(<FeedbackDetail feedbackId="f1" />);
+
+    await screen.findByText("OK");
+    expect(screen.queryByRole("list", { name: "引用回饋" })).not.toBeInTheDocument();
+  });
+});

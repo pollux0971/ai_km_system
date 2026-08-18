@@ -91,3 +91,33 @@ describe("filterFeedback (E13-S007)", () => {
     expect(FIXTURE).toEqual(copy);
   });
 });
+
+describe("FeedbackItem free-text comment and citation-specific feedback shape (E13-S008)", () => {
+  it("accepts a FeedbackItem with a comment and citationFeedback, both optional", () => {
+    const withBoth: FeedbackItem = {
+      id: "f5",
+      verdict: "ng",
+      reason: "答案不正確",
+      comment: "第二段引用的資料已經過期",
+      citationFeedback: [
+        { citationId: "1", verdict: "ok" },
+        { citationId: "2", verdict: "ng" },
+      ],
+      submittedAt: "2026-08-18T00:00:00.000Z",
+    };
+
+    expect(withBoth.comment).toBe("第二段引用的資料已經過期");
+    expect(withBoth.citationFeedback).toHaveLength(2);
+  });
+
+  it("still accepts a FeedbackItem with neither comment nor citationFeedback — both remain optional, matching E11-S016's original shape", () => {
+    const bareMinimum: FeedbackItem = {
+      id: "f6",
+      verdict: "ok",
+      submittedAt: "2026-08-18T00:00:00.000Z",
+    };
+
+    expect(bareMinimum.comment).toBeUndefined();
+    expect(bareMinimum.citationFeedback).toBeUndefined();
+  });
+});

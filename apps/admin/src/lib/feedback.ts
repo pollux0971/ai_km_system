@@ -81,3 +81,31 @@ export function filterFeedback(items: FeedbackItem[], criteria: FeedbackFilterCr
     return true;
   });
 }
+
+/**
+ * E13-S014 "OK/NG rate dashboard". Same "presentation layer already
+ * exists" situation E13-S012 (DAU/questions) established, not the
+ * "brand-new page" situation E13-S013 (latency) required: `feedback-list.tsx`
+ * (E11-S016, extended by E13-S007/S008) already is this queue's dashboard —
+ * this story's real, non-duplicate value is a pure aggregation over
+ * `listFeedback()`'s already-loaded items, not a new fetch, new endpoint,
+ * or new page. `okRatePercent` is `null` for zero samples (same "no
+ * natural zero" reasoning `computeAverageLatencyMs`, E13-S013, already
+ * establishes) rather than `0`, since a 0%-OK rate and "no feedback exists
+ * at all" are different facts an admin should not confuse.
+ */
+export interface FeedbackOkNgRate {
+  okCount: number;
+  ngCount: number;
+  okRatePercent: number | null;
+}
+
+export function computeOkNgRate(items: FeedbackItem[]): FeedbackOkNgRate {
+  const okCount = items.filter((item) => item.verdict === "ok").length;
+  const ngCount = items.length - okCount;
+  return {
+    okCount,
+    ngCount,
+    okRatePercent: items.length === 0 ? null : Math.round((okCount / items.length) * 100),
+  };
+}

@@ -4,7 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
-import { filterFeedback, listFeedback, type FeedbackFilterCriteria, type FeedbackItem } from "@/lib/feedback";
+import {
+  computeOkNgRate,
+  filterFeedback,
+  listFeedback,
+  type FeedbackFilterCriteria,
+  type FeedbackItem,
+} from "@/lib/feedback";
 
 const logger = createLogger("admin:feedback-list");
 
@@ -34,6 +40,15 @@ const VERDICT_LABEL: Record<FeedbackItem["verdict"], string> = {
  * a distinct message ("沒有符合篩選條件的回饋。") from the genuinely-empty
  * queue message ("尚無回饋。") — conflating "nothing exists" with
  * "nothing matches your filter" would misrepresent which one is true.
+ *
+ * E13-S014 "OK/NG rate dashboard" — the OK/NG rate stat above the filter
+ * fieldset is computed from `items` (the whole loaded queue), not
+ * `filtered` — it's an overview metric of the queue itself, distinct in
+ * purpose from the filter below it (which narrows what's browsed, not
+ * what's measured). `computeOkNgRate` can return a `null` rate for zero
+ * samples, but that branch is unreachable here: this component only ever
+ * renders once `FeedbackList` above has already confirmed `items.length >
+ * 0`, so the stat is always a real number in practice.
  */
 export default function FeedbackList() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -87,9 +102,13 @@ function LoadedFeedbackList({
   onCriteriaChange: (criteria: FeedbackFilterCriteria) => void;
 }) {
   const filtered = useMemo(() => filterFeedback(items, criteria), [items, criteria]);
+  const rate = useMemo(() => computeOkNgRate(items), [items]);
 
   return (
     <div>
+      <p style={{ marginBottom: 16 }}>
+        OK 比例:{rate.okRatePercent}%(OK {rate.okCount} / NG {rate.ngCount},共 {items.length} 筆)
+      </p>
       <fieldset style={{ border: "none", padding: 0, marginBottom: 16 }}>
         <legend style={{ marginBottom: 8 }}>篩選</legend>
         <p>

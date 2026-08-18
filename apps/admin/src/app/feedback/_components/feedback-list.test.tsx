@@ -244,3 +244,39 @@ describe("FeedbackList queue filter (E13-S007)", () => {
     expect(screen.queryByText("尚無回饋。")).not.toBeInTheDocument();
   });
 });
+
+describe("FeedbackList OK/NG rate stat (E13-S014)", () => {
+  const MIXED: import("@/lib/feedback").FeedbackItem[] = [
+    { id: "f1", verdict: "ok", reason: "回答完全解決問題", submittedAt: "2026-08-17T01:00:00.000Z" },
+    { id: "f2", verdict: "ng", reason: "答案不正確", submittedAt: "2026-08-17T02:00:00.000Z" },
+    { id: "f3", verdict: "ok", submittedAt: "2026-08-17T03:00:00.000Z" },
+  ];
+
+  it("shows the OK rate computed from the whole queue once loaded", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: MIXED });
+
+    render(<FeedbackList />);
+
+    expect(await screen.findByText("OK 比例:67%(OK 2 / NG 1,共 3 筆)")).toBeInTheDocument();
+  });
+
+  it("keeps the rate stat unchanged when a filter narrows what's displayed below — it's a whole-queue metric, not a filtered one", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: MIXED });
+
+    render(<FeedbackList />);
+    await screen.findByLabelText("依判斷篩選");
+
+    fireEvent.change(screen.getByLabelText("依判斷篩選"), { target: { value: "ok" } });
+
+    expect(screen.getByText("OK 比例:67%(OK 2 / NG 1,共 3 筆)")).toBeInTheDocument();
+  });
+
+  it("does not show the rate stat while the genuinely-empty production state is showing", async () => {
+    mockedListFeedback.mockResolvedValue({ ok: true, value: [] });
+
+    render(<FeedbackList />);
+
+    await screen.findByText("尚無回饋。");
+    expect(screen.queryByText(/OK 比例/)).not.toBeInTheDocument();
+  });
+});

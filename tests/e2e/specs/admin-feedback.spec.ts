@@ -73,3 +73,18 @@ test("E13-S008: the not-found feedback detail page shows no comment or citation-
   await expect(page.getByText("留言", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("list", { name: "引用回饋" })).toHaveCount(0);
 });
+
+/**
+ * E13-S014 "OK/NG rate dashboard" — same honest-negative shape S007's
+ * filter-controls test above already establishes: an OK/NG rate has no
+ * honest value while the queue is genuinely empty (0/0 is undefined, not
+ * 0%), so the real production coverage here is that the stat does not
+ * appear at all alongside the empty-queue message, rather than showing a
+ * misleading "0%" or "NaN%".
+ */
+test("E13-S014: the genuinely-empty feedback queue shows no OK/NG rate stat", async ({ page }) => {
+  await page.goto("/feedback");
+
+  await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
+  await expect(page.getByText(/OK 比例/)).toHaveCount(0);
+});

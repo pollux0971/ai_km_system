@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterFeedback, getFeedback, listFeedback, type FeedbackItem } from "./feedback";
+import { computeOkNgRate, filterFeedback, getFeedback, listFeedback, type FeedbackItem } from "./feedback";
 
 describe("listFeedback (E11-S016)", () => {
   it("returns an empty list — no real feedback submission mechanism exists yet (E13, Team A's own not-yet-reached epic)", async () => {
@@ -89,6 +89,61 @@ describe("filterFeedback (E13-S007)", () => {
     filterFeedback(FIXTURE, { verdict: "ok" });
 
     expect(FIXTURE).toEqual(copy);
+  });
+});
+
+describe("computeOkNgRate (E13-S014)", () => {
+  it("returns a null rate and zero counts for an empty array — today's real production input, no natural rate for zero samples", () => {
+    expect(computeOkNgRate([])).toEqual({ okCount: 0, ngCount: 0, okRatePercent: null });
+  });
+
+  it("returns 100% when every item is OK", () => {
+    const items: FeedbackItem[] = [
+      { id: "f1", verdict: "ok", submittedAt: "2026-08-18T00:00:00.000Z" },
+      { id: "f2", verdict: "ok", submittedAt: "2026-08-18T01:00:00.000Z" },
+    ];
+
+    expect(computeOkNgRate(items)).toEqual({ okCount: 2, ngCount: 0, okRatePercent: 100 });
+  });
+
+  it("returns 0% when every item is NG", () => {
+    const items: FeedbackItem[] = [
+      { id: "f1", verdict: "ng", submittedAt: "2026-08-18T00:00:00.000Z" },
+    ];
+
+    expect(computeOkNgRate(items)).toEqual({ okCount: 0, ngCount: 1, okRatePercent: 0 });
+  });
+
+  it("computes a rounded percentage for a mixed set (2 OK / 1 NG rounds 66.67% to 67%)", () => {
+    const items: FeedbackItem[] = [
+      { id: "f1", verdict: "ok", submittedAt: "2026-08-18T00:00:00.000Z" },
+      { id: "f2", verdict: "ok", submittedAt: "2026-08-18T01:00:00.000Z" },
+      { id: "f3", verdict: "ng", submittedAt: "2026-08-18T02:00:00.000Z" },
+    ];
+
+    expect(computeOkNgRate(items)).toEqual({ okCount: 2, ngCount: 1, okRatePercent: 67 });
+  });
+
+  it("counts every item exactly once, not just the first few — a silent truncation would slip past a small fixture", () => {
+    const items: FeedbackItem[] = Array.from({ length: 7 }, (_, index) => ({
+      id: `f${index}`,
+      verdict: index < 5 ? ("ok" as const) : ("ng" as const),
+      submittedAt: "2026-08-18T00:00:00.000Z",
+    }));
+
+    expect(computeOkNgRate(items)).toEqual({ okCount: 5, ngCount: 2, okRatePercent: 71 });
+  });
+
+  it("does not mutate the input array", () => {
+    const items: FeedbackItem[] = [
+      { id: "f1", verdict: "ok", submittedAt: "2026-08-18T00:00:00.000Z" },
+      { id: "f2", verdict: "ng", submittedAt: "2026-08-18T01:00:00.000Z" },
+    ];
+    const copy = [...items];
+
+    computeOkNgRate(items);
+
+    expect(items).toEqual(copy);
   });
 });
 

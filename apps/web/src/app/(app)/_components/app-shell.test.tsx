@@ -11,8 +11,12 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
+// ux/enterprise-polish: Sidebar now also calls usePathname() (history
+// rail + active-item highlight) — pure mock addition, assertions below
+// unchanged.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/",
 }));
 
 const session = {

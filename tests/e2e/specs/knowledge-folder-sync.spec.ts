@@ -27,7 +27,13 @@ async function openKnowledgeDetail(page: import("@playwright/test").Page, name: 
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "知識庫" }).click();
   await page.waitForURL((url) => url.pathname === "/knowledge");
-  await page.getByRole("link", { name }).click();
+  // ux/enterprise-polish added a sidebar "歷史對話" rail listing every
+  // active conversation's title — the seeded "產品保固政策詢問"
+  // conversation makes an unscoped getByRole("link", { name }) ambiguous
+  // (substring match) when `name` is "產品保固政策". Scoped to <main>,
+  // matching this codebase's established fix for the same collision
+  // (see home-dashboard.spec.ts's dashboardMain).
+  await page.getByRole("main").getByRole("link", { name }).click();
   await page.waitForURL((url) => /^\/knowledge\/[^/]+$/.test(url.pathname));
 }
 

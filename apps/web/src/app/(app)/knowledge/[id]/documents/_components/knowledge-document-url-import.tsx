@@ -115,7 +115,7 @@ export default function KnowledgeDocumentUrlImport({
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ marginBottom: 24, paddingBottom: 24, borderBottom: "1px solid #e5e5e5" }}
+      style={{ marginBottom: 24, paddingBottom: 24, borderBottom: "1px solid var(--border)" }}
     >
       <label htmlFor={inputId}>從網址匯入</label>
       <br />

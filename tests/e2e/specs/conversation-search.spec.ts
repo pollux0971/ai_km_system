@@ -28,14 +28,23 @@ async function openConversationList(page: import("@playwright/test").Page) {
   await page.waitForURL((url) => url.pathname === "/conversations");
 }
 
+// Scoped to <main> — the sidebar's own "歷史對話" rail lists every active
+// conversation's title unfiltered by this page's own search box, so an
+// unscoped getByText for any of these titles is either ambiguous (still
+// matching) or wrongly non-zero (filtered out of the main list here, but
+// the sidebar still shows it).
+function mainContent(page: import("@playwright/test").Page) {
+  return page.getByRole("main");
+}
+
 test("E03-S023: searching by title filters the list to only matching conversations", async ({ page }) => {
   await openConversationList(page);
 
   await page.getByLabel("搜尋對話").fill("保固");
 
-  await expect(page.getByText("產品保固政策詢問")).toBeVisible();
-  await expect(page.getByText("設備 E-204 錯誤代碼排查")).toHaveCount(0);
-  await expect(page.getByText("Q3 銷售報表彙整")).toHaveCount(0);
+  await expect(mainContent(page).getByText("產品保固政策詢問")).toBeVisible();
+  await expect(mainContent(page).getByText("設備 E-204 錯誤代碼排查")).toHaveCount(0);
+  await expect(mainContent(page).getByText("Q3 銷售報表彙整")).toHaveCount(0);
 });
 
 test("E03-S023: a search matching a single item across pages shows no pagination controls", async ({ page }) => {
@@ -47,7 +56,7 @@ test("E03-S023: a search matching a single item across pages shows no pagination
   // what is now a single-item filtered result.
   await page.getByLabel("搜尋對話").fill("報表");
 
-  await expect(page.getByText("Q3 銷售報表彙整")).toBeVisible();
+  await expect(mainContent(page).getByText("Q3 銷售報表彙整")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "對話列表分頁" })).toHaveCount(0);
 });
 
@@ -65,10 +74,10 @@ test("E03-S023: clearing the search restores the full unfiltered list", async ({
 
   const searchInput = page.getByLabel("搜尋對話");
   await searchInput.fill("保固");
-  await expect(page.getByText("設備 E-204 錯誤代碼排查")).toHaveCount(0);
+  await expect(mainContent(page).getByText("設備 E-204 錯誤代碼排查")).toHaveCount(0);
 
   await searchInput.fill("");
 
-  await expect(page.getByText("產品保固政策詢問")).toBeVisible();
-  await expect(page.getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
+  await expect(mainContent(page).getByText("產品保固政策詢問")).toBeVisible();
+  await expect(mainContent(page).getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
 });

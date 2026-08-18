@@ -5,6 +5,8 @@ import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getConversation, type ConversationMode, type ConversationSummary } from "@/lib/conversations";
 import { ArchiveConversation } from "./archive-conversation";
+import { ConversationModeMenu } from "./conversation-mode-menu";
+import { ConversationRelatedPanel } from "./conversation-related-panel";
 import { DeleteConversation } from "./delete-conversation";
 import { KnowledgeSelector } from "./knowledge-selector";
 import { MessageThread } from "./message-thread";
@@ -122,25 +124,54 @@ export default function ConversationDetail({ id }: { id: string }) {
     );
   }
 
+  /*
+   * ux/enterprise-polish (Claude-style three-zone layout):
+   * - slim header: title/rename on the left, archive/delete on the right;
+   * - center column: the thread + composer, with the mode switch
+   *   relocated into a pop-up menu in the composer's action row
+   *   (ConversationModeMenu wraps the untouched ModeSwitch);
+   * - right rail: knowledge scopes, the Advanced-mode-only model
+   *   selector, and the related-content panel (attachments + citation
+   *   sources).
+   * Every control keeps its own component/behavior — only placement
+   * changed.
+   */
   return (
-    <main style={{ padding: 32 }}>
-      <RenameConversation conversationId={state.conversation.id} initialTitle={state.conversation.title} />
-      <ArchiveConversation conversationId={state.conversation.id} initialArchived={state.conversation.archived ?? false} />
-      <DeleteConversation conversationId={state.conversation.id} title={state.conversation.title} />
-      <ModeSwitch
-        conversationId={state.conversation.id}
-        initialMode={state.conversation.mode}
-        onModeChange={setCurrentMode}
-      />
-      <div style={{ marginTop: 16 }}>
-        <KnowledgeSelector conversationId={state.conversation.id} initialScopes={state.conversation.knowledgeScopes} />
-      </div>
-      {currentMode === "advanced" && (
-        <div style={{ marginTop: 16 }}>
-          <ModelSelector conversationId={state.conversation.id} initialModel={state.conversation.model} />
+    <main className="chat-page">
+      <div className="chat-page-header">
+        <RenameConversation conversationId={state.conversation.id} initialTitle={state.conversation.title} />
+        <div className="chat-page-header-actions">
+          <ArchiveConversation conversationId={state.conversation.id} initialArchived={state.conversation.archived ?? false} />
+          <DeleteConversation conversationId={state.conversation.id} title={state.conversation.title} />
         </div>
-      )}
-      <MessageThread conversationId={state.conversation.id} />
+      </div>
+      <div className="chat-page-body">
+        <div className="chat-page-center">
+          <MessageThread
+            conversationId={state.conversation.id}
+            composerAccessory={
+              <ConversationModeMenu mode={currentMode}>
+                <ModeSwitch
+                  conversationId={state.conversation.id}
+                  initialMode={state.conversation.mode}
+                  onModeChange={setCurrentMode}
+                />
+              </ConversationModeMenu>
+            }
+          />
+        </div>
+        <aside className="chat-rail" aria-label="對話設定">
+          <section className="rail-section" aria-label="知識來源設定">
+            <KnowledgeSelector conversationId={state.conversation.id} initialScopes={state.conversation.knowledgeScopes} />
+          </section>
+          {currentMode === "advanced" && (
+            <section className="rail-section" aria-label="AI 模型設定">
+              <ModelSelector conversationId={state.conversation.id} initialModel={state.conversation.model} />
+            </section>
+          )}
+          <ConversationRelatedPanel conversationId={state.conversation.id} />
+        </aside>
+      </div>
     </main>
   );
 }

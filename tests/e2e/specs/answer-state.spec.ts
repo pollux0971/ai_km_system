@@ -43,7 +43,7 @@ async function openConversation(page: import("@playwright/test").Page) {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
@@ -84,7 +84,7 @@ test("E03-S021: NO_EVIDENCE trigger replaces the reply with fallback content and
   await page.waitForURL((url) => url.pathname === "/");
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL(conversationUrl);
 
   await expect(page.getByRole("main").getByText("查無依據", { exact: true })).toBeVisible();

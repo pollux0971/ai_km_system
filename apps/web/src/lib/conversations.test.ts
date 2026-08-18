@@ -6,6 +6,7 @@ import {
   deleteConversation,
   getConversation,
   getRecentConversations,
+  listActiveConversations,
   listConversations,
   renameConversation,
   setConversationKnowledgeScopes,
@@ -825,6 +826,52 @@ describe("getRecentConversations archived exclusion (E03-S026)", () => {
     expect(recent.ok).toBe(true);
     if (recent.ok) {
       expect(recent.value.some((item) => item.id === created.value.id)).toBe(false);
+    }
+  });
+});
+
+describe("listActiveConversations (ux/enterprise-polish sidebar history)", () => {
+  it("returns every unarchived conversation without pagination", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await listActiveConversations();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBeGreaterThan(CONVERSATIONS_PAGE_SIZE);
+      expect(result.value.some((item) => item.id === created.value.id)).toBe(true);
+    }
+  });
+
+  it("excludes an archived conversation", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await archiveConversation(created.value.id);
+
+    const result = await listActiveConversations();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((item) => item.id === created.value.id)).toBe(false);
+    }
+  });
+
+  it("sorts by lastMessageAt descending — the most recently touched conversation comes first", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await listActiveConversations();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const timestamps = result.value.map((item) => item.lastMessageAt);
+      const sorted = [...timestamps].sort((a, b) => b.localeCompare(a));
+      expect(timestamps).toEqual(sorted);
+      expect(result.value[0]?.id).toBe(created.value.id);
     }
   });
 });

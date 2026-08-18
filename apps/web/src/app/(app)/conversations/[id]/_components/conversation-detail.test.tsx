@@ -103,6 +103,11 @@ describe("ConversationDetail (E03-S002/S003/S004/S005/S006)", () => {
     // E03-S025: same reasoning — DeleteConversation wired in, deeper
     // behavior covered in delete-conversation.test.tsx.
     expect(screen.getByRole("button", { name: "刪除對話" })).toBeInTheDocument();
+    // ux/enterprise-polish: the mode switch moved into the composer's
+    // pop-up menu (ConversationModeMenu) — same ModeSwitch component,
+    // reached through its trigger now. The trigger also reflects the
+    // conversation's current mode.
+    fireEvent.click(await screen.findByRole("button", { name: "對話模式：進階" }));
     expect(screen.getByRole("group", { name: "對話模式" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "進階模式" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("group", { name: "知識來源" })).toBeInTheDocument();
@@ -202,6 +207,9 @@ describe("ConversationDetail (E03-S002/S003/S004/S005/S006)", () => {
     await screen.findByRole("heading", { name: "測試對話", level: 1 });
     expect(screen.queryByRole("combobox", { name: "AI 模型" })).not.toBeInTheDocument();
 
+    // ux/enterprise-polish: open the composer's mode menu first — the
+    // switch buttons live inside it now.
+    fireEvent.click(await screen.findByRole("button", { name: "對話模式：一般" }));
     fireEvent.click(screen.getByRole("button", { name: "進階模式" }));
 
     expect(await screen.findByRole("combobox", { name: "AI 模型" })).toHaveValue("standard");

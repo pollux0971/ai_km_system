@@ -240,6 +240,21 @@ export async function listConversations(page = 1, query?: string, archived = fal
 }
 
 /**
+ * ux/enterprise-polish: the sidebar's conversation-history section — ALL
+ * unarchived conversations, most-recent first. Deliberately NOT paginated
+ * (unlike listConversations, whose page size exists for the /conversations
+ * management page's pagination story); the sidebar scrolls within its own
+ * region instead, matching the ChatGPT-style history rail the user asked
+ * for. Sorted by lastMessageAt descending so the conversation you touched
+ * last is always on top, regardless of raw store insertion order.
+ */
+export async function listActiveConversations(): Promise<Result<ConversationSummary[], ApiError>> {
+  const active = readStore().filter((item) => !(item.archived ?? false));
+  const sorted = [...active].sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
+  return { ok: true, value: sorted };
+}
+
+/**
  * E03-S002: a single conversation for the detail route. `value: null`
  * (not an error) when the id doesn't match anything — "not found" is an
  * expected outcome to render distinctly, not a dependency failure —

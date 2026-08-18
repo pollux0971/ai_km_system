@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useId, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { createLogger } from "@ai-km/logger";
 import { trackEvent } from "@/lib/telemetry";
 import { FileAttachmentPicker } from "./file-attachment-picker";
@@ -73,10 +73,17 @@ export function MessageComposer({
   conversationId,
   onSubmit,
   disabled = false,
+  accessory,
 }: {
   conversationId: string;
   onSubmit?: (content: string, attachmentNames: string[]) => void;
   disabled?: boolean;
+  /**
+   * ux/enterprise-polish: optional extra control rendered in the action
+   * row beside 送出 (the conversation-mode menu). Optional so every
+   * existing call site/test keeps its exact previous rendering.
+   */
+  accessory?: ReactNode;
 }) {
   const inputId = useId();
   const [draft, setDraft] = useState("");
@@ -132,9 +139,10 @@ export function MessageComposer({
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
-      <label htmlFor={inputId}>訊息</label>
-      <br />
+    <form onSubmit={handleSubmit} className="chat-composer">
+      <label htmlFor={inputId} className="visually-hidden">
+        訊息
+      </label>
       <textarea
         id={inputId}
         rows={3}
@@ -143,11 +151,13 @@ export function MessageComposer({
         onKeyDown={handleKeyDown}
         placeholder="輸入訊息…（Enter 送出，Shift+Enter 換行）"
       />
-      <br />
-      <FileAttachmentPicker files={attachments} onFilesSelected={handleFilesSelected} onRemove={handleRemoveAttachment} />
-      <button type="submit" disabled={!canSubmit}>
-        送出
-      </button>
+      <div className="composer-actions">
+        <FileAttachmentPicker files={attachments} onFilesSelected={handleFilesSelected} onRemove={handleRemoveAttachment} />
+        {accessory}
+        <button type="submit" disabled={!canSubmit}>
+          送出
+        </button>
+      </div>
     </form>
   );
 }

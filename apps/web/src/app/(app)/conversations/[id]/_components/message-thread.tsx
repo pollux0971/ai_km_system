@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState, type AnswerState } from "@/lib/answer-state";
@@ -457,7 +457,20 @@ type DisplayMessage =
 
 type LoadState = "loading" | "error" | "loaded";
 
-export function MessageThread({ conversationId }: { conversationId: string }) {
+export function MessageThread({
+  conversationId,
+  composerAccessory,
+}: {
+  conversationId: string;
+  /**
+   * ux/enterprise-polish: optional control(s) the parent wants rendered
+   * inside the composer's action row (the conversation-mode menu lives
+   * there now, Claude-style, instead of in a stack above the thread).
+   * Optional with no default behavior change so every existing test and
+   * call site is untouched.
+   */
+  composerAccessory?: ReactNode;
+}) {
   const currentUser = useOptionalCurrentUser();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
@@ -1054,17 +1067,25 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
   }
 
   return (
-    <div style={{ marginTop: 16 }}>
+    <div className="chat-thread" style={{ marginTop: 16 }}>
       {displayMessages.length === 0 ? (
         <EmptyState message="尚無訊息，開始對話吧。" />
       ) : (
-        <ul>
+        // aria-label (ux/enterprise-polish): the right rail's related-
+        // content panel now shares this page's <main> and has lists of
+        // its own — naming the thread list keeps it uniquely addressable
+        // (for assistive tech and for the E2E messageItems() helpers)
+        // instead of "whichever listitems happen to be inside main".
+        // 「對話串」specifically, NOT「對話訊息」— getByLabel matching is
+        // substring-based, so any label containing「訊息」would collide
+        // with the composer textarea's own「訊息」label.
+        <ul aria-label="對話串">
           {displayMessages.map((entry, index) => {
             const isLastEntry = index === displayMessages.length - 1;
 
             if (entry.kind === "stream-failed") {
               return (
-                <li key={entry.localId}>
+                <li key={entry.localId} data-role="assistant">
                   <span>AI</span>
                   <span role="alert">AI 回覆失敗</span>
                   <button type="button" onClick={() => handleRetryStream(entry.localId, entry.answerState, entry.reviseTarget)}>
@@ -1085,7 +1106,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
             const answerState: AnswerState = entry.kind === "sent" ? (entry.message.state ?? "ANSWERED") : "ANSWERED";
 
             return (
-              <li key={key}>
+              <li key={key} data-role={role}>
                 <span>{roleLabel}</span>
                 <span>
                   <MessageContent
@@ -1279,7 +1300,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
         }}
       />
       {displayMessages.length > 0 && <ConversationContextIndicator messageCount={sentMessageCount} />}
-      <MessageComposer conversationId={conversationId} onSubmit={handleComposerSubmit} disabled={isTurnInFlight} />
+      <MessageComposer conversationId={conversationId} onSubmit={handleComposerSubmit} disabled={isTurnInFlight} accessory={composerAccessory} />
     </div>
   );
 }

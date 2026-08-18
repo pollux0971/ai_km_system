@@ -28,12 +28,22 @@ async function openKnowledgeList(page: import("@playwright/test").Page) {
   await page.waitForURL((url) => url.pathname === "/knowledge");
 }
 
+// ux/enterprise-polish added a sidebar "歷史對話" rail listing every
+// active conversation's title — the seeded "產品保固政策詢問" conversation
+// makes an unscoped getByText("產品保固政策") ambiguous (substring match
+// against both the sidebar link and this page's own knowledge base link).
+// Scoped to <main>, matching this codebase's established fix for the same
+// collision (see home-dashboard.spec.ts's dashboardMain).
+function mainContent(page: import("@playwright/test").Page) {
+  return page.getByRole("main");
+}
+
 test("E05-S002: searching by name filters the list to only matching knowledge bases", async ({ page }) => {
   await openKnowledgeList(page);
 
   await page.getByLabel("搜尋知識庫").fill("保固");
 
-  await expect(page.getByText("產品保固政策")).toBeVisible();
+  await expect(mainContent(page).getByText("產品保固政策")).toBeVisible();
   await expect(page.getByText("設備維修標準作業程序")).toHaveCount(0);
   await expect(page.getByText("人力資源與請假規範")).toHaveCount(0);
 });
@@ -56,6 +66,6 @@ test("E05-S002: clearing the search restores the full unfiltered list", async ({
 
   await searchInput.fill("");
 
-  await expect(page.getByText("產品保固政策")).toBeVisible();
+  await expect(mainContent(page).getByText("產品保固政策")).toBeVisible();
   await expect(page.getByText("設備維修標準作業程序")).toBeVisible();
 });

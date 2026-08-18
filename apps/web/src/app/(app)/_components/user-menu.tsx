@@ -47,8 +47,8 @@ export default function UserMenu() {
             position: "absolute",
             right: 0,
             top: "100%",
-            border: "1px solid #e5e5e5",
-            background: "#ffffff",
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
             padding: 4,
           }}
         >

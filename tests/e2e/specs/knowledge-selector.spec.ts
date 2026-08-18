@@ -29,7 +29,10 @@ test("E03-S004: opening a conversation shows its pre-selected knowledge scopes (
   await page.waitForURL((url) => url.pathname === "/conversations");
 
   // Seed data: "產品保固政策詢問" has knowledgeScopes ["company", "qna"].
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  // Scoped to <main> — the sidebar's own "歷史對話" rail also links to
+  // this same conversation by the same title, so an unscoped getByRole
+  // here is ambiguous.
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
   await expect(page.getByRole("checkbox", { name: "公司知識庫" })).toBeChecked();
@@ -45,7 +48,10 @@ test("E03-S004: checking multiple scopes and leaving one unchecked persists exac
   await page.waitForURL((url) => url.pathname === "/conversations");
 
   // Seed data: "設備 E-204 錯誤代碼排查" has no knowledge scopes selected.
-  await page.getByRole("link", { name: "設備 E-204 錯誤代碼排查" }).click();
+  // Scoped to <main> — the sidebar's own "歷史對話" rail also links to
+  // this same conversation by the same title, so an unscoped getByRole
+  // here is ambiguous.
+  await page.getByRole("main").getByRole("link", { name: "設備 E-204 錯誤代碼排查" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
   const conversationUrl = page.url();
 
@@ -58,7 +64,10 @@ test("E03-S004: checking multiple scopes and leaving one unchecked persists exac
   await page.waitForURL((url) => url.pathname === "/");
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "設備 E-204 錯誤代碼排查" }).click();
+  // Scoped to <main> — the sidebar's own "歷史對話" rail also links to
+  // this same conversation by the same title, so an unscoped getByRole
+  // here is ambiguous.
+  await page.getByRole("main").getByRole("link", { name: "設備 E-204 錯誤代碼排查" }).click();
   await page.waitForURL(conversationUrl);
 
   await expect(page.getByRole("checkbox", { name: "部門知識庫" })).toBeChecked();
@@ -74,7 +83,10 @@ test("E03-S004: unchecking one previously-selected scope leaves the others check
   await page.waitForURL((url) => url.pathname === "/conversations");
 
   // Seed data: "產品保固政策詢問" has knowledgeScopes ["company", "qna"].
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  // Scoped to <main> — the sidebar's own "歷史對話" rail also links to
+  // this same conversation by the same title, so an unscoped getByRole
+  // here is ambiguous.
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
   await page.getByRole("checkbox", { name: "公司知識庫" }).uncheck();

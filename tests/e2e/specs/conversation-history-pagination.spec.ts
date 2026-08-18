@@ -35,12 +35,21 @@ async function openConversationList(page: import("@playwright/test").Page) {
   await page.waitForURL((url) => url.pathname === "/conversations");
 }
 
+// Scoped to <main> — the sidebar's own "歷史對話" rail lists every active
+// conversation's title regardless of this page's pagination, so an
+// unscoped getByText for any of these titles is either ambiguous (when
+// also on the current page) or wrongly non-zero (when checking absence
+// from a page the sidebar still shows it on).
+function mainContent(page: import("@playwright/test").Page) {
+  return page.getByRole("main");
+}
+
 test("E03-S022: page 1 shows the 2 most recent conversations, with 上一頁 disabled", async ({ page }) => {
   await openConversationList(page);
 
-  await expect(page.getByText("產品保固政策詢問")).toBeVisible();
-  await expect(page.getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
-  await expect(page.getByText("Q3 銷售報表彙整")).toHaveCount(0);
+  await expect(mainContent(page).getByText("產品保固政策詢問")).toBeVisible();
+  await expect(mainContent(page).getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
+  await expect(mainContent(page).getByText("Q3 銷售報表彙整")).toHaveCount(0);
 
   await expect(page.getByText("第 1 頁，共 2 頁")).toBeVisible();
   await expect(page.getByRole("button", { name: "上一頁" })).toBeDisabled();
@@ -52,9 +61,9 @@ test("E03-S022: 下一頁 navigates to page 2, showing the remaining conversatio
 
   await page.getByRole("button", { name: "下一頁" }).click();
 
-  await expect(page.getByText("Q3 銷售報表彙整")).toBeVisible();
-  await expect(page.getByText("產品保固政策詢問")).toHaveCount(0);
-  await expect(page.getByText("設備 E-204 錯誤代碼排查")).toHaveCount(0);
+  await expect(mainContent(page).getByText("Q3 銷售報表彙整")).toBeVisible();
+  await expect(mainContent(page).getByText("產品保固政策詢問")).toHaveCount(0);
+  await expect(mainContent(page).getByText("設備 E-204 錯誤代碼排查")).toHaveCount(0);
 
   await expect(page.getByText("第 2 頁，共 2 頁")).toBeVisible();
   await expect(page.getByRole("button", { name: "下一頁" })).toBeDisabled();
@@ -65,12 +74,12 @@ test("E03-S022: 上一頁 returns from page 2 back to page 1", async ({ page }) 
   await openConversationList(page);
 
   await page.getByRole("button", { name: "下一頁" }).click();
-  await expect(page.getByText("Q3 銷售報表彙整")).toBeVisible();
+  await expect(mainContent(page).getByText("Q3 銷售報表彙整")).toBeVisible();
 
   await page.getByRole("button", { name: "上一頁" }).click();
 
-  await expect(page.getByText("產品保固政策詢問")).toBeVisible();
-  await expect(page.getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
-  await expect(page.getByText("Q3 銷售報表彙整")).toHaveCount(0);
+  await expect(mainContent(page).getByText("產品保固政策詢問")).toBeVisible();
+  await expect(mainContent(page).getByText("設備 E-204 錯誤代碼排查")).toBeVisible();
+  await expect(mainContent(page).getByText("Q3 銷售報表彙整")).toHaveCount(0);
   await expect(page.getByText("第 1 頁，共 2 頁")).toBeVisible();
 });

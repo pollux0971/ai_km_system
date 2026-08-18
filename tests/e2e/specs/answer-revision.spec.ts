@@ -42,7 +42,7 @@ async function openConversation(page: import("@playwright/test").Page) {
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
@@ -96,7 +96,7 @@ test("E03-S020: revision history survives leaving and returning to the conversat
   await page.waitForURL((url) => url.pathname === "/");
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL(conversationUrl);
 
   await expect(page.getByText("先前版本（1）")).toBeVisible();

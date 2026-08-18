@@ -29,7 +29,7 @@ async function openConversationWithCitation(page: import("@playwright/test").Pag
   await login(page);
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
-  await page.getByRole("link", { name: "產品保固政策詢問" }).click();
+  await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
   await page.getByLabel("訊息").fill("保固期限是多久？");

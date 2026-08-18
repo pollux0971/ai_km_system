@@ -28,7 +28,7 @@ export default function QuickEntryCards() {
             style={{
               display: "block",
               minWidth: 200,
-              border: "1px solid #e5e5e5",
+              border: "1px solid var(--border)",
               borderRadius: 8,
               padding: 16,
               textDecoration: "none",

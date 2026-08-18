@@ -172,7 +172,7 @@ export default function ConversationList() {
         <>
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {state.items.map((item) => (
-              <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+              <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
                 <Link href={`/conversations/${item.id}`}>
                   <strong>{item.title}</strong>
                 </Link>

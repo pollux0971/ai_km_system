@@ -293,3 +293,55 @@ describe("computeAverageLatencyMs (E13-S013)", () => {
     expect(computeAverageLatencyMs(events)).toBe(1000);
   });
 });
+
+// E13-S016 privacy-safe analytics fields. All of E13-S001~S015's
+// telemetry/analytics call sites were individually grepped clean of free
+// text (see this story's EVIDENCE for the full field-by-field audit) —
+// every current caller of recordUsageEvent passes only literal objects
+// containing answerState/citationCount/latencyMs, which TypeScript's
+// excess-property check on object LITERALS already rejects at compile
+// time if a stray field like `comment` were added. That compile-time
+// protection does NOT apply once a caller builds the details object in a
+// variable first — these tests prove recordUsageEvent itself is the
+// enforcement point, not just today's caller discipline, by deliberately
+// bypassing the type system the way a variable-built details object
+// would.
+describe("recordUsageEvent privacy-safe field allowlist (E13-S016)", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("never persists an unexpected field even when the caller's details object carries one", () => {
+    const contaminatedDetails = {
+      answerState: "ANSWERED",
+      citationCount: 2,
+      latencyMs: 500,
+      comment: "使用者的敏感留言原文，不該出現在 analytics store",
+      answerContent: "回答的完整原文，同樣不該出現",
+    } as unknown as { answerState: "ANSWERED"; citationCount: number; latencyMs: number };
+
+    recordUsageEvent("rag_answer_outcome", "u1", contaminatedDetails);
+
+    const raw = window.sessionStorage.getItem("ai-km:mock-usage-events");
+    expect(raw).not.toBeNull();
+    expect(raw).not.toContain("敏感留言原文");
+    expect(raw).not.toContain("回答的完整原文");
+    expect(raw).not.toContain("comment");
+    expect(raw).not.toContain("answerContent");
+
+    const [persisted] = listUsageEvents();
+    if (!persisted) throw new Error("expected a persisted event");
+    expect(Object.keys(persisted).sort()).toEqual(["answerState", "citationCount", "latencyMs", "name", "occurredAt", "userId"].sort());
+    expect(persisted.answerState).toBe("ANSWERED");
+    expect(persisted.citationCount).toBe(2);
+    expect(persisted.latencyMs).toBe(500);
+  });
+
+  it("persists only name/userId/occurredAt for events given no details at all — no stray keys from a previous call leak in", () => {
+    recordUsageEvent("conversation_message_sent", "u1");
+
+    const [persisted] = listUsageEvents();
+    if (!persisted) throw new Error("expected a persisted event");
+    expect(Object.keys(persisted).sort()).toEqual(["name", "occurredAt", "userId"].sort());
+  });
+});

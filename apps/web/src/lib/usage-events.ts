@@ -171,8 +171,27 @@ function writeStore(events: UsageEvent[]): void {
  *
  * `details` is optional and only meaningful for `"rag_answer_outcome"` —
  * `conversation_message_sent`/`conversation_created` callers pass
- * nothing, leaving `answerState`/`citationCount` undefined on the
- * persisted event rather than defaulted to some stray value.
+ * nothing, leaving `answerState`/`citationCount`/`latencyMs` undefined on
+ * the persisted event rather than defaulted to some stray value.
+ *
+ * E13-S016 privacy-safe-analytics-fields audit: this is the one function
+ * in the codebase that actually persists a `UsageEvent` into the
+ * queryable store a future DAU/rate aggregation reads back — the real
+ * "analytics" surface this story's name refers to (as opposed to
+ * trackEvent, which is fire-and-forget UI telemetry with 50+ unrelated
+ * call sites outside this epic's domain, already grepped clean of free
+ * text for every feedback/comment-adjacent call site and out of this
+ * story's Domain Ownership Boundary to rewrite). Every current call site
+ * only ever passes `answerState`/`citationCount`/`latencyMs` — but that
+ * safety previously relied entirely on TypeScript's excess-property
+ * check on object LITERALS, which does not apply once a caller builds
+ * `details` in a variable first. Explicitly picking the three known-safe
+ * fields below (instead of spreading `...details`) makes this function
+ * itself the enforcement point: even a future call site that
+ * accidentally passes an object carrying `comment`/`answerContent` (e.g.
+ * copy-pasted from feedback-knowledge-candidates.ts, which legitimately
+ * DOES carry free text as a disclosed human-review artifact, not
+ * analytics) cannot leak that text into this persisted store.
  */
 export function recordUsageEvent(
   name: UsageEventName,
@@ -181,7 +200,14 @@ export function recordUsageEvent(
 ): void {
   try {
     const events = readStore();
-    events.push({ name, userId, occurredAt: new Date().toISOString(), ...details });
+    events.push({
+      name,
+      userId,
+      occurredAt: new Date().toISOString(),
+      answerState: details?.answerState,
+      citationCount: details?.citationCount,
+      latencyMs: details?.latencyMs,
+    });
     writeStore(events);
   } catch {
     // Swallowed deliberately — see doc comment above.

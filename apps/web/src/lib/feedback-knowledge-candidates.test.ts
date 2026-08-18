@@ -70,6 +70,27 @@ describe("submitFeedbackKnowledgeCandidate / listFeedbackKnowledgeCandidates (E1
     expect(listFeedbackKnowledgeCandidates()).toEqual([]);
   });
 
+  // Isolates the `feedback !== "NG"` guard from the `feedbackReason ==
+  // null` guard below it. The test above (OK feedback, no reason) can't
+  // tell the two apart — an OK message never legitimately has a reason
+  // in production, but VALIDATION_ERROR is thrown either way, so the
+  // first guard's own effect was previously unproven (a reviewer's
+  // adversarial mutation stripping the "NG" check left all 9 tests
+  // passing). This fixture deliberately gives an OK message a
+  // production-impossible reason+comment pair, purely to prove the
+  // first guard rejects it on its own, independent of the second.
+  it("fails closed with VALIDATION_ERROR for an OK-feedback message even when it also has a reason and comment (isolates the feedback!==NG guard from the reason guard)", async () => {
+    const message = makeAssistantMessage({ feedback: "OK", feedbackReason: "INCORRECT", feedbackComment: "特別有幫助" });
+
+    const result = await submitFeedbackKnowledgeCandidate(message);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+    expect(listFeedbackKnowledgeCandidates()).toEqual([]);
+  });
+
   it("fails closed with VALIDATION_ERROR when NG feedback has no reason yet", async () => {
     const message = makeAssistantMessage({ feedback: "NG", feedbackComment: "有些地方怪怪的" });
 

@@ -66,8 +66,34 @@ import { getConversation, touchConversationLastMessage } from "./conversations";
  * changes for this: it already took `verdict: AnswerFeedbackVerdict`
  * generically and does a plain upsert regardless of value, so widening
  * the type is the entire lib-level change.
+ *
+ * `feedbackReason` (E13-S003 "feedback reason selector") is a SEPARATE
+ * optional field from `feedback`, not folded into a combined verdict —
+ * neither SOURCE_BASELINE nor the E13 epic file gives this story any
+ * content beyond its title (confirmed: the epic section for E13-S003 is
+ * the same generic boilerplate every E13 story shares, with zero
+ * story-specific fields/options named anywhere in
+ * AI_KM_BMAD_High_Granularity/). `FEEDBACK_REASONS`'s 4 options below are
+ * therefore a Team-A ASSUMPTION (documented in EVIDENCE), the smallest
+ * set directly inferable from the story title itself, not an invented
+ * contract — this is UI copy, not an endpoint/schema/permission the Anti-
+ * hallucination Guard would forbid guessing. Kept as its own field
+ * (rather than widening `feedback` to `"OK" | "NG" | "NG:INCORRECT" | ...`)
+ * because a reason only ever qualifies an already-given NG verdict; it is
+ * never itself a verdict, and folding it in would force every OK-feedback
+ * fixture to reason about a dimension that never applies to it.
  */
 export type AnswerFeedbackVerdict = "OK" | "NG";
+
+export const FEEDBACK_REASONS = ["INCORRECT", "INCOMPLETE", "OFF_TOPIC", "OTHER"] as const;
+export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
+
+export const FEEDBACK_REASON_LABELS: Record<FeedbackReason, string> = {
+  INCORRECT: "答案不正確",
+  INCOMPLETE: "答案不完整",
+  OFF_TOPIC: "答案離題",
+  OTHER: "其他",
+};
 
 export interface Message {
   id: string;
@@ -79,6 +105,7 @@ export interface Message {
   revisions?: string[];
   state?: AnswerState;
   feedback?: AnswerFeedbackVerdict;
+  feedbackReason?: FeedbackReason;
 }
 
 const STORAGE_KEY = "ai-km:mock-messages";
@@ -268,6 +295,41 @@ export async function submitAnswerFeedback(messageId: string, verdict: AnswerFee
   }
 
   const updated: Message = { ...existing, feedback: verdict };
+  writeStore(messages.map((message) => (message.id === messageId ? updated : message)));
+
+  return { ok: true, value: updated };
+}
+
+/**
+ * E13-S003 "feedback reason selector". A reason only ever qualifies an
+ * NG verdict that has already been recorded via submitAnswerFeedback —
+ * this function fails closed with VALIDATION_ERROR (Functional AC 2:
+ * "缺少必要輸入...不產生部分 side effect") for a message whose current
+ * `feedback` isn't `"NG"`, covering both "no feedback given yet" and
+ * "OK was given" in one check, rather than only checking `feedback ==
+ * null` and silently letting an OK-feedback message grow a reason that
+ * message-thread.tsx's UI would never let a real user reach in the
+ * first place (mirrors submitAnswerFeedback's own "role !== assistant"
+ * fail-closed check for the same "caller shouldn't have been able to
+ * construct this through the real UI" reasoning).
+ *
+ * Same idempotent-upsert shape as submitAnswerFeedback/reviseMessage:
+ * updates the row in place, allows switching to a different reason
+ * (data-layer has no additional guard against it — same trust boundary
+ * S001/S002 already established, message-thread.tsx's UI is what
+ * enforces "no changing the reason once submitted").
+ */
+export async function submitFeedbackReason(messageId: string, reason: FeedbackReason): Promise<Result<Message, ApiError>> {
+  const messages = readStore();
+  const existing = messages.find((message) => message.id === messageId);
+  if (!existing) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } };
+  }
+  if (existing.feedback !== "NG") {
+    return { ok: false, error: { code: "VALIDATION_ERROR", message: "只能為「沒有幫助」的回饋選擇原因。" } };
+  }
+
+  const updated: Message = { ...existing, feedbackReason: reason };
   writeStore(messages.map((message) => (message.id === messageId ? updated : message)));
 
   return { ok: true, value: updated };

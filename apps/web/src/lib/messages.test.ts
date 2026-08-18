@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConversation, getConversation } from "./conversations";
-import { deleteMessagesForConversation, listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback } from "./messages";
+import { deleteMessagesForConversation, listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback, submitFeedbackReason } from "./messages";
 
 describe("listMessages (E03-S009)", () => {
   it("resolves with an empty list for a conversation with no messages", async () => {
@@ -647,6 +647,162 @@ describe("submitAnswerFeedback NG verdict (E13-S002)", () => {
     if (list.ok) {
       expect(list.value).toHaveLength(1);
       expect(list.value[0]?.feedback).toBe("NG");
+    }
+  });
+});
+
+describe("submitFeedbackReason (E13-S003)", () => {
+  it("sets feedbackReason on a message that already has NG feedback and persists it", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "NG");
+
+    const result = await submitFeedbackReason(reply.value.id, "INCORRECT");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.feedbackReason).toBe("INCORRECT");
+      expect(result.value.feedback).toBe("NG");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedbackReason).toBe("INCORRECT");
+    }
+  });
+
+  it("fails closed with NOT_FOUND for an id that doesn't exist", async () => {
+    const result = await submitFeedbackReason("does-not-exist", "INCORRECT");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR when no feedback has been given yet, and does not set feedbackReason", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+
+    const result = await submitFeedbackReason(reply.value.id, "INCORRECT");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedbackReason).toBeUndefined();
+    }
+  });
+
+  it("fails closed with VALIDATION_ERROR when OK (not NG) feedback was given, and does not set feedbackReason", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const result = await submitFeedbackReason(reply.value.id, "INCORRECT");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === reply.value.id)?.feedbackReason).toBeUndefined();
+    }
+  });
+
+  it("is idempotent — submitting the same reason twice does not create a duplicate record or change the outcome", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "NG");
+
+    await submitFeedbackReason(reply.value.id, "INCOMPLETE");
+    const second = await submitFeedbackReason(reply.value.id, "INCOMPLETE");
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value.feedbackReason).toBe("INCOMPLETE");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.feedbackReason).toBe("INCOMPLETE");
+    }
+  });
+
+  it("upserts the same row when switching reasons — the store never accumulates more than one reason record per message", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "NG");
+
+    await submitFeedbackReason(reply.value.id, "INCOMPLETE");
+    const switched = await submitFeedbackReason(reply.value.id, "OFF_TOPIC");
+
+    expect(switched.ok).toBe(true);
+    if (switched.ok) {
+      expect(switched.value.feedbackReason).toBe("OFF_TOPIC");
+    }
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value).toHaveLength(1);
+      expect(list.value[0]?.feedbackReason).toBe("OFF_TOPIC");
+    }
+  });
+
+  it("does not affect other messages' feedbackReason", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const first = await receiveAssistantReply(conversation.value.id, "第一則回覆");
+    const second = await receiveAssistantReply(conversation.value.id, "第二則回覆");
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    await submitAnswerFeedback(first.value.id, "NG");
+    await submitAnswerFeedback(second.value.id, "NG");
+    await submitFeedbackReason(first.value.id, "INCORRECT");
+
+    const list = await listMessages(conversation.value.id);
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.value.find((m) => m.id === second.value.id)?.feedbackReason).toBeUndefined();
     }
   });
 });

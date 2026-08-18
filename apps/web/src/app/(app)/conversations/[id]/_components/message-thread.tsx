@@ -6,7 +6,19 @@ import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState, type AnswerState } from "@/lib/answer-state";
 import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
-import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback, type AnswerFeedbackVerdict, type Message } from "@/lib/messages";
+import {
+  FEEDBACK_REASONS,
+  FEEDBACK_REASON_LABELS,
+  listMessages,
+  receiveAssistantReply,
+  reviseMessage,
+  sendMessage,
+  submitAnswerFeedback,
+  submitFeedbackReason,
+  type AnswerFeedbackVerdict,
+  type FeedbackReason,
+  type Message,
+} from "@/lib/messages";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
@@ -389,6 +401,26 @@ const logger = createLogger("web:message-thread");
  * only flips to its "已回饋：..." form when it's the one that matches the
  * recorded verdict — the other stays at its plain label, just disabled,
  * so the UI never claims a verdict was given that wasn't.
+ *
+ * E13-S003 "feedback reason selector" renders a reason `<fieldset>` of
+ * radio options (FEEDBACK_REASONS) ONLY once `entry.message.feedback ===
+ * "NG"` — a reason only ever qualifies an already-given NG verdict (see
+ * lib/messages.ts's submitFeedbackReason doc comment), so it never shows
+ * for OK feedback or before any feedback has been given. Selecting an
+ * option is local-only (`selectedReasons`, keyed by messageId) until the
+ * separate "送出原因" submit button is pressed — Functional AC 2 ("缺少
+ * 必要輸入...fail-closed") is satisfied by disabling that submit button
+ * until a reason is selected, so there is no way to trigger a
+ * no-reason-selected submission through the real UI. Once
+ * `entry.message.feedbackReason` is persisted, the whole fieldset
+ * (every radio + the submit button) renders `disabled` and shows the
+ * chosen label as static confirmation text — same "no undo" pattern as
+ * the OK/NG buttons themselves, and the same lesson E13-S001's
+ * independent review taught this codebase: disabled state must be
+ * something a test can assert (`.toBeDisabled()`), not just inferred
+ * from visible text. `feedbackReasonPendingIds`/`feedbackReasonErrorIds`
+ * (keyed by messageId, same shape as `feedbackPendingIds`/
+ * `feedbackErrorIds`) track only the transient in-flight/error UI.
  */
 type DisplayMessage =
   | { kind: "sent"; message: Message }
@@ -408,6 +440,9 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
   const [copyStatuses, setCopyStatuses] = useState<Map<string, "pending" | "copied" | "failed">>(new Map());
   const [feedbackPendingIds, setFeedbackPendingIds] = useState<Set<string>>(new Set());
   const [feedbackErrorIds, setFeedbackErrorIds] = useState<Set<string>>(new Set());
+  const [selectedReasons, setSelectedReasons] = useState<Map<string, FeedbackReason>>(new Map());
+  const [feedbackReasonPendingIds, setFeedbackReasonPendingIds] = useState<Set<string>>(new Set());
+  const [feedbackReasonErrorIds, setFeedbackReasonErrorIds] = useState<Set<string>>(new Set());
   const stoppedRef = useRef<Set<string>>(new Set());
   const copyResetTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -755,6 +790,48 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
     );
   }
 
+  function handleSelectReason(messageId: string, reason: FeedbackReason) {
+    setSelectedReasons((previous) => new Map(previous).set(messageId, reason));
+  }
+
+  async function handleSubmitFeedbackReason(messageId: string) {
+    const reason = selectedReasons.get(messageId);
+    if (!reason) return;
+
+    const correlationId = crypto.randomUUID();
+    logger.info("submitting feedback reason", { correlationId, conversationId, messageId, reason });
+    trackEvent("conversation_feedback_reason_attempt", { correlationId, properties: { conversationId, messageId, reason } });
+
+    setFeedbackReasonPendingIds((previous) => new Set(previous).add(messageId));
+    setFeedbackReasonErrorIds((previous) => {
+      if (!previous.has(messageId)) return previous;
+      const next = new Set(previous);
+      next.delete(messageId);
+      return next;
+    });
+
+    const result = await submitFeedbackReason(messageId, reason);
+
+    setFeedbackReasonPendingIds((previous) => {
+      const next = new Set(previous);
+      next.delete(messageId);
+      return next;
+    });
+
+    if (!result.ok) {
+      logger.error("failed to submit feedback reason", { correlationId, conversationId, messageId, reason, code: result.error.code });
+      trackEvent("conversation_feedback_reason_failure", { correlationId, properties: { conversationId, messageId, reason, code: result.error.code } });
+      setFeedbackReasonErrorIds((previous) => new Set(previous).add(messageId));
+      return;
+    }
+
+    logger.info("feedback reason submitted", { correlationId, conversationId, messageId, reason });
+    trackEvent("conversation_feedback_reason_success", { correlationId, properties: { conversationId, messageId, reason } });
+    setDisplayMessages((previous) =>
+      previous.map((entry) => (entry.kind === "sent" && entry.message.id === messageId ? { kind: "sent", message: result.value } : entry)),
+    );
+  }
+
   function handleCitationClick(citationId: string) {
     setPreviewCitationId(citationId);
   }
@@ -862,6 +939,40 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
                       {entry.message.feedback === "NG" ? "已回饋：沒有幫助" : "沒有幫助"}
                     </button>
                     {feedbackErrorIds.has(entry.message.id) && <span role="alert">回饋送出失敗，請再試一次。</span>}
+                    {entry.message.feedback === "NG" && (
+                      <fieldset>
+                        <legend>為什麼沒有幫助？</legend>
+                        {FEEDBACK_REASONS.map((reason) => (
+                          <label key={reason}>
+                            <input
+                              type="radio"
+                              name={`feedback-reason-${entry.message.id}`}
+                              value={reason}
+                              checked={
+                                entry.message.feedbackReason === reason ||
+                                (entry.message.feedbackReason == null && selectedReasons.get(entry.message.id) === reason)
+                              }
+                              onChange={() => handleSelectReason(entry.message.id, reason)}
+                              disabled={entry.message.feedbackReason != null || feedbackReasonPendingIds.has(entry.message.id)}
+                            />
+                            {FEEDBACK_REASON_LABELS[reason]}
+                          </label>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => handleSubmitFeedbackReason(entry.message.id)}
+                          disabled={
+                            entry.message.feedbackReason != null ||
+                            feedbackReasonPendingIds.has(entry.message.id) ||
+                            selectedReasons.get(entry.message.id) == null
+                          }
+                        >
+                          送出原因
+                        </button>
+                        {entry.message.feedbackReason != null && <span>已選擇原因：{FEEDBACK_REASON_LABELS[entry.message.feedbackReason]}</span>}
+                        {feedbackReasonErrorIds.has(entry.message.id) && <span role="alert">原因送出失敗，請再試一次。</span>}
+                      </fieldset>
+                    )}
                   </>
                 )}
                 {entry.kind === "sent" && role === "assistant" && isLastEntry && (

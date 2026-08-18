@@ -4,7 +4,16 @@ import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
 import { MOCK_FILE_PROCESSING_FAILURE_TRIGGER, simulateFileProcessing } from "@/lib/file-processing";
 import { runGenerationPhases } from "@/lib/generation-status";
-import { listMessages, receiveAssistantReply, reviseMessage, sendMessage, submitAnswerFeedback } from "@/lib/messages";
+import {
+  listMessages,
+  receiveAssistantReply,
+  reviseMessage,
+  sendMessage,
+  submitAnswerFeedback,
+  submitFeedbackReason,
+  type AnswerFeedbackVerdict,
+  type FeedbackReason,
+} from "@/lib/messages";
 import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 
@@ -14,6 +23,17 @@ vi.mock("@/lib/messages", () => ({
   receiveAssistantReply: vi.fn(),
   reviseMessage: vi.fn(),
   submitAnswerFeedback: vi.fn(),
+  submitFeedbackReason: vi.fn(),
+  // Plain data, not vi.fn() — mirrors this file's established convention
+  // (see the generation-status mock's own doc comment) of duplicating
+  // inert constant/label values rather than vi.importActual'ing them.
+  FEEDBACK_REASONS: ["INCORRECT", "INCOMPLETE", "OFF_TOPIC", "OTHER"],
+  FEEDBACK_REASON_LABELS: {
+    INCORRECT: "答案不正確",
+    INCOMPLETE: "答案不完整",
+    OFF_TOPIC: "答案離題",
+    OTHER: "其他",
+  },
 }));
 
 vi.mock("@/lib/streaming", () => ({
@@ -60,6 +80,7 @@ const mockedSendMessage = vi.mocked(sendMessage);
 const mockedReceiveAssistantReply = vi.mocked(receiveAssistantReply);
 const mockedReviseMessage = vi.mocked(reviseMessage);
 const mockedSubmitAnswerFeedback = vi.mocked(submitAnswerFeedback);
+const mockedSubmitFeedbackReason = vi.mocked(submitFeedbackReason);
 const mockedStreamAssistantReply = vi.mocked(streamAssistantReply);
 const mockedShouldSimulateStreamDisconnect = vi.mocked(shouldSimulateStreamDisconnect);
 const mockedRunGenerationPhases = vi.mocked(runGenerationPhases);
@@ -110,6 +131,7 @@ beforeEach(() => {
   mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
   mockedReviseMessage.mockResolvedValue({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
   mockedSubmitAnswerFeedback.mockReset();
+  mockedSubmitFeedbackReason.mockReset();
 });
 
 function submitViaComposer(content: string) {
@@ -2136,6 +2158,169 @@ describe("MessageThread answer NG feedback (E13-S002)", () => {
     expect(screen.getByRole("button", { name: "沒有幫助" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "有幫助" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "已回饋：沒有幫助" })).not.toBeInTheDocument();
+  });
+});
+
+describe("MessageThread feedback reason selector (E13-S003)", () => {
+  const DEFAULT_NG_MESSAGE: {
+    id: string;
+    conversationId: string;
+    role: "assistant";
+    content: string;
+    attachmentNames: string[];
+    createdAt: string;
+    feedback: AnswerFeedbackVerdict;
+    feedbackReason?: FeedbackReason;
+  } = {
+    id: "a1",
+    conversationId: "c1",
+    role: "assistant",
+    content: "第一輪回覆",
+    attachmentNames: [],
+    createdAt: "2026-08-14T00:00:01.000Z",
+    feedback: "NG",
+  };
+
+  function ngMessage(overrides: Partial<typeof DEFAULT_NG_MESSAGE> = {}) {
+    return { ...DEFAULT_NG_MESSAGE, ...overrides };
+  }
+
+  it("does not render a reason selector when no feedback has been given yet", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [SENT_USER_MESSAGE, { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" }],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.queryByText("為什麼沒有幫助？")).not.toBeInTheDocument();
+  });
+
+  it("does not render a reason selector when OK feedback was given", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [SENT_USER_MESSAGE, ngMessage({ feedback: "OK" })],
+    });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.queryByText("為什麼沒有幫助？")).not.toBeInTheDocument();
+  });
+
+  it("renders a reason selector with 4 radio options once NG feedback has been given, and the submit button starts disabled", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, ngMessage()] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByText("為什麼沒有幫助？")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "答案不正確" })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: "答案不完整" })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: "答案離題" })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: "其他" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "送出原因" })).toBeDisabled();
+  });
+
+  it("enables the submit button once a reason is selected, and clicking it submits that reason", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, ngMessage()] });
+    mockedSubmitFeedbackReason.mockResolvedValue({ ok: true, value: ngMessage({ feedbackReason: "INCORRECT" }) });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("radio", { name: "答案不正確" }));
+    expect(screen.getByRole("button", { name: "送出原因" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "送出原因" }));
+
+    await waitFor(() => expect(mockedSubmitFeedbackReason).toHaveBeenCalledWith("a1", "INCORRECT"));
+  });
+
+  it("locks the whole selector (every radio + submit button disabled) and shows the chosen label once a reason has been recorded", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, ngMessage({ feedbackReason: "OFF_TOPIC" })] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    expect(screen.getByRole("radio", { name: "答案不正確" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "答案不完整" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "答案離題" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "其他" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "送出原因" })).toBeDisabled();
+    expect(screen.getByText("已選擇原因：答案離題")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "答案離題" })).toBeChecked();
+  });
+
+  it("clicking the already-disabled submit button after a reason is recorded does not call submitFeedbackReason again", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, ngMessage({ feedbackReason: "OTHER" })] });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("button", { name: "送出原因" }));
+    expect(mockedSubmitFeedbackReason).not.toHaveBeenCalled();
+  });
+
+  it("disables all radios and the submit button while a reason submission is in flight", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, ngMessage()] });
+    let resolveSubmit!: (value: Awaited<ReturnType<typeof submitFeedbackReason>>) => void;
+    mockedSubmitFeedbackReason.mockReturnValue(new Promise((resolve) => (resolveSubmit = resolve)));
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("radio", { name: "答案不完整" }));
+    fireEvent.click(screen.getByRole("button", { name: "送出原因" }));
+
+    expect(screen.getByRole("radio", { name: "答案不完整" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "答案不正確" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "送出原因" })).toBeDisabled();
+
+    resolveSubmit({ ok: true, value: ngMessage({ feedbackReason: "INCOMPLETE" }) });
+    await waitFor(() => expect(screen.getByText("已選擇原因：答案不完整")).toBeInTheDocument());
+  });
+
+  it("shows a distinct error message and re-enables the selector (for retry) when a reason submission fails", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, ngMessage()] });
+    mockedSubmitFeedbackReason.mockResolvedValue({ ok: false, error: { code: "VALIDATION_ERROR", message: "只能為「沒有幫助」的回饋選擇原因。" } });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第一輪回覆");
+
+    fireEvent.click(screen.getByRole("radio", { name: "答案離題" }));
+    fireEvent.click(screen.getByRole("button", { name: "送出原因" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("原因送出失敗，請再試一次。");
+    expect(screen.getByRole("radio", { name: "答案離題" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "送出原因" })).toBeEnabled();
+    expect(screen.queryByText(/已選擇原因/)).not.toBeInTheDocument();
+  });
+
+  it("selecting/submitting a reason for one message does not affect a different message's selector", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        ngMessage({ id: "a1", content: "第一輪回覆" }),
+        { id: "m2", conversationId: "c1", role: "user", content: "第二個問題", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
+        ngMessage({ id: "a2", content: "第二輪回覆", createdAt: "2026-08-14T00:00:03.000Z" }),
+      ],
+    });
+    mockedSubmitFeedbackReason.mockResolvedValue({ ok: true, value: ngMessage({ id: "a1", content: "第一輪回覆", feedbackReason: "INCORRECT" }) });
+
+    render(<MessageThread conversationId="c1" />);
+    await screen.findByText("第二輪回覆");
+
+    const items = screen.getAllByRole("listitem");
+    fireEvent.click(within(items[1]!).getByRole("radio", { name: "答案不正確" }));
+    fireEvent.click(within(items[1]!).getByRole("button", { name: "送出原因" }));
+
+    await waitFor(() => expect(within(items[1]!).getByText("已選擇原因：答案不正確")).toBeInTheDocument());
+    // a2's selector: completely untouched, still fully interactive.
+    expect(within(items[3]!).getByRole("radio", { name: "答案不正確" })).toBeEnabled();
+    expect(within(items[3]!).queryByText(/已選擇原因/)).not.toBeInTheDocument();
   });
 });
 

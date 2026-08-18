@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  computeAverageLatencyMs,
   computeDAU,
   computeQuestionsAsked,
   countDistinctCitations,
@@ -127,6 +128,36 @@ describe("recordUsageEvent / listUsageEvents — rag_answer_outcome (E13-S011)",
   });
 });
 
+describe("recordUsageEvent / listUsageEvents — latencyMs (E13-S013)", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("persists latencyMs alongside answerState/citationCount on a rag_answer_outcome event", () => {
+    recordUsageEvent("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 1, latencyMs: 1234 });
+
+    const [event] = listUsageEvents();
+    if (!event) throw new Error("expected an event");
+    expect(event.latencyMs).toBe(1234);
+  });
+
+  it("persists a zero latencyMs distinctly, not treated as absent", () => {
+    recordUsageEvent("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 0, latencyMs: 0 });
+
+    const [event] = listUsageEvents();
+    if (!event) throw new Error("expected an event");
+    expect(event.latencyMs).toBe(0);
+  });
+
+  it("leaves latencyMs undefined for events recorded without it, not defaulted to 0", () => {
+    recordUsageEvent("conversation_message_sent", "u1");
+
+    const [event] = listUsageEvents();
+    if (!event) throw new Error("expected an event");
+    expect(event.latencyMs).toBeUndefined();
+  });
+});
+
 describe("countDistinctCitations (E13-S011)", () => {
   it("returns 0 for content with no citation markers", () => {
     expect(countDistinctCitations("這是一段沒有引用的回答。")).toBe(0);
@@ -145,8 +176,8 @@ describe("countDistinctCitations (E13-S011)", () => {
   });
 });
 
-function event(name: UsageEvent["name"], userId: string, occurredAt: string): UsageEvent {
-  return { name, userId, occurredAt };
+function event(name: UsageEvent["name"], userId: string, occurredAt: string, latencyMs?: number): UsageEvent {
+  return { name, userId, occurredAt, ...(latencyMs === undefined ? {} : { latencyMs }) };
 }
 
 describe("computeQuestionsAsked (E13-S012)", () => {
@@ -217,5 +248,48 @@ describe("computeDAU (E13-S012)", () => {
       event("conversation_message_sent", "u2", "2026-08-18T23:59:59.999Z"),
     ];
     expect(computeDAU(events, referenceDate)).toBe(2);
+  });
+});
+
+describe("computeAverageLatencyMs (E13-S013)", () => {
+  it("returns null for an empty event list — no samples means no honest average, not a fabricated 0", () => {
+    expect(computeAverageLatencyMs([])).toBeNull();
+  });
+
+  it("returns null when no rag_answer_outcome event carries a latencyMs, even if other events exist", () => {
+    const events = [
+      event("conversation_created", "u1", "2026-08-18T01:00:00.000Z"),
+      event("conversation_message_sent", "u1", "2026-08-18T01:00:01.000Z"),
+    ];
+    expect(computeAverageLatencyMs(events)).toBeNull();
+  });
+
+  it("returns the single value for exactly one sample", () => {
+    const events = [event("rag_answer_outcome", "u1", "2026-08-18T01:00:00.000Z", 2000)];
+    expect(computeAverageLatencyMs(events)).toBe(2000);
+  });
+
+  it("averages multiple rag_answer_outcome samples", () => {
+    const events = [
+      event("rag_answer_outcome", "u1", "2026-08-18T01:00:00.000Z", 1000),
+      event("rag_answer_outcome", "u2", "2026-08-18T02:00:00.000Z", 3000),
+    ];
+    expect(computeAverageLatencyMs(events)).toBe(2000);
+  });
+
+  it("ignores non-rag_answer_outcome events even if they somehow carried a latencyMs value", () => {
+    const events = [
+      event("conversation_message_sent", "u1", "2026-08-18T01:00:00.000Z", 9999),
+      event("rag_answer_outcome", "u1", "2026-08-18T01:00:01.000Z", 1000),
+    ];
+    expect(computeAverageLatencyMs(events)).toBe(1000);
+  });
+
+  it("counts a zero-latency sample toward the average, not treated as missing", () => {
+    const events = [
+      event("rag_answer_outcome", "u1", "2026-08-18T01:00:00.000Z", 0),
+      event("rag_answer_outcome", "u2", "2026-08-18T02:00:00.000Z", 2000),
+    ];
+    expect(computeAverageLatencyMs(events)).toBe(1000);
   });
 });

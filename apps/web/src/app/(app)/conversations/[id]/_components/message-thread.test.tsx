@@ -3288,7 +3288,7 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     submitViaComposer("你好");
 
     await waitFor(() =>
-      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 2 }),
+      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 2, latencyMs: expect.any(Number) }),
     );
   });
 
@@ -3329,7 +3329,7 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     submitViaComposer("你好");
 
     await waitFor(() =>
-      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 0 }),
+      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 0, latencyMs: expect.any(Number) }),
     );
   });
 
@@ -3346,7 +3346,7 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     submitViaComposer(`保固期限是多久？ ${MOCK_ANSWER_STATE_TRIGGERS.NO_EVIDENCE}`);
 
     await waitFor(() =>
-      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "NO_EVIDENCE", citationCount: 0 }),
+      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "NO_EVIDENCE", citationCount: 0, latencyMs: expect.any(Number) }),
     );
   });
 
@@ -3402,7 +3402,63 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
     await waitFor(() =>
-      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 1 }),
+      expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 1, latencyMs: expect.any(Number) }),
     );
+  });
+});
+
+describe("MessageThread latency instrumentation (E13-S013)", () => {
+  const SENT_MESSAGE = {
+    id: "m1",
+    conversationId: "c1",
+    role: "user" as const,
+    content: "你好",
+    attachmentNames: [],
+    createdAt: "2026-08-14T00:00:00.000Z",
+  };
+
+  it("records a non-negative latencyMs reflecting real elapsed time, not a hardcoded placeholder", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答內容 [1]", state: "ANSWERED" },
+    });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", expect.anything(), expect.anything()));
+    const call = mockedRecordUsageEvent.mock.calls.find((call) => call[0] === "rag_answer_outcome");
+    if (!call) throw new Error("expected a rag_answer_outcome call");
+    const details = call[2] as { latencyMs?: number };
+    expect(typeof details.latencyMs).toBe("number");
+    expect(details.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("measures a distinctly longer latencyMs when the stream is artificially delayed, proving this is a real measurement rather than an always-zero stub", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "延遲後的回答 [1]", state: "ANSWERED" },
+    });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      yield "延遲後的回答 [1]";
+    });
+
+    renderWithSession(FIXTURE_SESSION);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+
+    await waitFor(() => expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", expect.anything(), expect.anything()), {
+      timeout: 2000,
+    });
+    const call = mockedRecordUsageEvent.mock.calls.find((call) => call[0] === "rag_answer_outcome");
+    if (!call) throw new Error("expected a rag_answer_outcome call");
+    const details = call[2] as { latencyMs?: number };
+    expect(details.latencyMs).toBeGreaterThanOrEqual(35);
   });
 });

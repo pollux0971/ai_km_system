@@ -614,6 +614,10 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
    */
   async function runStream(localId: string, reviseTarget?: Message, answerState: AnswerState = "ANSWERED", simulateDisconnect = false) {
     const correlationId = crypto.randomUUID();
+    // E13-S013: elapsed time from generation actually starting to the
+    // reply being durably persisted (below) — see usage-events.ts's own
+    // doc comment for exactly what this does/doesn't honestly represent.
+    const streamStartedAt = Date.now();
     logger.info("streaming assistant reply", { correlationId, conversationId });
     trackEvent("conversation_message_stream_attempt", { correlationId, properties: { conversationId } });
 
@@ -714,6 +718,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
       recordUsageEvent("rag_answer_outcome", currentUser.userId, {
         answerState: result.value.state ?? "ANSWERED",
         citationCount: countDistinctCitations(result.value.content),
+        latencyMs: Date.now() - streamStartedAt,
       });
     }
     setDisplayMessages((previous) =>

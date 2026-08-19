@@ -13,7 +13,7 @@ test("E11-S022: navigating from the admin home to 系統健康儀表板 shows ev
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "系統健康儀表板" }).click();
+  await page.getByRole("main").getByRole("link", { name: "系統健康儀表板" }).click();
   await page.waitForURL((url) => url.pathname === "/health");
 
   await expect(page.getByRole("heading", { name: "系統健康儀表板", level: 1, exact: true })).toBeVisible();

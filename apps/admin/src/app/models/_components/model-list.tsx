@@ -66,7 +66,7 @@ export default function ModelList() {
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.models.map((model) => (
-        <li key={model.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+        <li key={model.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
           <p>
             <strong>{model.label}</strong>
           </p>

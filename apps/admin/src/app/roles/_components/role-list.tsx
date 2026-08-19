@@ -60,7 +60,7 @@ export default function RoleList() {
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.roles.map((summary) => (
-        <li key={summary.role} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+        <li key={summary.role} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
           <p>
             <Link href={`/roles/${summary.role}`}>
               <strong>{summary.role}</strong>

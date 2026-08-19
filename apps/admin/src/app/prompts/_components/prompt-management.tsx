@@ -93,7 +93,7 @@ export default function PromptManagement() {
       ) : (
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
           {state.prompts.map((prompt) => (
-            <li key={prompt.promptId} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+            <li key={prompt.promptId} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
               <p>
                 <strong>{prompt.name}</strong>
               </p>

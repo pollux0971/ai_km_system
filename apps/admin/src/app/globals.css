@@ -1,3 +1,99 @@
+/*
+ * Enterprise UI foundation for the admin console (ux/admin-ui-overhaul).
+ *
+ * Mirrors apps/web's globals.css architecture (ux/enterprise-polish):
+ * - All colors flow through CSS custom properties; light/dark follows
+ *   prefers-color-scheme (no in-app toggle — same deliberate minimalism).
+ * - Element-level styling (button/input/table/fieldset/...) is the main
+ *   lever: admin components render bare HTML with no classes, so styling
+ *   the elements themselves lifts every page uniformly without touching
+ *   component DOM (jsdom ignores CSS, so unit tests are unaffected).
+ * - Layout classes (.app-*, .sidebar-*, .entry-*, .stat-*) are consumed
+ *   by the shell/home/dashboard components only.
+ *
+ * Deliberate divergence from apps/web (user-directed): the accent hue is
+ * deep teal instead of blue and the sidebar is near-black instead of
+ * navy, so operators can tell at a glance they are in the admin console
+ * rather than the end-user app. Everything else (radii, shadows, type
+ * scale, element treatments) matches apps/web 1:1.
+ */
+
+/* ---------- design tokens ---------- */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eff2f5;
+  --text: #1b2733;
+  --text-muted: #5b6a79;
+  --border: #d8dfe6;
+  --border-strong: #b8c3cf;
+
+  --primary: #0f766e;
+  --primary-hover: #0c5f59;
+  --primary-active: #0a4f4a;
+  --primary-soft: #e6f4f2;
+  --on-primary: #ffffff;
+
+  --danger: #c62828;
+  --danger-soft: #fdecea;
+  --success: #2e7d32;
+
+  --sidebar-bg: #0e1420;
+  --sidebar-text: #b8c3d4;
+  --sidebar-text-strong: #f1f5fa;
+  --sidebar-hover: rgba(255, 255, 255, 0.07);
+  --sidebar-active: rgba(255, 255, 255, 0.14);
+  --sidebar-border: rgba(255, 255, 255, 0.09);
+
+  --ring: rgba(15, 118, 110, 0.45);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.1);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg: #0f141b;
+    --surface: #1a212b;
+    --surface-2: #222c38;
+    --text: #e5ebf1;
+    --text-muted: #96a4b3;
+    --border: #2c3947;
+    --border-strong: #3f5063;
+
+    --primary: #5fc9bd;
+    --primary-hover: #7ad5cb;
+    --primary-active: #4fbcb0;
+    --primary-soft: #17332f;
+    --on-primary: #0f141b;
+
+    --danger: #ef7a72;
+    --danger-soft: #3a2020;
+    --success: #7fc784;
+
+    --sidebar-bg: #0a0f17;
+    --sidebar-text: #a3b0c1;
+    --sidebar-text-strong: #edf2f8;
+    --sidebar-hover: rgba(255, 255, 255, 0.06);
+    --sidebar-active: rgba(255, 255, 255, 0.12);
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+
+    --ring: rgba(95, 201, 189, 0.5);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ---------- reset & base ---------- */
+
 *,
 *::before,
 *::after {
@@ -18,4 +114,466 @@ body {
     Roboto,
     "Noto Sans TC",
     sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-size: 1.45rem;
+  line-height: 1.35;
+  margin: 0 0 0.75em;
+}
+
+h2 {
+  font-size: 1.15rem;
+  line-height: 1.4;
+  margin: 1.5em 0 0.6em;
+}
+
+h3 {
+  font-size: 1rem;
+  margin: 1.25em 0 0.5em;
+}
+
+p {
+  margin: 0.5em 0;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+::selection {
+  background: var(--primary-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Thin, theme-aware scrollbars (WebKit + Firefox). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- form elements ---------- */
+
+button {
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 14px;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button[type="submit"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+}
+
+button[type="submit"]:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+button[type="submit"]:active:not(:disabled) {
+  background: var(--primary-active);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  transition: border-color 0.12s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
+  border-color: var(--primary);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.6;
+  background: var(--surface-2);
+}
+
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  margin: 0;
+}
+
+legend {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 6px;
+}
+
+/* ---------- tables ---------- */
+
+table {
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.92rem;
+}
+
+th,
+td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+th {
+  background: var(--surface-2);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ---------- app shell ---------- */
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  height: 54px;
+  padding: 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.admin-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  padding: 1px 10px;
+}
+
+.app-header-note {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.app-main {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.app-main > main {
+  max-width: 1150px;
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* ---------- sidebar ---------- */
+
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 264px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  padding: 16px 12px;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.sidebar-home {
+  display: block;
+  color: var(--sidebar-text-strong);
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.sidebar-home:hover {
+  background: var(--sidebar-hover);
+  text-decoration: none;
+}
+
+.sidebar-home[aria-current="page"] {
+  background: var(--sidebar-active);
+}
+
+.sidebar-group {
+  margin-bottom: 6px;
+}
+
+.sidebar-group summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sidebar-text);
+  opacity: 0.75;
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  user-select: none;
+}
+
+.sidebar-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar-group summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 0.12s ease;
+}
+
+.sidebar-group[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.sidebar-group summary:hover {
+  background: var(--sidebar-hover);
+  opacity: 1;
+}
+
+.sidebar-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-group a {
+  display: block;
+  color: var(--sidebar-text);
+  font-size: 0.94rem;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px 6px 24px;
+  margin-bottom: 1px;
+}
+
+.sidebar-group a:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
+  text-decoration: none;
+}
+
+.sidebar-group a[aria-current="page"] {
+  background: var(--sidebar-active);
+  color: var(--sidebar-text-strong);
+  font-weight: 600;
+}
+
+/* ---------- home entry cards ---------- */
+
+.entry-group h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 1.6em 0 0.6em;
+}
+
+.entry-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.entry-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.entry-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
+
+.entry-card > a {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.entry-card > a:hover {
+  text-decoration: none;
+}
+
+/* Stretch the title link across the whole card so the entire card is
+   clickable while the accessible name stays the title text alone. */
+.entry-card > a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.entry-card > p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+/* ---------- dashboard stat cards ---------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-card > strong {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.stat-card > p {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 4px 0 0;
+}
+
+/* ---------- utilities ---------- */
+
+.page-note {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }

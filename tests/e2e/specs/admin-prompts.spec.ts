@@ -11,7 +11,7 @@ test("E11-S012: navigating from the admin home to 提示詞管理 starts empty, 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "提示詞管理" }).click();
+  await page.getByRole("main").getByRole("link", { name: "提示詞管理" }).click();
   await page.waitForURL((url) => url.pathname === "/prompts");
 
   await expect(page.getByRole("heading", { name: "提示詞管理", level: 1, exact: true })).toBeVisible();

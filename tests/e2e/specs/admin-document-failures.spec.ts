@@ -13,7 +13,7 @@ test("E11-S018: navigating from the admin home to 文件失敗佇列 shows the h
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "文件失敗佇列" }).click();
+  await page.getByRole("main").getByRole("link", { name: "文件失敗佇列" }).click();
   await page.waitForURL((url) => url.pathname === "/document-failures");
 
   await expect(page.getByRole("heading", { name: "文件失敗佇列", level: 1, exact: true })).toBeVisible();

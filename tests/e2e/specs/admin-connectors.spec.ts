@@ -11,7 +11,7 @@ test("E11-S014: navigating from the admin home to 連接器管理 shows all 9 co
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "連接器管理" }).click();
+  await page.getByRole("main").getByRole("link", { name: "連接器管理" }).click();
   await page.waitForURL((url) => url.pathname === "/connectors");
 
   await expect(page.getByRole("heading", { name: "連接器管理", level: 1, exact: true })).toBeVisible();
@@ -29,13 +29,13 @@ test("E11-S014: navigating from the admin home to 連接器管理 shows all 9 co
     await expect(page.getByText(name, { exact: true })).toBeVisible();
   }
 
-  const erpRow = page.getByRole("listitem").filter({ hasText: "ERP 連接器" });
+  const erpRow = page.getByRole("main").getByRole("listitem").filter({ hasText: "ERP 連接器" });
   await expect(erpRow.getByText("已停用", { exact: true })).toBeVisible();
 
   await erpRow.getByRole("button", { name: "啟用" }).click();
   await expect(erpRow.getByText("啟用中", { exact: true })).toBeVisible();
 
   await page.reload();
-  const erpRowAfterReload = page.getByRole("listitem").filter({ hasText: "ERP 連接器" });
+  const erpRowAfterReload = page.getByRole("main").getByRole("listitem").filter({ hasText: "ERP 連接器" });
   await expect(erpRowAfterReload.getByText("啟用中", { exact: true })).toBeVisible();
 });

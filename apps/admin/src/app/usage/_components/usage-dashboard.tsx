@@ -52,15 +52,17 @@ export default function UsageDashboard() {
 
   return (
     <div>
-      <div>
-        <strong>每日活躍使用者（DAU）</strong>
-        <p>{state.metrics.dailyActiveUsers}</p>
+      <div className="stat-grid">
+        <div className="stat-card">
+          <strong>每日活躍使用者（DAU）</strong>
+          <p>{state.metrics.dailyActiveUsers}</p>
+        </div>
+        <div className="stat-card">
+          <strong>今日提問數</strong>
+          <p>{state.metrics.questionsAsked}</p>
+        </div>
       </div>
-      <div>
-        <strong>今日提問數</strong>
-        <p>{state.metrics.questionsAsked}</p>
-      </div>
-      <p>尚未建置使用量追蹤機制，以上數據皆為零。</p>
+      <p className="page-note">尚未建置使用量追蹤機制，以上數據皆為零。</p>
     </div>
   );
 }

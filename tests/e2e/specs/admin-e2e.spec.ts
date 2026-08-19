@@ -55,7 +55,7 @@ test("E11-S025: navigating through every admin home entry link in one continuous
 }) => {
   for (const entry of ALL_ADMIN_ENTRIES) {
     await page.goto("/");
-    await page.getByRole("link", { name: entry.link }).click();
+    await page.getByRole("main").getByRole("link", { name: entry.link }).click();
     await page.waitForURL((url) => url.pathname === entry.pathname);
     await expect(page.getByRole("heading", { name: entry.heading, level: 1, exact: true })).toBeVisible();
   }
@@ -66,14 +66,14 @@ test("E11-S025: enabling a model, enabling a connector, and creating a departmen
 }) => {
   // 1. Enable the cloud model.
   await page.goto("/models");
-  const cloudRow = page.getByRole("listitem").filter({ hasText: "雲端模型" });
+  const cloudRow = page.getByRole("main").getByRole("listitem").filter({ hasText: "雲端模型" });
   await expect(cloudRow.getByText("已停用", { exact: true })).toBeVisible();
   await cloudRow.getByRole("button", { name: "啟用" }).click();
   await expect(cloudRow.getByText("啟用中", { exact: true })).toBeVisible();
 
   // 2. Enable the ERP connector — a completely independent domain.
   await page.goto("/connectors");
-  const erpRow = page.getByRole("listitem").filter({ hasText: "ERP 連接器" });
+  const erpRow = page.getByRole("main").getByRole("listitem").filter({ hasText: "ERP 連接器" });
   await expect(erpRow.getByText("已停用", { exact: true })).toBeVisible();
   await erpRow.getByRole("button", { name: "啟用" }).click();
   await expect(erpRow.getByText("啟用中", { exact: true })).toBeVisible();
@@ -96,14 +96,14 @@ test("E11-S025: enabling a model, enabling a connector, and creating a departmen
   await expect(page.getByText("維修工程師群組", { exact: true })).toBeVisible();
   await expect(page.getByText("業務群組", { exact: true })).toBeVisible();
   // Groups was never touched — it must show exactly its 3 seeded entries, nothing more.
-  await expect(page.getByRole("listitem")).toHaveCount(3);
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(3);
 
   await page.goto("/models");
-  const cloudRowAfterReload = page.getByRole("listitem").filter({ hasText: "雲端模型" });
+  const cloudRowAfterReload = page.getByRole("main").getByRole("listitem").filter({ hasText: "雲端模型" });
   await expect(cloudRowAfterReload.getByText("啟用中", { exact: true })).toBeVisible();
 
   await page.goto("/connectors");
-  const erpRowAfterReload = page.getByRole("listitem").filter({ hasText: "ERP 連接器" });
+  const erpRowAfterReload = page.getByRole("main").getByRole("listitem").filter({ hasText: "ERP 連接器" });
   await expect(erpRowAfterReload.getByText("啟用中", { exact: true })).toBeVisible();
 
   await page.goto("/departments");

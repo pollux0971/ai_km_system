@@ -146,7 +146,7 @@ function LoadedFeedbackList({
       ) : (
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
           {filtered.map((item) => (
-            <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+            <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
               <p>
                 <Link href={`/feedback/${item.id}`}>
                   <strong>{VERDICT_LABEL[item.verdict]}</strong>

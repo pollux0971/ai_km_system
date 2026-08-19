@@ -7,7 +7,7 @@ import { test, expect } from "@playwright/test";
  */
 test("E11-S008: navigating from the admin home to 權限矩陣 shows every role's capabilities in a grid", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "權限矩陣" }).click();
+  await page.getByRole("main").getByRole("link", { name: "權限矩陣" }).click();
   await page.waitForURL((url) => url.pathname === "/permissions");
 
   await expect(page.getByRole("heading", { name: "權限矩陣", level: 1, exact: true })).toBeVisible();

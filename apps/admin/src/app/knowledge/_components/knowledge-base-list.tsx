@@ -56,7 +56,7 @@ export default function KnowledgeBaseList() {
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.knowledgeBases.map((kb) => (
-        <li key={kb.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+        <li key={kb.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
           <p>
             <strong>{kb.name}</strong>
           </p>

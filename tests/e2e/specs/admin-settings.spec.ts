@@ -13,7 +13,7 @@ test("E11-S020: navigating from the admin home to 系統設定 shows SSO enabled
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "系統設定" }).click();
+  await page.getByRole("main").getByRole("link", { name: "系統設定" }).click();
   await page.waitForURL((url) => url.pathname === "/settings");
 
   await expect(page.getByRole("heading", { name: "系統設定", level: 1, exact: true })).toBeVisible();

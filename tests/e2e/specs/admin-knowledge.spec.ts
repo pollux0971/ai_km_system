@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
  */
 test("E11-S011: navigating from the admin home to 知識庫管理 shows every seeded knowledge base", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "知識庫管理" }).click();
+  await page.getByRole("main").getByRole("link", { name: "知識庫管理" }).click();
   await page.waitForURL((url) => url.pathname === "/knowledge");
 
   await expect(page.getByRole("heading", { name: "知識庫管理", level: 1, exact: true })).toBeVisible();

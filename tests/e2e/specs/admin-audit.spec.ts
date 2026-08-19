@@ -12,7 +12,7 @@ test("E11-S015: navigating from the admin home to 稽核紀錄 shows the honest 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "稽核紀錄" }).click();
+  await page.getByRole("main").getByRole("link", { name: "稽核紀錄" }).click();
   await page.waitForURL((url) => url.pathname === "/audit");
 
   await expect(page.getByRole("heading", { name: "稽核紀錄", level: 1, exact: true })).toBeVisible();

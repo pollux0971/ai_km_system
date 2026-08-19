@@ -9,7 +9,7 @@ test("E11-S002: navigating from the admin home to 使用者管理 shows the seed
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "使用者管理" }).click();
+  await page.getByRole("main").getByRole("link", { name: "使用者管理" }).click();
   await page.waitForURL((url) => url.pathname === "/users");
 
   await expect(page.getByRole("heading", { name: "使用者管理", level: 1, exact: true })).toBeVisible();
@@ -37,7 +37,7 @@ test("E11-S002: navigating from the admin home to 使用者管理 shows the seed
  */
 test("E11-S003: clicking a user from the list opens their own detail page", async ({ page }) => {
   await page.goto("/users");
-  await page.getByRole("link", { name: "示範 IT 管理員" }).click();
+  await page.getByRole("main").getByRole("link", { name: "示範 IT 管理員" }).click();
   await page.waitForURL((url) => url.pathname === "/users/mock-user-it-admin");
 
   await expect(page.getByRole("heading", { name: "示範 IT 管理員", level: 1 })).toBeVisible();
@@ -64,7 +64,7 @@ test("E11-S003: visiting an unknown user id shows a distinct not-found state", a
  */
 test("E11-S004: creating a user from the admin console reaches their own detail page and the list", async ({ page }) => {
   await page.goto("/users");
-  await page.getByRole("link", { name: "建立使用者" }).click();
+  await page.getByRole("main").getByRole("link", { name: "建立使用者" }).click();
   await page.waitForURL((url) => url.pathname === "/users/new");
 
   await page.getByLabel("姓名").fill("E2E 新進使用者");

@@ -46,7 +46,7 @@ test("E13-S017: navigating through every current admin home entry link — inclu
 }) => {
   for (const entry of ALL_ADMIN_ENTRIES) {
     await page.goto("/");
-    await page.getByRole("link", { name: entry.link }).click();
+    await page.getByRole("main").getByRole("link", { name: entry.link }).click();
     await page.waitForURL((url) => url.pathname === entry.pathname);
     await expect(page.getByRole("heading", { name: entry.heading, level: 1, exact: true })).toBeVisible();
   }
@@ -56,21 +56,21 @@ test("E13-S017: consecutively visiting the feedback queue, usage dashboard, and 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "回饋佇列" }).click();
+  await page.getByRole("main").getByRole("link", { name: "回饋佇列" }).click();
   await page.waitForURL((url) => url.pathname === "/feedback");
   await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
   await expect(page.getByRole("radiogroup")).toHaveCount(0);
   await expect(page.getByText(/OK 比例/)).toHaveCount(0);
 
   await page.goto("/");
-  await page.getByRole("link", { name: "使用量儀表板" }).click();
+  await page.getByRole("main").getByRole("link", { name: "使用量儀表板" }).click();
   await page.waitForURL((url) => url.pathname === "/usage");
   await expect(page.getByText("每日活躍使用者（DAU）", { exact: true })).toBeVisible();
   await expect(page.getByText("尚未建置使用量追蹤機制，以上數據皆為零。", { exact: true })).toBeVisible();
   await expect(page.getByText("尚無回饋。")).toHaveCount(0);
 
   await page.goto("/");
-  await page.getByRole("link", { name: "延遲儀表板" }).click();
+  await page.getByRole("main").getByRole("link", { name: "延遲儀表板" }).click();
   await page.waitForURL((url) => url.pathname === "/latency");
   await expect(page.getByText("尚無資料", { exact: true })).toBeVisible();
   await expect(page.getByText("每日活躍使用者（DAU）")).toHaveCount(0);
@@ -79,7 +79,7 @@ test("E13-S017: consecutively visiting the feedback queue, usage dashboard, and 
   // Full loop back to the feedback queue: still its own state, unaffected
   // by having just visited the other two dashboards in between.
   await page.goto("/");
-  await page.getByRole("link", { name: "回饋佇列" }).click();
+  await page.getByRole("main").getByRole("link", { name: "回饋佇列" }).click();
   await page.waitForURL((url) => url.pathname === "/feedback");
   await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
 });

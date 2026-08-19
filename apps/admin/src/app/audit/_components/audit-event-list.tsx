@@ -57,7 +57,7 @@ export default function AuditEventList() {
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.events.map((event) => (
-        <li key={event.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+        <li key={event.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
           <p>
             <strong>{event.actor}</strong>
           </p>

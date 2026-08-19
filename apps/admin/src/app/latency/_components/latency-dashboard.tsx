@@ -55,11 +55,13 @@ export default function LatencyDashboard() {
 
   return (
     <div>
-      <div>
-        <strong>平均回應延遲</strong>
-        <p>{state.metrics.averageLatencyMs === null ? "尚無資料" : `${state.metrics.averageLatencyMs}ms`}</p>
+      <div className="stat-grid">
+        <div className="stat-card">
+          <strong>平均回應延遲</strong>
+          <p>{state.metrics.averageLatencyMs === null ? "尚無資料" : `${state.metrics.averageLatencyMs}ms`}</p>
+        </div>
       </div>
-      <p>尚未建置跨應用資料管道，無法顯示真實延遲數據。</p>
+      <p className="page-note">尚未建置跨應用資料管道，無法顯示真實延遲數據。</p>
     </div>
   );
 }

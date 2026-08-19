@@ -65,7 +65,7 @@ export default function ConnectorList() {
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.connectors.map((connector) => (
-        <li key={connector.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+        <li key={connector.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
           <p>
             <strong>{connector.name}</strong>
           </p>

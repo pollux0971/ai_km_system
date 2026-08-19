@@ -71,7 +71,7 @@ export default function DocumentFailureList() {
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.documents.map((document) => (
-        <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+        <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
           <p>
             <strong>{document.name}</strong>
           </p>

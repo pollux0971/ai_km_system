@@ -11,7 +11,7 @@ test("E11-S010: navigating from the admin home to 群組管理 shows the seeded 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "群組管理" }).click();
+  await page.getByRole("main").getByRole("link", { name: "群組管理" }).click();
   await page.waitForURL((url) => url.pathname === "/groups");
 
   await expect(page.getByRole("heading", { name: "群組管理", level: 1, exact: true })).toBeVisible();

@@ -12,7 +12,7 @@ test("E11-S016: navigating from the admin home to 回饋佇列 shows the honest 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "回饋佇列" }).click();
+  await page.getByRole("main").getByRole("link", { name: "回饋佇列" }).click();
   await page.waitForURL((url) => url.pathname === "/feedback");
 
   await expect(page.getByRole("heading", { name: "回饋佇列", level: 1, exact: true })).toBeVisible();

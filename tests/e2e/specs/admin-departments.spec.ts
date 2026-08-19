@@ -9,7 +9,7 @@ test("E11-S009: navigating from the admin home to 部門管理 shows the seeded 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "部門管理" }).click();
+  await page.getByRole("main").getByRole("link", { name: "部門管理" }).click();
   await page.waitForURL((url) => url.pathname === "/departments");
 
   await expect(page.getByRole("heading", { name: "部門管理", level: 1, exact: true })).toBeVisible();

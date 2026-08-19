@@ -10,7 +10,7 @@ test("E11-S006: navigating from the admin home to 角色管理 shows all 9 syste
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "角色管理" }).click();
+  await page.getByRole("main").getByRole("link", { name: "角色管理" }).click();
   await page.waitForURL((url) => url.pathname === "/roles");
 
   await expect(page.getByRole("heading", { name: "角色管理", level: 1, exact: true })).toBeVisible();
@@ -45,7 +45,7 @@ test("E11-S006: navigating from the admin home to 角色管理 shows all 9 syste
  */
 test("E11-S007: editing a role's description from its own page persists across a reload", async ({ page }) => {
   await page.goto("/roles");
-  await page.getByRole("link", { name: "auditor" }).click();
+  await page.getByRole("main").getByRole("link", { name: "auditor" }).click();
   await page.waitForURL((url) => url.pathname === "/roles/auditor");
 
   await expect(page.getByRole("heading", { name: "auditor", level: 1 })).toBeVisible();

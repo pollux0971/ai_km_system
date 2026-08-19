@@ -13,7 +13,7 @@ test("E11-S021: navigating from the admin home to 使用量儀表板 shows zero 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "使用量儀表板" }).click();
+  await page.getByRole("main").getByRole("link", { name: "使用量儀表板" }).click();
   await page.waitForURL((url) => url.pathname === "/usage");
 
   await expect(page.getByRole("heading", { name: "使用量儀表板", level: 1, exact: true })).toBeVisible();

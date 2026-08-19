@@ -57,7 +57,7 @@ export default function SystemHealthDashboard() {
     <div>
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {state.subsystems.map((subsystem) => (
-          <li key={subsystem.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+          <li key={subsystem.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
             <p>
               <strong>{subsystem.name}</strong>
             </p>

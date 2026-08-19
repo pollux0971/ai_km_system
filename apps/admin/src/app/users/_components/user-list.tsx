@@ -79,7 +79,7 @@ export default function UserList() {
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {state.users.map((user) => (
-        <li key={user.userId} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e5e5e5" }}>
+        <li key={user.userId} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
           <p>
             <Link href={`/users/${user.userId}`}>
               <strong>{user.name}</strong>

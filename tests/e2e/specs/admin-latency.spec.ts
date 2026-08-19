@@ -11,7 +11,7 @@ import { test, expect } from "@playwright/test";
  */
 test("E13-S013: navigating from the admin home to 延遲儀表板 shows an honest no-data state", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "延遲儀表板" }).click();
+  await page.getByRole("main").getByRole("link", { name: "延遲儀表板" }).click();
   await page.waitForURL((url) => url.pathname === "/latency");
 
   await expect(page.getByRole("heading", { name: "延遲儀表板", level: 1, exact: true })).toBeVisible();

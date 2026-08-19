@@ -11,7 +11,7 @@ test("E11-S013: navigating from the admin home to 模型管理 shows all 3 seede
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "模型管理" }).click();
+  await page.getByRole("main").getByRole("link", { name: "模型管理" }).click();
   await page.waitForURL((url) => url.pathname === "/models");
 
   await expect(page.getByRole("heading", { name: "模型管理", level: 1, exact: true })).toBeVisible();
@@ -19,13 +19,13 @@ test("E11-S013: navigating from the admin home to 模型管理 shows all 3 seede
   await expect(page.getByText("進階模型（地端）", { exact: true })).toBeVisible();
   await expect(page.getByText("雲端模型", { exact: true })).toBeVisible();
 
-  const cloudRow = page.getByRole("listitem").filter({ hasText: "雲端模型" });
+  const cloudRow = page.getByRole("main").getByRole("listitem").filter({ hasText: "雲端模型" });
   await expect(cloudRow.getByText("已停用", { exact: true })).toBeVisible();
 
   await cloudRow.getByRole("button", { name: "啟用" }).click();
   await expect(cloudRow.getByText("啟用中", { exact: true })).toBeVisible();
 
   await page.reload();
-  const cloudRowAfterReload = page.getByRole("listitem").filter({ hasText: "雲端模型" });
+  const cloudRowAfterReload = page.getByRole("main").getByRole("listitem").filter({ hasText: "雲端模型" });
   await expect(cloudRowAfterReload.getByText("啟用中", { exact: true })).toBeVisible();
 });

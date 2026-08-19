@@ -1,102 +1,43 @@
 import Link from "next/link";
+import { ADMIN_NAV_GROUPS } from "@/lib/admin-nav";
 
 /**
- * E11-S001 "Admin dashboard" — apps/admin's own bootstrap root page,
- * mirroring apps/web's own E01-S001 in scope: route skeleton + a bare
- * landing page, deliberately not yet gated by any session/authorization
- * check (that's E11-S023 "admin route authorization", the direct
- * counterpart of apps/web's RoleGuard from E01-S017 — apps/web itself
- * shipped a full 16 stories, S002 through S016, before RoleGuard existed
- * at S017, so deferring it here past S001 is the same, already-approved
- * sequencing this codebase's own web app already used).
+ * E11-S001 "Admin dashboard" — apps/admin's bootstrap root page. It grew
+ * one entry link per approved story, in this order: E11-S002 使用者管理
+ * (/users), E11-S006 角色管理 (/roles), E11-S008 權限矩陣 (/permissions),
+ * E11-S009 部門管理 (/departments), E11-S010 群組管理 (/groups), E11-S011
+ * 知識庫管理 (/knowledge), E11-S012 提示詞管理 (/prompts), E11-S013 模型管理
+ * (/models), E11-S014 連接器管理 (/connectors), E11-S015 稽核紀錄 (/audit),
+ * E11-S016 回饋佇列 (/feedback), E11-S018 文件失敗佇列 (/document-failures),
+ * E11-S020 系統設定 (/settings), E11-S021 使用量儀表板 (/usage), E11-S022
+ * 系統健康儀表板 (/health), E13-S013 延遲儀表板 (/latency) — each added only
+ * once its route actually existed, never invented ahead of time.
  *
- * Unlike apps/web's own root page (which stayed a content-free scaffold
- * until E01-S008's later dedicated "Home dashboard" story), this page's
- * own title already is "Admin dashboard" — there's no separate future
- * E11 story reserved for turning a placeholder into real dashboard
- * content. So this establishes the actual page real content lives on,
- * not a placeholder deferring to an unnamed future story: later E11
- * stories (user list, role list, audit viewer, ...) are expected to
- * enrich this page with their own summary/entry content the same
- * additive way erp/page.tsx (E09-S001) grew its own "開始新的 ERP 查詢"
- * link only once E09-S002 actually existed — not invented ahead of time
- * here, since none of those sections' own data models exist yet.
- *
- * E11-S002 "User list" was the first of these — added the "使用者管理"
- * entry link once /users existed. E11-S006 "Role list" adds "角色管理"
- * the same way, now that /roles exists too. E11-S008 "Permission
- * matrix" adds "權限矩陣" the same way, now that /permissions exists.
- * E11-S009 "Department management" adds "部門管理" the same way, now
- * that /departments exists. E11-S010 "Group management" adds "群組管理"
- * the same way, now that /groups exists. E11-S011 "Knowledge admin"
- * adds "知識庫管理" the same way, now that /knowledge exists. E11-S012
- * "Prompt admin" adds "提示詞管理" the same way, now that /prompts exists.
- * E11-S013 "Model admin" adds "模型管理" the same way, now that /models
- * exists. E11-S014 "Connector admin" adds "連接器管理" the same way, now
- * that /connectors exists. E11-S015 "Audit viewer" adds "稽核紀錄" the
- * same way, now that /audit exists. E11-S016 "Feedback queue" adds
- * "回饋佇列" the same way, now that /feedback exists. E11-S018
- * "Document failure queue" adds "文件失敗佇列" the same way, now that
- * /document-failures exists. E11-S020 "System settings" adds "系統設定"
- * the same way, now that /settings exists. E11-S021 "Usage dashboard"
- * adds "使用量儀表板" the same way, now that /usage exists. E11-S022
- * "System health dashboard" adds "系統健康儀表板" the same way, now
- * that /health exists. E13-S013 "Latency dashboard" adds "延遲儀表板"
- * the same way, now that /latency exists.
+ * ux/admin-ui-overhaul: those same 16 entries (now sourced from
+ * ADMIN_NAV_GROUPS, shared with AdminSidebar) render as grouped entry
+ * cards instead of a flat link column. Every href/label pair is
+ * unchanged — the accessible name of each entry link is still exactly
+ * its original label (descriptions live outside the <a>), so every
+ * story's own frozen link assertion keeps holding.
  */
 export default function AdminHomePage() {
   return (
     <main style={{ padding: 32 }}>
       <h1>AI KM 管理主控台</h1>
       <p>企業知識管理平台的後台管理入口。</p>
-      <p>
-        <Link href="/users">使用者管理</Link>
-      </p>
-      <p>
-        <Link href="/roles">角色管理</Link>
-      </p>
-      <p>
-        <Link href="/permissions">權限矩陣</Link>
-      </p>
-      <p>
-        <Link href="/departments">部門管理</Link>
-      </p>
-      <p>
-        <Link href="/groups">群組管理</Link>
-      </p>
-      <p>
-        <Link href="/knowledge">知識庫管理</Link>
-      </p>
-      <p>
-        <Link href="/prompts">提示詞管理</Link>
-      </p>
-      <p>
-        <Link href="/models">模型管理</Link>
-      </p>
-      <p>
-        <Link href="/connectors">連接器管理</Link>
-      </p>
-      <p>
-        <Link href="/audit">稽核紀錄</Link>
-      </p>
-      <p>
-        <Link href="/feedback">回饋佇列</Link>
-      </p>
-      <p>
-        <Link href="/document-failures">文件失敗佇列</Link>
-      </p>
-      <p>
-        <Link href="/settings">系統設定</Link>
-      </p>
-      <p>
-        <Link href="/usage">使用量儀表板</Link>
-      </p>
-      <p>
-        <Link href="/health">系統健康儀表板</Link>
-      </p>
-      <p>
-        <Link href="/latency">延遲儀表板</Link>
-      </p>
+      {ADMIN_NAV_GROUPS.map((group) => (
+        <section key={group.title} className="entry-group">
+          <h2>{group.title}</h2>
+          <ul className="entry-grid">
+            {group.items.map((item) => (
+              <li key={item.href} className="entry-card">
+                <Link href={item.href}>{item.label}</Link>
+                <p>{item.description}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </main>
   );
 }

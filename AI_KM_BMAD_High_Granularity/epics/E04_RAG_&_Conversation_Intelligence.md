@@ -7591,20 +7591,28 @@
 ## 技術決策（使用者已拍板，2026-08-20）
 - Runtime：llama.cpp + GGUF，透過 `node-llama-cpp`（npm，自帶 prebuilt
   binary，與 monorepo 的 Node/TS 技術棧一致，可寫 vitest 測試）。
-- 模型範圍：embedding 與 LLM 兩者都驗。
-  - LLM（優先）：Qwen3-4B-Instruct `Q4_K_M` GGUF（約 2.5GB）；
-    替代：Qwen3-8B `Q4_K_M` GGUF（約 5GB）。兩者擇一即可。
-  - Embedding：BAAI bge-m3 GGUF（約 0.7GB，llama.cpp 已支援）。
+- 模型範圍：embedding 與 LLM 兩者都驗。目標機器（Team B 開發機）GPU
+  VRAM 充裕（使用者補充指示，2026-08-20），模型選擇不需節省容量，以
+  品質優先、全量 GPU offload 為預設：
+  - LLM（優先）：Qwen3-32B `Q4_K_M` GGUF（約 20GB，VRAM ≥ 24GB 時全量
+    offload）；替代：Qwen3-14B `Q4_K_M` GGUF（約 9GB）。VRAM 更大時
+    可再上探（如 Qwen3-32B `Q8_0` 約 35GB）。多檔並存時 `verify-models`
+    以實際存在者驗證，擇一即可。
+  - Embedding：BAAI bge-m3 `F16` GGUF（約 1.2GB，品質優先，llama.cpp
+    已支援）。
 - 模型指定目錄：repo 內 `models/`（入 `.gitignore`，模型檔不進 git）。
-- 參考硬體基準（2026-08-20 於開發機實測；腳本必須動態重測，不得寫死）：
-  i5-11320H（8 執行緒）／32GB RAM／GTX 1650 4GB VRAM／磁碟餘 305GB。
+- 硬體規格以 `check-specs` 於目標機器實測為準，不得寫死；建議邏輯依
+  實測 VRAM 分級（充裕 → 全量 offload 大模型；不足 → 降級建議並明確
+  警告）。（本 Story 撰寫機的規格——8 執行緒／32GB RAM／4GB VRAM——
+  僅為腳本開發參考，不是目標機器的基準。）
 
 ## Scope
 ### In
 - `tools/model-readiness/`（新 workspace）：
   - `check-specs` 腳本：動態偵測 CPU（型號／執行緒數）、RAM、GPU／VRAM、
-    `models/` 所在分區可用磁碟，輸出規格報告與模型建議（依實測規格判斷
-    建議 4B 或 8B、可否 GPU offload、規格不足時降級警告）。
+    `models/` 所在分區可用磁碟，輸出規格報告與模型建議（依實測 VRAM
+    分級建議模型尺寸與量化等級、可否全量 GPU offload、規格不足時降級
+    警告）。
   - `verify-models` 腳本：掃描 `models/` 下的 GGUF——embedding 模型載入
     後對固定中文句子產生向量並驗證維度與非零值；LLM 載入後對最小中文
     prompt 完成一次真實推論並驗證非空回應。輸出成功／失敗／缺檔三態報告。

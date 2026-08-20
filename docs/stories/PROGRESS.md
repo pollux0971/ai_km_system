@@ -258,4 +258,4 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E04-S037 | todo | — | — | RAG 開發前置環境就緒:硬體規格確認與地端模型準備(使用者 2026-08-20 指示建立並插入 E04)。技術決策已拍板:llama.cpp+GGUF(node-llama-cpp)、embedding(bge-m3)+LLM(Qwen3-4B/8B Q4_K_M)都驗、模型放 repo 內 `models/`(gitignored)。L3 需使用者手動下載模型後以真實推論通過才可 DONE。 |
+| E04-S037 | todo | — | — | RAG 開發前置環境就緒:硬體規格確認與地端模型準備(使用者 2026-08-20 指示建立並插入 E04)。技術決策已拍板:llama.cpp+GGUF(node-llama-cpp)、embedding(bge-m3 F16)+LLM(Qwen3-32B Q4_K_M 優先/14B 替代——目標機器 VRAM 充裕,品質優先不省容量,使用者 2026-08-20 補充指示)都驗、模型放 repo 內 `models/`(gitignored)。L3 需使用者手動下載模型後以真實推論通過才可 DONE。 |

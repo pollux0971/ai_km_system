@@ -1,13 +1,19 @@
 # docs/stories — Story 完成證據(Evidence)與進度
 
-此目錄有三種檔案:
+此目錄有四種檔案:
 
-- **`PROGRESS.md`** — 進度唯一真相來源(175 個 Team A story 的狀態表),
-  每次狀態轉換必須即時更新並隨 commit 提交。
+- **`PROGRESS.md`** — 進度唯一真相來源(規格庫 175 個 Team A story +
+  `LOCAL-*` 使用者增補 story 的狀態表),每次狀態轉換必須即時更新並隨
+  commit 提交。
 - **`PENDING_DECISIONS.md`** — 自主模式下累積的待使用者批示問題。
 - **`EXX-SYYY.md`** — 每個 story 的完成證據,依
   `.claude/rules/STORY_WORKFLOW.md` Phase 6 建立。
   沒有 EVIDENCE 檔的 story 一律不得視為 DONE。
+- **`LOCAL-SXXX.spec.md`** — `LOCAL-*` 增補 story 的規格定義。規格庫
+  `AI_KM_BMAD_High_Granularity/` 唯讀,使用者直接指示新增的 story 無法
+  寫進 epic 檔,因此其規格權威落在這裡(Metadata / Scope In/Out /
+  Preconditions / 四類 AC / 開發邊界,格式比照 epic 檔)。開發與審核
+  仍走 STORY_WORKFLOW 完整狀態機,證據照常落在 `LOCAL-SXXX.md`。
 
 ## 模板
 

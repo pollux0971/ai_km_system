@@ -32,7 +32,8 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 25 | 25 | 0 | 0 | 0 | 0 |
 | E13 Feedback & Analytics | 17 | 17 | 0 | 0 | 0 | 0 |
-| **合計** | **175** | 174 | 0 | 0 | 1 | 0 |
+| LOCAL 使用者增補(規格庫外) | 1 | 0 | 0 | 0 | 0 | 1 |
+| **合計** | **176** | 174 | 0 | 0 | 1 | 1 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -246,3 +247,14 @@ mock 也做不了才標 `blocked-team-b`。
 | E13-S016 | approved | story/E13-S016-privacy-safe-analytics-fields | [E13-S016.md](E13-S016.md) | privacy-safe analytics fields;系統性稽核 S001~S015 累積的全部 analytics/usage/telemetry 資料結構(`usage-events.ts` 的 `UsageEvent`、`trackEvent` 27 處呼叫點、`messages.ts` 回饋欄位、`feedback-knowledge-candidates.ts`、apps/admin 三個 lib 檔案)。發現唯一真實風險:`recordUsageEvent` 用 `...details` spread 建構持久化物件,型別安全只在呼叫端傳字面量時生效,未來若誤傳變數型 details(例如與 S015 `FeedbackKnowledgeCandidate` 撞名——S015 自己 EVIDENCE 就記錄過一次真實檔名碰撞插曲)可能讓 `comment`/`answerContent` 原文流入持久化 analytics store。修正為 explicit field-picking,函式本身成為強制點。`trackEvent`(跨 50+ 呼叫點的既有 shared 機制)與 `FeedbackKnowledgeCandidate`(刻意保留原文供人工審閱,非自動化 analytics)逐一查證後判斷非本 story 修正對象,原因已在 EVIDENCE 詳述。既有 33 個測試零修改,新增 2 個測試,對抗性複驗還原 spread 寫法精準命中新測試。unit 1531/1531(淨增 2)、E2E 261/261(不變,非快取重跑複驗)。獨立審核 APPROVE(1 round,0 個 finding;審核者獨立重數 `trackEvent` 呼叫點實際為 30 處(非 DEV 自報的 27,輕微計數誤差非覆蓋缺口),逐一確認 payload 皆不含原文;獨立判斷 `FeedbackKnowledgeCandidate` 保留原文的設計對「目前 codebase 現況」(尚無任何審閱介面/匯出管道讀取這份資料)成立,但標記為前瞻性風險——未來若真的建了審閱 UI/匯出路徑,屆時需要重新評估隱私姿態,非本 story 缺口;獨立確認 `apps/admin` 三個 lib 檔案零 telemetry 呼叫;獨立還原 spread 寫法重跑測試精準命中同一個新測試,已還原;獨立重跑 gate 數字與 DEV 自報一致;diff 邊界確認乾淨,既有 33 個測試零修改)。 |
 | E13-S017 | approved | story/E13-S017-analytics-e2e | [E13-S017.md](E13-S017.md) | analytics E2E(E13 最後一個 story);零 production code 變更,同 E01-S020/E03-S033/E05-S031/E07-S025/E09-S024/E11-S025/E13-S006 既有前例——稽核全部 E13 相關 E2E spec(apps/web 11 個+apps/admin 4 個)找出兩個組合層級落差:(1) S009~S013 各自只測「單一動作 → 單一事件」,從未有測試證明一個真實多動作 session(送 2 則訊息+對第一則回覆給 NG+原因+留言+標記知識落差候選、對第二則給 OK+留言)累積出的完整 usage-events 序列本身正確一致(同 userId、依真實順序遞增排列、無交叉污染),且 S006 的四維度組合測試完成時 S015 的知識落差候選標記還不存在;(2) `admin-e2e.spec.ts` 的 `ALL_ADMIN_ENTRIES`(E11-S025 凍結)只有 15 個入口,E13-S013 後來新增的「延遲儀表板」(`/latency`)入口從未被組合測試涵蓋過,E13 自己在 apps/admin 新增的三個 analytics 頁面(回饋佇列+使用量+延遲儀表板)也從未在同一 session 連續造訪過。新增 2 個 E2E spec(apps/web 1 個關鍵流程測試+apps/admin 2 個組合測試,含自己完整的 16 項入口清單,不修改既有凍結的 15 項陣列)。撰寫過程 2 處非邏輯錯誤自我糾正(reason 欄位斷言誤用顯示標籤而非 enum 值、兩處空狀態文字憑記憶猜測寫錯,皆於首次 VERIFY 前修正)。對抗性複驗:突變 `recordUsageEvent` 把 `push` 改 `unshift`(事件順序寫反),既有 1 個 S010 單元測試與本 story 新增的 E2E 測試皆精準命中,已還原確認乾淨。unit web 1531/1531、admin 350/350(皆不變,零 production 變更);E2E 264/264(較 S016 的 261 淨增 3)。獨立審核 APPROVE(1 round,0 個 finding;審核者確認 `admin-e2e.spec.ts` 的既有凍結清單真的零改動,獨立 grep `apps/admin/src/app/page.tsx` 確認確實有 16 個真實入口,與本 story 新測試清單完全吻合,判定「不動舊測試、新增獨立測試涵蓋現況」是正確做法;審核者實際讀過兩個新 spec 全文確認真的測到 5 維度組合(含 count/歸屬/順序/候選範圍的具體 sessionStorage 斷言)與 16 項導覽+3 頁連續造訪隔離,非灌水;獨立重做 push→unshift 突變,確認同時精準命中既有 1 個 S010 單元測試與新 E2E 排序斷言,已還原;獨立確認 `apps/web/src`/`apps/admin/src` 零命中;獨立重跑 gate 數字與 DEV 自報一致)。**E13 Feedback & Analytics epic 全部 17/17 approved 完成。** |
 
+
+## LOCAL 使用者增補(規格庫外)(1)
+
+> `LOCAL-*` 是使用者直接指示新增、不屬於唯讀規格庫
+> `AI_KM_BMAD_High_Granularity/` 175 個 story 的增補 story。
+> 每個 LOCAL story 的規格權威是它自己的 `LOCAL-SXXX.spec.md`
+> (取代 epic 檔的角色);開發仍走 STORY_WORKFLOW 完整狀態機。
+
+| Story | 狀態 | Branch | Evidence | 備註 |
+|---|---|---|---|---|
+| LOCAL-S001 | todo | — | — | RAG 開發前置:硬體規格確認與地端模型準備(規格見 [LOCAL-S001.spec.md](LOCAL-S001.spec.md);使用者 2026-08-20 指示建立)。技術決策已拍板:llama.cpp+GGUF(node-llama-cpp)、embedding(bge-m3)+LLM(Qwen3-4B/8B Q4)都驗、模型放 repo 內 `models/`(gitignored)。L3 需使用者手動下載模型後以真實推論通過才可 DONE。 |

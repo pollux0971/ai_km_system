@@ -1,6 +1,6 @@
 # docs/stories — Story 完成證據(Evidence)與進度
 
-此目錄有三種檔案:
+此目錄有五種檔案:
 
 - **`PROGRESS.md`** — 進度唯一真相來源(追蹤中 story 的狀態表),
   每次狀態轉換必須即時更新並隨 commit 提交。
@@ -8,10 +8,21 @@
 - **`EXX-SYYY.md`** — 每個 story 的完成證據,依
   `.claude/rules/STORY_WORKFLOW.md` Phase 6 建立。
   沒有 EVIDENCE 檔的 story 一律不得視為 DONE。
+- **`specs/EXX-SYYY.spec.md`** — 2026-08-28 使用者增補的 44 個 story,
+  每個 story 一份獨立規格文件(對應 epic 檔章節的逐字副本,含開發範圍、
+  依賴 story、四類 AC、允許/禁止修改清單)。**規格權威仍是 epic 檔**;
+  本目錄只是讓單一 story 開發時不必在數十萬字的 epic 檔裡捲動。索引與
+  依賴摘要表見 `specs/INDEX.md`。注意 `EXX-SYYY.spec.md`(規格)與
+  `EXX-SYYY.md`(證據)是不同檔案。
+- **`STORY_REGISTER_PROMPT.md`** — 交給 Claude Code 開工用的註冊 prompt。
 
 > 使用者指示新增的 story 直接寫進規格庫對應 epic 檔(使用者 2026-08-20
-> 明示覆蓋規格庫唯讀規則,僅限此用途;例:E04-S037),規格權威仍是
-> epic 檔,進度照常登記於 `PROGRESS.md`。
+> 明示覆蓋規格庫唯讀規則,僅限此用途;例:E04-S037;2026-08-28 再依同一
+> 規則插入 44 個 story:E01-S021～S030、E02-S031～S034、E03-S034～S046、
+> E04-S038～S044/S047～S048、E11-S026、E12-S029～S031、E13-S018～S021,
+> 導讀見 `docs/architecture/voice-persistence-sync-m3.md` 與
+> `docs/architecture/tech-debt-audit-2026-08-28.md`,單一 story 規格副本見
+> `specs/`),規格權威仍是 epic 檔,進度照常登記於 `PROGRESS.md`。
 
 ## 模板
 

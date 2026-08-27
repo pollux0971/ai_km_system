@@ -164,11 +164,17 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
 1. **一次一個 story**。未完成前不開下一個(使用者明示除外)。
 2. **story 挑選順序**:使用者指定 > 垂直切片順序(E02→E01→E06→E04→E12→E03→E14
    中屬於 Team A 的部分)> epic 檔內的 sequencing 建議。Team A 只實作
-   E01/E03/E05/E07/E09/E11/E13 的 story;遇到需要 Team B 的部分 → mock + 記錄。
+   E01/E03/E05/E07/E09/E11/E13 的 story,**加上**使用者 2026-08-28 指派的
+   增補 story(E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021;排程依
+   `docs/architecture/voice-persistence-sync-m3.md` 的 wave/lane 與各 story
+   的「依賴關係(平行開發用)」);遇到需要 Team B 的部分 → mock + 記錄。
 3. **契約優先**:`contracts/` 是唯一真相來源。改 contract = 跨組事件,
-   必須先問使用者,不得單方面改。
+   必須先問使用者,不得單方面改。(使用者 2026-08-28 已批准 E02-S031、
+   E04-S038、E12-S029、E13-S018 四個 contract story 依其規格新增 yaml。)
 4. **禁止修改**:`AI_KM_BMAD_High_Granularity/`(規格庫,唯讀)、
    Team B 佔位資料夾(`apps/api`、`apps/worker-*`、`services/*`、`db/*`)。
+   (例外:使用者 2026-08-28 明示授權並指派 Team A 的增補 story——
+   E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021——限該 story 允許修改清單內的路徑,含 `infra/*`。)
 5. **失敗誠實回報**:紅就是紅。任何 gate 未跑或未過,不得宣稱 DONE。
 6. **進度唯一真相**:`docs/stories/PROGRESS.md` 是進度追蹤的唯一來源。
    每次狀態轉換立即更新並隨 commit 提交;不得只更新 tracker 而未實際完成

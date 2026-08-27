@@ -22,3 +22,5 @@ argument-hint: <Story ID,例如 E01-S001;留空則依垂直切片順序自動挑
 
 若 `$ARGUMENTS` 指定的 story 屬於 Team B 的 epic(E02/E04/E06/E08/E10/E12/E14),
 停止並告知使用者:Team A 不實作該 story,只能為其建立 contract 草案與 mock。
+**例外**:使用者 2026-08-28 指派 Team A 開發的增補 story(E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021)照常執行,
+其允許修改清單可含 Team B 佔位資料夾與 `contracts/`(見 CLAUDE.md 鐵律 1/6 例外)。

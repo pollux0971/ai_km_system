@@ -68,6 +68,26 @@ story 沒有這種「Team A 自己真實擁有的資料」可以類比——一�
 需要回來這裡批示後才會回頭處理這個 story;若使用者之後拿到 Team B
 的 E06-S030 contract,也需要回來解除 `blocked-team-b`。
 
+### [2026-08-28] E01-S021／E01-S022／E03-S042 — M3 視覺假設(不阻塞開工,可事後推翻)
+
+**背景**:使用者 2026-08-28 拍板 ASR／持久化／同步的技術方向,但未回覆
+M3 視覺細節。為讓 story 可直接開工,以下以 ASSUMPTION 寫入規格,推翻時只
+需改 seed／字型檔／圖示風格,不影響其他 story:
+
+1. 種子色沿用既有品牌藍 `#1e56a0`(E01-S021 `generate-m3-theme` 的 seed);
+   若有正式品牌色請提供 hex。
+2. 圖示使用 Material Symbols **Outlined**(可改 Rounded/Sharp,只換字型檔)。
+3. 字型:Roboto(拉丁)+ Noto Sans TC(中文)自託管,約 10–12 MB woff2 進 git。
+4. 動畫素材一律原創純 SVG/CSS,不用 Lottie。
+5. 深色模式沿用 `prefers-color-scheme`,不做手動切換。
+6. M3 範圍先做 apps/web(shell、首頁、對話頁優先;其餘頁為 P2),apps/admin
+   不在本批。
+
+**選項**:(推薦)全部照上述假設;或逐點回覆要改的項目。
+
+**影響範圍**:只影響 E01-S021/S022/S023/S024/S025、E03-S042/S043 的視覺
+輸出;不影響後端與資料層 story。
+
 <!-- 模板:
 ### [YYYY-MM-DD] EXX-SYYY — 一句話問題
 - 背景:

@@ -25,19 +25,21 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 20 | 20 | 0 | 0 | 0 | 0 |
-| E03 AI Conversation Experience | 33 | 33 | 0 | 0 | 0 | 0 |
+| E01 Application Shell & User Workspace | 30 | 20 | 0 | 0 | 0 | 10 |
+| E03 AI Conversation Experience | 46 | 33 | 0 | 0 | 0 | 13 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 25 | 25 | 0 | 0 | 0 | 0 |
-| E13 Feedback & Analytics | 17 | 17 | 0 | 0 | 0 | 0 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037) | 1 | 0 | 0 | 0 | 0 | 1 |
-| **合計** | **176** | 174 | 0 | 0 | 1 | 1 |
+| E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
+| E13 Feedback & Analytics | 21 | 17 | 0 | 0 | 0 | 4 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S048) | 10 | 0 | 0 | 0 | 0 | 10 |
+| E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 0 | 0 | 0 | 0 | 4 |
+| E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 0 | 0 | 0 | 0 | 3 |
+| **合計** | **220** | 174 | 0 | 0 | 1 | 45 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
-## E01 Application Shell & User Workspace(20)
+## E01 Application Shell & User Workspace(30)
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
@@ -61,8 +63,18 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S018 | approved | story/E01-S018-app-level-error-boundary | [E01-S018.md](E01-S018.md) | 獨立審核 APPROVE(2 輪 FIX 後 fresh gate 全綠,補上 global-error.tsx 的 CSS import) |
 | E01-S019 | approved | story/E01-S019-frontend-telemetry-hooks | [E01-S019.md](E01-S019.md) | 獨立審核 APPROVE(fresh gate 全綠,無 lockfile drift,scope 未逾界) |
 | E01-S020 | approved | story/E01-S020-e01-e2e-smoke-flow | [E01-S020.md](E01-S020.md) | 獨立審核 APPROVE(fresh gate 連兩輪全綠,無 flaky,scope 未逾界)——**E01 epic 全數 20/20 approved** |
+| E01-S021 | todo | — | — | M3 design token 基礎（種子色 `#1e56a0` 為 ASSUMPTION，見 PENDING_DECISIONS）；HARD 依賴：無；wave 0；`globals.css` 第一修改者。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S021.spec.md](specs/E01-S021.spec.md) |
+| E01-S022 | todo | — | — | 自託管字型（Noto Sans TC + Roboto）與 Material Symbols Outlined、`<Icon>`；HARD 依賴：無；wave 0；字型檔需使用者於本機自官方來源下載。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S022.spec.md](specs/E01-S022.spec.md) |
+| E01-S023 | todo | — | — | App shell M3 化（navigation rail/drawer、top app bar、FAB、M3 list/menu）；HARD 依賴：E01-S021、E01-S022；wave 1；與 E03-S039 同動 sidebar/header，不可同時。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S023.spec.md](specs/E01-S023.spec.md) |
+| E01-S024 | todo | — | — | 首頁 M3 tiles（快速入口 card tiles、最近對話 list tiles）；HARD 依賴：E01-S021、E01-S022；wave 1；與 E03-S039 同動 recent-conversations，不可同時。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S024.spec.md](specs/E01-S024.spec.md) |
+| E01-S025 | todo | — | — | 其餘頁面 M3 一致性（knowledge/maintenance/ERP/profile/login）；HARD 依賴：E01-S021、E01-S022、E01-S023、E01-S024；wave 6；P2 可延後；`globals.css` 最後修改者。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S025.spec.md](specs/E01-S025.spec.md) |
+| E01-S026 | todo | — | — | 品牌與空狀態素材（logo mark、favicon、3 張空狀態 SVG、EmptyState `illustration` prop）；HARD 依賴：無；wave 0；P2 可延後。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S026.spec.md](specs/E01-S026.spec.md) |
+| E01-S027 | todo | — | — | E2E 穩定性強化（資源競爭型 flaky 根因量測與處理，零 retries）；HARD 依賴：E03-S038；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E01-S027.spec.md](specs/E01-S027.spec.md) |
+| E01-S028 | todo | — | — | 內網 HTTPS 部署與一鍵啟動（Caddy、compose、dev-all 腳本、runbook）；HARD 依賴：E04-S039；wave D1；語音功能在 http 內網不可用之根治。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E01-S028.spec.md](specs/E01-S028.spec.md) |
+| E01-S029 | todo | — | — | 安全性 HTTP headers（CSP/HSTS/X-Frame-Options/Referrer-Policy/Permissions-Policy）；HARD 依賴：E04-S039；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E01-S029.spec.md](specs/E01-S029.spec.md) |
+| E01-S030 | todo | — | — | Playwright `reuseExistingServer` CI 安全模式（避免舊 process 造成假綠燈）；HARD 依賴：E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E01-S030.spec.md](specs/E01-S030.spec.md) |
 
-## E03 AI Conversation Experience(33)
+## E03 AI Conversation Experience(46)
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
@@ -99,6 +111,19 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S031 | approved | story/E03-S031-stream-disconnect-reconnect-ux | [E03-S031.md](E03-S031.md) | 獨立審核 APPROVE(Stream disconnect/reconnect UX,SOURCE_BASELINE 完全無此 story 章節(E03 條目在 S30 結束)——審核者獨立複驗:通篇 grep disconnect/reconnect/斷線/重連 等關鍵字零命中,非 S30 那種關鍵字漏搜情境;lib/streaming.ts 於 S10 預留的明確伏筆經 `git show` 原始 commit 複驗屬實非事後編造;沿用 S21/S29/S30 的 [模擬:X] mock trigger 慣例;stream-disconnected 與既有 stream-failed 結構上互斥路徑經程式碼複驗;重新連線沿用原始 answerState 有專屬非預設狀態測試把關;0 次 FIX 循環;審核者獨立重跑 typecheck/lint/build/452 unit/32 個目標 E2E 皆綠;零 BLOCKER/MAJOR/MINOR) |
 | E03-S032 | approved | story/E03-S032-message-retry-ux | [E03-S032.md](E03-S032.md) | 獨立審核 APPROVE(Message retry UX,SOURCE_BASELINE 無此 story 章節(E03 條目在 S30 結束);修正 `handleRetryStream` 遺失 `reviseTarget`/`answerState` 的真實 bug——重試一次失敗的 regenerate 原本會產生重複訊息而非更新原訊息,直接違反 AC 5;審核者獨立重建 fix 前的舊程式碼親自追蹤確認 bug 屬實可達、兩個新測試在舊碼下確實會失敗;`stream-disconnected` 同形狀缺口因目前不可達,刻意不動,審核者亦獨立確認;0 次 FIX 循環;typecheck/lint/build/454 unit/32 個目標 E2E 皆綠,force 全量兩輪皆綠;1 個 MINOR(測試註解鑑別力宣稱過度)已修正) |
 | E03-S033 | approved | story/E03-S033-conversation-e2e-mocked-backend | [E03-S033.md](E03-S033.md) | 獨立審核 APPROVE(conversation E2E with mocked backend,**E03 全部 33 個 story 完成**;SOURCE_BASELINE 無此 story 章節,範圍依 epic 標題本身+SOURCE_BASELINE §11 團隊分工+稽核既有 30+ 個 spec 找到的組合層級覆蓋缺口判斷,審核者親自複驗四個缺口全部屬實,不需 advisor;純新增一個 spec 檔(2 個測試),無任何原始碼變更;1 次 FIX 循環(測試自己的 locator scope 遺漏,非產品 bug);typecheck/lint/build/454 unit/27 個目標 E2E 皆綠,force 全量兩輪(107 E2E)皆綠;1 個 MINOR——FIX 根因原判斷有誤(誤歸因 NotificationCenter),審核者指出後實測確認真正原因是 Next.js route announcer,已更正 EVIDENCE 與測試註解) |
+| E03-S034 | todo | — | — | `@ai-km/api-client` codegen pipeline + `openapi-fetch` runtime client + drift gate；HARD 依賴：任一含 paths 的 contract（建議 E04-S038）；wave 1。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S034.spec.md](specs/E03-S034.spec.md) |
+| E03-S035 | todo | — | — | HTTP AuthClient 與 web 接線（cookie session 跨分頁／重整存活、`/api/v1` rewrite）；HARD 依賴：E02-S031、E03-S034；wave 2；L5 於 E03-S038 後補齊。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S035.spec.md](specs/E03-S035.spec.md) |
+| E03-S036 | todo | — | — | `lib/conversations.ts` 改 typed-client adapter + contract-validated fake API；HARD 依賴：E04-S038、E03-S034、E03-S035；wave 2；既有 lib 測試逐案對照改寫。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S036.spec.md](specs/E03-S036.spec.md) |
+| E03-S037 | todo | — | — | `lib/messages.ts` 改 typed-client adapter（訊息／修訂／四維回饋）；HARD 依賴：E03-S036；wave 3；`message-thread.tsx` 零改動。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S037.spec.md](specs/E03-S037.spec.md) |
+| E03-S038 | todo | — | — | E2E 基礎設施（apps/api webServer、test sandbox、fake ASR、假麥克風），既有 264 E2E 零修改全綠；HARD 依賴：E02-S032、E04-S041、E04-S042、E04-S043、E03-S035、E03-S036、E03-S037；wave 5。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S038.spec.md](specs/E03-S038.spec.md) |
+| E03-S039 | todo | — | — | 跨視窗同步 client（SSE 訂閱、resync、清單／側欄／訊息串重抓、連線指示）；HARD 依賴：E04-S038、E03-S036、E03-S037；wave 4；與 E01-S023/S024、E03-S043 有檔案交集。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S039.spec.md](specs/E03-S039.spec.md) |
+| E03-S040 | todo | — | — | 語音擷取 lib（AudioWorklet 16k WAV、level、VAD、錯誤分類）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S040.spec.md](specs/E03-S040.spec.md) |
+| E03-S041 | todo | — | — | Push-to-talk 按鈕（四態、上傳、自動送出規則、flag、telemetry）；HARD 依賴：E12-S029、E03-S034、E03-S040、E03-S042；wave 1；L3 需 E12-S031。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S041.spec.md](specs/E03-S041.spec.md) |
+| E03-S042 | todo | — | — | VoiceVisualizer 素材（M3 風格、真實音量驅動、reduced-motion）+ 靜態 SVG；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S042.spec.md](specs/E03-S042.spec.md) |
+| E03-S043 | todo | — | — | 對話頁 M3 化（list-detail、訊息卡片、M3 composer 含麥克風 FAB、chips、segmented、side sheet）；HARD 依賴：E01-S021、E01-S022、E03-S039、E03-S041、E03-S042；wave 6。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S043.spec.md](specs/E03-S043.spec.md) |
+| E03-S044 | todo | — | — | 語音＋持久化＋跨視窗同步 E2E（真實 api、fake ASR、假麥克風；真實 ASR 為 L3 手動證據）；HARD 依賴：E03-S038、E03-S039、E03-S041、E03-S043、E04-S044、E12-S031；wave 7；本批最後一個。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S044.spec.md](specs/E03-S044.spec.md) |
+| E03-S045 | todo | — | — | 模擬觸發字串 feature flag 閘門（production 預設關閉，E2E 開啟，既有測試零修改）；HARD 依賴：E03-S041、E03-S038；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E03-S045.spec.md](specs/E03-S045.spec.md) |
+| E03-S046 | todo | — | — | `CONVERSATIONS_PAGE_SIZE` 設定化（production 20，E2E env 2）；HARD 依賴：E03-S036、E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E03-S046.spec.md](specs/E03-S046.spec.md) |
 
 ## E05 Knowledge Management Experience(31)
 
@@ -195,7 +220,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E09-S023 | approved | story/E09-S023-large-result-ux | [E09-S023.md](E09-S023.md) | 獨立審核 APPROVE(單輪;large-result UX;審核者獨立重新讀取 `E10_Enterprise_Data_Integration.md` 4842-4899 行 E10-S024「Row-limit enforcement」的完整 AC 與 UX Acceptance 原文,逐字確認其 8 條 Functional AC 為通用樣板、UX Acceptance 僅為「API/domain error 使用穩定 error code」的錯誤代碼衛生要求,零任何前端顯示相關文字,證實 DEV「排除模擬截斷揭露設計」的核心推理有堅實依據,不是規避工作量;改為兩項有實據的強化——`erp-result-charts.ts` 圖表新增 `ERP_RESULT_CHART_MAX_BARS`(10)上限與 `hiddenCount`(先前對每筆結果無條件渲染 bar,無上限保護),分頁列文字新增總筆數(`paginateErpResultTable` 早已計算 `totalRows` 但先前從未被讀取顯示)——兩者皆只使用既有已計算資料或為既有元件加防護性上限,不涉及任何新的跨 team 資料形狀;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit 105/105 檔案 1354/1354 tests、E2E 203/203(獨立單獨執行,launch 前確認無殘留 process);審核者另以獨立對抗性突變、鎖定與 DEV 自己驗證過的層(元件層 `hiddenCount > 0` 渲染條件)不同的另一層——直接竄改 lib 層級的切片上限(`slice(0, ERP_RESULT_CHART_MAX_BARS)` 改成 `+ 1`,模擬差一錯誤)——精準命中預期的 2 個測試失敗(上限筆數與 hiddenCount 計算、以及數字/非數字判斷範圍),且確認元件層 72 個測試完全不受影響(因為該測試直接 mock 回傳值,不經過真實 lib 邏輯),證實兩層測試關注點確實分離、彼此獨立守護;審核者並獨立驗證 DEV 誠實揭露的流程疏失(IMPLEMENT 階段誤在 main 上進行,事後才補建 branch)——`git log main` 確認 main 分支 HEAD 精確停在 E09-S022 merge commit(`01e4f55`),無任何 S023 相關的雜散 commit 落在 main 上,補救程序正確,main 未受影響;diff 邊界確認乾淨(7 個檔案,皆在 apps/web/tests/e2e/docs 範圍內,禁止清單資料夾零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;本 story 完成後 E09 僅剩最後 1 個 story(S024 ERP E2E);PROGRESS.md 逐列計數複核一致) |
 | E09-S024 | approved | story/E09-S024-erp-e2e | [E09-S024.md](E09-S024.md) | 獨立審核 APPROVE(單輪;ERP E2E,**E09 最後一個 story,epic 至此 24/24 全數 approved**;同 E03-S033/E05-S031/E07-S025 既有前例,零原始碼變更,純新增 `erp-e2e.spec.ts` 2 個測試;審核者獨立重新查證核心主張:直接讀取 `erp-scenarios.ts` 確認 `revenue-by-branch` 關鍵字為「營收/分公司/銷售額」,種子查詢 `erp-query-sample-1` 文字「上個月各分公司的營收總額是多少?」確實同時含「營收」與「分公司」,構成真實 confident match;另外獨立核對既有測試 2 使用的文字「上季各產品線的毛利率是多少?」對全部 4 個情境的關鍵字逐一比對確認零命中,證實兩份測試文字選擇的「confident vs ambiguous」對比屬實,不是誇大的落差描述;獨立確認 `git diff main --stat -- apps/web/src` 為空,證實零原始碼變更的核心前提;獨立 force 全量重跑 typecheck 20/20、lint 20/20、build 12/12、unit 105/105 檔案 1354/1354 tests(與 S023 相同)、E2E 205/205(獨立單獨執行,launch 前確認無殘留 process);審核者另以獨立對抗性突變、鎖定與 DEV 自己驗證過的函式(`selectErpQueryScenario`,ERP 資料層)完全不同的另一層——`login-form.tsx` 的 returnUrl 重導向邏輯(改成登入後永遠導去 `/` 而忽略 `sanitizeReturnUrl` 算出的目的地,屬於 E01 網域、與 ERP 資料無關)——精準命中預期的測試 1(reload-survival,timeout 在 `reauthenticate` helper 等待正確網址處),測試 2 完全不受影響(它沒有任何 reload/重新登入步驟),證實測試 1 的重整存活驗證確實依賴且驗證了 returnUrl 機制本身正確運作,不只是「重新登入成功」這麼淺;diff 邊界確認乾淨(3 個檔案,皆在 tests/e2e/docs/stories 範圍內,禁止清單資料夾與 apps/web/src 零命中);零 skip/only/passWithNoTests/`|| true`/TODO 等造假跡象;0 個 BLOCKER/MAJOR/MINOR;PROGRESS.md 逐列計數複核一致) |
 
-## E11 Admin Console(25)
+## E11 Admin Console(26)
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
@@ -224,8 +249,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E11-S023 | approved | story/E11-S023-admin-route-authorization | [E11-S023.md](E11-S023.md) | admin route authorization;開工前發現架構缺口(apps/admin 無 session/login,`@ai-km/auth-client` mock 無管理員帳號,真正 RBAC 後端 E02 為 Team B 未建置,強制接線會讓現有 22 個 admin E2E 全部失敗),依全域規則第 7 條以 AskUserQuestion 徵詢使用者,使用者選擇「只建結構,不接線」。`ADMIN_ROUTES`/`rolesRequiredForAdminRoute` 角色指派逐一可追溯至 `roles.ts` 已核准的 `ROLE_DESCRIPTIONS`,曖昧路由依 Deny Wins 收斂至 super_administrator only。`AdminRouteGuard` 比照 apps/web 的 RoleGuard,但刻意反轉未分類路由預設(拒絕而非開放)+ 401/403 分開訊息。無 FIX 循環。因應安全性敏感度執行兩次獨立對抗性突變(fail-closed 預設反轉、401/403 訊息合併),皆精準命中。未接線至 layout.tsx,未新增/修改任何既有 E2E(誠實記錄理由)。獨立審核 APPROVE(1 round,無需修正;審核者獨立確認 layout.tsx 與全部既有 E2E spec 零命中、角色描述逐一比對屬實;E2E 出現的 2 個失敗與本 diff 無關(零觸碰 apps/web),獨立 `--workers=1` 隔離重跑確認乾淨,同 S019 已診斷的資源競爭型 flaky;另以獨立對抗性突變鎖定第三層——路由比對的斜線防護,移除後導致全部 7 個測試失敗,證實測試套件對此類授權繞過錯誤有廣泛覆蓋)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 43/43 檔案 300/300 tests,E2E 231/231 與 S022 相同)。diff 邊界確認乾淨(僅 apps/admin/docs,apps/web/layout.tsx/既有 E2E 零命中) |
 | E11-S024 | approved | story/E11-S024-dangerous-action-confirmation | [E11-S024.md](E11-S024.md) | dangerous-action confirmation;查核全 codebase 確認今天沒有任何真正危險/不可逆的 admin 動作(所有 toggle 皆可逆;無任何 delete 能力),且 S013/S014 自己的 EVIDENCE 已明確伏筆「今天不加確認、未來真正接上有效力系統時很可能需要 E11-S024」,回頭套用確認步驟等於推翻其既有判斷。`DangerousActionConfirm` 比照 apps/web 已核准兩次的 DeleteConversation/KnowledgeDocumentDeleteButton pattern,泛用可重用,完整測試,不接線至任何既有動作(同 S023 結構完整、未接線先例)。不在元件內寫入 audit event(同 S015 判斷)。無 FIX 循環。對抗性複驗精準命中元件自己 doc comment 點名的、KnowledgeDocumentDeleteButton 當年真實發生過的 accessible-name 缺陷。獨立審核 APPROVE(1 round,無需修正;審核者逐字查證 S013/S014 EVIDENCE 伏筆屬實、全 codebase 確認零 delete 函式;另以獨立對抗性突變鎖定與 DEV 不同的另一層——成功路徑對話框自動關閉行為,精準命中 2 個測試)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 44/44 檔案 308/308 tests,E2E 231/231 與 S023 相同)。diff 邊界確認乾淨(僅新增元件+docs,零觸碰既有元件/頁面/E2E) |
 | E11-S025 | approved | story/E11-S025-admin-e2e | [E11-S025.md](E11-S025.md) | admin E2E(E11 最後一個 story);零原始碼變更,同 E03-S033/E05-S031/E07-S025/E09-S024 既有前例——稽核全部 16 個既有 admin-*.spec.ts(25 個測試)找出組合層級落差:無測試在同一 session 連續造訪多領域驗證首頁 15 個入口連結全部共存;無測試證明多個獨立領域(各自獨立 sessionStorage key)同時變更後撐過真實重整仍彼此不污染;無測試證明完全未碰的領域維持原始種子狀態。新增 2 個測試涵蓋兩者。無 FIX 循環,首次執行即全綠。對抗性複驗比照 E09-S024 方法,對既有已核准的 groups.ts 做突變(STORAGE_KEY 改成 departments.ts 的值,模擬複製貼上忘記改 key),精準命中測試 2(Groups 未碰域污染檢查),測試 1 不受影響。獨立審核 APPROVE(1 round,無需修正;審核者獨立確認零觸碰 apps/admin/src、三個 STORAGE_KEY 確實各自獨立;另針對 DEV 未觸及的測試 1 做獨立對抗性突變——從 page.tsx 移除「知識庫管理」連結模擬回歸,精準命中測試 1,測試 2 不受影響)。Gate 全綠:typecheck 20/20、lint 20/20、build 12/12、`pnpm test` 全 pipeline 綠(admin 44/44 檔案 308/308 tests 與 S024 相同,E2E 233/233,較 S024 淨增 2)。diff 邊界確認乾淨(僅新增 E2E spec+docs,零觸碰 apps/admin/src)。**E11 Admin Console 全部 25 個 story 至此完成。** |
+| E11-S026 | todo | — | — | apps/admin 登入／session gate／`AdminRouteGuard` 接線（E11-S023 空殼補完）+ E2E setup project 讓既有 admin spec 零修改；HARD 依賴：E02-S032、E02-S033、E03-S035、E03-S038；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E11-S026.spec.md](specs/E11-S026.spec.md) |
 
-## E13 Feedback & Analytics(17)
+## E13 Feedback & Analytics(21)
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
@@ -246,12 +272,18 @@ mock 也做不了才標 `blocked-team-b`。
 | E13-S015 | approved | story/E13-S015-feedback-to-knowledge-candidate-flow | [E13-S015.md](E13-S015.md) | feedback-to-knowledge-candidate flow;grep 確認 E05(知識庫,Team A)/E06(ingestion,Team B)兩份 epic 皆零 candidate 相關內容——真正把候選寫入知識庫索引屬 E06 未建置的 ingestion pipeline,本 story 不嘗試。新增獨立模組 `feedback-knowledge-candidates.ts`(`FeedbackKnowledgeCandidate`,重用既有 `FeedbackReason`),`submitFeedbackKnowledgeCandidate(message)` fail-closed 驗證 NG+reason+comment 三者齊全,以 sourceMessageId 去重(非覆寫)。**過程中兩個真實插曲皆已發現並修正**:(1) 撰寫初期誤用 `Write` 覆蓋了已核准的 E07-S023「Knowledge candidate submission」同名檔案(`knowledge-candidates.ts`/`.test.ts`,完全不同領域的實體),經 `git checkout main --` 逐一復原並改用 `feedback-knowledge-candidates.ts`/`FeedbackKnowledgeCandidate` 徹底避開撞名,復原後獨立確認 E07-S023 相關 117 個既有測試零受影響;(2)「已標記」狀態原本只在 local React state,元件重掛載/reload 後會不誠實地顯示回「尚未標記」(即使候選已真的持久化),E2E 測試直接抓到,修正為載入時從 `listFeedbackKnowledgeCandidates()` 重新推導。UI 按鈕僅在 NG+reason+comment 三者齊全時出現,點擊鎖定(no-undo),沿用 S001~S014 一路建立的狀態管理 pattern。獨立審核 Round 1 REQUEST-CHANGES(1 個 MAJOR:唯一測「OK feedback 該被拒絕」的測試 fixture 沒帶 `feedbackReason`,意外被第二道 guard 掩護,對抗性突變拿掉第一道 `feedback !== "NG"` guard 後全部既有測試依然通過);新增 1 個測試(OK feedback 刻意搭配 production 端不可能出現的 reason+comment,單獨隔離驗證第一道 guard),同一突變下精準命中該新測試、其餘 9 個不受影響。unit 1529/1529(淨增 21:10 lib+11 元件)、E2E 261/261(淨增 3,非快取重跑複驗)。Round 2 獨立複驗 APPROVE(0 個 finding):`--force` 全量重跑 typecheck 20/20、lint 20/20,unit web 107/107 檔案 1529/1529 tests、admin 46/46 檔案 350/350 tests,E2E 261/261;數字與 DEV 自報完全一致;`knowledge-candidates.ts`/`.test.ts`(E07-S023 原始檔名)再次確認零殘留;`git diff main a5f16fa` 之對比空白。 |
 | E13-S016 | approved | story/E13-S016-privacy-safe-analytics-fields | [E13-S016.md](E13-S016.md) | privacy-safe analytics fields;系統性稽核 S001~S015 累積的全部 analytics/usage/telemetry 資料結構(`usage-events.ts` 的 `UsageEvent`、`trackEvent` 27 處呼叫點、`messages.ts` 回饋欄位、`feedback-knowledge-candidates.ts`、apps/admin 三個 lib 檔案)。發現唯一真實風險:`recordUsageEvent` 用 `...details` spread 建構持久化物件,型別安全只在呼叫端傳字面量時生效,未來若誤傳變數型 details(例如與 S015 `FeedbackKnowledgeCandidate` 撞名——S015 自己 EVIDENCE 就記錄過一次真實檔名碰撞插曲)可能讓 `comment`/`answerContent` 原文流入持久化 analytics store。修正為 explicit field-picking,函式本身成為強制點。`trackEvent`(跨 50+ 呼叫點的既有 shared 機制)與 `FeedbackKnowledgeCandidate`(刻意保留原文供人工審閱,非自動化 analytics)逐一查證後判斷非本 story 修正對象,原因已在 EVIDENCE 詳述。既有 33 個測試零修改,新增 2 個測試,對抗性複驗還原 spread 寫法精準命中新測試。unit 1531/1531(淨增 2)、E2E 261/261(不變,非快取重跑複驗)。獨立審核 APPROVE(1 round,0 個 finding;審核者獨立重數 `trackEvent` 呼叫點實際為 30 處(非 DEV 自報的 27,輕微計數誤差非覆蓋缺口),逐一確認 payload 皆不含原文;獨立判斷 `FeedbackKnowledgeCandidate` 保留原文的設計對「目前 codebase 現況」(尚無任何審閱介面/匯出管道讀取這份資料)成立,但標記為前瞻性風險——未來若真的建了審閱 UI/匯出路徑,屆時需要重新評估隱私姿態,非本 story 缺口;獨立確認 `apps/admin` 三個 lib 檔案零 telemetry 呼叫;獨立還原 spread 寫法重跑測試精準命中同一個新測試,已還原;獨立重跑 gate 數字與 DEV 自報一致;diff 邊界確認乾淨,既有 33 個測試零修改)。 |
 | E13-S017 | approved | story/E13-S017-analytics-e2e | [E13-S017.md](E13-S017.md) | analytics E2E(E13 最後一個 story);零 production code 變更,同 E01-S020/E03-S033/E05-S031/E07-S025/E09-S024/E11-S025/E13-S006 既有前例——稽核全部 E13 相關 E2E spec(apps/web 11 個+apps/admin 4 個)找出兩個組合層級落差:(1) S009~S013 各自只測「單一動作 → 單一事件」,從未有測試證明一個真實多動作 session(送 2 則訊息+對第一則回覆給 NG+原因+留言+標記知識落差候選、對第二則給 OK+留言)累積出的完整 usage-events 序列本身正確一致(同 userId、依真實順序遞增排列、無交叉污染),且 S006 的四維度組合測試完成時 S015 的知識落差候選標記還不存在;(2) `admin-e2e.spec.ts` 的 `ALL_ADMIN_ENTRIES`(E11-S025 凍結)只有 15 個入口,E13-S013 後來新增的「延遲儀表板」(`/latency`)入口從未被組合測試涵蓋過,E13 自己在 apps/admin 新增的三個 analytics 頁面(回饋佇列+使用量+延遲儀表板)也從未在同一 session 連續造訪過。新增 2 個 E2E spec(apps/web 1 個關鍵流程測試+apps/admin 2 個組合測試,含自己完整的 16 項入口清單,不修改既有凍結的 15 項陣列)。撰寫過程 2 處非邏輯錯誤自我糾正(reason 欄位斷言誤用顯示標籤而非 enum 值、兩處空狀態文字憑記憶猜測寫錯,皆於首次 VERIFY 前修正)。對抗性複驗:突變 `recordUsageEvent` 把 `push` 改 `unshift`(事件順序寫反),既有 1 個 S010 單元測試與本 story 新增的 E2E 測試皆精準命中,已還原確認乾淨。unit web 1531/1531、admin 350/350(皆不變,零 production 變更);E2E 264/264(較 S016 的 261 淨增 3)。獨立審核 APPROVE(1 round,0 個 finding;審核者確認 `admin-e2e.spec.ts` 的既有凍結清單真的零改動,獨立 grep `apps/admin/src/app/page.tsx` 確認確實有 16 個真實入口,與本 story 新測試清單完全吻合,判定「不動舊測試、新增獨立測試涵蓋現況」是正確做法;審核者實際讀過兩個新 spec 全文確認真的測到 5 維度組合(含 count/歸屬/順序/候選範圍的具體 sessionStorage 斷言)與 16 項導覽+3 頁連續造訪隔離,非灌水;獨立重做 push→unshift 突變,確認同時精準命中既有 1 個 S010 單元測試與新 E2E 排序斷言,已還原;獨立確認 `apps/web/src`/`apps/admin/src` 零命中;獨立重跑 gate 數字與 DEV 自報一致)。**E13 Feedback & Analytics epic 全部 17/17 approved 完成。** |
+| E13-S018 | todo | — | — | Contract：analytics API（usage-events、usage/latency metrics、feedback queue、admin health）；HARD 依賴：E02-S031、E04-S038；wave D1。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S018.spec.md](specs/E13-S018.spec.md) |
+| E13-S019 | todo | — | — | `services/feedback` 實作（usage-events 持久化、彙總、跨 owner feedback read model 角色守門）；HARD 依賴：E13-S018、E04-S040、E04-S043、E02-S033；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S019.spec.md](specs/E13-S019.spec.md) |
+| E13-S020 | todo | — | — | apps/web `usage-events.ts` 改送 server（純函式保留，E13-S009～S013/S017 測試對照改寫）；HARD 依賴：E13-S018、E03-S034、E03-S036；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S020.spec.md](specs/E13-S020.spec.md) |
+| E13-S021 | todo | — | — | apps/admin 回饋佇列／使用量／延遲／系統健康接真實 API（移除永遠空／零／null／unknown stub）；HARD 依賴：E11-S026、E13-S018、E03-S034；wave D3；E11-S016/S017/S021/S022、E13-S007/S008/S012/S013/S014 空殼補完。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S021.spec.md](specs/E13-S021.spec.md) |
 
 
-## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,1)
+## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,10)
 
-> E04 屬 Team B epic,本表只追蹤使用者 2026-08-20 明示指示插入規格庫
-> epic 檔的增補 story(使用者明示覆蓋規格庫唯讀規則,僅限該次插入)。
+> E04 屬 Team B epic,本表只追蹤使用者明示指示插入規格庫 epic 檔的增補
+> story(2026-08-20 插入 E04-S037;2026-08-28 插入 E04-S038～S047,使用者明示
+> 覆蓋規格庫唯讀規則,僅限該兩次插入)。E04-S038 起由 **Team A** 開發
+> (使用者 2026-08-28 指派;E04-S037 仍為 Team B)。
 > 規格權威:`AI_KM_BMAD_High_Granularity/epics/
 > E04_RAG_&_Conversation_Intelligence.md` 之 E04-S037(epic story 數
 > 36 → 37)。開發走 STORY_WORKFLOW 完整狀態機,證據落 `E04-S037.md`。
@@ -259,3 +291,41 @@ mock 也做不了才標 `blocked-team-b`。
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
 | E04-S037 | todo | — | — | RAG 開發前置環境就緒:硬體規格確認與地端模型準備(使用者 2026-08-20 指示建立並插入 E04)。技術決策已拍板:llama.cpp+GGUF(node-llama-cpp)、embedding(bge-m3 F16)+LLM(Qwen3-32B Q4_K_M 優先/14B 替代——目標機器 VRAM 充裕,品質優先不省容量,使用者 2026-08-20 補充指示)都驗、模型放 repo 內 `models/`(gitignored)。L3 需使用者手動下載模型後以真實推論通過才可 DONE。 |
+| E04-S038 | todo | — | — | Contract 凍結：conversations/messages REST + change-event SSE（`contracts/openapi/conversations.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S038.spec.md](specs/E04-S038.spec.md) |
+| E04-S039 | todo | — | — | apps/api bootstrap（Fastify、config、錯誤封套、correlation、契約載入與 harness、auth 介面）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S039.spec.md](specs/E04-S039.spec.md) |
+| E04-S040 | todo | — | — | SQLite 基礎（better-sqlite3、migration runner、conversation schema、change_events、ownerKey helper）；HARD 依賴：E04-S039；wave 1。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S040.spec.md](specs/E04-S040.spec.md) |
+| E04-S041 | todo | — | — | Conversations REST（list/search/paginate/create/get/patch/delete + 事件 + seed）；HARD 依賴：E04-S038、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S041.spec.md](specs/E04-S041.spec.md) |
+| E04-S042 | todo | — | — | Messages REST（list/create user 與過渡期 assistant/revisions，連動摘要 + seed）；HARD 依賴：E04-S038、E04-S041；wave 3。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S042.spec.md](specs/E04-S042.spec.md) |
+| E04-S043 | todo | — | — | Message feedback endpoints（verdict/reason/comment/citation，fail-closed 規則搬到 server）；HARD 依賴：E04-S038、E04-S042；wave 4。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S043.spec.md](specs/E04-S043.spec.md) |
+| E04-S044 | todo | — | — | Change-event SSE 端點（每 owner 一條、Last-Event-ID 重播、resync、heartbeat、連線上限）；HARD 依賴：E04-S038、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S044.spec.md](specs/E04-S044.spec.md) |
+| E04-S047 | todo | — | — | `/v1/health` subsystem 三態 + 角色守門 `/v1/admin/health`；HARD 依賴：E04-S040、E13-S018、E02-S033；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E04-S047.spec.md](specs/E04-S047.spec.md) |
+| E04-S048 | todo | — | — | CSRF 防禦：state-changing API 要求自訂 header（`x-requested-with`）+ multipart Origin 檢查；HARD 依賴：E04-S039、E02-S032；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E04-S048.spec.md](specs/E04-S048.spec.md) |
+
+## E02 Identity, RBAC & Authorization(僅追蹤使用者增補,4)
+
+> E02 屬 Team B epic,本表只追蹤使用者 2026-08-28 明示指示插入規格庫
+> epic 檔的增補 story(E02-S031～S033,session-cookie 登入薄切片與管理員 seed;規格權威
+> `AI_KM_BMAD_High_Granularity/epics/E02_Identity,_RBAC_&_Authorization.md`,
+> epic story 數 30 → 33),由 **Team A** 開發。使用者同時授權在 Team B 佔位資料夾(`apps/api`、
+> `services/*`、`db/*`)與 `contracts/` 實作本批 story;各 story 邊界仍逐一
+> 列出允許／禁止修改清單。
+
+| Story | 狀態 | Branch | Evidence | 備註 |
+|---|---|---|---|---|
+| E02-S031 | todo | — | — | Contract 凍結：session-cookie login/logout/session（E02-S009 最小切片，`contracts/openapi/auth.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E02-S031.spec.md](specs/E02-S031.spec.md) |
+| E02-S032 | todo | — | — | 實作 session-cookie 登入薄切片（users/sessions migration、scrypt、requireSession、dev trigger、E2E test sandbox）；HARD 依賴：E02-S031、E04-S039、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E02-S032.spec.md](specs/E02-S032.spec.md) |
+| E02-S033 | todo | — | — | 管理員帳號 seed（6 個角色）+ `requireAnyRole` 最小角色守門 + cookie domain env；HARD 依賴：E02-S032；wave D1。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E02-S033.spec.md](specs/E02-S033.spec.md) |
+| E02-S034 | todo | — | — | 登入速率限制與帳號鎖定（per-username/per-IP、恆定時間、不洩漏鎖定狀態）；HARD 依賴：E02-S032；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E02-S034.spec.md](specs/E02-S034.spec.md) |
+
+## E12 Model & Prompt Platform(僅追蹤使用者增補,3)
+
+> E12 屬 Team B epic,本表只追蹤使用者 2026-08-28 明示指示插入規格庫
+> epic 檔的增補 story(E12-S029～S031,語音辨識;規格權威
+> `AI_KM_BMAD_High_Granularity/epics/E12_Model_&_Prompt_Platform.md`,
+> epic story 數 28 → 31),由 **Team A** 開發。
+
+| Story | 狀態 | Branch | Evidence | 備註 |
+|---|---|---|---|---|
+| E12-S029 | todo | — | — | Contract 凍結：transcription API（`contracts/openapi/transcriptions.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S029.spec.md](specs/E12-S029.spec.md) |
+| E12-S030 | todo | — | — | ASR 環境就緒（whisper-server CUDA 建置／模型指引、check-asr／verify-asr 以真實中英夾雜音檔驗證）；HARD 依賴：無；wave 0；比照 E04-S037，L3 需使用者於目標機器手動完成。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S030.spec.md](specs/E12-S030.spec.md) |
+| E12-S031 | todo | — | — | Transcription 端點（TranscriptionProvider 抽象、whisper-server adapter、fake provider、WAV 驗證、OpenCC 繁體化）；HARD 依賴：E12-S029、E04-S039；wave 1；L3 需 E12-S030。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S031.spec.md](specs/E12-S031.spec.md) |

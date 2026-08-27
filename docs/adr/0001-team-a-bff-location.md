@@ -3,6 +3,12 @@
 Status: Accepted (assumption made during monorepo scaffold — needs Team B
 sign-off before being relied upon for real story work)
 
+Amendment 2026-08-28: still in force for BFF logic. Separately, the user
+assigned Team A a batch of stories that implement a real `apps/api`
+(ADR 0003); that is not BFF logic and does not supersede this ADR — the
+web/admin apps keep calling `apps/api` only through `@ai-km/api-client`, and
+`/api/v1/*` in the Next apps is a rewrite (proxy), not a Route Handler.
+
 ## Context
 
 `SOURCE_BASELINE.md` and `readme_zh.md` state Team A "可以建立 Mock Server、

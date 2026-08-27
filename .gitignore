@@ -33,3 +33,6 @@ pnpm-debug.log*
 coverage/
 playwright-report/
 test-results/
+
+# 使用者指示的 story 註冊 zip(內容已解壓進 repo,archive 本身不入 git)
+/AI_KM_story_register_*.zip

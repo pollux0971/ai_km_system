@@ -3,7 +3,9 @@
 Typed HTTP client generated from `contracts/openapi/*.yaml`.
 
 Nothing is generated yet — `contracts/openapi/core.yaml` only has the shared
-`Error`/`Pagination` schemas as a scaffold check. Once Team B freezes real
+`Error`/`Pagination` schemas as a scaffold check. (2026-08-28: E03-S034 turns
+this package into the multi-spec codegen + `openapi-fetch` runtime client
+used by every Team A adapter; see that story.) Once Team B freezes real
 contracts for E02 (auth), E04 (retrieval/citation) and E12 (model gateway),
 add them under `contracts/openapi/`, then run:
 

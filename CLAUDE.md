@@ -25,6 +25,9 @@
 
 1. **不發明 contract**:endpoint / schema / permission 不存在 → 回報 BLOCKED,
    不猜測。`contracts/` 是唯一真相來源,改 contract 前必須先問使用者。
+   (例外:使用者 2026-08-28 已批准的 contract story——E02-S031、E04-S038、
+   E12-S029、E13-S018——可依其 story 規格新增對應 yaml;其他 story 仍不得
+   改 contract。)
 2. **Fail closed**:Authorization 先於 retrieval;Deny-Wins;未授權資料不進
    context/citation/export/log。
 3. **前端與 BFF 不直連 DB / vector store**;只透過 `@ai-km/api-client`。
@@ -34,12 +37,20 @@
 6. **範圍紀律**:只改 story 允許清單內的檔案;Team B 資料夾
    (`apps/api`、`apps/worker-*`、`services/*`、`db/*`)與
    `AI_KM_BMAD_High_Granularity/` 一律不動。
+   (例外:使用者 2026-08-28 明示授權並指派 Team A 開發的增補 story——
+   E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021——可在**該 story 允許修改清單內**修改 `apps/api`、`services/*`、
+   `db/*`、`infra/*`;導讀見 `docs/architecture/voice-persistence-sync-m3.md`
+   與 `docs/architecture/tech-debt-audit-2026-08-28.md`。)
 7. **證據落檔**:story 沒有 `docs/stories/EXX-SYYY.md` 就不是 DONE。
 
 ## Team A 範圍
 
 只實作 E01/E03/E05/E07/E09/E11/E13 的 story。依賴 Team B(E02/E04/E06/E08/
 E10/E12/E14)時:對 contract 草案 + mock 開發,並在 EVIDENCE 記錄。
+**2026-08-28 起 Team A 另負責使用者增補並指派的 40 個 story**:E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021
+(含落在 Team B epic 的 E02/E04/E12 story,domain 仍屬 Team B,contract 變更
+需 domain owner review)。E04-S037 維持 Team B。全部走完整狀態機,進度登記於
+PROGRESS.md 各 epic 章節。
 
 ## 開發環境
 

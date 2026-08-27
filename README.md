@@ -29,6 +29,15 @@ The monorepo is **not** split into `team-a/`/`team-b/` folders — Domain
 Ownership beats Team Folder Ownership. Every folder below states its owner
 in its own `README.md`.
 
+**2026-08-28 assignment:** the user assigned Team A a batch of 40 user-added
+stories (E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021) that implement the first real backend slice (`apps/api`,
+`services/identity|conversation|model-gateway|feedback`, `db/migrations`),
+voice input (server-side whisper), conversation persistence, cross-window
+sync, Material 3 UI, and a tech-debt clean-up. Domain ownership of E02/E04/E12
+stays with Team B; contract changes still need domain-owner review. Read
+`docs/architecture/voice-persistence-sync-m3.md` and
+`docs/architecture/tech-debt-audit-2026-08-28.md` first.
+
 ## Layout
 
 ```

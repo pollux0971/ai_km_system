@@ -49,7 +49,10 @@ while true:
 - main 上的 gate 意外變紅且一次修復未果。
 - git 出現非預期狀態(衝突、detached HEAD、遠端 diverged)。
 - 任何情況下都**禁止**:force-push、跳過 gate、繞過 STORY_WORKFLOW、
-  動 Team B 資料夾或規格庫。
+  動 Team B 資料夾或規格庫(例外:使用者 2026-08-28 指派的增補 story 依其
+  允許修改清單觸碰 Team B 資料夾,仍不得動規格庫;story 挑選時優先依
+  `docs/architecture/voice-persistence-sync-m3.md` 的 wave 順序,HARD 依賴
+  未 approved 的 story 不得開工)。
 
 ## 收尾報告(循環結束時必出)
 

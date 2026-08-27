@@ -15,3 +15,8 @@ Single source of truth for cross-team API contracts (Contract-First policy).
 - Team A's first three needed contracts (see the suggested vertical slice in
   `readme_zh.md`): E02 minimum auth (login/session/logout), E04 authorized
   retrieval + citation, E12 local model gateway chat/completion (streaming).
+- **2026-08-28:** the user approved four contract stories to be authored by
+  Team A (domain owner review still required before freeze): `auth.yaml`
+  (E02-S031), `conversations.yaml` + `contracts/events/conversation-change-events.md`
+  (E04-S038), `transcriptions.yaml` (E12-S029), `analytics.yaml` (E13-S018).
+  Every other endpoint is still BLOCKED-until-negotiated.

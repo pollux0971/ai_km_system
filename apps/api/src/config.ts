@@ -19,6 +19,7 @@ export interface ApiConfig {
   readonly corsOrigins: readonly string[];
   readonly devTriggers: boolean;
   readonly testSandbox: boolean;
+  readonly autoMigrate: boolean;
   readonly asrProvider: AsrProvider;
   readonly asrServerUrl: string;
   readonly logLevel: LogLevel;
@@ -156,6 +157,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     corsOrigins: Object.freeze(readOriginList(env, "AI_KM_CORS_ORIGINS")),
     devTriggers,
     testSandbox,
+    // Defaults ON so a developer's first `pnpm dev` just works. A production
+    // deploy should set it false and run `pnpm --filter @ai-km/api migrate`
+    // as its own step, so a schema change is never a side effect of a restart
+    // (E04-S040; see db/migrations/README.md).
+    autoMigrate: readBoolean(env, "AI_KM_AUTO_MIGRATE", true),
     asrProvider: readEnum<AsrProvider>(env, "AI_KM_ASR_PROVIDER", ASR_PROVIDERS, "whisper-server"),
     asrServerUrl: readUrl(env, "AI_KM_ASR_SERVER_URL", "http://127.0.0.1:8178"),
     logLevel: readEnum<LogLevel>(env, "AI_KM_LOG_LEVEL", LOG_LEVELS, "info"),

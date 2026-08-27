@@ -10,3 +10,9 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+  # better-sqlite3's install script runs prebuild-install, which downloads the
+  # prebuilt native binary for this platform/Node ABI (Node 22) and only falls
+  # back to node-gyp when none exists — the same "fetch a platform binary, no
+  # arbitrary code" shape as esbuild above. Added by E04-S040 (apps/api's
+  # SQLite persistence, ADR 0003 §2).
+  better-sqlite3: true

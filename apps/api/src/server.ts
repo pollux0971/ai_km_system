@@ -1,0 +1,201 @@
+/**
+ * Fastify assembly for apps/api (E04-S039, ADR 0003 §1).
+ *
+ * `buildServer()` is a pure factory returning a non-listening instance, so
+ * every test drives the real server through `inject()` rather than a mock of
+ * it. `main.ts` is the only place that binds a port.
+ *
+ * Domain code does NOT live here. Each domain ships a Fastify plugin from
+ * `services/<domain>` and is registered below; this file owns only config,
+ * logging, correlation, the error envelope, the contract registry and the
+ * authentication seam. See README.md for how to add one.
+ */
+import { randomUUID } from "node:crypto";
+import Fastify, { LogController, type FastifyInstance } from "fastify";
+import ajvModule from "ajv/dist/2020.js";
+import addFormatsModule from "ajv-formats";
+
+// See the note in contracts.ts — CJS packages with ESM-shaped typings.
+const Ajv2020 = ajvModule.default;
+const addFormats = addFormatsModule.default;
+import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
+import { loadConfig, type ApiConfig } from "./config.js";
+import { registerErrorHandling, ApiHttpError, ERROR_CODES } from "./errors.js";
+import { registerCorrelation, readCorrelationId } from "./correlation.js";
+import { registerAuth } from "./auth-decorator.js";
+import { loadContracts, resolveContractsDir, type ContractRegistry } from "./contracts.js";
+import "./types.js";
+
+export const API_PREFIX = "/v1";
+
+/** Bumped by hand; `/v1/health` reports it so a deploy can be identified. */
+export const API_VERSION = "0.1.0";
+
+export interface BuildServerOptions {
+  config?: ApiConfig;
+  /** Overridden by tests to load fixture contracts instead of the repo's. */
+  contractsDir?: string;
+  /**
+   * Overridden by tests to capture log output. Only `write` is required —
+   * that is all pino calls — so a test sink need not be a full stream.
+   */
+  loggerStream?: { write(chunk: string): void };
+  /**
+   * Defaults to "test env or sandbox enabled". Passing `true` in production is
+   * refused — see the assertion below.
+   */
+  enableTestAuthProvider?: boolean;
+}
+
+export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
+  const config = options.config ?? loadConfig();
+  const enableTestAuthProvider =
+    options.enableTestAuthProvider ?? (config.nodeEnv === "test" || config.testSandbox);
+
+  // Defence in depth. loadConfig already refuses production + sandbox, but
+  // buildServer can be called with a hand-built config (tests do exactly
+  // that), so the guard is repeated at the point where the bypass would
+  // actually be wired up.
+  if (config.nodeEnv === "production" && enableTestAuthProvider) {
+    throw new Error(
+      "拒絕啟動:test auth provider(x-test-user)不得在 production 註冊。這會讓任何人以任意身分發出請求。",
+    );
+  }
+
+  const app = Fastify({
+    // The correlation id IS the request id. Deriving it here rather than in a
+    // hook means Fastify's own "incoming request" / "request completed" lines
+    // carry it too — a hook runs too late to relabel those (AC2).
+    genReqId: (raw) => readCorrelationId(raw.headers),
+    // `requestIdLogLabel` / `disableRequestLogging` are deprecated in
+    // Fastify 5 and removed in 6; the LogController is the supported way to
+    // say the same thing, so new code should not be born deprecated.
+    logController: new LogController({
+      requestIdLogLabel: "correlationId",
+      disableRequestLogging: false,
+    }),
+    logger: {
+      level: config.logLevel,
+      // Security AC: cookies, authorization headers and bodies never reach the
+      // log. Fastify does not log bodies by default; the serialiser below
+      // pins the request shape so a future change cannot start doing so.
+      redact: {
+        paths: [
+          "req.headers.cookie",
+          "req.headers.authorization",
+          "req.headers['x-test-user']",
+          "res.headers['set-cookie']",
+        ],
+        remove: true,
+      },
+      serializers: {
+        req(request: { method: string; url: string }) {
+          return { method: request.method, url: request.url };
+        },
+      },
+      ...(options.loggerStream ? { stream: options.loggerStream } : {}),
+    },
+  });
+
+  registerRequestValidation(app);
+  registerCorrelation(app);
+  registerErrorHandling(app);
+  await app.register(cookie);
+  await app.register(multipart);
+
+  // CORS stays entirely unregistered unless an allowlist was configured. The
+  // browser talks to /api/v1/* same-origin through the Next rewrite
+  // (ADR 0003 §6), so cross-origin is the exception, not the default.
+  if (config.corsOrigins.length > 0) {
+    await app.register(cors, { origin: [...config.corsOrigins], credentials: true });
+  }
+
+  registerAuth(app, { enableTestProvider: enableTestAuthProvider });
+
+  const contracts: ContractRegistry = await loadContracts(
+    options.contractsDir ?? resolveContractsDir(),
+  );
+  app.decorate("contracts", contracts);
+
+  const startedAt = Date.now();
+  app.get(`${API_PREFIX}/health`, async () => ({
+    status: "ok" as const,
+    version: API_VERSION,
+    uptimeMs: Date.now() - startedAt,
+  }));
+
+  // Test-only routes exercising the platform behaviours (contract-bound
+  // validation, the error envelope, requireSession). Gated on BOTH
+  // "not production" and "the test fixture spec is loaded" — that fixture
+  // lives under src/testing/fixtures and is only ever passed in by a test, so
+  // these routes cannot appear on a dev server, let alone a deployed one.
+  // Deliberately NOT gated on the auth provider: proving that `x-test-user`
+  // is ignored while the provider is off needs the protected route to exist.
+  const enableTestRoutes = config.nodeEnv !== "production" && contracts.specNames().includes("sample");
+  if (enableTestRoutes) {
+    await app.register(async (scope) => {
+      scope.post(
+        `${API_PREFIX}/__test__/widgets`,
+        { schema: { body: contracts.getSchema("sample", "CreateWidgetRequest") } },
+        async (_request, reply) => {
+          void reply.status(201);
+          return { id: randomUUID(), name: "widget" };
+        },
+      );
+
+      scope.get(`${API_PREFIX}/__test__/boom`, async () => {
+        throw new Error("kaboom-internal-detail");
+      });
+
+      scope.get(`${API_PREFIX}/__test__/conflict`, async () => {
+        throw new ApiHttpError(ERROR_CODES.CONFLICT, 409, "資料狀態衝突,請重新載入後再試。");
+      });
+
+      scope.get(
+        `${API_PREFIX}/__test__/protected`,
+        { preHandler: app.requireSession },
+        async (request) => ({
+          userId: request.auth?.userId,
+          ownerKey: request.auth?.ownerKey,
+        }),
+      );
+    });
+  }
+
+  await app.ready();
+  return app;
+}
+
+/**
+ * Fastify's stock Ajv runs with `removeAdditional: true`, which SILENTLY
+ * DROPS a property the contract does not declare. For a contract-first API
+ * that is the wrong default twice over: the client is told its request
+ * succeeded when part of it was discarded, and a typo'd field name becomes
+ * invisible instead of a 400.
+ *
+ * Bodies are therefore validated strictly and without type coercion — the
+ * contract says `integer`, so `"3"` is a client bug, not something to paper
+ * over. Query strings, params and headers are always strings on the wire and
+ * so keep coercion; refusing it there would make every numeric query
+ * parameter impossible to express.
+ */
+function registerRequestValidation(app: FastifyInstance): void {
+  const strict = new Ajv2020({ strict: false, allErrors: true, removeAdditional: false, coerceTypes: false, useDefaults: true });
+  const coercing = new Ajv2020({ strict: false, allErrors: true, removeAdditional: false, coerceTypes: "array", useDefaults: true });
+  addFormats(strict);
+  addFormats(coercing);
+
+  app.setValidatorCompiler(({ schema, httpPart }) => {
+    const ajv = httpPart === "body" || httpPart === undefined ? strict : coercing;
+    return ajv.compile(schema as object);
+  });
+}
+
+declare module "fastify" {
+  interface FastifyInstance {
+    /** The frozen contracts, for routes that bind their schemas from them. */
+    contracts: ContractRegistry;
+  }
+}

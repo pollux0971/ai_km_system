@@ -1,0 +1,1289 @@
+openapi: 3.1.0
+info:
+  title: AI KM Conversation Persistence & Change-Event Contracts
+  version: 1.0.0
+  description: >
+    Conversation / Message persistence REST plus the server-sent change-event
+    stream that drives cross-window sync.
+
+
+    Authored under E04-S038 (user-assigned to Team A on 2026-08-28; the E04
+    domain still belongs to Team B, so any change here needs domain-owner
+    review). Runtime decisions this spec encodes are fixed by
+    `docs/adr/0003-api-runtime-sqlite-sse.md`.
+
+
+    The entity shapes are NOT invented here: they are the shapes apps/web has
+    been using since E03-S001 (`apps/web/src/lib/conversations.ts`,
+    `apps/web/src/lib/messages.ts`), promoted to a cross-team contract. The
+    only additions are fields the server owns and the client never sent
+    (`createdAt`, `updatedAt`) — see each property's description.
+
+
+    Authorization model: every operation requires an authenticated session.
+    Ownership is decided **server-side** from the session's owner key. A
+    resource id supplied by the client is a lookup key only and never
+    constitutes authorization; a resource that exists but belongs to another
+    owner is a 403 `PERMISSION_DENIED`, never a silent empty result. No
+    request body in this spec has any field that lets a client name an owner.
+  contact:
+    name: E04 domain owner (Team B) / authored by Team A under E04-S038
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /v1
+    description: >
+      Same-origin path prefix. Browsers call `/api/v1/*`; apps/web rewrites to
+      `API_INTERNAL_URL` and the production reverse proxy does the same
+      (ADR 0003 §6).
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: conversations
+    description: Conversation CRUD, search and pagination.
+  - name: messages
+    description: Messages within a conversation, including feedback.
+  - name: events
+    description: Change-event stream used for cross-window sync.
+
+paths:
+  /conversations:
+    get:
+      tags: [conversations]
+      operationId: listConversations
+      security:
+        - sessionCookie: []
+      summary: List the caller's conversations (search + pagination).
+      description: >
+        Returns only conversations owned by the session's owner key. Sorted by
+        `lastMessageAt` descending. `archived` is a switch between two
+        mutually exclusive views (active / archived), not an "also include"
+        toggle — `totalCount` and `totalPages` always describe the view that
+        was actually requested.
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: 1-based page number. Values below 1 are clamped to 1.
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          description: >
+            Page size. The server caps this at 200; apps/web's own default is
+            configured client-side (E03-S046).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+        - name: q
+          in: query
+          required: false
+          description: >
+            Case-insensitive substring match against `title` only (not
+            `lastMessagePreview`, not message content). An empty or
+            whitespace-only value means "no search" and returns everything in
+            the selected view.
+          schema:
+            type: string
+            maxLength: 200
+        - name: archived
+          in: query
+          required: false
+          description: >
+            `false` (default) returns the active list; `true` returns only
+            archived conversations.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: One page of the requested view.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationListPage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [conversations]
+      operationId: createConversation
+      security:
+        - sessionCookie: []
+      summary: Create an empty conversation owned by the caller.
+      description: >
+        Server-assigned defaults, matching `createConversation` in
+        `apps/web/src/lib/conversations.ts`: `title` "新對話",
+        `lastMessagePreview` "尚無訊息。", `model` `standard`,
+        `knowledgeScopes` `[]` (the deliberate fail-closed default from
+        E03-S003 — nothing is selected until the user selects it),
+        `archived` `false`, and `lastMessageAt` = `createdAt`.
+
+
+        Emits `conversation.created`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationRequest"
+      responses:
+        "201":
+          description: The created conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /conversations/events:
+    get:
+      tags: [events]
+      operationId: streamConversationChangeEvents
+      security:
+        - sessionCookie: []
+      summary: Server-sent change events for the caller's conversations.
+      description: >
+        One `text/event-stream` per subscriber. Wire format, replay semantics
+        and which endpoint emits which event are specified in
+        `contracts/events/conversation-change-events.md` — that document is
+        normative for this endpoint's body.
+
+
+        Each SSE frame carries `id:` (the `ChangeEvent.id`), `event:` (the
+        `ChangeEvent.type`, or `resync`) and `data:` (JSON). Replay is
+        requested with the standard `Last-Event-ID` request header, or with
+        the `lastEventId` query parameter for clients that cannot set headers
+        (`EventSource` cannot). A comment-only heartbeat is sent every 15
+        seconds so idle proxies do not drop the connection.
+
+
+        This path is deliberately a literal segment sitting alongside
+        `/conversations/{conversationId}`. Per OpenAPI/RFC路由 precedence the
+        concrete path wins, and `conversationId` is a UUID, so `events` can
+        never be a valid id.
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: >
+            Standard SSE replay header. The server resends every event for
+            this owner with an id strictly greater than the supplied value.
+            If the requested id is older than the retained window the server
+            sends a single `resync` event instead of a partial replay.
+          schema:
+            type: integer
+            minimum: 0
+        - name: lastEventId
+          in: query
+          required: false
+          description: >
+            Same semantics as the `Last-Event-ID` header, for `EventSource`
+            clients (the browser API cannot set request headers). When both
+            are present the header wins.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: >
+            An open event stream. The connection stays open until the client
+            disconnects or the server shuts down.
+          headers:
+            Cache-Control:
+              description: Always `no-store`; change events must never be cached.
+              schema:
+                type: string
+            X-Accel-Buffering:
+              description: >
+                Always `no`, so a buffering reverse proxy does not hold frames
+                back.
+              schema:
+                type: string
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  Raw SSE framing. Each `data:` payload is a JSON
+                  `ChangeEvent` (for the five change types) or a JSON
+                  `ResyncEvent` (for `event: resync`).
+                examples:
+                  - |
+                    : connected
+
+                    id: 41
+                    event: conversation.created
+                    data: {"id":41,"type":"conversation.created","conversationId":"8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77","occurredAt":"2026-08-28T05:12:00.000Z","originClientId":"c7c2f0b6-1f9a-4c1e-9f2b-2d3e4f5a6b7c"}
+
+                    id: 42
+                    event: message.created
+                    data: {"id":42,"type":"message.created","conversationId":"8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77","messageId":"1b6a1f2c-3d4e-4f50-8a61-7c8d9e0f1a2b","occurredAt":"2026-08-28T05:12:04.000Z"}
+
+                    id: 43
+                    event: conversation.updated
+                    data: {"id":43,"type":"conversation.updated","conversationId":"8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77","occurredAt":"2026-08-28T05:12:04.000Z"}
+
+                    :
+
+                    event: resync
+                    data: {"reason":"EVENT_LOG_TRUNCATED"}
+          x-sse-frame-payloads:
+            description: >
+              OpenAPI has no way to type the body of an individual SSE frame
+              (the response body is the raw stream), so the JSON shapes that
+              appear on each frame's `data:` line are declared here. These are
+              normative — `contracts/events/conversation-change-events.md`
+              documents when each is emitted.
+            change:
+              $ref: "#/components/schemas/ChangeEvent"
+            resync:
+              $ref: "#/components/schemas/ResyncEvent"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/TooManyConnections"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /conversations/{conversationId}:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+    get:
+      tags: [conversations]
+      operationId: getConversation
+      security:
+        - sessionCookie: []
+      summary: Fetch one conversation owned by the caller.
+      responses:
+        "200":
+          description: The conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [conversations]
+      operationId: updateConversation
+      security:
+        - sessionCookie: []
+      summary: Update conversation metadata (rename, mode, scopes, model, archive).
+      description: >
+        Partial update; only the supplied fields change. Emits
+        `conversation.updated`. Sending an empty object is a no-op update and
+        still returns the current conversation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConversationRequest"
+      responses:
+        "200":
+          description: The updated conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [conversations]
+      operationId: deleteConversation
+      security:
+        - sessionCookie: []
+      summary: Delete a conversation and every message in it.
+      description: >
+        Deletes the conversation together with its messages in one
+        transaction. Emits `conversation.deleted`. Deleting an id that is
+        already gone is a 404, not a silent success — the caller needs to be
+        able to tell "I deleted it" from "it was never yours".
+      responses:
+        "204":
+          description: Deleted. No body.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /conversations/{conversationId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+    get:
+      tags: [messages]
+      operationId: listMessages
+      security:
+        - sessionCookie: []
+      summary: List every message in a conversation, oldest first.
+      description: >
+        Not paginated — a conversation's thread is read as a whole, matching
+        `listMessages` in `apps/web/src/lib/messages.ts`. Ordered by
+        `createdAt` ascending.
+      responses:
+        "200":
+          description: The full thread.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+                examples:
+                  - - id: 1b6a1f2c-3d4e-4f50-8a61-7c8d9e0f1a2b
+                      conversationId: 8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77
+                      role: user
+                      content: 保固期多久？
+                      attachmentNames: []
+                      createdAt: 2026-08-12T09:14:00.000Z
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [messages]
+      operationId: createMessage
+      security:
+        - sessionCookie: []
+      summary: Append a message to a conversation.
+      description: >
+        In the same transaction the server updates the parent conversation's
+        `lastMessageAt` and `lastMessagePreview`. The preview rule is the one
+        apps/web already applies in `sendMessage` /
+        `receiveAssistantReply`: non-empty `content` becomes the preview
+        verbatim, otherwise the preview is `已傳送 N 個附件` where N is
+        `attachmentNames.length`.
+
+
+        Emits `message.created` **and** `conversation.updated` — both, because
+        a subscriber that only re-fetches the thread would leave a stale
+        preview in the sidebar.
+
+
+        TRANSITIONAL: `role: assistant` is accepted because generation still
+        runs in the browser (E03-S010). When real server-side generation lands
+        in E04, assistant messages will be produced by the server and this
+        request will be rejected — that removal is a BREAKING CHANGE and needs
+        a version bump plus consumer migration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageRequest"
+      responses:
+        "201":
+          description: The created message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /conversations/{conversationId}/messages/{messageId}/revisions:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+      - $ref: "#/components/parameters/MessageId"
+    post:
+      tags: [messages]
+      operationId: createMessageRevision
+      security:
+        - sessionCookie: []
+      summary: Replace an assistant message's content, keeping the old text.
+      description: >
+        Pushes the message's current `content` onto `revisions` and replaces
+        it with the supplied text, matching `regenerateAssistantReply` in
+        `apps/web/src/lib/messages.ts`. Only `role: assistant` messages may be
+        revised; a user message returns 400 `VALIDATION_ERROR`.
+
+
+        Returns 200 (not 201) — the addressed resource is the existing
+        message, which is mutated in place; no new message resource appears.
+
+
+        Emits `message.updated`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRevisionRequest"
+      responses:
+        "200":
+          description: The revised message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /conversations/{conversationId}/messages/{messageId}/feedback:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+      - $ref: "#/components/parameters/MessageId"
+    put:
+      tags: [messages]
+      operationId: setMessageFeedback
+      security:
+        - sessionCookie: []
+      summary: Set the OK/NG verdict on an assistant message.
+      description: >
+        Idempotent — sending the same verdict twice produces identical stored
+        state. Emits `message.updated`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetFeedbackRequest"
+      responses:
+        "200":
+          description: The message with its verdict applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /conversations/{conversationId}/messages/{messageId}/feedback/reason:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+      - $ref: "#/components/parameters/MessageId"
+    put:
+      tags: [messages]
+      operationId: setMessageFeedbackReason
+      security:
+        - sessionCookie: []
+      summary: Set the structured reason behind an NG verdict.
+      description: >
+        Fail-closed precondition: the message must already carry
+        `feedback: "NG"`. A reason on a message with no verdict, or with an
+        `OK` verdict, is 400 `VALIDATION_ERROR` — a reason is an explanation
+        of a rejection, so it cannot exist without the rejection.
+
+
+        Emits `message.updated`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetFeedbackReasonRequest"
+      responses:
+        "200":
+          description: The message with its reason applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /conversations/{conversationId}/messages/{messageId}/feedback/comment:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+      - $ref: "#/components/parameters/MessageId"
+    put:
+      tags: [messages]
+      operationId: setMessageFeedbackComment
+      security:
+        - sessionCookie: []
+      summary: Attach a free-text comment to an existing verdict.
+      description: >
+        Fail-closed precondition: the message must already carry a `feedback`
+        verdict (either `OK` or `NG` — praise and complaints are both worth
+        recording). The comment must be non-empty after trimming and at most
+        500 characters; violations are 400 `VALIDATION_ERROR`.
+
+
+        Emits `message.updated`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetFeedbackCommentRequest"
+      responses:
+        "200":
+          description: The message with its comment applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /conversations/{conversationId}/messages/{messageId}/citations/{citationId}/feedback:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+      - $ref: "#/components/parameters/MessageId"
+      - name: citationId
+        in: path
+        required: true
+        description: >
+          The citation marker being rated. Must be one of the `[N]` markers
+          that actually appear in this message's own `content`; anything else
+          is 400 `VALIDATION_ERROR` (fail closed — a client must not be able
+          to record feedback against a source this answer never cited).
+        schema:
+          type: string
+          pattern: "^[0-9]+$"
+          examples:
+            - "1"
+    put:
+      tags: [messages]
+      operationId: setCitationFeedback
+      security:
+        - sessionCookie: []
+      summary: Rate one citation within an assistant message.
+      description: >
+        Scoped to the single `citationId` given; other entries in
+        `citationFeedback` are untouched. Idempotent. Emits `message.updated`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetFeedbackRequest"
+      responses:
+        "200":
+          description: The message with the citation verdict applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/PermissionDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: ai_km_session
+      description: >
+        Opaque session token issued by `POST /v1/auth/login` (E02-S031,
+        ADR 0005). HttpOnly, `SameSite=Lax`, `Secure` over HTTPS; the browser
+        sends it automatically and client code never reads it. The server
+        derives the owner key from this cookie — see the top-level
+        `info.description` for why a resource id in the URL is never
+        authorization.
+
+  parameters:
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      description: >
+        Lookup key only. Supplying an id owned by somebody else is 403, not a
+        successful read.
+      schema:
+        type: string
+        format: uuid
+        examples:
+          - 8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77
+    MessageId:
+      name: messageId
+      in: path
+      required: true
+      description: Must belong to `conversationId`; otherwise 404.
+      schema:
+        type: string
+        format: uuid
+        examples:
+          - 1b6a1f2c-3d4e-4f50-8a61-7c8d9e0f1a2b
+
+  schemas:
+    ConversationMode:
+      type: string
+      description: >
+        E03-S002. Every conversation has a mode from the moment it is
+        created, so this is never absent.
+      enum: [normal, advanced]
+      examples: [normal]
+
+    AiModel:
+      type: string
+      description: >
+        E03-S005. Deliberately capability names, not vendor names — see
+        `apps/web/src/lib/ai-models.ts`.
+      enum: [standard, advanced-local, cloud]
+      examples: [standard]
+
+    KnowledgeScope:
+      type: string
+      description: E03-S003/S004 knowledge scope selection.
+      enum: [company, department, project, private, qna]
+      examples: [company]
+
+    AnswerState:
+      type: string
+      description: >
+        E03-S013 answer state. Not every message has one (a user message
+        never does), which is why it is optional on `Message`.
+      enum:
+        - ANSWERED
+        - PARTIAL
+        - NO_EVIDENCE
+        - ERROR
+        - PERMISSION_DENIED
+        - SOURCE_UNAVAILABLE
+      examples: [ANSWERED]
+
+    AnswerFeedbackVerdict:
+      type: string
+      description: >
+        E03-S014. The same OK/NG shape is reused for whole-answer feedback
+        and for per-citation feedback.
+      enum: [OK, NG]
+      examples: [OK]
+
+    FeedbackReason:
+      type: string
+      description: E03-S015 structured reason for an NG verdict.
+      enum: [INCORRECT, INCOMPLETE, OFF_TOPIC, OTHER]
+      examples: [INCORRECT]
+
+    Conversation:
+      type: object
+      description: >
+        Field-for-field the `ConversationSummary` apps/web has used since
+        E03-S001, plus the two server-owned timestamps.
+      required:
+        - id
+        - title
+        - mode
+        - knowledgeScopes
+        - model
+        - archived
+        - lastMessageAt
+        - lastMessagePreview
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Server-assigned. Never derived from the title.
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: >
+            Trimmed by the server. Empty-after-trim is rejected with 400.
+        mode:
+          $ref: "#/components/schemas/ConversationMode"
+        knowledgeScopes:
+          type: array
+          description: >
+            `[]` means "nothing selected — base model knowledge only", which
+            is the fail-closed default, not "all scopes".
+          items:
+            $ref: "#/components/schemas/KnowledgeScope"
+          uniqueItems: true
+        model:
+          $ref: "#/components/schemas/AiModel"
+        archived:
+          type: boolean
+          description: >
+            REQUIRED here although apps/web declares it optional
+            (`archived?`). A stored row always has a definite value; the
+            frontend optionality only exists so pre-E03-S026 fixtures did not
+            all need updating, and a required boolean is assignable to an
+            optional one.
+        lastMessageAt:
+          type: string
+          format: date-time
+          description: >
+            UTC ISO-8601. Equal to `createdAt` for a conversation that has no
+            messages yet. Sort key for the list endpoint.
+        lastMessagePreview:
+          type: string
+          description: >
+            "尚無訊息。" until the first message; afterwards the rule in
+            `POST /conversations/{conversationId}/messages`.
+        createdAt:
+          type: string
+          format: date-time
+          description: >
+            NEW server-owned field (no apps/web equivalent). Needed by
+            E04-S041 as a stable tiebreaker when several conversations share a
+            `lastMessageAt`.
+        updatedAt:
+          type: string
+          format: date-time
+          description: >
+            NEW server-owned field. Needed by E03-S039 so a sync client can
+            tell a replayed event from a stale local copy.
+      examples:
+        - id: 8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77
+          title: 產品保固政策詢問
+          mode: normal
+          knowledgeScopes: [company, qna]
+          model: standard
+          archived: false
+          lastMessageAt: 2026-08-12T09:15:00.000Z
+          lastMessagePreview: 保固期從出貨日起算 12 個月，涵蓋原廠零件更換。
+          createdAt: 2026-08-12T09:00:00.000Z
+          updatedAt: 2026-08-12T09:15:00.000Z
+
+    ConversationListPage:
+      type: object
+      description: >
+        Matches `ConversationListPage` in apps/web. `totalCount` /
+        `totalPages` describe the FILTERED view (archived switch + search),
+        not the whole store. Deliberately not `core.yaml`'s `Pagination`,
+        which spells the count `total`.
+      required: [items, page, pageSize, totalCount, totalPages]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Conversation"
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 200
+        totalCount:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 1
+          description: >
+            At least 1 even when `totalCount` is 0, so "page 1 of 1, empty" is
+            representable — apps/web relies on this.
+      examples:
+        - items: []
+          page: 1
+          pageSize: 20
+          totalCount: 0
+          totalPages: 1
+
+    Message:
+      type: object
+      description: >
+        Field-for-field the `Message` apps/web has used since E03-S009.
+      required: [id, conversationId, role, content, attachmentNames, createdAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          description: >
+            May be empty for an attachment-only user message. Assistant
+            content may contain `[N]` citation markers.
+          maxLength: 20000
+        attachmentNames:
+          type: array
+          description: >
+            File NAMES only. Attachment content upload is explicitly out of
+            scope for this contract.
+          items:
+            type: string
+            maxLength: 255
+        createdAt:
+          type: string
+          format: date-time
+          description: UTC ISO-8601. Ascending sort key for a thread.
+        state:
+          $ref: "#/components/schemas/AnswerState"
+        revisions:
+          type: array
+          description: >
+            Previous `content` values, oldest first. Assistant messages only.
+          items:
+            type: string
+        feedback:
+          $ref: "#/components/schemas/AnswerFeedbackVerdict"
+        feedbackReason:
+          $ref: "#/components/schemas/FeedbackReason"
+        feedbackComment:
+          type: string
+          maxLength: 500
+        citationFeedback:
+          type: object
+          description: >
+            Map of citation marker id (`"1"`, `"2"`, … as they appear in
+            `content`) to its verdict.
+          additionalProperties:
+            $ref: "#/components/schemas/AnswerFeedbackVerdict"
+      examples:
+        - id: 1b6a1f2c-3d4e-4f50-8a61-7c8d9e0f1a2b
+          conversationId: 8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77
+          role: assistant
+          content: 保固期從出貨日起算 12 個月。[1]
+          attachmentNames: []
+          createdAt: 2026-08-12T09:15:00.000Z
+          state: ANSWERED
+          feedback: OK
+          citationFeedback:
+            "1": OK
+
+    ChangeEvent:
+      type: object
+      description: >
+        One entry of the per-owner change log (ADR 0003 §7). Carries only
+        identifiers — a subscriber re-fetches the affected resource rather
+        than trusting a payload, so a revoked permission can never be
+        smuggled through the stream.
+      required: [id, type, conversationId, occurredAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          description: >
+            Monotonically increasing PER OWNER, not globally. Used as the SSE
+            `id:` field and for `Last-Event-ID` replay.
+        type:
+          type: string
+          enum:
+            - conversation.created
+            - conversation.updated
+            - conversation.deleted
+            - message.created
+            - message.updated
+        conversationId:
+          type: string
+          format: uuid
+        messageId:
+          type: string
+          format: uuid
+          description: Present exactly for the two `message.*` types.
+        occurredAt:
+          type: string
+          format: date-time
+        originClientId:
+          type: string
+          format: uuid
+          description: >
+            Echo of the `X-Client-Id` request header, when the mutating
+            request supplied one. Lets the originating window skip its own
+            echo. Purely a UX hint — it is NOT an identity and carries no
+            authorization meaning.
+      examples:
+        - id: 42
+          type: message.created
+          conversationId: 8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77
+          messageId: 1b6a1f2c-3d4e-4f50-8a61-7c8d9e0f1a2b
+          occurredAt: 2026-08-28T05:12:04.000Z
+
+    ResyncEvent:
+      type: object
+      description: >
+        Sent as `event: resync` when the server cannot serve a correct
+        incremental replay and the client must re-fetch everything. Carries
+        no `id:`, so it never advances the client's `Last-Event-ID`.
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          enum: [EVENT_LOG_TRUNCATED, UNKNOWN_LAST_EVENT_ID, SERVER_RESTART]
+      examples:
+        - reason: EVENT_LOG_TRUNCATED
+
+    CreateConversationRequest:
+      type: object
+      description: >
+        Everything else about a new conversation is a server-assigned
+        default. There is deliberately no owner field.
+      additionalProperties: false
+      properties:
+        mode:
+          $ref: "#/components/schemas/ConversationMode"
+      examples:
+        - mode: advanced
+
+    UpdateConversationRequest:
+      type: object
+      description: Partial update; omitted fields are left alone.
+      additionalProperties: false
+      minProperties: 0
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: >
+            Trimmed before validation; empty-after-trim is 400
+            `VALIDATION_ERROR`.
+        mode:
+          $ref: "#/components/schemas/ConversationMode"
+        knowledgeScopes:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeScope"
+          uniqueItems: true
+        model:
+          $ref: "#/components/schemas/AiModel"
+        archived:
+          type: boolean
+      examples:
+        - title: 產品保固政策詢問
+
+    CreateMessageRequest:
+      type: object
+      required: [role, content]
+      additionalProperties: false
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+          description: >
+            TRANSITIONAL — see the operation description. `assistant` is
+            accepted only while generation still runs in the browser.
+        content:
+          type: string
+          maxLength: 20000
+          description: >
+            May be empty ONLY when `attachmentNames` is non-empty; an empty
+            message with no attachments is 400 `VALIDATION_ERROR`.
+        attachmentNames:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+          maxItems: 10
+        state:
+          $ref: "#/components/schemas/AnswerState"
+      examples:
+        - role: user
+          content: 保固期多久？
+          attachmentNames: []
+
+    CreateRevisionRequest:
+      type: object
+      required: [content]
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        state:
+          $ref: "#/components/schemas/AnswerState"
+      examples:
+        - content: 保固期從出貨日起算 12 個月，另含 3 個月延長保固。
+          state: ANSWERED
+
+    SetFeedbackRequest:
+      type: object
+      required: [verdict]
+      additionalProperties: false
+      properties:
+        verdict:
+          $ref: "#/components/schemas/AnswerFeedbackVerdict"
+      examples:
+        - verdict: NG
+
+    SetFeedbackReasonRequest:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason:
+          $ref: "#/components/schemas/FeedbackReason"
+      examples:
+        - reason: INCOMPLETE
+
+    SetFeedbackCommentRequest:
+      type: object
+      required: [comment]
+      additionalProperties: false
+      properties:
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Trimmed by the server; empty-after-trim is 400.
+      examples:
+        - comment: 少了延長保固的部分。
+
+    ValidationErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR]
+          required: [code]
+      examples:
+        - code: VALIDATION_ERROR
+          message: 對話名稱不得為空。
+
+    UnauthenticatedErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [UNAUTHENTICATED]
+          required: [code]
+      examples:
+        - code: UNAUTHENTICATED
+          message: 請先登入。
+
+    PermissionDeniedErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [PERMISSION_DENIED]
+          required: [code]
+      examples:
+        - code: PERMISSION_DENIED
+          message: 沒有存取這筆對話的權限。
+
+    NotFoundErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [NOT_FOUND]
+          required: [code]
+      examples:
+        - code: NOT_FOUND
+          message: 找不到這筆對話。
+
+    PayloadTooLargeErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [PAYLOAD_TOO_LARGE]
+          required: [code]
+      examples:
+        - code: PAYLOAD_TOO_LARGE
+          message: 訊息內容超過長度上限。
+
+    UnsupportedMediaTypeErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [UNSUPPORTED_MEDIA_TYPE]
+          required: [code]
+      examples:
+        - code: UNSUPPORTED_MEDIA_TYPE
+          message: 僅接受 application/json。
+
+    TooManyConnectionsErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [TOO_MANY_CONNECTIONS]
+          required: [code]
+      examples:
+        - code: TOO_MANY_CONNECTIONS
+          message: 同時連線數已達上限。
+
+    InternalErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [INTERNAL_ERROR]
+          required: [code]
+      examples:
+        - code: INTERNAL_ERROR
+          message: 系統發生未預期的錯誤。
+
+  responses:
+    ValidationError:
+      description: >
+        Request failed schema, size, range or a documented state
+        precondition.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorBody"
+    Unauthenticated:
+      description: No session cookie, or the session has expired.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnauthenticatedErrorBody"
+    PermissionDenied:
+      description: >
+        The resource exists but is owned by somebody else. Deliberately
+        distinct from 404 so the UI can show a permission-denied state rather
+        than an empty one.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PermissionDeniedErrorBody"
+    NotFound:
+      description: No such resource for this owner.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/NotFoundErrorBody"
+    PayloadTooLarge:
+      description: Body exceeded a documented size limit.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PayloadTooLargeErrorBody"
+    UnsupportedMediaType:
+      description: Request body was not `application/json`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnsupportedMediaTypeErrorBody"
+    TooManyConnections:
+      description: >
+        This owner already holds the maximum of 20 concurrent event streams.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TooManyConnectionsErrorBody"
+    InternalError:
+      description: >
+        Unexpected server error. The body never contains a stack trace
+        (ADR 0003 §4).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorBody"

@@ -20,3 +20,20 @@ Single source of truth for cross-team API contracts (Contract-First policy).
   (E02-S031), `conversations.yaml` + `contracts/events/conversation-change-events.md`
   (E04-S038), `transcriptions.yaml` (E12-S029), `analytics.yaml` (E13-S018).
   Every other endpoint is still BLOCKED-until-negotiated.
+
+## Frozen specs
+
+| Spec | Story | Domain owner | Consumers |
+|---|---|---|---|
+| `core.yaml` | scaffold | shared | shared `Error` / `Pagination` only; no paths |
+| `conversations.yaml` | E04-S038 | E04 (Team B); authored by Team A | E03-S034/S036/S037/S039, E04-S041~S044, E13-S018 |
+
+`conversations.yaml` covers conversation + message persistence and the
+`GET /v1/conversations/events` change-event stream. Its event semantics —
+which endpoint emits which event, replay, `resync`, heartbeats — are
+normative in `contracts/events/conversation-change-events.md`.
+
+Compatibility with the shapes apps/web already uses is enforced by a
+typecheck-only gate in `contracts/openapi/__checks__/` (see its README for
+the exact commands). That gate is not in CI yet; E03-S034 owns wiring the
+codegen + drift gate into the build.

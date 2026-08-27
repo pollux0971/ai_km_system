@@ -26,6 +26,7 @@ Single source of truth for cross-team API contracts (Contract-First policy).
 | Spec | Story | Domain owner | Consumers |
 |---|---|---|---|
 | `core.yaml` | scaffold | shared | shared `Error` / `Pagination` only; no paths |
+| `auth.yaml` | E02-S031 | E02 (Team B); authored by Team A | E02-S032, E03-S034/S035, E11-S026, E13-S018 |
 | `conversations.yaml` | E04-S038 | E04 (Team B); authored by Team A | E03-S034/S036/S037/S039, E04-S041~S044, E13-S018 |
 
 `conversations.yaml` covers conversation + message persistence and the
@@ -37,3 +38,10 @@ Compatibility with the shapes apps/web already uses is enforced by a
 typecheck-only gate in `contracts/openapi/__checks__/` (see its README for
 the exact commands). That gate is not in CI yet; E03-S034 owns wiring the
 codegen + drift gate into the build.
+
+
+`auth.yaml` is the frozen slice of E02-S009 (local authentication endpoint):
+`POST /v1/auth/login`, `POST /v1/auth/logout`, `GET /v1/auth/session`. It is
+also the **canonical definition of the `sessionCookie` security scheme** —
+other specs describe the same cookie, and new specs should `$ref` this one
+rather than restate it.

@@ -24,20 +24,37 @@ a hand-copied mirror — and asserts, at compile time, that:
   (`userId` / `ownerKey` / `ownerId` / `owner`) — the Security AC that
   ownership is decided server-side from the session.
 
+## What `auth-compat.ts` proves
+
+Introduced by **E02-S031**. Against the real `@ai-km/auth-client` types:
+
+- the contract's `AuthSession` is assignable to the client's `AuthSession`,
+  both fully populated and with only its required fields;
+- `AuthErrorCode` is **exactly** the client's union — narrower would make a
+  failure the client already handles unrepresentable, wider would leave it an
+  unhandled branch;
+- no response schema can carry a session token
+  (`token` / `sessionToken` / `accessToken` / `sessionId`), and `LoginRequest`
+  cannot name a `userId` / `ownerKey` / `roles`. Identity is what the server
+  derives from credentials, never what the caller asserts.
+
 ## Running it
 
 ```bash
-# 1. regenerate the types from the contract
+# 1. regenerate the types from each contract
 pnpm --filter @ai-km/api-client exec openapi-typescript \
   ../../contracts/openapi/conversations.yaml \
   -o ../../contracts/openapi/__checks__/generated/conversations.d.ts
+pnpm --filter @ai-km/api-client exec openapi-typescript \
+  ../../contracts/openapi/auth.yaml \
+  -o ../../contracts/openapi/__checks__/generated/auth.d.ts
 
 # 2. the gate itself
 ./node_modules/.bin/tsc -p contracts/openapi/__checks__/tsconfig.json --noEmit
 
 # 3. spec lint (0 errors required)
 pnpm --package=@redocly/cli@1.25.11 dlx redocly lint \
-  contracts/openapi/conversations.yaml
+  contracts/openapi/conversations.yaml contracts/openapi/auth.yaml
 ```
 
 `generated/` is committed so a reviewer can run step 2 without step 1, and so

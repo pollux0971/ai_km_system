@@ -32,10 +32,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
 | E13 Feedback & Analytics | 21 | 17 | 0 | 0 | 0 | 4 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S048) | 10 | 2 | 1 | 0 | 0 | 7 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S048) | 10 | 3 | 0 | 0 | 0 | 7 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 0 | 0 | 0 | 0 | 4 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 0 | 0 | 0 | 0 | 3 |
-| **合計** | **220** | 176 | 1 | 0 | 1 | 42 |
+| **合計** | **220** | 177 | 0 | 0 | 1 | 42 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -293,7 +293,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S037 | todo | — | — | RAG 開發前置環境就緒:硬體規格確認與地端模型準備(使用者 2026-08-20 指示建立並插入 E04)。技術決策已拍板:llama.cpp+GGUF(node-llama-cpp)、embedding(bge-m3 F16)+LLM(Qwen3-32B Q4_K_M 優先/14B 替代——目標機器 VRAM 充裕,品質優先不省容量,使用者 2026-08-20 補充指示)都驗、模型放 repo 內 `models/`(gitignored)。L3 需使用者手動下載模型後以真實推論通過才可 DONE。 |
 | E04-S038 | approved | `story/E04-S038-conversations-contract` | [E04-S038.md](E04-S038.md) | Contract 凍結：conversations/messages REST + change-event SSE（`contracts/openapi/conversations.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S038.spec.md](specs/E04-S038.spec.md) |
 | E04-S039 | approved | `story/E04-S039-api-bootstrap` | [E04-S039.md](E04-S039.md) | apps/api bootstrap（Fastify、config、錯誤封套、correlation、契約載入與 harness、auth 介面）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S039.spec.md](specs/E04-S039.spec.md) |
-| E04-S040 | done | `story/E04-S040-sqlite-base` | [E04-S040.md](E04-S040.md) | SQLite 基礎（better-sqlite3、migration runner、conversation schema、change_events、ownerKey helper）；HARD 依賴：E04-S039；wave 1。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S040.spec.md](specs/E04-S040.spec.md) |
+| E04-S040 | approved | `story/E04-S040-sqlite-base` | [E04-S040.md](E04-S040.md) | SQLite 基礎（better-sqlite3、migration runner、conversation schema、change_events、ownerKey helper）；HARD 依賴：E04-S039；wave 1。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S040.spec.md](specs/E04-S040.spec.md) |
 | E04-S041 | todo | — | — | Conversations REST（list/search/paginate/create/get/patch/delete + 事件 + seed）；HARD 依賴：E04-S038、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S041.spec.md](specs/E04-S041.spec.md) |
 | E04-S042 | todo | — | — | Messages REST（list/create user 與過渡期 assistant/revisions，連動摘要 + seed）；HARD 依賴：E04-S038、E04-S041；wave 3。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S042.spec.md](specs/E04-S042.spec.md) |
 | E04-S043 | todo | — | — | Message feedback endpoints（verdict/reason/comment/citation，fail-closed 規則搬到 server）；HARD 依賴：E04-S038、E04-S042；wave 4。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S043.spec.md](specs/E04-S043.spec.md) |

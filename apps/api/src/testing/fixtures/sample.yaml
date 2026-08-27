@@ -1,0 +1,55 @@
+openapi: 3.1.0
+info:
+  title: Contract loader fixture
+  version: 1.0.0
+  description: >
+    Test-only spec. Exists so the contract loader and the contract-test
+    harness can be tested without depending on a real contract having landed
+    (E04-S038 / E02-S031 / E12-S029 are SOFT dependencies of E04-S039, so this
+    story must not be blocked by their absence).
+servers:
+  - url: /v1
+paths:
+  /widgets:
+    post:
+      operationId: createWidget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWidgetRequest"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+components:
+  schemas:
+    CreateWidgetRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 20
+        size:
+          type: integer
+          minimum: 1
+          maximum: 10
+    Widget:
+      type: object
+      required: [id, name]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        size:
+          type: integer

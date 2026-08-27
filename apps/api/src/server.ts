@@ -26,6 +26,8 @@ import { registerErrorHandling, ApiHttpError, ERROR_CODES } from "./errors.js";
 import { registerCorrelation, readCorrelationId } from "./correlation.js";
 import { registerAuth } from "./auth-decorator.js";
 import { loadContracts, resolveContractsDir, type ContractRegistry } from "./contracts.js";
+import { databasePlugin } from "./db/plugin.js";
+import { conversationPlugin } from "@ai-km/service-conversation";
 import "./types.js";
 
 export const API_PREFIX = "/v1";
@@ -37,6 +39,10 @@ export interface BuildServerOptions {
   config?: ApiConfig;
   /** Overridden by tests to load fixture contracts instead of the repo's. */
   contractsDir?: string;
+  /** Overridden by tests so each run gets its own throwaway SQLite file. */
+  dbPath?: string;
+  /** Overridden by tests to point at a fixture migrations directory. */
+  migrationsDir?: string;
   /**
    * Overridden by tests to capture log output. Only `write` is required —
    * that is all pino calls — so a test sink need not be a full stream.
@@ -113,6 +119,16 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   }
 
   registerAuth(app, { enableTestProvider: enableTestAuthProvider });
+
+  // E04-S040 — SQLite connection + migrations (fastify.db).
+  await app.register(databasePlugin, {
+    dbPath: options.dbPath ?? config.dbPath,
+    autoMigrate: config.autoMigrate,
+    ...(options.migrationsDir ? { migrationsDir: options.migrationsDir } : {}),
+  });
+
+  // E04-S040 — conversation domain mount point; routes arrive in E04-S041+.
+  await app.register(conversationPlugin);
 
   const contracts: ContractRegistry = await loadContracts(
     options.contractsDir ?? resolveContractsDir(),

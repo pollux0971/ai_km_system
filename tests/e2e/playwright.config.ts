@@ -1,4 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { defineConfig } from "@playwright/test";
+import { ensureFakeMicrophoneWav } from "./helpers/fake-microphone";
 
 /**
  * E11-S001 adds apps/admin as a second, independently-deployed app
@@ -11,26 +15,107 @@ import { defineConfig } from "@playwright/test";
  * or neither. Both patterns intentionally aren't `^`-anchored — testMatch/
  * testIgnore match against each file's full absolute path, not its
  * basename, so an anchored pattern would never match a real file here.
+ *
+ * E03-S038 adds a THIRD webServer: apps/api, with its own throwaway
+ * SQLite file per Playwright run (AI_KM_DB_PATH below) and the E2E-only
+ * env flags (test sandbox, dev triggers, demo-user seeding, fake ASR
+ * provider) documented in README.md. Every browser context that logs in
+ * gets its own isolated sandbox owner (AI_KM_TEST_SANDBOX=true,
+ * services/identity's `runSandboxSeeders`), replacing the old
+ * "everything is one shared client-side mock" model with real isolation
+ * backed by a real (if throwaway) server — see `specs/api-sandbox.spec.ts`
+ * for the test proving that isolation actually holds. `web`'s own env
+ * gets `API_INTERNAL_URL` so its `/api/v1/*` rewrite (next.config.ts)
+ * reaches this run's own apps/api instance.
+ *
+ * **Deliberately NOT port 4000.** A shared, manually-run apps/api instance
+ * (maintained by the fleet coordinator for other lanes' own verification)
+ * commonly occupies :4000 during development — with `reuseExistingServer`,
+ * Playwright would silently reuse THAT instance instead of starting its
+ * own, quietly defeating every isolation property this story exists to
+ * provide (own tmp SQLite, own test-sandbox/fake-ASR env) and reintroducing
+ * exactly the cross-run data pollution this story is meant to eliminate.
+ * Running on its own port (4100) sidesteps the conflict entirely — this
+ * webServer entry is brand new, so `reuseExistingServer: false` below is
+ * also safe to set now rather than waiting on E01-S030 (which only needs
+ * to change this for the pre-existing web/admin entries): a occupied :4100
+ * fails loudly instead of silently reusing whatever happens to be there.
  */
+
+// Unique per Playwright invocation (not per test/worker) — every worker
+// process spawned by this run shares the same apps/api server and its one
+// SQLite file; a per-worker path would just mean N empty, disconnected
+// databases instead of one shared sandboxed one.
+const RUN_ID = randomUUID();
+const E2E_DB_PATH = path.join(tmpdir(), `ai-km-e2e-${RUN_ID}.sqlite`);
+const API_PORT = 4100;
+const API_BASE_URL = `http://127.0.0.1:${API_PORT}`;
+
+// Generated once, synchronously, before defineConfig() below builds the
+// static config object — see fake-microphone.ts's own doc comment for why
+// this can't be done via Playwright's `globalSetup` hook instead (that runs
+// too late to reach `use.launchOptions.args`).
+const FAKE_MIC_WAV = ensureFakeMicrophoneWav();
+
 export default defineConfig({
   testDir: "./specs",
+  // Warms up /login on both apps after webServer readiness but before any
+  // spec runs — see global-setup.ts's own doc comment (E01-S027 root-cause
+  // finding: Next.js dev-mode on-demand compilation, not "flaky tests").
+  globalSetup: "./global-setup.ts",
   webServer: [
     {
       command: "pnpm --filter @ai-km/web dev",
       url: "http://localhost:3000",
       reuseExistingServer: true,
+      env: {
+        API_INTERNAL_URL: API_BASE_URL,
+      },
     },
     {
-      command: "pnpm --filter @ai-km/admin dev",
+      command: "pnpm --filter @ai-km/admin dev -p 3001",
       url: "http://localhost:3001",
       reuseExistingServer: true,
+      env: {
+        API_INTERNAL_URL: API_BASE_URL,
+      },
+    },
+    {
+      command: "pnpm --filter @ai-km/api dev",
+      url: `${API_BASE_URL}/v1/health`,
+      // Deliberately false, not true — see this file's own top-of-file
+      // doc comment: this webServer entry is new, its whole purpose is
+      // isolation, and it runs on a port nothing else is expected to
+      // occupy, so reuse would only ever mean "something unexpected is
+      // on 4100" — that should fail loudly, not be silently adopted.
+      reuseExistingServer: false,
+      timeout: 120000,
+      env: {
+        AI_KM_API_PORT: String(API_PORT),
+        AI_KM_DB_PATH: E2E_DB_PATH,
+        AI_KM_TEST_SANDBOX: "true",
+        AI_KM_DEV_TRIGGERS: "true",
+        AI_KM_SEED_DEMO_USERS: "true",
+        AI_KM_ASR_PROVIDER: "fake",
+        AI_KM_LOG_LEVEL: "warn",
+      },
     },
   ],
   projects: [
     {
       name: "web",
       testIgnore: /admin-.*\.spec\.ts$/,
-      use: { baseURL: "http://localhost:3000" },
+      use: {
+        baseURL: "http://localhost:3000",
+        permissions: ["microphone"],
+        launchOptions: {
+          args: [
+            "--use-fake-ui-for-media-stream",
+            "--use-fake-device-for-media-stream",
+            `--use-file-for-fake-audio-capture=${FAKE_MIC_WAV}%noloop`,
+          ],
+        },
+      },
     },
     {
       name: "admin",

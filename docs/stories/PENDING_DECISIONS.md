@@ -151,6 +151,33 @@ E02-S032/S033/S034、E04-S048。逐字轉寫的 schema 與 contract 之間沒有
 **影響範圍**:E12-S030、E12-S031 能否達到 approved;連帶 E03-S041(L3 真實
 ASR)與 E03-S044(本批最後一個 story)。
 
+### [2026-08-28] `E04-S050` — E04-S049 沒修完:domain plugin 無條件註冊(總指揮已依授權決定,使用者可推翻)
+
+**背景**:使用者今日裁示新增 E04-S049 修正 `server.ts` 裝飾器順序,目標是讓後續
+story 能直接用 `app.contracts.getSchema()` 而不必逐字轉寫 JSON Schema。E04-S049
+已 approved 且達成其 AC,**但目標沒達成**。
+
+W3 在 E04-S042 實測:把 `messages.ts` 改用真的 `getSchema()` 後,`apps/api` 91 個
+測試中 **28 個失敗**。根因是**第二個與順序無關的獨立成因**——`server.ts` 第 153
+行**無條件註冊** `conversationPlugin`,但 `server.test.ts` / `db/migrate.test.ts` /
+`contracts.test.ts` 刻意用只含 `sample.yaml` 的 fixture 契約目錄
+(`apps/api/src/testing/fixtures/`)建 server 以隔離 bootstrap 行為;route 註冊時
+呼叫 `getSchema("conversations", …)` 在 fixture 裡找不到就拋錯。
+
+**總指揮的決定(2026-08-28)**:新增 **`E04-S050`**,讓 domain plugin 改為
+**依「該 domain 的 spec 是否已載入」條件註冊**——repo 內已有此模式的先例
+(`server.ts` 第 175 行用 `contracts.specNames().includes("sample")` 決定是否註冊
+`__test__` routes)。排程於 **E04-S043 之後、E04-S044 之前**:E04-S043 是 W7
+E03-S038(全專案 E2E 匯流點)的前置,三條 lane 在等,不得為本 story 延後。
+
+**為什麼沒有再問使用者**:使用者今日已對**完全同類**的問題(E04-S049)裁示
+「插隊做一個修正 story」,並指示「未來遇到問題,由你來回答」。本項是同一決定的
+延續,不是新的政策選擇。若使用者認為不值得再開一個 story、寧可讓後續 6 個
+story 繼續逐字轉寫,**可隨時推翻本決定**,把 E04-S050 標回不做即可。
+
+**影響範圍**:`apps/api/src/server.ts`、`services/conversation`(僅為證明機制可用
+而改回一處 `getSchema()`)。`contracts/` 零 diff。PROGRESS.md 總數 221 → 222。
+
 <!-- 模板:
 ### [YYYY-MM-DD] EXX-SYYY — 一句話問題
 - 背景:

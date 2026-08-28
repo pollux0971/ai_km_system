@@ -21,6 +21,7 @@
  */
 import type { Database } from "better-sqlite3";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
+import type { ChangeEventBus } from "./events/change-event-bus.js";
 
 /** Mirrors `ContractRegistry.getSchema` (apps/api/src/contracts.ts) — the one method this domain needs. */
 export interface ConversationContractSource {
@@ -70,6 +71,16 @@ export function hostRequireSession(app: FastifyInstance): preHandlerHookHandler 
 
 export function hostContracts(app: FastifyInstance): ConversationContractSource {
   return (app as unknown as { contracts: ConversationContractSource }).contracts;
+}
+
+/**
+ * `changeEventBus` (E04-S044) is decorated by `conversationPlugin` itself,
+ * not by the host app — unlike `db`/`requireSession`/`contracts`, there is
+ * no cross-package ambient-augmentation risk here at all. Kept as a narrow
+ * cast anyway, purely for consistency with the rest of this file.
+ */
+export function hostChangeEventBus(app: FastifyInstance): ChangeEventBus {
+  return (app as unknown as { changeEventBus: ChangeEventBus }).changeEventBus;
 }
 
 /** Present only after `requireSession` has run and allowed the request. */

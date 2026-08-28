@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
-import { appendChangeEvent, listChangeEventsAfter } from "./change-events.repository.js";
+import { appendChangeEvent, getLatestSeq, listChangeEventsAfter } from "./change-events.repository.js";
 import { toOwnerKey } from "./owner-scope.js";
 
 let db: Database.Database;
@@ -166,5 +166,28 @@ describe("listChangeEventsAfter (E04-S040 AC6)", () => {
   it("clamps a hostile limit instead of letting a client ask for everything", () => {
     const rows = listChangeEventsAfter(db, toOwnerKey("o1"), 0, 10_000);
     expect(rows.length).toBeLessThanOrEqual(1000);
+  });
+});
+
+describe("getLatestSeq (E04-S044 AC9 — resync detection)", () => {
+  it("is 0 for an owner with no events yet", () => {
+    expect(getLatestSeq(db, toOwnerKey("nobody"))).toBe(0);
+  });
+
+  it("tracks the highest seq issued to this owner", () => {
+    const owner = toOwnerKey("o1");
+    appendChangeEvent(db, owner, { type: "conversation.created", conversationId: CONV, occurredAt: AT });
+    appendChangeEvent(db, owner, { type: "conversation.updated", conversationId: CONV, occurredAt: AT });
+    expect(getLatestSeq(db, owner)).toBe(2);
+  });
+
+  it("is scoped per owner", () => {
+    const a = toOwnerKey("o1");
+    const b = toOwnerKey("o2");
+    appendChangeEvent(db, a, { type: "conversation.created", conversationId: CONV, occurredAt: AT });
+    appendChangeEvent(db, a, { type: "conversation.created", conversationId: CONV, occurredAt: AT });
+    appendChangeEvent(db, b, { type: "conversation.created", conversationId: CONV, occurredAt: AT });
+    expect(getLatestSeq(db, a)).toBe(2);
+    expect(getLatestSeq(db, b)).toBe(1);
   });
 });

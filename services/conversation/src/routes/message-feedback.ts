@@ -21,7 +21,7 @@ import {
 } from "../repository/message-feedback.repository.js";
 import { appendChangeEvent } from "../repository/change-events.repository.js";
 import { toOwnerKey, type OwnerKey } from "../repository/owner-scope.js";
-import { hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
+import { hostChangeEventBus, hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
 import { ConversationDomainError } from "../domain-error.js";
 
 const PREFIX = "/v1";
@@ -105,8 +105,12 @@ export function registerMessageFeedbackRoutes(app: FastifyInstance): void {
 
       const { verdict } = request.body as { verdict: AnswerFeedbackVerdict };
       const now = new Date().toISOString();
-      const updated = setFeedbackVerdict(db, owner, messageId, verdict, now);
-      appendChangeEvent(db, owner, { type: "message.updated", conversationId, messageId, occurredAt: now });
+      const { updated, event } = db.transaction(() => {
+        const updated = setFeedbackVerdict(db, owner, messageId, verdict, now);
+        const event = appendChangeEvent(db, owner, { type: "message.updated", conversationId, messageId, occurredAt: now });
+        return { updated, event };
+      })();
+      hostChangeEventBus(app).publish(owner, event);
       return updated;
     },
   );
@@ -125,8 +129,12 @@ export function registerMessageFeedbackRoutes(app: FastifyInstance): void {
 
       const { reason } = request.body as { reason: FeedbackReason };
       const now = new Date().toISOString();
-      const updated = setFeedbackReason(db, owner, messageId, reason, now);
-      appendChangeEvent(db, owner, { type: "message.updated", conversationId, messageId, occurredAt: now });
+      const { updated, event } = db.transaction(() => {
+        const updated = setFeedbackReason(db, owner, messageId, reason, now);
+        const event = appendChangeEvent(db, owner, { type: "message.updated", conversationId, messageId, occurredAt: now });
+        return { updated, event };
+      })();
+      hostChangeEventBus(app).publish(owner, event);
       return updated;
     },
   );
@@ -151,8 +159,12 @@ export function registerMessageFeedbackRoutes(app: FastifyInstance): void {
       if (trimmed.length === 0) throw new ConversationDomainError(400, "留言不得為空白。");
 
       const now = new Date().toISOString();
-      const updated = setFeedbackComment(db, owner, messageId, trimmed, now);
-      appendChangeEvent(db, owner, { type: "message.updated", conversationId, messageId, occurredAt: now });
+      const { updated, event } = db.transaction(() => {
+        const updated = setFeedbackComment(db, owner, messageId, trimmed, now);
+        const event = appendChangeEvent(db, owner, { type: "message.updated", conversationId, messageId, occurredAt: now });
+        return { updated, event };
+      })();
+      hostChangeEventBus(app).publish(owner, event);
       return updated;
     },
   );
@@ -175,8 +187,12 @@ export function registerMessageFeedbackRoutes(app: FastifyInstance): void {
 
       const { verdict } = request.body as { verdict: AnswerFeedbackVerdict };
       const now = new Date().toISOString();
-      const updated = setCitationFeedback(db, owner, messageId, citationId, verdict, now);
-      appendChangeEvent(db, owner, { type: "message.updated", conversationId, messageId, occurredAt: now });
+      const { updated, event } = db.transaction(() => {
+        const updated = setCitationFeedback(db, owner, messageId, citationId, verdict, now);
+        const event = appendChangeEvent(db, owner, { type: "message.updated", conversationId, messageId, occurredAt: now });
+        return { updated, event };
+      })();
+      hostChangeEventBus(app).publish(owner, event);
       return updated;
     },
   );

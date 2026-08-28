@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
-    "fastify": "^5.2.1"
+    "fastify": "^5.2.1",
+    "fastify-plugin": "^5.0.1"
   },
   "devDependencies": {
     "@apidevtools/json-schema-ref-parser": "^11.7.2",

@@ -28,6 +28,8 @@ import addFormatsModule from "ajv-formats";
 import Database from "better-sqlite3";
 import { conversationPlugin } from "../plugin.js";
 import { loadConversationsContract } from "./contract-check.js";
+import { hostChangeEventBus } from "../plugin-types.js";
+import type { ChangeEventBus } from "../events/change-event-bus.js";
 
 const Ajv2020 = ajvModule.default;
 const addFormats = addFormatsModule.default;
@@ -86,9 +88,16 @@ function openMigratedDatabase(): Database.Database {
 export interface TestApp {
   readonly app: FastifyInstance;
   readonly db: Database.Database;
+  /** E04-S044: lets a test pre-fill/inspect connection state directly, e.g. the 429 connection-limit test. */
+  readonly changeEventBus: ChangeEventBus;
 }
 
-export async function buildTestApp(): Promise<TestApp> {
+export interface BuildTestAppOptions {
+  /** E04-S044: shrinks the SSE heartbeat interval so stream tests don't wait on the real 15s default. */
+  readonly heartbeatIntervalMs?: number;
+}
+
+export async function buildTestApp(options: BuildTestAppOptions = {}): Promise<TestApp> {
   const db = openMigratedDatabase();
   const registry = await loadConversationsContract();
 
@@ -162,8 +171,8 @@ export async function buildTestApp(): Promise<TestApp> {
     reply.status(500).send({ code: "INTERNAL_ERROR", message: safeMessageFor("INTERNAL_ERROR") });
   });
 
-  await app.register(conversationPlugin);
+  await app.register(conversationPlugin, { heartbeatIntervalMs: options.heartbeatIntervalMs });
   await app.ready();
 
-  return { app, db };
+  return { app, db, changeEventBus: hostChangeEventBus(app) };
 }

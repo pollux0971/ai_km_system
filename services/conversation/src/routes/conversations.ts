@@ -19,7 +19,7 @@ import {
 } from "../repository/conversations.repository.js";
 import { appendChangeEvent } from "../repository/change-events.repository.js";
 import { toOwnerKey, type OwnerKey } from "../repository/owner-scope.js";
-import { hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
+import { hostChangeEventBus, hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
 import { ConversationDomainError } from "../domain-error.js";
 
 /** Matches contract `servers: - url: /v1` (ADR 0003 §6). */
@@ -152,14 +152,22 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       const now = new Date().toISOString();
       const id = randomUUID();
 
-      const row = createConversation(db, owner, { id, mode: body.mode ?? "normal", now });
       const originClientId = originClientIdOf(request);
-      appendChangeEvent(db, owner, {
-        type: "conversation.created",
-        conversationId: row.id,
-        occurredAt: now,
-        ...(originClientId ? { originClientId } : {}),
-      });
+      // E04-S044: write + event-append must be one transaction — publish()
+      // below must never fire for a write that got rolled back, and there
+      // is no way to know "did it commit?" without an actual transaction
+      // boundary to observe.
+      const { row, event } = db.transaction(() => {
+        const row = createConversation(db, owner, { id, mode: body.mode ?? "normal", now });
+        const event = appendChangeEvent(db, owner, {
+          type: "conversation.created",
+          conversationId: row.id,
+          occurredAt: now,
+          ...(originClientId ? { originClientId } : {}),
+        });
+        return { row, event };
+      })();
+      hostChangeEventBus(app).publish(owner, event);
 
       void reply.status(201);
       return row;
@@ -220,14 +228,18 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       if (Object.keys(patch).length === 0) return lookup.row;
 
       const now = new Date().toISOString();
-      const updated = updateConversation(db, owner, conversationId, patch, now);
       const originClientId = originClientIdOf(request);
-      appendChangeEvent(db, owner, {
-        type: "conversation.updated",
-        conversationId,
-        occurredAt: now,
-        ...(originClientId ? { originClientId } : {}),
-      });
+      const { updated, event } = db.transaction(() => {
+        const updated = updateConversation(db, owner, conversationId, patch, now);
+        const event = appendChangeEvent(db, owner, {
+          type: "conversation.updated",
+          conversationId,
+          occurredAt: now,
+          ...(originClientId ? { originClientId } : {}),
+        });
+        return { updated, event };
+      })();
+      hostChangeEventBus(app).publish(owner, event);
       return updated;
     },
   );
@@ -246,15 +258,16 @@ export function registerConversationRoutes(app: FastifyInstance): void {
 
       const now = new Date().toISOString();
       const originClientId = originClientIdOf(request);
-      db.transaction(() => {
+      const event = db.transaction(() => {
         deleteConversation(db, owner, conversationId);
-        appendChangeEvent(db, owner, {
+        return appendChangeEvent(db, owner, {
           type: "conversation.deleted",
           conversationId,
           occurredAt: now,
           ...(originClientId ? { originClientId } : {}),
         });
       })();
+      hostChangeEventBus(app).publish(owner, event);
 
       void reply.status(204);
     },

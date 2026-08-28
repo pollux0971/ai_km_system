@@ -20,7 +20,7 @@ import {
 } from "../repository/messages.repository.js";
 import { appendChangeEvent } from "../repository/change-events.repository.js";
 import { toOwnerKey, type OwnerKey } from "../repository/owner-scope.js";
-import { hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
+import { hostChangeEventBus, hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
 import { ConversationDomainError } from "../domain-error.js";
 
 const PREFIX = "/v1";
@@ -167,7 +167,7 @@ export function registerMessageRoutes(app: FastifyInstance): void {
       const preview = body.content.length > 0 ? body.content : `已傳送 ${attachmentNames.length} 個附件`;
       const originClientId = originClientIdOf(request);
 
-      const message = db.transaction(() => {
+      const { created, messageCreatedEvent, conversationUpdatedEvent } = db.transaction(() => {
         const created = createMessage(db, owner, conversationId, {
           id,
           role: body.role,
@@ -177,24 +177,27 @@ export function registerMessageRoutes(app: FastifyInstance): void {
           now,
         });
         touchConversationSummary(db, owner, conversationId, preview, now);
-        appendChangeEvent(db, owner, {
+        const messageCreatedEvent = appendChangeEvent(db, owner, {
           type: "message.created",
           conversationId,
           messageId: created.id,
           occurredAt: now,
           ...(originClientId ? { originClientId } : {}),
         });
-        appendChangeEvent(db, owner, {
+        const conversationUpdatedEvent = appendChangeEvent(db, owner, {
           type: "conversation.updated",
           conversationId,
           occurredAt: now,
           ...(originClientId ? { originClientId } : {}),
         });
-        return created;
+        return { created, messageCreatedEvent, conversationUpdatedEvent };
       })();
+      const bus = hostChangeEventBus(app);
+      bus.publish(owner, messageCreatedEvent);
+      bus.publish(owner, conversationUpdatedEvent);
 
       void reply.status(201);
-      return message;
+      return created;
     },
   );
 
@@ -223,19 +226,20 @@ export function registerMessageRoutes(app: FastifyInstance): void {
       const now = new Date().toISOString();
       const originClientId = originClientIdOf(request);
 
-      const updated = db.transaction(() => {
+      const { revised, event } = db.transaction(() => {
         const revised = createRevision(db, owner, messageId, body.content, body.state, now);
-        appendChangeEvent(db, owner, {
+        const event = appendChangeEvent(db, owner, {
           type: "message.updated",
           conversationId,
           messageId,
           occurredAt: now,
           ...(originClientId ? { originClientId } : {}),
         });
-        return revised;
+        return { revised, event };
       })();
+      hostChangeEventBus(app).publish(owner, event);
 
-      return updated;
+      return revised;
     },
   );
 }

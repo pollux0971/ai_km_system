@@ -131,3 +131,20 @@ export function listChangeEventsAfter(
 
   return rows.map(toRow);
 }
+
+/**
+ * The highest `seq` ever assigned to this owner, or 0 if none. Since `seq`
+ * is a gapless per-owner counter (`MAX(seq) + 1`, E04-S040), every integer
+ * from 1..latestSeq was issued to this owner at some point — so
+ * `lastEventId > latestSeq` is both necessary and sufficient to detect "this
+ * id was never issued to this owner" (E04-S044 AC9, `UNKNOWN_LAST_EVENT_ID`),
+ * with no separate existence check needed.
+ */
+export function getLatestSeq(db: Database, ownerKey: OwnerKey): number {
+  const owner = toOwnerKey(ownerKey);
+  const row = prepareOwnerScoped(
+    db,
+    "SELECT COALESCE(MAX(seq), 0) AS latest FROM change_events WHERE owner_key = ?",
+  ).get(owner) as { latest: number };
+  return row.latest;
+}

@@ -1,0 +1,401 @@
+openapi: 3.1.0
+info:
+  title: AI KM Transcription (ASR) Contracts
+  version: 1.0.0
+  description: >
+    Server-side speech-to-text for the push-to-talk voice input in the message
+    composer.
+
+
+    Authored under E12-S029 (user-assigned to Team A on 2026-08-28; the E12
+    domain belongs to Team B, so changes here need domain-owner review).
+    Runtime decisions are fixed by
+    `docs/adr/0004-asr-runtime-whisper-cpp.md`: whisper.cpp's `whisper-server`
+    runs as a loopback-only sidecar and `apps/api` calls it over HTTP, so an
+    ASR crash cannot take the API process with it.
+
+
+    **Privacy — the audio is not kept.** The uploaded audio is held only for
+    the duration of the request and is never written to disk, never logged and
+    never attached to telemetry or audit. Telemetry records metadata only:
+    duration, character count, elapsed time, provider and model. **The
+    recognised text is never logged** — it is speech from a user's workplace,
+    and a transcript in a log file is the same disclosure as a transcript in a
+    database, with none of the access control.
+
+
+    Recognition is one-shot, not streaming. Whisper is not a streaming model;
+    live captioning is explicitly out of scope (ADR 0004 §6).
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+  contact:
+    name: E12 domain owner (Team B) / authored by Team A under E12-S029
+servers:
+  - url: /v1
+    description: Same-origin path prefix (ADR 0003 §6).
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: transcriptions
+    description: Speech-to-text.
+
+paths:
+  /transcriptions:
+    post:
+      tags: [transcriptions]
+      operationId: createTranscription
+      summary: Transcribe one short audio clip.
+      description: >
+        Accepts a single 16 kHz mono PCM16 WAV clip and returns its text.
+
+
+        The browser resamples to 16 kHz mono PCM16 itself (E03-S040), which is
+        exactly what whisper.cpp wants, so the server needs no ffmpeg and no
+        transcoding step. A clip that is not in that format is rejected with a
+        specific `details.reason` rather than being silently converted —
+        silent conversion would hide a recorder bug until the day it produced
+        unusable transcripts.
+
+
+        Recognition runs with `language=zh` plus a prompt biasing toward
+        Taiwanese Mandarin mixed with English technical terms, and the output
+        is normalised to Traditional Chinese (OpenCC `cn→twp`); English and
+        digits pass through unchanged. Automatic language detection is
+        deliberately NOT used — in testing it flips language mid-sentence on
+        mixed Chinese/English speech and translates the whole utterance
+        (ADR 0004 §5).
+
+
+        An empty result is a **success**: silence, or audio with no
+        recognisable speech, returns 200 with `text: ""`. It is not an error
+        condition — the user simply did not say anything the model could hear,
+        and the UI should say so rather than show a failure.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/TranscriptionRequest"
+            encoding:
+              audio:
+                contentType: audio/wav
+      responses:
+        "200":
+          description: >
+            Transcribed. `text` may be an empty string — see the operation
+            description.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcription"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/AsrUnavailable"
+        "504":
+          $ref: "#/components/responses/AsrTimeout"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      # Canonical definition lives in auth.yaml (E02-S031); referenced rather
+      # than restated so the two can never drift.
+      $ref: "./auth.yaml#/components/securitySchemes/sessionCookie"
+
+  schemas:
+    TranscriptionLanguage:
+      type: string
+      description: >
+        Recognition language hint. `zh` means Taiwanese Mandarin that may
+        contain English technical terms — not "Chinese only".
+      enum: [zh, en]
+      examples: [zh]
+
+    TranscriptionProvider:
+      type: string
+      description: >
+        Which backend produced this text. `fake` returns fixed text for unit
+        and E2E runs; it is enabled only by explicit configuration
+        (`AI_KM_ASR_PROVIDER`) and a `fake` result must never be presented as
+        integration evidence.
+      enum: [whisper-server, fake]
+      examples: [whisper-server]
+
+    TranscriptionRequest:
+      type: object
+      required: [audio]
+      additionalProperties: false
+      properties:
+        audio:
+          type: string
+          format: binary
+          description: >
+            One `audio/wav` clip: 16 kHz, mono, PCM16. At most 4 MiB and 60
+            seconds — roughly the point past which a push-to-talk utterance is
+            no longer one utterance, and a bound that keeps a single request
+            from monopolising the sidecar.
+        language:
+          $ref: "#/components/schemas/TranscriptionLanguage"
+        conversationId:
+          type: string
+          format: uuid
+          description: >
+            Optional, for correlating telemetry with the conversation the
+            user was in. It is **not** an authorization input: the endpoint
+            neither checks that the caller owns this conversation nor changes
+            behaviour based on it, so supplying somebody else's id gains
+            nothing.
+
+    Transcription:
+      type: object
+      required:
+        - text
+        - rawText
+        - language
+        - durationMs
+        - processingMs
+        - provider
+        - model
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          description: >
+            The usable result: Traditional Chinese normalised and trimmed.
+            This is what the composer sends. Empty string when nothing was
+            recognised.
+        rawText:
+          type: string
+          description: >
+            The provider's output before normalisation and trimming. Kept so a
+            wrong transcript can be diagnosed as "the model misheard" versus
+            "our post-processing broke it" — without it, every complaint about
+            voice input is unfalsifiable.
+        language:
+          $ref: "#/components/schemas/TranscriptionLanguage"
+        durationMs:
+          type: integer
+          minimum: 0
+          description: Length of the submitted audio.
+        processingMs:
+          type: integer
+          minimum: 0
+          description: >
+            Server-side recognition time. Compared against `durationMs` it is
+            the real-time factor, which is how the ASR host is capacity-planned.
+        provider:
+          $ref: "#/components/schemas/TranscriptionProvider"
+        model:
+          type: string
+          description: >
+            Model filename, e.g. `ggml-large-v3-turbo.bin`. Reported so a
+            quality change can be attributed to a model swap.
+      examples:
+        - text: 請幫我查一下 E-204 的錯誤代碼。
+          rawText: 请帮我查一下 E-204 的错误代码。
+          language: zh
+          durationMs: 3200
+          processingMs: 780
+          provider: whisper-server
+          model: ggml-large-v3-turbo.bin
+        - text: ""
+          rawText: ""
+          language: zh
+          durationMs: 900
+          processingMs: 210
+          provider: whisper-server
+          model: ggml-large-v3-turbo.bin
+
+    TranscriptionRejectionReason:
+      type: string
+      description: >
+        Why a clip was rejected. Specific enough for the UI to tell the user
+        what to do differently — "說話時間太長" and "錄音格式不正確" need
+        different responses from the user, so a single generic 400 would be
+        useless to them.
+      enum:
+        - MISSING_AUDIO
+        - BAD_WAV_HEADER
+        - UNSUPPORTED_SAMPLE_RATE
+        - AUDIO_TOO_LONG
+        - AUDIO_TOO_SHORT
+      examples: [AUDIO_TOO_LONG]
+
+    ValidationErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          required: [code, details]
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR]
+            details:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  $ref: "#/components/schemas/TranscriptionRejectionReason"
+      examples:
+        - code: VALIDATION_ERROR
+          message: 錄音時間過長,請縮短在 60 秒以內。
+          details:
+            reason: AUDIO_TOO_LONG
+        - code: VALIDATION_ERROR
+          message: 沒有收到錄音內容。
+          details:
+            reason: MISSING_AUDIO
+        - code: VALIDATION_ERROR
+          message: 錄音格式不正確,請重新錄製。
+          details:
+            reason: BAD_WAV_HEADER
+        - code: VALIDATION_ERROR
+          message: 錄音取樣率不支援,需為 16kHz。
+          details:
+            reason: UNSUPPORTED_SAMPLE_RATE
+        - code: VALIDATION_ERROR
+          message: 錄音時間過短,請再說一次。
+          details:
+            reason: AUDIO_TOO_SHORT
+
+    UnauthenticatedBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [UNAUTHENTICATED]
+          required: [code]
+      examples:
+        - code: UNAUTHENTICATED
+          message: 請先登入。
+
+    PayloadTooLargeBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [PAYLOAD_TOO_LARGE]
+          required: [code]
+      examples:
+        - code: PAYLOAD_TOO_LARGE
+          message: 錄音檔案超過 4MB 上限。
+
+    UnsupportedMediaTypeBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [UNSUPPORTED_MEDIA_TYPE]
+          required: [code]
+      examples:
+        - code: UNSUPPORTED_MEDIA_TYPE
+          message: 僅接受 multipart/form-data 的 audio/wav 錄音。
+
+    AsrUnavailableBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [ASR_UNAVAILABLE]
+          required: [code]
+      examples:
+        - code: ASR_UNAVAILABLE
+          message: 語音辨識服務目前無法使用,請改用鍵盤輸入。
+
+    AsrTimeoutBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [ASR_TIMEOUT]
+          required: [code]
+      examples:
+        - code: ASR_TIMEOUT
+          message: 語音辨識逾時,請再試一次。
+
+    InternalErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [INTERNAL_ERROR]
+          required: [code]
+      examples:
+        - code: INTERNAL_ERROR
+          message: 系統發生未預期的錯誤。
+
+  responses:
+    ValidationError:
+      description: >
+        The clip was rejected before recognition. `details.reason` says which
+        rule it broke.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorBody"
+    Unauthenticated:
+      description: No valid session.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnauthenticatedBody"
+    PayloadTooLarge:
+      description: >
+        Body exceeded 4 MiB. Distinct from `AUDIO_TOO_LONG`, which is about
+        duration — a 4 MiB clip can be under 60 s and vice versa.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PayloadTooLargeBody"
+    UnsupportedMediaType:
+      description: Not `multipart/form-data`, or the part was not `audio/wav`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnsupportedMediaTypeBody"
+    AsrUnavailable:
+      description: >
+        The whisper sidecar is unreachable or has no model loaded. Fails
+        closed: the request is NOT silently rerouted to a cloud provider, and
+        no placeholder text is returned. The UI falls back to the keyboard.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AsrUnavailableBody"
+    AsrTimeout:
+      description: >
+        Recognition exceeded the 30-second server-side budget. Distinct from
+        503 so the UI can say "try again" rather than "voice input is down".
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AsrTimeoutBody"
+    InternalError:
+      description: Unexpected server error. Never contains a stack trace.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorBody"

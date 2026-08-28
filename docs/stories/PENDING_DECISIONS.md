@@ -216,6 +216,42 @@ story 繼續逐字轉寫,**可隨時推翻本決定**,把 E04-S050 標回不做�
 **影響範圍**:兩個 `plugin-types.ts`、`server.ts` 註冊順序、新增 apps/api 全鏈路
 測試。`contracts/` 零 diff。PROGRESS.md 總數 222 → 223。
 
+### [2026-08-28] apps/api 沒有可部署的編譯產物——production 要跑 `tsx` 還是改成出 JS?(**需使用者裁示**)
+
+**背景**:W2 在 E01-S028 建 Docker image 時發現,`apps/api` 自己 README 記載的
+`pnpm build && pnpm start` **從來就不能用**(Docker 內外皆已實測)。總指揮覆核確認:
+
+- `services/conversation`、`services/identity`、`services/model-gateway` 三者的
+  `package.json` 都是 `main: ./src/index.ts`、`build: tsc --noEmit`
+  ——**完全不產生 JS**,設計上就是要被 `tsx` 當原始 TS 消費。
+- `apps/api` 的 `start: node dist/main.js` 因此無法解析那些 `.ts` import,
+  直接 `ERR_UNKNOWN_FILE_EXTENSION`。
+- `apps/web`/`apps/admin` 不受影響——Next.js 自己的 bundler 會透過
+  `transpilePackages` 轉譯 workspace 套件;只有不經 bundler 的 Fastify 這條路踩到。
+
+**W2 目前的處置(已核准,不阻塞)**:`infra/docker/api.Dockerfile` 改用
+`pnpm exec tsx src/main.ts`,與 `pnpm dev` 相同機制,不另造影子實作,並記錄為假設。
+
+**但有一個必須知道的代價**:`tsx` 是 `apps/api` 的 **devDependency**。所以 image
+不能用 `pnpm install --prod`,必須連 dev 依賴一起裝——production image 會帶著整套
+開發工具鏈(體積、攻擊面、以及「production 跑 dev 工具」的心理負擔)。
+
+**選項**:
+1. **(短期推薦,已在做)維持 `tsx` 執行**,在 runbook 明記代價與原因。零風險、
+   不阻塞 E01-S028。
+2. **新增一個 story,讓 `services/*` 真的產出 JS**(`build: tsc` 出 `dist/`、
+   `main`/`exports` 指向編譯產物、`apps/api` 的 `start` 才會成立)。這是跨全部
+   三個 service + apps/api 的建置架構變更,會影響所有既有測試的 import 解析,
+   規模明顯大於前五個補正 story。
+3. 兩者並行:先出貨選項 1,把選項 2 排到本批之後。
+
+**總指揮的判斷**:這個缺陷**目前不阻塞任何 lane**,而且選項 2 是「production
+要不要跑 TS」的架構取捨,不是單純的 bug 修復——所以**沒有自行立案**,交由使用者
+裁示。若使用者選 2,再新增 story。
+
+**影響範圍**:`services/*/package.json` 與 tsconfig、`apps/api` 的 build/start、
+`infra/docker/api.Dockerfile`、`apps/api/README.md` 的文件正確性。
+
 <!-- 模板:
 ### [YYYY-MM-DD] EXX-SYYY — 一句話問題
 - 背景:

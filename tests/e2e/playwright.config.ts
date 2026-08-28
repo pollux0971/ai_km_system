@@ -4,6 +4,8 @@ import path from "node:path";
 import { defineConfig } from "@playwright/test";
 import { ensureFakeMicrophoneWav } from "./helpers/fake-microphone";
 import { assertPortsFreeForCI, resolveReuseExistingServer } from "./helpers/port-check";
+import { wrapCommandWithSentinel } from "./helpers/env-sentinel";
+import { API_BASE_URL, API_PORT, ADMIN_EXPECTED_ENV, WEB_EXPECTED_ENV } from "./helpers/webserver-env";
 import { STORAGE_STATE_PATH } from "./auth-storage-state";
 
 /**
@@ -50,8 +52,6 @@ import { STORAGE_STATE_PATH } from "./auth-storage-state";
 // databases instead of one shared sandboxed one.
 const RUN_ID = randomUUID();
 const E2E_DB_PATH = path.join(tmpdir(), `ai-km-e2e-${RUN_ID}.sqlite`);
-const API_PORT = 4100;
-const API_BASE_URL = `http://127.0.0.1:${API_PORT}`;
 
 // Generated once, synchronously, before defineConfig() below builds the
 // static config object — see fake-microphone.ts's own doc comment for why
@@ -108,7 +108,14 @@ export default defineConfig({
   workers: process.env.CI ? 2 : Math.max(1, Math.floor(cpus().length / 2)),
   webServer: [
     {
-      command: "pnpm --filter @ai-km/web dev",
+      // E04-S056 AC5.1: `reuseExistingServer` below silently keeps whatever
+      // env the ALREADY-LISTENING process was started with — Playwright's
+      // own `env:` here only ever applies when it starts a fresh process.
+      // `wrapCommandWithSentinel` makes every real start of this command
+      // record the env it actually got, so `global-setup.ts` can catch a
+      // reused server whose recorded env no longer matches `WEB_EXPECTED_ENV`
+      // below (see helpers/env-sentinel.ts's own doc comment).
+      command: wrapCommandWithSentinel(3000, Object.keys(WEB_EXPECTED_ENV), "pnpm --filter @ai-km/web dev"),
       url: "http://localhost:3000",
       // E01-S030: `!process.env.CI` — local dev keeps the old `true`
       // (convenient: don't restart on every run); CI always starts fresh,
@@ -116,33 +123,21 @@ export default defineConfig({
       // adopting a leftover process. See helpers/port-check.ts.
       reuseExistingServer: resolveReuseExistingServer(),
       timeout: 120000,
-      env: {
-        API_INTERNAL_URL: API_BASE_URL,
-        // E03-S046: keeps every existing E2E spec that depends on the old
-        // hardcoded CONVERSATIONS_PAGE_SIZE=2 pagination behaviour
-        // (conversation-history-pagination.spec.ts, model-selector.spec.ts,
-        // conversation-detail.spec.ts, ...) seeing exactly the same value
-        // as before this story — production now defaults to 20, but the
-        // E2E fixtures (3-seed-conversation scenarios landing on exactly 2
-        // pages) were designed around 2 and stay unmodified.
-        NEXT_PUBLIC_CONVERSATIONS_PAGE_SIZE: "2",
-        // E03-S045: production defaults every "[模擬:X]" mock trigger off
-        // (feature-flags.ts's "mock_triggers" flag) — E2E specs exercise
-        // those states deliberately (answer-state/streaming/file-processing/
-        // knowledge-documents specs), so turn the flag back on here, same
-        // as apps/web/vitest.setup.ts does for the unit-test environment.
-        NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS: "true",
-      },
+      // E03-S046 / E03-S045: see WEB_EXPECTED_ENV's own doc comment in
+      // helpers/webserver-env.ts for why each of these three must be exactly
+      // these values in E2E — kept there, not duplicated here, so the values
+      // Playwright actually sets and the values global-setup.ts verifies
+      // against a reused server can never quietly drift apart.
+      env: WEB_EXPECTED_ENV,
     },
     {
-      command: "pnpm --filter @ai-km/admin dev -p 3001",
+      // E04-S056 AC5.1: see the `web` entry above — same hazard, same fix.
+      command: wrapCommandWithSentinel(3001, Object.keys(ADMIN_EXPECTED_ENV), "pnpm --filter @ai-km/admin dev -p 3001"),
       url: "http://localhost:3001",
       // E01-S030: see the `web` entry above — same reasoning.
       reuseExistingServer: resolveReuseExistingServer(),
       timeout: 120000,
-      env: {
-        API_INTERNAL_URL: API_BASE_URL,
-      },
+      env: ADMIN_EXPECTED_ENV,
     },
     {
       command: "pnpm --filter @ai-km/api dev",

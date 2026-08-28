@@ -1,3 +1,6 @@
+import { assertReusedServerEnvMatches } from "./helpers/env-sentinel";
+import { ADMIN_EXPECTED_ENV, WEB_EXPECTED_ENV } from "./helpers/webserver-env";
+
 /**
  * E01-S027 root-cause finding (ROADMAP_TEMP.md §5-nona, 2026-08-28-29):
  * Next.js dev servers compile routes on demand — Playwright's `webServer.url`
@@ -15,6 +18,13 @@
  * budget, rather than mid-test on a spec's normal timeout.
  */
 export default async function globalSetup(): Promise<void> {
+  // E04-S056 AC5.1: runs BEFORE the warm-up below so a reused server with
+  // stale/wrong env fails immediately, not after burning the warm-up's
+  // budget compiling routes that would then behave wrong anyway — see
+  // helpers/env-sentinel.ts's own doc comment for the hazard this closes.
+  assertReusedServerEnvMatches(3000, WEB_EXPECTED_ENV);
+  assertReusedServerEnvMatches(3001, ADMIN_EXPECTED_ENV);
+
   // E11-S026: apps/admin now has its own /login route too (previously it
   // had none — admin-smoke.spec.ts's own comment described that earlier
   // reality, which this story's whole point is to change), so it gets

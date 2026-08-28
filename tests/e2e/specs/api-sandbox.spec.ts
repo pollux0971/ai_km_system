@@ -139,10 +139,28 @@ test("a fake microphone is available: getUserMedia({audio:true}) resolves with a
  * starts — verified here against the real server rather than "Next dev
  * server + a fake API" (E03-S035's own AC6 wording), now that a real one
  * exists to verify against.
+ *
+ * E04-S056 AC2: this test's own purpose is the ROUTE (does the rewrite
+ * reach a real apps/api at all), not ASR's operational status — asserting
+ * a literal `status: "ok"` coupled this route test to an unrelated optional
+ * subsystem (the previous version of this file's own doc comment explains
+ * how that produced a permanently-degraded dev/test `/v1/health` once
+ * E04-S047 added the ASR subsystem check). Asserting the full response
+ * shape (same 3 keys `apps/api/src/server.test.ts`'s own
+ * "leaks neither filesystem paths..." test locks in) proves the real
+ * backend answered without caring which way ASR happens to be configured.
+ * The `ok` direction (default dev/test config, ASR unaffected) is covered
+ * by `apps/api/src/server.test.ts`'s "returns 200 with status, version and
+ * uptimeMs"; the `degraded` direction by its
+ * "AC1/AC3: reports status degraded when a subsystem (asr, unreachable
+ * whisper-server default) is down" — both already existing, unmodified.
  */
 test("apps/web's /api/v1/health rewrite reaches the real apps/api instance", async ({ page }) => {
   const response = await page.request.get("/api/v1/health");
   expect(response.status()).toBe(200);
   const body = await response.json();
-  expect(body).toMatchObject({ status: "ok" });
+  expect(Object.keys(body).sort()).toEqual(["status", "uptimeMs", "version"]);
+  expect(["ok", "degraded"]).toContain(body.status);
+  expect(typeof body.version).toBe("string");
+  expect(typeof body.uptimeMs).toBe("number");
 });

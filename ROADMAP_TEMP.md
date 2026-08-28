@@ -482,14 +482,35 @@ lane。正確判準是「`.api-version` 到 `main` 之間的差異**有沒有碰
 (`apps/api`、`services`、`db`、`contracts`)——沒碰到就可以繼續,並在 EVIDENCE
 記錄這個判斷。
 
-跑任何 E2E 前先確認:
+跑任何 E2E 前先確認(E04-S056 修正:**只看 HTTP 200 攔不到 `degraded`
+——它一樣回 200**,舊版 `curl -w "%{http_code}"` 這條在任一 subsystem 掛掉
+時仍會誤判為健康):
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4000/v1/health
+BODY=$(curl -s http://127.0.0.1:4000/v1/health)
+STATUS=$(echo "$BODY" | node -e 'process.stdin.on("data",d=>{try{console.log(JSON.parse(d).status)}catch{console.log("PARSE_ERROR")}})')
+if [ "$STATUS" != "ok" ]; then
+  echo "共用 API health 非 ok(實際: $STATUS,body: $BODY)— 回報總指揮,不要自行重啟別人的 process"; exit 1
+fi
 ```
 
-`200` 才跑。`000`/refused → **回報總指揮,不要自行重啟別人的 process,也不要
+`000`/refused/非 `ok` → **回報總指揮,不要自行重啟別人的 process,也不要
 把測試結果當成自己的回歸或 flaky。**
+
+**總指揮重啟該共用實例時,啟動指令務必帶上 `AI_KM_ASR_PROVIDER=fake`**
+(E04-S056):dev/test 從不跑 whisper sidecar,不帶這個變數會讓預設值
+`whisper-server` 連不上 8178,`checkAsr` 回 `down`,`/v1/health` 因此永遠
+`degraded`,即使 apps/api 本身完全健康。這不是「假裝 ASR 正常」——`fake`
+provider 是明示宣告「這裡沒有 ASR」,production 預設仍是 `whisper-server`
+不受影響(見 `apps/api/src/config.ts`)。在既有重啟指令(不論目前是
+`tsx src/main.ts` 或 build 後的 `node dist/main.js`,見本節上方「非 watch
+模式」說明)前面加上這個變數即可,其餘變數沿用既有
+`AI_KM_DEV_TRIGGERS`/`AI_KM_TEST_SANDBOX`/`AI_KM_SEED_DEMO_USERS`
+(完整清單見 `tests/e2e/README.md`):
+
+```bash
+AI_KM_ASR_PROVIDER=fake <既有的重啟指令，例如 setsid node dist/main.js &>
+```
 
 **總指揮維護該 process 時一律先拿 `.e2e.lock`**(2026-08-28 立):對它的任何
 重啟都會讓正在跑的 E2E 從中途失去後端,產生大規模、看起來像回歸的紅燈。當天

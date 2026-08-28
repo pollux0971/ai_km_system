@@ -1,10 +1,12 @@
-import { createMockAuthClient } from "@ai-km/auth-client";
+import { createHttpAuthClient, createMockAuthClient } from "@ai-km/auth-client";
 import type { AuthClient } from "@ai-km/auth-client";
+import { apiClient } from "./api";
 
 /**
- * Mock-backed until the E02 (Identity, RBAC & Authorization) contract
- * exists (see docs/stories/E01-S002.md). Consumers depend on the
- * AuthClient type only, so swapping this for a real generated client is a
- * future story's job and shouldn't require touching call sites.
+ * E03-S035: backed by the real `/auth/*` endpoints (E02-S031's frozen contract) via
+ * @ai-km/api-client by default. Set NEXT_PUBLIC_AUTH_BACKEND=mock to fall back to the
+ * in-memory mock (e.g. for unit tests / environments with no API to talk to) — consumers
+ * depend on the AuthClient type only, so this switch never touches call sites.
  */
-export const authClient: AuthClient = createMockAuthClient();
+export const authClient: AuthClient =
+  process.env.NEXT_PUBLIC_AUTH_BACKEND === "mock" ? createMockAuthClient() : createHttpAuthClient(apiClient);

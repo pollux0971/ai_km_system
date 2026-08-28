@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-km/api-client": "workspace:*",
     "@ai-km/types": "workspace:*"
   },
   "devDependencies": {

@@ -43,3 +43,4 @@ export type AuthErrorCode =
   | "SERVICE_UNAVAILABLE";
 
 export * from "./mock";
+export { createHttpAuthClient } from "./http";

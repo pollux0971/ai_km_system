@@ -263,6 +263,41 @@ hang 且不丟例外。** 純字串 FormData 完全正常。補 `Blob.prototype.
 沒有這個問題**,所以 `fake-api.ts` 的 multipart handler 仍應完整寫好,留給
 E03-S038 / E03-S044 的真實 E2E 使用。
 
+## 5-nona. 🔴 跑 E2E 前必須「暖機」——Next dev 是按需編譯
+
+**症狀**:全量跑的**最前面**連續數個 spec 全部卡在同一步(通常是
+`login()` 的 `getByLabel('帳號')` 或首個 `page.goto`)30 秒逾時,後面的
+spec 卻正常。看起來像後端掛掉或大規模回歸,其實兩者都不是。
+
+**根因**:Playwright 的 `webServer` 只等到 **port 開始監聽**就視為就緒,但
+Next.js dev server 是**按需編譯**——第一次請求某條路由時才 compile。這台機器
+同時有多條 lane 在跑時,首次編譯很容易超過 Playwright 的 30 秒逾時,於是最前面
+幾個 spec 全滅。
+
+**2026-08-28 W6 的對照證據**:pre-flight 兩項(`.api-version` 相符 +
+`:4000` health 200)**都通過**之後,同一批 spec 仍然從 `[1/273]` 起卡在登入表單
+——證明與共用 API 無關,是冷編譯。
+
+**修法**:在 `flock` 內、`playwright test` **之前**加暖機迴圈:
+
+```bash
+for port in 3000 3001; do
+  for i in $(seq 1 90); do
+    code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/login" || true)
+    [ "$code" = "200" ] && { echo "port $port warm after ${i}s"; break; }
+    sleep 1
+  done
+done
+```
+
+**這是純操作步驟**,不動任何 story 檔案,任何 lane 都可以立刻採用。
+
+**對 E01-S027 的意義**:那 3 支長期「已知 flaky」(`admin-e2e`、
+`admin-analytics-e2e`、`maintenance-e2e`)全部是導航/載入逾時,**極可能是同一個
+冷編譯根因**,而不是測試本身不穩。W7 做 E01-S027 時應先驗證這個假設——若成立,
+該 story 的解法是「webServer 就緒判定改成等真實回應而非等 port」,而不是去改那
+三支 spec。
+
 ## 5-penta. 共用 apps/api(`:4000`)—— 全域單點,跑 E2E 前必檢查
 
 七條 lane 的 E2E 登入都經由 web dev server 的 `/api/v1` rewrite 打到**同一個**

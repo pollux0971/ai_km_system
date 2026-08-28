@@ -140,6 +140,26 @@ W7 在 E03-S038 前置未齊時,可先做 E13-S020 或協助 review 其他 lane 
    - **絕對不可**用 `exec 200>lock; flock 200` 然後在**另一個 Bash 呼叫**裡跑
      測試——Claude Code 的 Bash 工具**不保留 shell 狀態**,前一個呼叫的 shell
      一結束,鎖就釋放了,你會在毫無自覺的情況下無鎖執行。
+   - **手動啟動 dev server 時必須用 `trap cleanup EXIT` 保證收尾**(2026-08-28
+     W4 事故的真正根因):若腳本用了 `set -euo pipefail`,中間任何一步非零退出
+     會讓腳本**提前結束、跳過 stop server 那行**,而 flock 隨腳本結束就釋放
+     ——dev server 於是在**無鎖狀態下裸奔**,變成別人眼中的孤兒。Playwright 自
+     管 webServer 的情況不受影響,但只要你自己 `&` 起 server 就一定要 trap:
+
+     ```bash
+     flock -w 3600 /data/python/AI_KM-worktrees/.e2e.lock bash -c '
+       set -euo pipefail
+       cleanup() { kill "${SRV:-}" 2>/dev/null || true; rm -f /data/python/AI_KM-worktrees/.e2e.owner; }
+       trap cleanup EXIT
+       echo "<lane> pid=$$ $(date -Is)" > /data/python/AI_KM-worktrees/.e2e.owner
+       pnpm --filter @ai-km/web dev & SRV=$!
+       <做事>
+     '
+     ```
+   - **更省事的替代方案**:人工視覺確認/smoke 這類不需要跑既有 E2E 的工作,
+     直接用**非 3000/3001 的丟棄式 port**(如 `PORT=3910 pnpm --filter @ai-km/web dev`),
+     完全不必搶鎖,也不會擋到其他六條 lane。W1(E03-S035 用 3910)與 W5
+     (voice harness 用 random port)都是這樣做的。
    - `.e2e.owner` 是**可觀測的所有權宣告**。動手 kill 任何 process 前先讀它:
      若檔案存在且**不是你自己**,代表鎖語意出了問題 → **立刻停手、回報總指揮,
      不准 kill**。若不存在或是你自己,才適用下面的孤兒判定。

@@ -137,3 +137,16 @@ during the scan (a genuinely-empty history list), not because it was fine.
 Re-running after the fix: 0 violations, screenshots above regenerated
 against the corrected styling. Fixed once and confirmed rather than
 "most likely fine" reasoning.
+
+**Self-review follow-up**: removing the opacity from `.sidebar-history-title`
+and `.sidebar-history-preview` fixed the contrast bug but had a side
+effect axe can't detect — `.sidebar-history-link` (the item's title) used
+the same `--sidebar-text` (on-surface-variant) token as
+`.sidebar-history-preview`, so after the opacity fix the title and its
+supporting-text preview rendered in the *exact same color*, leaving only
+font-size to tell them apart. `/story-review`'s self-review checklist
+caught this (axe only checks contrast ratios, not visual hierarchy).
+Fixed by moving `.sidebar-history-link` to `--sidebar-text-strong`
+(on-surface) — strictly increases contrast, so it cannot reintroduce an
+axe violation (re-verified: still 0). Screenshots above are from this
+corrected version.

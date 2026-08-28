@@ -590,7 +590,14 @@ th {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--sidebar-text);
+  /* E01-S023 FIX (self-review): was --sidebar-text (on-surface-variant),
+     same token as .sidebar-history-preview below — once opacity dimming
+     was removed to fix the axe contrast bug, title and preview rendered
+     in the exact same color with only font-size telling them apart.
+     on-surface-strong restores the M3 headline/supporting-text hierarchy
+     (headline = on-surface, supporting = on-surface-variant) and only
+     raises contrast, so it cannot introduce a new axe violation. */
+  color: var(--sidebar-text-strong);
   font-size: 0.9rem;
   border-radius: var(--radius-md);
   padding: 6px 10px 0;

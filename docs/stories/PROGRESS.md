@@ -34,8 +34,8 @@ mock 也做不了才標 `blocked-team-b`。
 | E13 Feedback & Analytics | 21 | 18 | 0 | 0 | 0 | 3 |
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S051) | 13 | 9 | 0 | 0 | 0 | 4 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
-| E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 1 | 0 | 1 |
-| **合計** | **223** | 193 | 0 | 4 | 1 | 25 |
+| E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
+| **合計** | **223** | 193 | 0 | 5 | 1 | 24 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -330,5 +330,5 @@ mock 也做不了才標 `blocked-team-b`。
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
 | E12-S029 | approved | `story/E12-S029-transcription-contract` | [E12-S029.md](E12-S029.md) | Contract 凍結：transcription API（`contracts/openapi/transcriptions.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S029.spec.md](specs/E12-S029.spec.md) |
-| E12-S030 | todo | — | — | ASR 環境就緒（whisper-server CUDA 建置／模型指引、check-asr／verify-asr 以真實中英夾雜音檔驗證）；HARD 依賴：無；wave 0；比照 E04-S037，L3 需使用者於目標機器手動完成。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S030.spec.md](specs/E12-S030.spec.md) |
+| E12-S030 | in-progress | story/E12-S030-asr-readiness | — | ASR 環境就緒（whisper-server CUDA 建置／模型指引、check-asr／verify-asr 以真實中英夾雜音檔驗證）；HARD 依賴：無；wave 0；比照 E04-S037，L3 需使用者於目標機器手動完成。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S030.spec.md](specs/E12-S030.spec.md) |
 | E12-S031 | in-progress | story/E12-S031-transcription-endpoint | [E12-S031.md](E12-S031.md) | **碼已 merge(60dff4f),但依 spec 不得標 approved**——`Evidence Required Before Done` 要求「L3 真實輸出(**兩台**)」且 DoD 要求「AC 全綠」,而 AC8(對 E12-S030 真實 fixture 的辨識,關鍵詞命中率 ≥80%,1650 與 4070 各一次)尚未取證:E12-S030 仍 todo,且使用者 2026-08-28 已確認**目前沒有 4070**(該輪記 `BLOCKED_DEPENDENCY`)。總指揮 2026-08-28 由 approved 更正為 in-progress。原註記保留於後:獨立審核 APPROVE(重新獨立跑 typecheck/lint/test 皆綠——model-gateway 65/65、apps/api 91/91;範圍/邊界核對通過;發現並修正 1 個 MINOR——outer Content-Type 檢查缺測試;2 項誠實記錄的非阻擋落差:conversationId 無對應 contract reason 值改安靜捨棄、AC8 L3 真實 sidecar 需 E12-S030 尚未 approved 故未驗證)。Transcription 端點（TranscriptionProvider 抽象、whisper-server adapter、fake provider、WAV 驗證、OpenCC 繁體化）；HARD 依賴：E12-S029、E04-S039；wave 1；L3 需 E12-S030。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S031.spec.md](specs/E12-S031.spec.md) |

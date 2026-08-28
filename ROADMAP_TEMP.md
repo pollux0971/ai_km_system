@@ -269,6 +269,22 @@ E03-S038 / E03-S044 的真實 E2E 使用。
 apps/api:掛在 `/data/python/AI_KM/apps/api`(總指揮 checkout,內容 = main)的
 `tsx watch src/main.ts`。**它不屬於任何 lane,沒有健康檢查。**
 
+**🔴 `health=200` 不代表它跑著最新的 main。** 為了穩定性,總指揮已把它從
+`tsx watch` 改成**非 watch 模式**——它不再隨 main 變動自動重啟,所以任何影響
+`apps/api`/`services/*` 的 merge(例如 E04-S053 改 sandbox seeder 註冊)**必須
+由總指揮手動重啟才會生效**。2026-08-28 W4 因此對著舊碼白跑一輪 264 個 E2E。
+
+**版本查驗**——總指揮每次重啟後把當時的 main commit 寫進
+`/data/python/AI_KM-worktrees/.api-version`,跑 E2E 前比對:
+
+```bash
+test "$(cat /data/python/AI_KM-worktrees/.api-version 2>/dev/null)" = "$(git rev-parse main)" \
+  && echo "API 版本相符" || echo "API 落後 — 回報總指揮重啟後再跑"
+```
+
+不相符時**不要跑**,回報總指揮。若你的 story 完全不碰 `apps/api`/`services/*`,
+落後幾個 commit 通常無妨,但要自己判斷並在 EVIDENCE 說明。
+
 跑任何 E2E 前先確認:
 
 ```bash

@@ -2,6 +2,21 @@ import { test, expect } from "@playwright/test";
 import { MOCK_SALES_USERNAME, MOCK_VALID_PASSWORD } from "@ai-km/auth-client";
 
 /**
+ * E01-S031: test 1 below used to lose the mock AuthClient's in-memory-only
+ * session on its own page.reload() (a hard reload always did), which is
+ * what forced a reauthenticate() round trip back through login that used
+ * to follow it. E03-S035's real cookie session correctly survives a real
+ * reload, so that round trip no longer happens — the reload alone now
+ * already proves the ERP data survived a genuinely fresh page load,
+ * without conflating it with whether the login mechanism also survived
+ * (a separate concern session-gate.spec.ts's own tests already cover).
+ * See that test's own inline comment, right after its page.reload() call,
+ * for the updated reasoning; the reauthenticate() helper this file used
+ * to share with maintenance-e2e.spec.ts's pattern was removed since
+ * nothing here needs it anymore.
+ */
+
+/**
  * E09-S024 — the final story of E09 (AI ERP & Reporting Experience).
  * SOURCE_BASELINE/epic 檔對這個 story 沒有任何專屬內容,只有通用樣板
  * 文字 + 標題,同 E03-S033/E05-S031/E07-S025 這三個既有前例——每個 epic
@@ -46,21 +61,6 @@ function sidebarNav(page: import("@playwright/test").Page) {
   return page.getByRole("navigation", { name: "主導覽" });
 }
 
-// Same pattern maintenance-e2e.spec.ts's own reauthenticate() helper
-// established: a hard reload/navigation loses the mock AuthClient's
-// in-memory-only session, redirecting to /login before the target page
-// ever renders — logging back in and letting the login flow's own
-// returnUrl carry the user back to where they were (E01-S003) is how
-// this codebase actually verifies "survives a real reload", not a bare
-// page.reload() alone.
-async function reauthenticate(page: import("@playwright/test").Page, expectedPathname: string) {
-  await page.waitForURL((url) => url.pathname === "/login");
-  await page.getByLabel("帳號").fill(MOCK_SALES_USERNAME);
-  await page.getByLabel("密碼").fill(MOCK_VALID_PASSWORD);
-  await page.getByRole("button", { name: "登入", exact: true }).click();
-  await page.waitForURL((url) => url.pathname === expectedPathname);
-}
-
 test("E09-S024: clicking into a seeded query with a confident scenario match shows the single-option picker (not the 4-option ambiguous fallback), completes execution, and survives a real page reload", async ({
   page,
 }) => {
@@ -103,15 +103,16 @@ test("E09-S024: clicking into a seeded query with a confident scenario match sho
   // Real hard reload — never exercised anywhere else in this epic's E2E
   // coverage. The mock ERP query data persists to sessionStorage (same
   // pattern every other domain in this codebase uses), so the executed
-  // state, not the pre-execution picker, must be what comes back — but
-  // the hard reload also loses the separate, in-memory-only mock auth
-  // session first, same as maintenance-e2e.spec.ts's own reload already
-  // established; re-authenticating and following the login flow's own
-  // returnUrl back here is what actually proves the ERP data survived,
-  // not just the login state.
+  // state, not the pre-execution picker, must be what comes back.
+  // E01-S031: this used to also lose the separate, in-memory-only mock
+  // auth session and need a reauthenticate() round trip back through
+  // login — E03-S035's real cookie session correctly survives a real
+  // reload now, so the assertion below runs straight after the reload,
+  // on the same URL, still authenticated; asserting the URL didn't move
+  // makes that explicit instead of leaving it implicit.
   const detailUrl = page.url();
   await page.reload();
-  await reauthenticate(page, new URL(detailUrl).pathname);
+  expect(page.url()).toBe(detailUrl);
   await expect(page.getByRole("heading", { name: "上個月各分公司的營收總額是多少?", level: 1 })).toBeVisible();
   await expect(page.getByText("查詢情境:各分公司營收")).toBeVisible();
   await expect(page.getByText("查詢已執行完成。")).toBeVisible();

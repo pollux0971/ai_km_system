@@ -7,6 +7,22 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * multi-select (a checkbox group) in S004. Navigation after login
  * always uses in-app link clicks, never page.goto() — see
  * conversations.spec.ts's file doc comment for why.
+ *
+ * E01-S031: the two tests below that toggle a checkbox use .click()
+ * followed by a separate `expect(...).toBeChecked()`, not `.check()`/
+ * `.uncheck()` directly. knowledge-selector.tsx's own doc comment is
+ * explicit that this checkbox is non-optimistic — its checked state only
+ * flips once the API call resolves. `.check()`/`.uncheck()` bundle their
+ * own short, fixed post-click wait for the state to flip; that was long
+ * enough against the old mock's near-instant resolution but not against
+ * real network latency. A plain `.click()` plus `expect().toBeChecked()`
+ * separates "perform the click" from "wait for the resulting state",
+ * with `expect()`'s own (longer, polling) timeout budget for the latter
+ * — same mechanism, just decoupled instead of relying on `.check()`'s
+ * built-in one. Each starting state below is still exactly what it was
+ * before (seed data, or a prior action in the same test), so a plain
+ * click still flips it in the same direction `.check()`/`.uncheck()`
+ * would have.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -55,9 +71,9 @@ test("E03-S004: checking multiple scopes and leaving one unchecked persists exac
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
   const conversationUrl = page.url();
 
-  await page.getByRole("checkbox", { name: "部門知識庫" }).check();
+  await page.getByRole("checkbox", { name: "部門知識庫" }).click();
   await expect(page.getByRole("checkbox", { name: "部門知識庫" })).toBeChecked();
-  await page.getByRole("checkbox", { name: "問答庫" }).check();
+  await page.getByRole("checkbox", { name: "問答庫" }).click();
   await expect(page.getByRole("checkbox", { name: "問答庫" })).toBeChecked();
 
   await sidebarNav(page).getByRole("link", { name: "首頁" }).click();
@@ -89,7 +105,7 @@ test("E03-S004: unchecking one previously-selected scope leaves the others check
   await page.getByRole("main").getByRole("link", { name: "產品保固政策詢問" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 
-  await page.getByRole("checkbox", { name: "公司知識庫" }).uncheck();
+  await page.getByRole("checkbox", { name: "公司知識庫" }).click();
 
   await expect(page.getByRole("checkbox", { name: "公司知識庫" })).not.toBeChecked();
   await expect(page.getByRole("checkbox", { name: "問答庫" })).toBeChecked();

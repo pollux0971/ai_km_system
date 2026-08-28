@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD } from "@ai-km/auth-client";
+import { MOCK_MAINTENANCE_USER_ID, MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD } from "@ai-km/auth-client";
 
 /**
  * E07-S021 critical flow: the case detail route (/maintenance/[id]).
@@ -19,13 +19,20 @@ import { MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD } from "@ai-km/auth-clie
  * See docs/stories/E07-S021.md's own Assumptions section for the full
  * reasoning and the deliberate choice to self-adopt the conservative
  * option rather than stretch that exception. So this route is reached
- * here the same way maintenance-session.spec.ts's own 2nd/3rd tests
- * already reach a deep-linked session URL: create a case while logged
- * in, note its id, then page.goto() directly to it — which loses the
- * mock AuthClient's in-memory session (a hard reload always does, see
- * that file's own doc comment) and rides the same returnUrl round trip
- * session-gate.spec.ts's own "full round trip" test already proves
- * general-purpose.
+ * here the same way maintenance-session.spec.ts's own tests reach a
+ * deep-linked session URL: create a case while logged in, note its id,
+ * log out explicitly, then page.goto() directly to it and ride the same
+ * returnUrl round trip session-gate.spec.ts's own "full round trip" test
+ * already proves general-purpose.
+ *
+ * E01-S031: the explicit logout() step above didn't exist originally —
+ * a bare page.goto() used to be enough, because the mock AuthClient's
+ * session was a plain in-memory closure that any hard navigation lost
+ * outright. E03-S035 replaced that with a real cookie session that
+ * correctly survives a hard reload/goto, so reaching this page
+ * unauthenticated now takes a deliberate logout() first; the returnUrl
+ * round trip itself, and everything each test below actually asserts
+ * about the destination page, is unchanged.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -34,6 +41,15 @@ async function login(page: import("@playwright/test").Page) {
   await page.getByLabel("密碼").fill(MOCK_VALID_PASSWORD);
   await page.getByRole("button", { name: "登入", exact: true }).click();
   await page.waitForURL((url) => url.pathname === "/");
+}
+
+// E01-S031: E03-S035's real cookie session survives a hard reload/goto,
+// so an explicit logout is now the only way to reach a deep link below
+// while genuinely unauthenticated (see this file's own doc comment).
+async function logout(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: MOCK_MAINTENANCE_USER_ID }).click();
+  await page.getByRole("menuitem", { name: "登出" }).click();
+  await page.waitForURL((url) => url.pathname === "/login");
 }
 
 function sidebarNav(page: import("@playwright/test").Page) {
@@ -61,6 +77,7 @@ test("E07-S021: deep-linking to a case's detail page round-trips through login a
 }) => {
   const caseId = await createCase(page, "空壓機 A");
 
+  await logout(page);
   await page.goto(`/maintenance/${caseId}`);
   await page.waitForURL((url) => url.pathname === "/login");
   await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);
@@ -82,6 +99,7 @@ test("E07-S021: resolving a case and then deep-linking to its detail page shows 
   await page.getByRole("button", { name: "解決此案例" }).click();
   await expect(page.getByText("已解決", { exact: true })).toBeVisible();
 
+  await logout(page);
   await page.goto(`/maintenance/${caseId}`);
   await page.waitForURL((url) => url.pathname === "/login");
   await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);
@@ -94,12 +112,13 @@ test("E07-S021: resolving a case and then deep-linking to its detail page shows 
 });
 
 test("E07-S021: deep-linking to an unknown case id shows a distinct not-found state", async ({ page }) => {
-  // login() itself already ends with a page navigation, and page.goto()
-  // is a hard reload — the mock AuthClient's in-memory session doesn't
-  // survive one even moments after a real login (same reasoning every
-  // other deep-link test in this file already relies on), so this also
-  // needs the full login-redirect round trip, not a direct goto.
+  // E03-S035's real cookie session survives a hard reload/goto (unlike
+  // the old mock AuthClient's in-memory session), so reaching this page
+  // unauthenticated now needs an explicit logout() first (same reasoning
+  // every other deep-link test in this file already relies on), not a
+  // bare page.goto() alone.
   await login(page);
+  await logout(page);
   await page.goto("/maintenance/not-a-real-case-id");
   await page.waitForURL((url) => url.pathname === "/login");
   await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);

@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
+import {
+  MOCK_MAINTENANCE_USER_ID,
+  MOCK_MAINTENANCE_USERNAME,
+  MOCK_VALID_PASSWORD,
+  MOCK_VALID_USERNAME,
+} from "@ai-km/auth-client";
 
 /**
  * E07-S006 critical flow: the diagnostic session shell at
@@ -13,30 +18,37 @@ import { MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } f
  * authorization test, now feasible for exactly the reason the second test
  * below establishes.
  *
- * Navigation after login always uses in-app link clicks, never page.goto()
- * — see conversations.spec.ts's own file doc comment for why (the mock
- * AuthClient's session is a plain in-memory closure with no cookie/storage
- * backing; a hard reload wipes it, full stop — even a login that just
- * succeeded moments earlier doesn't survive a *subsequent* page.goto(),
- * since that's a fresh page load with a brand new empty JS module
- * instance). The one exception: sessionStorage itself (unlike the auth
- * session) is real per-tab browser storage that survives a hard reload —
- * so the second and third tests below deliberately go straight at a known
- * session URL with page.goto() (losing the session on purpose) and ride
- * the exact returnUrl round trip session-gate.spec.ts's own "full round
- * trip" test already proves general-purpose (redirected to /login with a
- * matching returnUrl, then routed straight back after logging in again) to
- * reach it — a genuinely fresh mount, not a client-side transition Next's
- * own router cache might short-circuit without re-running anything.
- * sessionStorage's own survival through all of this is what lets the
- * diagnostic session created in the second test still be there to resume.
+ * Navigation after login always uses in-app link clicks, never a bare
+ * page.goto() to a fresh URL — except the specific spots below that
+ * deliberately want an unauthenticated round trip through a deep link
+ * (see conversations.spec.ts's own file doc comment for the general
+ * reasoning). Historically that round trip fell out for free: the mock
+ * AuthClient's session was a plain in-memory closure with no cookie/
+ * storage backing, so any hard navigation lost it outright — even a
+ * login that just succeeded moments earlier didn't survive a
+ * *subsequent* page.goto(). E01-S031: E03-S035 replaced that with a real
+ * cookie session that correctly survives a hard reload/goto, so those
+ * spots now call an explicit logout() first before the page.goto() — the
+ * same returnUrl round trip session-gate.spec.ts's own "full round trip"
+ * test already proves general-purpose (redirected to /login with a
+ * matching returnUrl, then routed straight back after logging in again),
+ * just reached deliberately instead of as a side effect. sessionStorage
+ * itself (unlike the auth session, before or after E03-S035) is real
+ * per-tab browser storage that survives a hard reload regardless — a
+ * genuinely fresh mount, not a client-side transition Next's own router
+ * cache might short-circuit without re-running anything — which is what
+ * lets the diagnostic session created in the "revisiting an
+ * already-created session" test below still be there to resume.
  *
- * This same round trip is what makes the third test's negative-
- * authorization check possible at all: unlike /maintenance itself (no
+ * The negative-authorization test below is unaffected by any of this: it
+ * never logs in first in that browser context, so a bare page.goto() was
+ * always enough to reach it genuinely unauthenticated, both before and
+ * after E03-S035. It's what makes that test's own round trip through a
+ * *different* role possible at all: unlike /maintenance itself (no
  * sidebar link a general_user can click, and no way to land on it
  * authenticated-as-the-wrong-role to see RoleGuard actually deny), logging
- * in as a *different* role partway through the round trip lands that role
- * on the deep-linked route while genuinely authenticated — the one gap
+ * in as that different role after the redirect lands it on the
+ * deep-linked route while genuinely authenticated — the one gap
  * E07-S001's own doc comment identified as untestable at the time.
  */
 
@@ -50,6 +62,15 @@ async function login(page: import("@playwright/test").Page) {
 
 function sidebarNav(page: import("@playwright/test").Page) {
   return page.getByRole("navigation", { name: "主導覽" });
+}
+
+// E01-S031: see this file's own doc comment — E03-S035's real cookie
+// session survives a hard reload/goto, so an explicit logout is now the
+// only way to reach a deep link below while genuinely unauthenticated.
+async function logout(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: MOCK_MAINTENANCE_USER_ID }).click();
+  await page.getByRole("menuitem", { name: "登出" }).click();
+  await page.waitForURL((url) => url.pathname === "/login");
 }
 
 async function createCase(page: import("@playwright/test").Page, equipmentLabel: string) {
@@ -111,6 +132,7 @@ test("E07-S006: revisiting an already-created session resumes it instead of crea
   expect(await countStoredSessions(page, caseId)).toBe(1);
 
   const sessionPath = `/maintenance/${caseId}/session`;
+  await logout(page);
   await page.goto(sessionPath);
   await page.waitForURL((url) => url.pathname === "/login");
   expect(new URL(page.url()).searchParams.get("returnUrl")).toBe(sessionPath);
@@ -167,9 +189,11 @@ test("E07-S008: selecting a decision option advances the session to the next ste
 
   // Persists across a genuinely fresh mount (not just client-side router
   // cache) — same returnUrl round trip the S006 "resumes" test above
-  // already established, ridden here to reach the same session URL after
-  // sessionStorage (not the mock auth session) survives the hard reload.
+  // already established, ridden here (via an explicit logout first,
+  // E01-S031) to reach the same session URL after sessionStorage (not
+  // the mock auth session) survives the hard reload.
   const sessionPath = `/maintenance/${caseId}/session`;
+  await logout(page);
   await page.goto(sessionPath);
   await page.waitForURL((url) => url.pathname === "/login");
   await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);
@@ -220,6 +244,7 @@ test("E07-S009: typing free-text detail before selecting an option records it, a
   await expect(page.getByText("現場有明顯異音，且設備外殼溫度偏高")).toBeVisible();
 
   const sessionPath = `/maintenance/${caseId}/session`;
+  await logout(page);
   await page.goto(sessionPath);
   await page.waitForURL((url) => url.pathname === "/login");
   await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);
@@ -367,6 +392,7 @@ test("E07-S013: attaching a photo before selecting an option records its name, a
   await expect(page.getByText("現場照片.jpg", { exact: false })).toBeVisible();
 
   const sessionPath = `/maintenance/${caseId}/session`;
+  await logout(page);
   await page.goto(sessionPath);
   await page.waitForURL((url) => url.pathname === "/login");
   await page.getByLabel("帳號").fill(MOCK_MAINTENANCE_USERNAME);

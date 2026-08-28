@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD } from "@ai-km/auth-client";
+import { MOCK_MAINTENANCE_USER_ID, MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWORD } from "@ai-km/auth-client";
 
 /**
  * E07-S025 "maintenance E2E" — the closing story for E07, same role
@@ -81,6 +81,15 @@ async function reauthenticate(page: import("@playwright/test").Page, expectedPat
   await page.waitForURL((url) => url.pathname === expectedPathname);
 }
 
+// E01-S031: E03-S035's real cookie session survives a hard reload/goto,
+// so the page.goto() calls below that used to reach reauthenticate()'s
+// /login wait as a side effect now need an explicit logout first.
+async function logout(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: MOCK_MAINTENANCE_USER_ID }).click();
+  await page.getByRole("menuitem", { name: "登出" }).click();
+  await page.waitForURL((url) => url.pathname === "/login");
+}
+
 test("E07-S025: a case's rich diagnostic history stays consistent across the session page, case detail, history, report, and the resume prompt — including a real reload", async ({
   page,
 }) => {
@@ -140,11 +149,14 @@ test("E07-S025: a case's rich diagnostic history stays consistent across the ses
   // Case B: left untouched at OPEN, for the multi-case checks below.
   await createCase(page, "傳送帶馬達");
 
-  // Case detail for A, reached via a real hard navigation (page.goto
-  // loses the mock auth session — the same "reload" this story's own
-  // doc comment promises) — every recorded field from the rich flow
-  // above must show up together, not just the ones any single existing
+  // Case detail for A, reached via a real hard navigation (page.goto,
+  // after an explicit logout — E01-S031: E03-S035's real cookie session
+  // survives page.goto on its own, so the logout is what now reaches an
+  // unauthenticated state, the same "reload" this story's own doc
+  // comment promises) — every recorded field from the rich flow above
+  // must show up together, not just the ones any single existing
   // case-detail test already checks in isolation.
+  await logout(page);
   await page.goto(`/maintenance/${caseAId}`);
   await reauthenticate(page, `/maintenance/${caseAId}`);
   await expect(page.getByRole("heading", { name: "空壓機 A", level: 1 })).toBeVisible();
@@ -214,6 +226,8 @@ test("E07-S025: 重新開始 resets an escalated case everywhere it's shown, not
 
   // Confirm case detail shows the escalated state before the reset —
   // establishes the "before" half of the propagation check below.
+  // E01-S031: explicit logout() first — see its own doc comment above.
+  await logout(page);
   await page.goto(`/maintenance/${caseId}`);
   await reauthenticate(page, `/maintenance/${caseId}`);
   await expect(page.getByText("狀態:已升級")).toBeVisible();
@@ -235,6 +249,8 @@ test("E07-S025: 重新開始 resets an escalated case everywhere it's shown, not
   // The reset must propagate to every other view reading the same
   // session — case detail and history must NOT show stale escalation
   // data just because they aren't the page the reset happened on.
+  // E01-S031: explicit logout() first — see its own doc comment above.
+  await logout(page);
   await page.goto(`/maintenance/${caseId}`);
   await reauthenticate(page, `/maintenance/${caseId}`);
   await expect(page.getByText("狀態:待處理")).toBeVisible();

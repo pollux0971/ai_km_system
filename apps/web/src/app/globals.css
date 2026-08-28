@@ -878,3 +878,136 @@ th {
   margin-top: 8px;
   padding: 9px 16px;
 }
+
+/* ---------- M3 home ---------- */
+
+.home-page {
+  padding: 32px;
+}
+
+.home-headline {
+  font: var(--md-sys-typescale-display-small-weight) var(--md-sys-typescale-display-small-size) / var(
+      --md-sys-typescale-display-small-line-height
+    )
+    var(--md-sys-typescale-display-small-font);
+  letter-spacing: var(--md-sys-typescale-display-small-tracking);
+  color: var(--text);
+  margin: 0 0 8px;
+}
+
+.home-supporting-text {
+  font: var(--md-sys-typescale-body-large-weight) var(--md-sys-typescale-body-large-size) / var(
+      --md-sys-typescale-body-large-line-height
+    )
+    var(--md-sys-typescale-body-large-font);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.home-section {
+  margin-top: 32px;
+}
+
+/* Quick-entry M3 filled card tiles (E01-S009 grid, restyled). */
+
+.home-tile-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.home-tile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  background: var(--surface-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--md-sys-elevation-level1);
+  padding: 20px;
+  color: inherit;
+  text-decoration: none;
+  transition:
+    box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+    background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.home-tile-card:hover {
+  box-shadow: var(--md-sys-elevation-level2);
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) calc(var(--md-sys-state-hover-opacity) * 100%), var(--surface-2));
+  text-decoration: none;
+}
+
+.home-tile-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: var(--md-sys-elevation-level2);
+}
+
+.home-tile-title {
+  font: var(--md-sys-typescale-title-medium-weight) var(--md-sys-typescale-title-medium-size) / var(
+      --md-sys-typescale-title-medium-line-height
+    )
+    var(--md-sys-typescale-title-medium-font);
+  letter-spacing: var(--md-sys-typescale-title-medium-tracking);
+}
+
+.home-tile-description {
+  font: var(--md-sys-typescale-body-medium-weight) var(--md-sys-typescale-body-medium-size) / var(
+      --md-sys-typescale-body-medium-line-height
+    )
+    var(--md-sys-typescale-body-medium-font);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Recent-conversations M3 list tiles (E01-S008 list, restyled). */
+
+.home-list-tile-group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--md-sys-elevation-level1);
+  overflow: hidden;
+}
+
+.home-list-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 20px;
+}
+
+.home-list-tile + .home-list-tile {
+  border-top: 1px solid var(--border);
+}
+
+.home-list-tile-title {
+  font: var(--md-sys-typescale-title-medium-weight) var(--md-sys-typescale-title-medium-size) / var(
+      --md-sys-typescale-title-medium-line-height
+    )
+    var(--md-sys-typescale-title-medium-font);
+  letter-spacing: var(--md-sys-typescale-title-medium-tracking);
+}
+
+.home-list-tile-preview {
+  font: var(--md-sys-typescale-body-medium-weight) var(--md-sys-typescale-body-medium-size) / var(
+      --md-sys-typescale-body-medium-line-height
+    )
+    var(--md-sys-typescale-body-medium-font);
+  color: var(--text-muted);
+}
+
+.home-list-tile-time {
+  font: var(--md-sys-typescale-label-medium-weight) var(--md-sys-typescale-label-medium-size) / var(
+      --md-sys-typescale-label-medium-line-height
+    )
+    var(--md-sys-typescale-label-medium-font);
+  letter-spacing: var(--md-sys-typescale-label-medium-tracking);
+  color: var(--text-muted);
+}

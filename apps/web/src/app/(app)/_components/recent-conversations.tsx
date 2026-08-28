@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { getRecentConversations, type ConversationSummary } from "@/lib/conversations";
+import { formatRelativeTime } from "@/lib/format-time";
 
 const logger = createLogger("web:recent-conversations");
 
@@ -59,14 +60,14 @@ export default function RecentConversations() {
 
   return (
     <>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+      <ul className="home-list-tile-group">
         {state.items.map((item) => (
-          <li key={item.id} style={{ marginBottom: 12 }}>
-            <strong>{item.title}</strong>
-            <br />
-            <span>{item.lastMessagePreview}</span>
-            <br />
-            <time dateTime={item.lastMessageAt}>{new Date(item.lastMessageAt).toLocaleString("zh-TW")}</time>
+          <li key={item.id} className="home-list-tile">
+            <strong className="home-list-tile-title">{item.title}</strong>
+            <span className="home-list-tile-preview">{item.lastMessagePreview}</span>
+            <time className="home-list-tile-time" dateTime={item.lastMessageAt}>
+              {formatRelativeTime(item.lastMessageAt)}
+            </time>
           </li>
         ))}
       </ul>

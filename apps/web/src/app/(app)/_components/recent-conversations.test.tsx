@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import RecentConversations from "./recent-conversations";
 import { getRecentConversations } from "@/lib/conversations";
@@ -63,5 +63,36 @@ describe("RecentConversations", () => {
     expect(await screen.findByText("測試對話標題")).toBeInTheDocument();
     expect(screen.getByText("測試預覽內容")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看全部對話" })).toHaveAttribute("href", "/conversations");
+  });
+
+  describe("E01-S024: M3 list tiles use formatRelativeTime", () => {
+    beforeEach(() => {
+      vi.setSystemTime(new Date("2026-08-12T12:15:00.000Z"));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("shows a relative time (3 小時前), not the raw locale string", async () => {
+      mockedGetRecentConversations.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: "c1",
+            title: "測試對話標題",
+            lastMessageAt: "2026-08-12T09:15:00.000Z",
+            lastMessagePreview: "測試預覽內容",
+            mode: "normal",
+            knowledgeScopes: [],
+            model: "standard",
+          },
+        ],
+      });
+
+      render(<RecentConversations />);
+
+      expect(await screen.findByText("3 小時前")).toBeInTheDocument();
+    });
   });
 });

@@ -58,4 +58,36 @@ describe("QuickEntryCards", () => {
 
     expect(screen.getByText("目前沒有可用的快速入口。")).toBeInTheDocument();
   });
+
+  describe("E01-S024: M3 tile icons", () => {
+    it("each card's accessible name and href survive adding an icon (icon must not leak into the name)", () => {
+      renderCardsAs(["super_administrator"]);
+
+      const knowledge = screen.getByRole("link", { name: /知識庫/ });
+      expect(knowledge).toHaveAttribute("href", "/knowledge");
+      expect(knowledge).toHaveAccessibleName("知識庫 瀏覽企業知識庫、文件與 FAQ。");
+
+      const maintenance = screen.getByRole("link", { name: /維修助手/ });
+      expect(maintenance).toHaveAttribute("href", "/maintenance");
+      expect(maintenance).toHaveAccessibleName("維修助手 設備故障排除、錯誤代碼與 SOP 查詢。");
+
+      const erp = screen.getByRole("link", { name: /ERP 助手/ });
+      expect(erp).toHaveAttribute("href", "/erp");
+      expect(erp).toHaveAccessibleName("ERP 助手 以自然語言查詢 ERP 資料與報表。");
+    });
+
+    it("renders the spec-mapped decorative icon per card (menu_book/build/insights), hidden from assistive tech", () => {
+      renderCardsAs(["super_administrator"]);
+
+      const knowledgeIcon = screen.getByRole("link", { name: /知識庫/ }).querySelector(".md-icon");
+      expect(knowledgeIcon).toHaveTextContent("menu_book");
+      expect(knowledgeIcon).toHaveAttribute("aria-hidden", "true");
+
+      const maintenanceIcon = screen.getByRole("link", { name: /維修助手/ }).querySelector(".md-icon");
+      expect(maintenanceIcon).toHaveTextContent("build");
+
+      const erpIcon = screen.getByRole("link", { name: /ERP 助手/ }).querySelector(".md-icon");
+      expect(erpIcon).toHaveTextContent("insights");
+    });
+  });
 });

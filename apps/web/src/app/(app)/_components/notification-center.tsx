@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createLogger } from "@ai-km/logger";
-import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { EmptyState, ErrorMessage, Icon, LoadingIndicator } from "@ai-km/ui";
 import { getNotifications, type NotificationSummary } from "@/lib/notifications";
 
 const logger = createLogger("web:notification-center");
@@ -52,31 +52,26 @@ export default function NotificationCenter() {
   const unreadCount = state.status === "loaded" ? state.items.filter((item) => !item.read).length : 0;
 
   return (
-    <div style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="dialog">
+    <div className="m3-menu-anchor">
+      <button
+        type="button"
+        className="m3-menu-trigger"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+      >
+        <Icon name="notifications" />
         通知{unreadCount > 0 ? `（${unreadCount}）` : ""}
       </button>
       {open && (
-        <div
-          role="dialog"
-          aria-label="通知中心"
-          style={{
-            position: "absolute",
-            right: 0,
-            top: "100%",
-            border: "1px solid var(--border)",
-            background: "var(--surface)",
-            padding: 8,
-            minWidth: 240,
-          }}
-        >
+        <div role="dialog" aria-label="通知中心" className="m3-menu m3-notification-panel">
           {state.status === "loading" && <LoadingIndicator />}
           {state.status === "error" && <ErrorMessage message="無法載入通知。" />}
           {state.status === "loaded" && state.items.length === 0 && <EmptyState message="目前沒有通知。" />}
           {state.status === "loaded" && state.items.length > 0 && (
-            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            <ul className="m3-notification-list">
               {state.items.map((item) => (
-                <li key={item.id} style={{ marginBottom: 8, fontWeight: item.read ? "normal" : "bold" }}>
+                <li key={item.id} className={item.read ? "m3-notification-item" : "m3-notification-item m3-notification-item--unread"}>
                   {item.title}
                 </li>
               ))}

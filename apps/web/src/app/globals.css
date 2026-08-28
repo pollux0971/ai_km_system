@@ -501,15 +501,18 @@ th {
 }
 
 .sidebar-new-chat {
-  display: block;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--primary);
   color: var(--on-primary);
   font-weight: 600;
   font-size: 0.92rem;
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  padding: 10px 16px;
   margin-bottom: 12px;
+  box-shadow: var(--md-sys-elevation-level1);
 }
 
 .sidebar-new-chat:hover {
@@ -524,11 +527,13 @@ th {
 }
 
 .app-sidebar nav a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: var(--sidebar-text);
   font-size: 0.94rem;
-  border-radius: var(--radius-sm);
-  padding: 7px 10px;
+  border-radius: var(--md-sys-shape-corner-full);
+  padding: 7px 12px;
   margin-bottom: 2px;
 }
 
@@ -559,8 +564,10 @@ th {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  /* E01-S023: no opacity dimming — axe caught this at 4.1:1 against
+     --sidebar-bg (surface-container-high) once dimmed; on-surface-variant
+     at full opacity already clears AA (see E01-S021's contrast report). */
   color: var(--sidebar-text);
-  opacity: 0.75;
   padding: 0 10px 6px;
   margin: 0;
 }
@@ -574,35 +581,223 @@ th {
   min-height: 0;
 }
 
-.sidebar-history a {
-  display: block;
-  color: var(--sidebar-text);
-  font-size: 0.9rem;
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
+.sidebar-history-item {
+  border-radius: var(--radius-md);
   margin-bottom: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.sidebar-history a:hover {
+.sidebar-history-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--sidebar-text);
+  font-size: 0.9rem;
+  border-radius: var(--radius-md);
+  padding: 6px 10px 0;
+  min-width: 0;
+}
+
+.sidebar-history-headline {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-history-preview {
+  margin: 0;
+  padding: 0 10px 6px 40px;
+  font-size: 0.78rem;
+  /* No opacity dimming — axe caught the same class of contrast failure on
+     .sidebar-history-title above; on-surface-variant at full opacity
+     already clears AA against surface-container-high. */
+  color: var(--sidebar-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-history-item:hover {
   background: var(--sidebar-hover);
+}
+
+.sidebar-history-item:hover .sidebar-history-link,
+.sidebar-history-item:hover .sidebar-history-preview {
   color: var(--sidebar-text-strong);
+}
+
+.sidebar-history-link:hover {
   text-decoration: none;
 }
 
-.sidebar-history a[aria-current="page"] {
-  background: var(--sidebar-active);
+.sidebar-history-link[aria-current="page"] {
   color: var(--sidebar-active-text);
   font-weight: 600;
 }
 
+.sidebar-history-item:has(.sidebar-history-link[aria-current="page"]) {
+  background: var(--sidebar-active);
+}
+
+.sidebar-history-item:has(.sidebar-history-link[aria-current="page"]) .sidebar-history-preview {
+  color: var(--sidebar-active-text);
+}
+
 .sidebar-history .sidebar-empty {
+  /* E01-S023: same opacity-dimming contrast issue as
+     .sidebar-history-title above, fixed the same way — this state just
+     didn't happen to be on-screen when axe caught the other one. */
   font-size: 0.85rem;
-  opacity: 0.65;
   padding: 2px 10px;
   margin: 0;
+}
+
+/* ---------- M3 shell (E01-S023) ---------- */
+/*
+ * `data-nav-mode` (set client-side by app-shell.tsx, absent during SSR/
+ * first paint — see that file's doc comment) drives three presentations
+ * of the same, never-unmounted <Sidebar>:
+ *   - "drawer" (>=1240px, also the no-JS/SSR default): sidebar always
+ *     visible at its normal in-flow width — no extra rule needed here,
+ *     this *is* the pre-existing .app-sidebar behavior above.
+ *   - "rail" (840-1239px): narrower, icon-forward sidebar; labels shrink
+ *     rather than disappear (M3 rail still shows a short label).
+ *   - "modal" (<840px): sidebar becomes an off-canvas panel opened by the
+ *     hamburger button, with a scrim behind it.
+ */
+
+.app-shell[data-nav-mode="rail"] .app-sidebar {
+  width: 96px;
+  padding-inline: 6px;
+}
+
+.app-shell[data-nav-mode="rail"] .sidebar-new-chat span,
+.app-shell[data-nav-mode="rail"] .app-sidebar nav a span:not(.md-icon) {
+  font-size: 0.7rem;
+}
+
+.app-shell[data-nav-mode="rail"] .sidebar-new-chat {
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 4px;
+}
+
+.app-shell[data-nav-mode="rail"] .app-sidebar nav a {
+  flex-direction: column;
+  gap: 2px;
+  text-align: center;
+  padding: 8px 4px;
+}
+
+.app-shell[data-nav-mode="rail"] .sidebar-history-preview {
+  display: none;
+}
+
+.app-shell-hamburger {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin: 8px 0 8px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--md-sys-shape-corner-full);
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--md-sys-elevation-level2);
+}
+
+.app-shell-hamburger:hover {
+  background: color-mix(in srgb, var(--surface) 92%, var(--text) 8%);
+}
+
+.app-shell-scrim {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--md-sys-color-scrim) 32%, transparent);
+  z-index: 20;
+}
+
+.app-shell[data-nav-mode="modal"] .app-sidebar-modal {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 25;
+  transform: translateX(-100%);
+  transition: transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
+}
+
+.app-shell[data-nav-mode="modal"] .app-sidebar-modal--open {
+  transform: translateX(0);
+  box-shadow: var(--md-sys-elevation-level3);
+}
+
+/* ---------- M3 top app bar (E01-S023) ---------- */
+
+.app-header--m3 {
+  box-shadow: var(--md-sys-elevation-level0);
+}
+
+/* ---------- M3 menu (E01-S023: user-menu, notification-center) ---------- */
+
+.m3-menu-anchor {
+  position: relative;
+}
+
+.m3-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.m3-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 200px;
+  background: var(--surface-2);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  box-shadow: var(--md-sys-elevation-level2);
+  padding: 8px;
+  z-index: 10;
+}
+
+.m3-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.m3-menu-item:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  text-decoration: none;
+}
+
+.m3-notification-panel {
+  min-width: 280px;
+}
+
+.m3-notification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.m3-notification-item {
+  padding: 8px 4px;
+  font-weight: 400;
+}
+
+.m3-notification-item--unread {
+  font-weight: 700;
 }
 
 /* ---------- utilities ---------- */

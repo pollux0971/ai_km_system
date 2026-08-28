@@ -3,9 +3,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Icon } from "@ai-km/ui";
 import { useCurrentUser } from "@/lib/session-context";
 import { visibleNavItems } from "@/lib/nav-items";
 import { listActiveConversations, type ConversationSummary } from "@/lib/conversations";
+
+/**
+ * E01-S023: Material Symbols name per nav item, keyed by href — kept here
+ * (not in nav-items.ts, which this story's boundary forbids touching) so
+ * the icon choice stays a presentation concern of the sidebar itself.
+ */
+const NAV_ICON_NAMES: Record<string, string> = {
+  "/": "home",
+  "/conversations": "chat",
+  "/knowledge": "menu_book",
+  "/maintenance": "build",
+  "/erp": "insights",
+};
 
 /**
  * E01-S006: nav items filtered by the current user's roles (see
@@ -64,7 +78,8 @@ export default function Sidebar() {
       {/* Brand lives in the header (E01-S005) — repeating it here would
           just duplicate the text one landmark away. */}
       <Link href="/conversations/new" className="sidebar-new-chat">
-        開始新對話
+        <Icon name="add" />
+        <span>開始新對話</span>
       </Link>
 
       <nav aria-label="主導覽">
@@ -72,7 +87,8 @@ export default function Sidebar() {
           {items.map((item) => (
             <li key={item.href}>
               <Link href={item.href} aria-current={isCurrentNavItem(item.href) ? "page" : undefined}>
-                {item.label}
+                <Icon name={NAV_ICON_NAMES[item.href] ?? "circle"} />
+                <span>{item.label}</span>
               </Link>
             </li>
           ))}
@@ -90,10 +106,17 @@ export default function Sidebar() {
             {history.map((conversation) => {
               const href = `/conversations/${conversation.id}`;
               return (
-                <li key={conversation.id}>
-                  <Link href={href} title={conversation.title} aria-current={pathname === href ? "page" : undefined}>
-                    {conversation.title}
+                <li key={conversation.id} className="sidebar-history-item">
+                  <Link
+                    href={href}
+                    title={conversation.title}
+                    aria-current={pathname === href ? "page" : undefined}
+                    className="sidebar-history-link"
+                  >
+                    <Icon name="chat_bubble" />
+                    <span className="sidebar-history-headline">{conversation.title}</span>
                   </Link>
+                  <p className="sidebar-history-preview">{conversation.lastMessagePreview}</p>
                 </li>
               );
             })}

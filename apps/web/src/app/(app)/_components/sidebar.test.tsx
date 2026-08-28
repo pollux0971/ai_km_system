@@ -99,4 +99,15 @@ describe("Sidebar conversation history (ux/enterprise-polish)", () => {
 
     mockedUsePathname.mockReturnValue("/");
   });
+
+  it("shows each conversation's lastMessagePreview as supporting text, separate from the link's own accessible name (E01-S023)", async () => {
+    renderSidebarAs(["general_user"]);
+
+    const link = await screen.findByRole("link", { name: "產品保固政策詢問" });
+    const item = link.closest("li");
+    if (!item) throw new Error("expected the history link to be inside an <li>");
+
+    expect(link).toHaveAccessibleName("產品保固政策詢問");
+    expect(item.querySelector(".sidebar-history-preview")).toHaveTextContent("保固期從出貨日起算 12 個月，涵蓋原廠零件更換。");
+  });
 });

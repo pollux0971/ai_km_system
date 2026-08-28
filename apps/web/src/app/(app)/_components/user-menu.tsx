@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
+import { Icon } from "@ai-km/ui";
 import { authClient } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/session-context";
 
@@ -36,26 +37,25 @@ export default function UserMenu() {
   }
 
   return (
-    <div style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="menu">
+    <div className="m3-menu-anchor">
+      <button
+        type="button"
+        className="m3-menu-trigger"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <Icon name="account_circle" />
         {user.userId}
       </button>
       {open && (
-        <div
-          role="menu"
-          style={{
-            position: "absolute",
-            right: 0,
-            top: "100%",
-            border: "1px solid var(--border)",
-            background: "var(--surface)",
-            padding: 4,
-          }}
-        >
-          <Link href="/profile" role="menuitem">
+        <div role="menu" className="m3-menu">
+          <Link href="/profile" role="menuitem" className="m3-menu-item">
+            <Icon name="person" />
             個人資料
           </Link>
-          <button type="button" role="menuitem" onClick={handleLogout} disabled={loggingOut}>
+          <button type="button" role="menuitem" className="m3-menu-item" onClick={handleLogout} disabled={loggingOut}>
+            <Icon name="logout" />
             {loggingOut ? "登出中…" : "登出"}
           </button>
         </div>

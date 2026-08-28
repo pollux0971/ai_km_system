@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S048) | 10 | 4 | 0 | 0 | 0 | 6 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 1 | 0 | 0 | 0 | 3 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 0 | 0 | 2 |
-| **合計** | **220** | 183 | 0 | 1 | 1 | 36 |
+| **合計** | **220** | 183 | 0 | 1 | 1 | 35 |
 
 > 總覽表在每次狀態轉換時一併更新。
 

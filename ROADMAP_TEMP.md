@@ -215,6 +215,35 @@ W7 在 E03-S038 前置未齊時,可先做 E13-S020 或協助 review 其他 lane 
      宣稱綠燈**,必須在持鎖且機器不忙時重跑到真的過。
 6. 本檔完成所有 39 個 story 並 merge 後刪除。
 
+## 5-septa. 🔴 推 main 只能用絕對路徑,**絕對不要用 `origin`**
+
+七個 worktree 與 `/data/python/AI_KM` **共用同一個 `.git`**,而那個 `.git` 的
+`origin` 指向使用者的 GitHub(`https://github.com/pollux0971/ai_km_system.git`),
+**不是**這個 worktree 群共用的本地 `main`。
+
+```bash
+git push /data/python/AI_KM HEAD:main     # ✅ 唯一正確
+git push origin HEAD:main                 # ❌ 推到 GitHub,不是本地 main
+```
+
+**這種錯誤完全靜默**:`git push origin HEAD:main` 會成功、exit code 0、
+`git status` 乾淨,但你的 commit 進了 GitHub 那本帳,本地 `main` 完全沒動,
+其他 lane 讀不到。2026-08-28 W3 的 E04-S050 就這樣分岔了兩次才被發現
+(是總指揮在驗收時比對 `git merge-base --is-ancestor` 才抓到)。
+
+**每次 push 後必須驗證**,不要只看指令有沒有噴錯:
+
+```bash
+git fetch /data/python/AI_KM main && \
+  git merge-base --is-ancestor HEAD FETCH_HEAD && \
+  echo "PUSH 確認成功" || echo "PUSH 沒進去"
+```
+
+開工前也花 10 秒自查一次 `git remote -v`,確認你心裡想的 remote 是哪一個。
+
+**GitHub 那本帳目前落後且已分岔**,總指揮未經使用者同意不會往那邊推——
+**任何 lane 都不要嘗試同步它**,那是對外動作。
+
 ## 5-hexa. 已知環境限制:jsdom + `FormData` 含 `Blob` 會永久 hang
 
 W5 於 E03-S041 以最小重現腳本驗證:**在本 repo 的 vitest + jsdom 環境下,只要

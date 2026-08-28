@@ -15,7 +15,7 @@ export default function ProfilePage() {
   return (
     <main style={{ padding: 32 }}>
       <h1>個人資料</h1>
-      <dl>
+      <dl className="m3-kv-list">
         <dt>姓名</dt>
         <dd>{user.name ?? "未提供"}</dd>
 

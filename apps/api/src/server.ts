@@ -29,6 +29,7 @@ import { loadContracts, resolveContractsDir, type ContractRegistry } from "./con
 import { databasePlugin } from "./db/plugin.js";
 import { conversationPlugin } from "@ai-km/service-conversation";
 import { identityPlugin } from "@ai-km/service-identity";
+import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
 import "./types.js";
 
 export const API_PREFIX = "/v1";
@@ -153,6 +154,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   await app.register(conversationPlugin);
   // E02-S032 — session-cookie login/logout/session + the real requireSession.
   await app.register(identityPlugin);
+  // E12-S031 — POST /v1/transcriptions (ASR). config.ts is outside this
+  // story's allowed-modify list, so the two fields it already reads
+  // (E04-S039) are passed through here rather than re-read.
+  await app.register(modelGatewayPlugin, {
+    nodeEnv: config.nodeEnv,
+    asrProvider: config.asrProvider,
+    asrServerUrl: config.asrServerUrl,
+  });
 
   if (options.testExtraPlugin) {
     await app.register(options.testExtraPlugin);

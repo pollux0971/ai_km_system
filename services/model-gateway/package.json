@@ -1,0 +1,30 @@
+{
+  "name": "@ai-km/service-model-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^5.2.1",
+    "opencc-js": "^1.0.5"
+  },
+  "devDependencies": {
+    "@apidevtools/json-schema-ref-parser": "^11.7.2",
+    "@fastify/multipart": "^9.0.3",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "form-data": "^4.0.1",
+    "js-yaml": "^4.1.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

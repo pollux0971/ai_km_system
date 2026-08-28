@@ -102,6 +102,9 @@ importers:
       '@ai-km/service-identity':
         specifier: workspace:*
         version: link:../../services/identity
+      '@ai-km/service-model-gateway':
+        specifier: workspace:*
+        version: link:../../services/model-gateway
       '@apidevtools/json-schema-ref-parser':
         specifier: ^11.7.2
         version: 11.9.3
@@ -424,6 +427,46 @@ importers:
       ajv-formats:
         specifier: ^3.0.1
         version: 3.0.1(ajv@8.20.0)
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.3.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1(supports-color@10.2.2))(supports-color@10.2.2)
+
+  services/model-gateway:
+    dependencies:
+      fastify:
+        specifier: ^5.2.1
+        version: 5.12.1
+      opencc-js:
+        specifier: ^1.0.5
+        version: 1.4.2
+    devDependencies:
+      '@apidevtools/json-schema-ref-parser':
+        specifier: ^11.7.2
+        version: 11.9.3
+      '@fastify/multipart':
+        specifier: ^9.0.3
+        version: 9.4.0
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      ajv:
+        specifier: ^8.17.1
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
+      form-data:
+        specifier: ^4.0.1
+        version: 4.0.6
       js-yaml:
         specifier: ^4.1.0
         version: 4.3.1
@@ -2863,6 +2906,9 @@ packages:
     hasBin: true
     peerDependencies:
       typescript: ^5.x
+
+  opencc-js@1.4.2:
+    resolution: {integrity: sha512-EdcspgdROiCCZDM+jZR6Pa670xW+EW2QhctPBQ8gRjg6lrx4IHEl+2s+kt5izk/TkxVRgdWuFgaGkaEdIUfdaw==}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -6248,6 +6294,8 @@ snapshots:
       supports-color: 10.2.2
       typescript: 5.9.3
       yargs-parser: 21.1.1
+
+  opencc-js@1.4.2: {}
 
   optionator@0.9.4:
     dependencies:

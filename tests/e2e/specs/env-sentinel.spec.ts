@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 import {
   assertReusedServerEnvMatches,
@@ -20,7 +19,11 @@ import {
  * lane's own Playwright run may legitimately own right now via `.e2e.lock`.
  */
 
-const HELPERS_DIR = path.dirname(fileURLToPath(import.meta.url)).replace(/specs$/, "helpers");
+// `__dirname`, not `import.meta.url` — see helpers/env-sentinel.ts's own
+// doc comment on `wrapCommandWithSentinel` for why (no "type": "module" in
+// this package, so Playwright's config/test loader requires this file as
+// CommonJS).
+const HELPERS_DIR = path.join(__dirname, "..", "helpers");
 
 test.describe("assertReusedServerEnvMatches", () => {
   const PORT = 59001;

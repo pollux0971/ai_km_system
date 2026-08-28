@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 /**
  * E04-S056 AC5.1. `reuseExistingServer: true` (local dev, `web`/`admin`
@@ -72,6 +71,13 @@ export function assertReusedServerEnvMatches(port: number, expected: SentinelVal
  * the env values that launch actually used.
  */
 export function wrapCommandWithSentinel(port: number, varNames: readonly string[], command: string): string {
-  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "write-env-sentinel.mjs");
+  // `__dirname`, not `import.meta.url` — this repo's `tests/e2e/package.json`
+  // has no `"type": "module"`, so Playwright's config loader requires this
+  // file as CommonJS (confirmed the hard way: `import.meta` throws
+  // `SyntaxError: Cannot use 'import.meta' outside a module` the moment
+  // Playwright loads the config, even for a no-op `--list`). `port-check.ts`
+  // and `fake-microphone.ts` avoid this by never needing directory
+  // resolution at all; this is the same fix these two files use implicitly.
+  const script = path.join(__dirname, "write-env-sentinel.mjs");
   return `node ${JSON.stringify(script)} ${port} ${varNames.join(" ")} && ${command}`;
 }

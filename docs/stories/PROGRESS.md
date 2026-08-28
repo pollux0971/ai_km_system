@@ -32,10 +32,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
 | E13 Feedback & Analytics | 21 | 18 | 0 | 0 | 0 | 3 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S048) | 10 | 4 | 0 | 0 | 0 | 6 |
-| E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 1 | 1 | 0 | 0 | 2 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S049) | 11 | 4 | 0 | 0 | 0 | 7 |
+| E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 2 | 0 | 0 | 0 | 2 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 0 | 0 | 2 |
-| **合計** | **220** | 183 | 1 | 1 | 1 | 34 |
+| **合計** | **221** | 184 | 0 | 1 | 1 | 35 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -278,7 +278,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E13-S021 | todo | — | — | apps/admin 回饋佇列／使用量／延遲／系統健康接真實 API（移除永遠空／零／null／unknown stub）；HARD 依賴：E11-S026、E13-S018、E03-S034；wave D3；E11-S016/S017/S021/S022、E13-S007/S008/S012/S013/S014 空殼補完。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S021.spec.md](specs/E13-S021.spec.md) |
 
 
-## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,10)
+## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,11)
 
 > E04 屬 Team B epic,本表只追蹤使用者明示指示插入規格庫 epic 檔的增補
 > story(2026-08-20 插入 E04-S037;2026-08-28 插入 E04-S038～S047,使用者明示
@@ -300,6 +300,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S044 | todo | — | — | Change-event SSE 端點（每 owner 一條、Last-Event-ID 重播、resync、heartbeat、連線上限）；HARD 依賴：E04-S038、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S044.spec.md](specs/E04-S044.spec.md) |
 | E04-S047 | todo | — | — | `/v1/health` subsystem 三態 + 角色守門 `/v1/admin/health`；HARD 依賴：E04-S040、E13-S018、E02-S033；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E04-S047.spec.md](specs/E04-S047.spec.md) |
 | E04-S048 | todo | — | — | CSRF 防禦：state-changing API 要求自訂 header（`x-requested-with`）+ multipart Origin 檢查；HARD 依賴：E04-S039、E02-S032；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E04-S048.spec.md](specs/E04-S048.spec.md) |
+| E04-S049 | todo | — | — | `apps/api` bootstrap 順序修正:`app.decorate` 必須在 route plugin 註冊前完成,讓 route 定義可直接用 `app.contracts.getSchema()`;HARD 依賴:E04-S039、E04-S041(皆 approved);**使用者 2026-08-28 裁示新增**(E04-S041 開發中發現的既有 bootstrap 缺陷,不修的話後續 9 個 apps/api story 都要重複逐字轉寫 JSON Schema,且 schema 與 contract 之間無機器檢查、為 contract drift 溫床;分析與選項見 [PENDING_DECISIONS.md](PENDING_DECISIONS.md));由 W3 於 E04-S042 之前插隊執行 規格:[E04-S049.spec.md](specs/E04-S049.spec.md) |
 
 ## E02 Identity, RBAC & Authorization(僅追蹤使用者增補,4)
 

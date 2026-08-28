@@ -94,6 +94,11 @@ M3 視覺細節。為讓 story 可直接開工,以下以 ASSUMPTION 寫入規格
 
 ### [2026-08-28] apps/api `server.ts` 裝飾器註冊順序 — 是否新增一個修正 story
 
+> **[2026-08-28 使用者批示]** 採選項 1:**新增 `E04-S049`**,只改裝飾器順序 +
+> 加「route 註冊時 `app.contracts` 已可用」的迴歸測試,由 **W3 在 E04-S042 之前
+> 插隊執行**。規格:`docs/stories/specs/E04-S049.spec.md`(總指揮依裁示撰寫)。
+> PROGRESS.md 總數因此由 220 → 221。**本項已解決。**
+
 **背景**:W3 開發 E04-S041 時發現 `apps/api/src/server.ts` 的
 `await app.register(conversationPlugin)` 排在 `app.decorate("contracts", ...)`
 之前,導致 route 註冊階段同步呼叫 `app.contracts.getSchema()` 會丟 TypeError。
@@ -120,6 +125,12 @@ E02-S032/S033/S034、E04-S048。逐字轉寫的 schema 與 contract 之間沒有
 已授權 Team A 在增補 story 的允許清單內修改 `apps/api`)。不影響 contract。
 
 ### [2026-08-28] E12-S030／E12-S031 的「4070 部署機」是否存在且可用
+
+> **[2026-08-28 使用者批示]** 採選項 2:**目前沒有 4070**。依 spec 明文處理——
+> 在 1650 上取得完整證據後,4070 那一輪記為 `BLOCKED_DEPENDENCY`,E12-S030 與
+> E12-S031 停在 `in-progress` 等硬體到位,**不得降低驗收標準改成單機通過**。
+> 連帶影響:E03-S041 的 L3 真實 ASR、E03-S044 亦無法在硬體到位前達 approved。
+> **本項已解決(處理方式已定,阻塞本身仍在)。**
 
 **背景**:E12-S030 AC6 要求「於開發機(1650)與部署機(4070)**各執行一次**
 `check-asr` 與 `verify-asr`,**兩台皆需通過才 Done**;4070 若尚不可用,記錄為

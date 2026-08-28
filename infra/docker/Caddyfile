@@ -1,0 +1,59 @@
+# E01-S028 — on-prem reverse proxy.
+#
+# `{$AI_KM_PUBLIC_HOST}` (ASSUMPTION, see docs/runbooks/deploy-on-prem.md and
+# docs/stories/PENDING_DECISIONS.md — the user has not yet supplied a real
+# host name/cert as of this story): a Caddyfile env-var placeholder, read
+# from the `caddy` container's own environment (docker-compose.yml sets it,
+# defaulting to `localhost`). `tls internal` is Caddy's own self-signed CA —
+# the default here per ai-km-e4's ruling (2026-08-28) until real
+# certificates are provided, at which point only docker-compose.yml's
+# environment (or the `tls` line below) changes, never application code.
+#
+# apps/admin is routed by SUBDOMAIN, not a `/admin/*` path prefix: apps/admin
+# has no `basePath` configured in its own next.config.ts (out of this
+# story's allowed-modify list — `apps/*/src` is forbidden, and next.config.ts
+# is contested territory with the concurrently-running E01-S029), so a
+# stripped `/admin/*` prefix would leave Next.js's own `/_next/static/*`
+# asset requests going out WITHOUT that prefix — Caddy's catch-all would then
+# route them to apps/web instead of apps/admin, breaking every admin page's
+# CSS/JS. The spec explicitly offers "/admin/*（或子網域）" as alternatives;
+# a subdomain needs zero admin-side changes. `admin.localhost` resolves to
+# loopback in every modern browser/OS resolver (RFC 6761) with no /etc/hosts
+# edit needed for local testing. Cross-subdomain session-cookie sharing
+# (E11-S026's precondition) composes with the EXISTING
+# `AI_KM_SESSION_COOKIE_DOMAIN` env var (E02-S033) — set it to the parent
+# domain (e.g. `.example.com`) when deploying with a real host; see the
+# runbook's env table.
+{$AI_KM_PUBLIC_HOST:localhost} {
+	tls internal
+
+	handle_path /api/* {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+admin.{$AI_KM_PUBLIC_HOST:localhost} {
+	tls internal
+
+	handle_path /api/* {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy admin:3001
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

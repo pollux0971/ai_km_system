@@ -1,0 +1,16 @@
+# E01-S028 — keeps the build context small and correct: `node_modules`
+# holds platform-specific native bindings (better-sqlite3) built for the
+# HOST, not the container, so it must be reinstalled inside the image, not
+# copied in. Every Dockerfile under infra/docker/ builds from the repo root
+# as its context (see their own header comments for why).
+node_modules
+**/node_modules
+.git
+.turbo
+**/.next
+**/dist
+**/*.tsbuildinfo
+coverage
+playwright-report
+test-results
+data

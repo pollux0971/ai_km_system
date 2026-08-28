@@ -367,6 +367,88 @@ EVIDENCE)。`apps/api/src/csrf/**` 改放這個機制唯一做不到的部分:�
 conversations／messages route 的『帶正確 CSRF header 應該放行』無法被正面
 驗證」,測試不假裝通過,見 `docs/stories/E04-S048.md`。
 
+### [2026-08-28] E01-S028 內網 HTTPS 部署——host 名稱與憑證未定,已依 ai-km-e4
+裁示採用預設值繼續開發(不阻擋開工)
+
+**背景**:spec 的 Preconditions 寫「使用者提供內網 host 名稱與憑證方式」,
+使用者截至本 story 開工時尚未回覆。ai-km-e4 已詢問過使用者但未等到答案,
+裁示不要停下來等,理由是 spec 自己已經給了明確的預設路徑(「自簽可先用
+`tls internal`」)。
+
+**採用的預設值(僅設定,非程式碼邏輯,之後只要改設定就能換掉)**:
+1. **Host 名稱**:`AI_KM_PUBLIC_HOST` 環境變數,未設定時 fallback 為
+   `localhost`(`infra/docker/Caddyfile`、`infra/docker/docker-compose.yml`
+   皆讀這個變數)。
+2. **TLS**:Caddy 內建的 `tls internal`(Caddy 自己管理的本地自簽 CA),
+   `infra/docker/Caddyfile` 的技術決策段落已完整記錄:使用者提供正式憑證
+   後,只需把那一行改成 `tls /path/to/cert.pem /path/to/key.pem`(或真實
+   ACME directory),不需改動任何應用程式碼。
+
+**另一個技術性偏離**(同樣記錄理由,見下方 EVIDENCE 的完整版本):spec 技術
+決策寫「`/admin/*`(或子網域)→ admin:3001」,給了路徑或子網域兩個選項。
+本 story 選擇**子網域**(`admin.<host>`),因為 `apps/admin` 目前沒有設定
+`basePath`(在 `next.config.ts`,不在本 story 允許修改清單內,且與同時
+進行中的 E01-S029 有交集風險),若用 `/admin/*` 路徑前綴會讓 Next.js 自己
+產生的 `/_next/static/*` 資源請求不帶前綴,被 Caddy 的 catch-all 規則誤導
+到 `web` 服務,整個 admin 頁面的 CSS/JS 全部載入失敗。子網域完全不需要碰
+`apps/admin` 的程式碼,且與既有的 `AI_KM_SESSION_COOKIE_DOMAIN`
+(E02-S033)機制自然相容(cross-subdomain cookie 共享本來就是這個變數
+設計的用途)。
+
+**完整 EVIDENCE**:`docs/stories/E01-S028.md`。
+
+### [2026-08-28] `apps/api` 自己的 `build`／`start` script 從未真的能跑
+(獨立於 E01-S028,已回報 ai-km-e4)——`services/*` 全部是 type-check-only,
+沒有編譯輸出
+
+**背景**:E01-S028 幫 `apps/api` 寫 production Docker image 時,一開始照
+`apps/api/package.json` 自己文件化的標準流程走:`pnpm build`(`tsc -p
+tsconfig.build.json`)→ `node dist/main.js`。容器啟動後 crash-loop:
+
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module
+'/repo/services/conversation/src/plugin.js' imported from
+/repo/services/conversation/src/index.ts
+```
+
+**根因,已在 Docker 之外重現確認(非 Docker 特有問題)**:
+```
+$ pnpm --filter @ai-km/api build   # 成功,無錯誤
+$ node apps/api/dist/main.js
+TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts" for
+/data/python/AI_KM-worktrees/w2/services/conversation/src/index.ts
+```
+
+`services/conversation`(以及推測 `services/identity`、
+`services/model-gateway`,`package.json` 的 `"build"` 都寫
+`"tsc -p tsconfig.json --noEmit"`,`"main"`／`"types"` 直接指向
+`./src/index.ts`)完全沒有編譯輸出——這些套件被設計成**只能透過
+TypeScript-aware runtime(`tsx`)以原始碼形式消費**。`pnpm --filter
+@ai-km/api dev`(`tsx watch src/main.ts`)能動是因為 `tsx` 會透明處理這種
+`.ts` 當 `.js` import 的解析;純 `node` 完全不懂,直接炸掉。
+
+`apps/web`／`apps/admin` **不受影響**——Next.js 自己的 bundler 透過
+`next.config.ts` 的 `transpilePackages` 清單,在建置時自行轉譯這些
+workspace TS 套件,不依賴它們自己的編譯輸出。只有 `apps/api` 這種「非
+bundler、純 tsc + node」的路徑會踩到。
+
+**影響範圍**:`apps/api/package.json` 的 `build`／`start` script,或
+`services/*` 的 `build` script 該不該真的產生編譯輸出——這是
+`apps/api`／`services/*` 本身的 package.json 設計決策,不在 E01-S028 允許
+修改清單內(`apps/*/src`、`services/*` 皆禁止修改),未動手修。
+
+**E01-S028 自己的因應**(在允許清單內、未動對方 domain):
+`infra/docker/api.Dockerfile` 改用 `pnpm exec tsx src/main.ts`
+執行——與 `pnpm dev` 完全同一條已驗證可行的路徑,不依賴 `tsc`/`dist`,
+省略了原本無論如何都會失敗的編譯步驟。已重新建置驗證可正常啟動(見
+`docs/stories/E01-S028.md`)。
+
+**未解問題,留給 ai-km-e4 判斷是否需要另開 story**:如果將來有人真的照
+`apps/api/README.md`「Running it」段落寫的 `pnpm --filter @ai-km/api
+build && pnpm --filter @ai-km/api start` 操作,會在**任何環境**(不只
+Docker)得到一模一樣的 crash——這個路徑目前對任何呼叫者都是壞的,不是
+E01-S028 這個 story 造成的,也不是只有 Docker 部署會碰到。
+
 ## 已批示
 
 (目前無)

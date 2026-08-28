@@ -1,0 +1,105 @@
+# E01-S028 — on-prem HTTPS deploy: web + admin + api behind Caddy.
+#
+# `whisper-server` is NOT a service here — it runs as a host process (GPU
+# passthrough into a container is its own can of worms this story explicitly
+# scopes out; see docs/runbooks/deploy-on-prem.md). `api` reaches it via
+# `host.docker.internal` (works out of the box on Docker Desktop; the
+# `extra_hosts` line below makes it resolve on Linux too, Docker 20.10+).
+# ALTERNATIVE for Linux without that mapping: uncomment `network_mode: host`
+# on the `api` service below and point AI_KM_ASR_SERVER_URL at
+# `http://127.0.0.1:8178` directly. WARNING: this puts api's port DIRECTLY
+# on the host network (bypassing the Security AC's "api never gets a host
+# port" guarantee below) — only use it on a host where nothing else could
+# ever be listening on AI_KM_API_PORT. This repo in particular often has a
+# host-level apps/api already on :4000; do not use this alternative here.
+#
+# Security AC: only `caddy` publishes a port to the host. `web`/`admin`/`api`
+# are reachable ONLY on the compose-internal network — there is deliberately
+# no `ports:` entry for any of them, so nothing here can collide with a
+# host-level dev process already using 3000/3001/4000 (this repo runs many
+# parallel worktrees; see scripts/dev-all.sh's own port-collision guard for
+# the equivalent bare-metal concern).
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      # Overridable ONLY so this story's own verification run can prove the
+      # login/seeding path works (NODE_ENV=development + SEED_DEMO_USERS=true
+      # together, briefly, for evidence-gathering — see EVIDENCE for the
+      # exact command). The shipped DEFAULT for a real deployment is
+      # "production", full stop.
+      NODE_ENV: ${AI_KM_DOCKER_NODE_ENV:-production}
+      AI_KM_API_HOST: "0.0.0.0"
+      AI_KM_API_PORT: "4000"
+      AI_KM_DB_PATH: /data/ai-km.sqlite
+      AI_KM_CORS_ORIGINS: ""
+      # Overridable, but the DEFAULT stays production-safe either way:
+      # loadConfig() itself refuses to start with DEV_TRIGGERS/TEST_SANDBOX
+      # true under NODE_ENV=production (ADR 0005 §4/§5), so an operator
+      # cannot accidentally weaken this — a stray "true" fails closed
+      # (refuses to start) rather than silently running open.
+      AI_KM_DEV_TRIGGERS: ${AI_KM_DEV_TRIGGERS:-false}
+      AI_KM_TEST_SANDBOX: ${AI_KM_TEST_SANDBOX:-false}
+      # Same: default false (the demo password is public); override only
+      # for a deliberate demo/staging deployment, never left true for real.
+      AI_KM_SEED_DEMO_USERS: ${AI_KM_SEED_DEMO_USERS:-false}
+      # Empty = host-only cookie. Set to the parent domain (e.g.
+      # ".example.internal") once AI_KM_PUBLIC_HOST is a real host, so the
+      # session cookie is shared with the admin.<host> subdomain
+      # (E11-S026's precondition — see Caddyfile's comment).
+      AI_KM_SESSION_COOKIE_DOMAIN: ${AI_KM_SESSION_COOKIE_DOMAIN:-}
+      AI_KM_ASR_PROVIDER: ${AI_KM_ASR_PROVIDER:-whisper-server}
+      AI_KM_ASR_SERVER_URL: ${AI_KM_ASR_SERVER_URL:-http://host.docker.internal:8178}
+      AI_KM_LOG_LEVEL: info
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # no-op on Docker Desktop; needed on Linux
+    volumes:
+      - api-data:/data
+    # network_mode: host   # Linux alternative — see the header comment above.
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: ../..
+      dockerfile: infra/docker/admin.Dockerfile
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      AI_KM_PUBLIC_HOST: ${AI_KM_PUBLIC_HOST:-localhost}
+    ports:
+      # Only Caddy touches the host. 8443, not 443 — no root/CAP_NET_BIND
+      # needed, and it stays out of the way of every other lane's
+      # 3000/3001/4000 dev ports.
+      - "${AI_KM_CADDY_PORT:-8443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+      - admin
+      - api
+    restart: unless-stopped
+
+volumes:
+  api-data:
+  caddy-data:
+  caddy-config:

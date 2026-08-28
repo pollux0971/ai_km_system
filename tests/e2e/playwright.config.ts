@@ -3,6 +3,7 @@ import { cpus, tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig } from "@playwright/test";
 import { ensureFakeMicrophoneWav } from "./helpers/fake-microphone";
+import { assertNotBlockingLockHolder } from "./helpers/lock-guard";
 import { assertPortsFreeForCI, resolveReuseExistingServer } from "./helpers/port-check";
 import { wrapCommandWithSentinel } from "./helpers/env-sentinel";
 import { API_BASE_URL, API_PORT, ADMIN_EXPECTED_ENV, WEB_EXPECTED_ENV } from "./helpers/webserver-env";
@@ -45,6 +46,15 @@ import { STORAGE_STATE_PATH } from "./auth-storage-state";
  * to change this for the pre-existing web/admin entries): a occupied :4100
  * fails loudly instead of silently reusing whatever happens to be there.
  */
+
+// E04-S057: runs before ANYTHING else in this file — every entry point
+// (bare `playwright test`, `--list`, `--last-failed`, a turbo-triggered
+// run) evaluates this module first, so a single synchronous check here
+// covers all of them. Refuses to proceed if the shared `.e2e.lock` is
+// held by someone else (see helpers/lock-guard.ts for the full
+// reasoning and the incident this fixes). No-op when nobody holds the
+// lock, and never blocks the lock holder's own run (see e2e-locked.sh).
+assertNotBlockingLockHolder();
 
 // Unique per Playwright invocation (not per test/worker) — every worker
 // process spawned by this run shares the same apps/api server and its one

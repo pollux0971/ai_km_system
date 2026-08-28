@@ -94,30 +94,6 @@ async function discoverStateChangingRoutes(instance: FastifyInstance): Promise<R
   return stateChangingRoutesOf(parseFastifyRoutes(printed));
 }
 
-/**
- * BLOCKED_DEPENDENCY, reported to ai-km-e4 (2026-08-28), recorded in
- * `docs/stories/PENDING_DECISIONS.md`: `services/conversation`'s
- * `hostRequireSession(app)` reads `app.requireSession` once, at
- * `conversationPlugin`'s OWN registration time — which `apps/api/src/server.ts`
- * runs BEFORE `identityPlugin` (the plugin that replaces the stub with the
- * real cookie check). Every `/v1/conversations*` route is therefore
- * permanently bound to the pre-E02-S032 deny-by-default stub and 401s for
- * EVERY caller, real session or not. This is a pre-existing bug, unrelated
- * to CSRF, outside E04-S048's allowed-modify list to fix (`server.ts`'s
- * registration order / `services/conversation/src/plugin-types.ts`).
- * `services/model-gateway` (registered AFTER identityPlugin) does not have
- * this problem — confirmed, not assumed; see the route-scan results below.
- *
- * Until it is fixed, these routes cannot be used to positively prove "CSRF
- * passes a request through once the header is supplied" (they 401 either
- * way right now) — only that they reject an uncredentialed request, which
- * they do, just not for the CSRF-specific reason. Documenting this
- * precisely rather than silently asserting something unverifiable.
- */
-function isBlockedByThePreExistingAuthBug(route: RouteEntry): boolean {
-  return route.path.startsWith("/v1/conversations");
-}
-
 describe("E04-S048 AC5 — every real state-changing route enforces CSRF (route-table scan, not a checklist)", () => {
   it("finds at least the state-changing routes this story's EVIDENCE documents (sanity: the scan itself is not empty)", async () => {
     const instance = await buildRealServer();
@@ -132,7 +108,7 @@ describe("E04-S048 AC5 — every real state-changing route enforces CSRF (route-
     expect(routes.some((r) => r.path === "/v1/transcriptions")).toBe(true);
   });
 
-  it("EVERY discovered state-changing route rejects a cross-site-shaped request (valid session cookie, no CSRF credentials) — 403 CSRF_HEADER_MISSING where the pre-existing auth bug does not mask it, otherwise still a hard deny (401)", async () => {
+  it("EVERY discovered state-changing route rejects a cross-site-shaped request (valid session cookie, no CSRF credentials) with 403 CSRF_HEADER_MISSING", async () => {
     const instance = await buildRealServer();
     const cookie = await loginAndGetCookie(instance);
     const routes = await discoverStateChangingRoutes(instance);
@@ -156,17 +132,6 @@ describe("E04-S048 AC5 — every real state-changing route enforces CSRF (route-
         code = undefined;
       }
 
-      if (isBlockedByThePreExistingAuthBug(route)) {
-        // Still must be a hard deny — just not necessarily FOR the CSRF
-        // reason, since these routes' requireSession is the stale
-        // pre-identityPlugin stub (see isBlockedByThePreExistingAuthBug's
-        // docstring), which denies everything regardless of CSRF.
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          failures.push(`${route.method} ${route.path} -> ${res.statusCode} (SUCCEEDED without any credentials!)`);
-        }
-        continue;
-      }
-
       if (res.statusCode !== 403 || code !== "CSRF_HEADER_MISSING") {
         failures.push(`${route.method} ${route.path} -> ${res.statusCode} ${JSON.stringify(code)}`);
       }
@@ -175,13 +140,10 @@ describe("E04-S048 AC5 — every real state-changing route enforces CSRF (route-
     expect(failures, `these routes did NOT reject a cross-site request:\n${failures.join("\n")}`).toEqual([]);
   });
 
-  it("the SAME routes are NOT blocked by CSRF once the credential is supplied (non-vacuity: proves the check is not a blanket 403) — skipped for routes the pre-existing auth bug always denies regardless", async () => {
+  it("the SAME routes are NOT blocked by CSRF once the credential is supplied (non-vacuity: proves the check is not a blanket 403)", async () => {
     const instance = await buildRealServer();
     const cookie = await loginAndGetCookie(instance);
-    const routes = await discoverStateChangingRoutes(instance).then((rs) =>
-      rs.filter((r) => !isBlockedByThePreExistingAuthBug(r)),
-    );
-    // Non-vacuity: prove the filter above did not just remove everything.
+    const routes = await discoverStateChangingRoutes(instance);
     expect(routes.length).toBeGreaterThan(0);
 
     for (const route of routes) {

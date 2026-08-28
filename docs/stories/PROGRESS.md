@@ -26,7 +26,7 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 30 | 20 | 0 | 0 | 0 | 10 |
-| E03 AI Conversation Experience | 46 | 37 | 0 | 2 | 0 | 7 |
+| E03 AI Conversation Experience | 46 | 37 | 0 | 3 | 0 | 6 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S051) | 13 | 7 | 0 | 0 | 0 | 6 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 1 | 0 | 1 |
-| **合計** | **223** | 191 | 0 | 3 | 1 | 28 |
+| **合計** | **223** | 191 | 0 | 4 | 1 | 27 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -118,7 +118,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S038 | todo | — | — | E2E 基礎設施（apps/api webServer、test sandbox、fake ASR、假麥克風），既有 264 E2E 零修改全綠；HARD 依賴：E02-S032、E04-S041、E04-S042、E04-S043、E03-S035、E03-S036、E03-S037；wave 5。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S038.spec.md](specs/E03-S038.spec.md) |
 | E03-S039 | todo | — | — | 跨視窗同步 client（SSE 訂閱、resync、清單／側欄／訊息串重抓、連線指示）；HARD 依賴：E04-S038、E03-S036、E03-S037；wave 4；與 E01-S023/S024、E03-S043 有檔案交集。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S039.spec.md](specs/E03-S039.spec.md) |
 | E03-S040 | approved | story/E03-S040-voice-capture-lib | [E03-S040.md](E03-S040.md) | 獨立審核 APPROVE(重新獨立跑全部 gate 皆綠;範圍/邊界核對通過;發現並修正 1 個 MINOR——resample 測試的長度斷言與實作公式同義反覆,已改硬編期望值;L3 手動證據為真實 Chromium 執行 repo 內實際 worklet 檔 + Chromium fake audio device,已依可信度分級誠實標記——真實 DMIC 因 headless 環境無法路由音訊給瀏覽器,音訊管線輸出以 file/ffprobe/python wave 三種外部工具獨立驗證為合法 16kHz/mono/PCM16 WAV)。語音擷取 lib（AudioWorklet 16k WAV、level、VAD、錯誤分類）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S040.spec.md](specs/E03-S040.spec.md) |
-| E03-S041 | todo | — | — | Push-to-talk 按鈕（四態、上傳、自動送出規則、flag、telemetry）；HARD 依賴：E12-S029、E03-S034、E03-S040、E03-S042；wave 1；L3 需 E12-S031。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S041.spec.md](specs/E03-S041.spec.md) |
+| E03-S041 | in-progress | story/E03-S041-push-to-talk-button | [E03-S041.md](E03-S041.md) | 碼已 merge,但依 spec DoD 不得標 approved——`Evidence Required Before Done` 要求「真實瀏覽器手動 demo 截圖與 L3 真實 ASR（E12-S031 L3 完成後）輸出」,AC10（L5，需 E03-S038）亦未執行;E12-S031 L3 卡在 E12-S030（同一條依賴鏈，見 ROADMAP_TEMP.md 第 5-bis 節）。AC1–9 + regression 全綠,獨立審核 APPROVE（重新獨立跑 typecheck/lint/test 全 apps/web 1647/1647 皆綠;範圍/邊界核對通過;發現並修正 1 個 MINOR/UX bug——API 回傳空字串是契約明文的成功案例，卻誤顯示 VoiceVisualizer 的 error 態(shake)，已修正並補 regression 測試;另跨 story 授權修改 `lib/voice/recorder.ts` 新增純加法 `onAutoStop` callback，E03-S040 既有 23 測試零修改全綠）。Push-to-talk 按鈕（四態、上傳、自動送出規則、flag、telemetry）；HARD 依賴：E12-S029、E03-S034、E03-S040、E03-S042；wave 1；L3 需 E12-S031。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S041.spec.md](specs/E03-S041.spec.md) |
 | E03-S042 | approved | story/E03-S042-voice-visualizer | [E03-S042.md](E03-S042.md) | 獨立審核 APPROVE(重新獨立跑 typecheck/lint/全 repo 1598 unit test 皆綠;範圍/邊界核對通過,只新增 `apps/web/src/components/voice/**`、`apps/web/public/illustrations/voice/**`、`docs/design/**`;4 個 SVG 逐一以 `pnpm dlx svgo --multipass` 驗證 idempotent 且無 script/外部參照/硬編色碼;AC7 視覺驗收用 Playwright 真實 Chromium 對 4 態 + `newContext({reducedMotion:"reduce"})` 截 5 張圖存於 `docs/design/voice-visualizer/`,並用 `data-reduced` 屬性核對 reduced-motion 分支真的觸發;審核中發現並修正 1 項測試覆蓋缺口——reduced-motion 靜態 bar 原本只驗證元素存在,未驗證其 width 真的隨 level 變化並 clamp,已補測試)。VoiceVisualizer 素材（M3 風格、真實音量驅動、reduced-motion）+ 靜態 SVG；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S042.spec.md](specs/E03-S042.spec.md) |
 | E03-S043 | todo | — | — | 對話頁 M3 化（list-detail、訊息卡片、M3 composer 含麥克風 FAB、chips、segmented、side sheet）；HARD 依賴：E01-S021、E01-S022、E03-S039、E03-S041、E03-S042；wave 6。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S043.spec.md](specs/E03-S043.spec.md) |
 | E03-S044 | todo | — | — | 語音＋持久化＋跨視窗同步 E2E（真實 api、fake ASR、假麥克風；真實 ASR 為 L3 手動證據）；HARD 依賴：E03-S038、E03-S039、E03-S041、E03-S043、E04-S044、E12-S031；wave 7；本批最後一個。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S044.spec.md](specs/E03-S044.spec.md) |

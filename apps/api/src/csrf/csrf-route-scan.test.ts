@@ -56,6 +56,18 @@ function payloadFor(route: RouteEntry): Record<string, unknown> {
   if (route.path === "/v1/auth/login") {
     return { username: "demo-user", password: "demo-pass-123" };
   }
+  if (route.path === "/v1/conversations/:conversationId/messages/:messageId/feedback") {
+    return { verdict: "NG" };
+  }
+  if (route.path === "/v1/conversations/:conversationId/messages/:messageId/feedback/reason") {
+    return { reason: "INCOMPLETE" };
+  }
+  if (route.path === "/v1/conversations/:conversationId/messages/:messageId/feedback/comment") {
+    return { comment: "x" };
+  }
+  if (route.path === "/v1/conversations/:conversationId/messages/:messageId/citations/:citationId/feedback") {
+    return { verdict: "OK" };
+  }
   return {};
 }
 

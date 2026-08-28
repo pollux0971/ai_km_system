@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { MOCK_VALID_PASSWORD, MOCK_VALID_USER_ID, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
+import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
 
 /**
  * E13-S017 — the final story of E13 (Feedback & Analytics). Same
@@ -43,19 +43,40 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USER_ID, MOCK_VALID_USERNAME } from "@a
  * 同其餘 E13 spec 一貫慣例:全程 in-app 導覽,不用 page.reload()
  * (會清空 mock AuthClient 的 in-memory session,見
  * answer-ok-feedback.spec.ts 的檔案 doc comment)。
+ *
+ * E13-S020 rewrite note: apps/web 的 usage events 不再寫入
+ * sessionStorage(整批改送 `POST /usage-events`),本檔的 usage-event
+ * 斷言機制改為 `page.route()` 攔截實際送出的請求(同其餘 4 個 E13 E2E
+ * spec 的作法)。`userId` 不再出現在請求本文(analytics.yaml 的規則:
+ * 身分來自 session,不接受 client 端提供),因此不再對每個事件斷言
+ * userId——這是刻意移除,不是遺漏。`GET /admin/metrics/*` 這條 spec
+ * 原文設想的替代路徑需要 E03-S038(真實 apps/api 接進 Playwright)才
+ * 可行,E03-S038 尚未完成,此處先以 route 攔截誠實驗證「client 端真的
+ * 送出正確的事件序列」這個本story 範圍內可驗證的宣稱;更深一層「一個
+ * 真實後端是否正確彙總」留給 E03-S038 之後的 story 驗證,不在此冒充
+ * 已完成。feedback-knowledge-candidates 部分(仍 sessionStorage)不在
+ * 本 story 範圍內,維持原樣零改動。
  */
 
-const USAGE_EVENTS_KEY = "ai-km:mock-usage-events";
 const KNOWLEDGE_CANDIDATES_KEY = "ai-km:mock-feedback-knowledge-candidates";
 
-type RawUsageEvent = {
+type CapturedUsageEvent = {
   name: string;
-  userId: string;
+  conversationId?: string;
   occurredAt: string;
   answerState?: string;
   citationCount?: number;
   latencyMs?: number;
 };
+
+async function captureUsageEvents(page: import("@playwright/test").Page): Promise<CapturedUsageEvent[]> {
+  const captured: CapturedUsageEvent[] = [];
+  await page.route("**/api/v1/usage-events", async (route) => {
+    captured.push(route.request().postDataJSON() as CapturedUsageEvent);
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "e2e-stub-id" }) });
+  });
+  return captured;
+}
 
 type RawKnowledgeCandidate = {
   id: string;
@@ -98,13 +119,6 @@ async function openConversation(page: import("@playwright/test").Page) {
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname));
 }
 
-async function readUsageEvents(page: import("@playwright/test").Page) {
-  return page.evaluate((key) => {
-    const raw = window.sessionStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as RawUsageEvent[]) : [];
-  }, USAGE_EVENTS_KEY);
-}
-
 async function readKnowledgeCandidates(page: import("@playwright/test").Page) {
   return page.evaluate((key) => {
     const raw = window.sessionStorage.getItem(key);
@@ -115,9 +129,10 @@ async function readKnowledgeCandidates(page: import("@playwright/test").Page) {
 test("E13-S017: a real multi-message session with feedback, comments, citation feedback, and a knowledge-candidate flag on one reply produces a correct, consistent usage-event stream and survives in-app navigation", async ({
   page,
 }) => {
+  const captured = await captureUsageEvents(page);
   await openConversation(page);
   const conversationUrl = page.url();
-  expect(await readUsageEvents(page)).toEqual([]);
+  expect(captured).toEqual([]);
   expect(await readKnowledgeCandidates(page)).toEqual([]);
 
   await page.getByLabel("訊息").fill("保固期限是多久？");
@@ -158,13 +173,13 @@ test("E13-S017: a real multi-message session with feedback, comments, citation f
 
   // The full event stream from this one real session must be internally
   // consistent: exactly one conversation_message_sent + one
-  // rag_answer_outcome per reply, all four events attributed to the
-  // same real user, in the order the actions actually happened.
-  const events = await readUsageEvents(page);
-  expect(events).toHaveLength(4);
-  for (const event of events) {
-    expect(event.userId).toBe(MOCK_VALID_USER_ID);
-  }
+  // rag_answer_outcome per reply, in the order the actions actually
+  // happened. (Pre-S020 this also asserted every event's userId matched
+  // the logged-in user — removed under S020, not overlooked: userId is
+  // no longer part of the request body at all, by design, per
+  // analytics.yaml's "identity comes from the session" rule.)
+  await expect.poll(() => captured.length).toBe(4);
+  const events = captured;
   const sentEvents = events.filter((event) => event.name === "conversation_message_sent");
   const ragEvents = events.filter((event) => event.name === "rag_answer_outcome");
   expect(sentEvents).toHaveLength(2);
@@ -187,8 +202,9 @@ test("E13-S017: a real multi-message session with feedback, comments, citation f
     comment: "少了逾期未申報的排除情形。",
   });
 
-  // Navigate away and back — every dimension on both replies, and the
-  // full underlying event stream, must still be there and unchanged.
+  // Navigate away and back — every dimension on both replies must still
+  // be there and unchanged, and the in-app navigation itself must not
+  // have triggered any new (spurious) usage-event request.
   await sidebarNav(page).getByRole("link", { name: "首頁" }).click();
   await page.waitForURL((url) => url.pathname === "/");
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
@@ -204,6 +220,6 @@ test("E13-S017: a real multi-message session with feedback, comments, citation f
   await expect(reloadedSecondReply.getByRole("button", { name: "已回饋：有幫助" })).toBeVisible();
   await expect(reloadedSecondReply.getByRole("button", { name: "標記為知識落差候選" })).toHaveCount(0);
 
-  expect(await readUsageEvents(page)).toHaveLength(4);
+  expect(captured).toHaveLength(4);
   expect(await readKnowledgeCandidates(page)).toHaveLength(1);
 });

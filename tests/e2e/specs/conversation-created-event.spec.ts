@@ -1,19 +1,33 @@
 import { test, expect } from "@playwright/test";
-import { MOCK_VALID_PASSWORD, MOCK_VALID_USER_ID, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
+import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
 
 /**
  * E13-S010 critical flow: starting a brand-new conversation — via either
  * the zero-interaction /conversations/new route or the file-first
- * /conversations/new-file route — persists a queryable
- * `conversation_created` usage event, the other half (alongside
- * E13-S009's `conversation_message_sent`) of the "questionsAsked"/DAU
- * source E11-S021's usage dashboard is waiting on. Navigation stays
- * in-app (see answer-ok-feedback.spec.ts's file doc comment for why a
- * real page.reload() is never used here — it wipes the mock AuthClient's
+ * /conversations/new-file route — sends a queryable `conversation_created`
+ * usage event, the other half (alongside E13-S009's
+ * `conversation_message_sent`) of the "questionsAsked"/DAU source
+ * E11-S021's usage dashboard is waiting on. E13-S020 rewrite: apps/web no
+ * longer persists usage events to its own sessionStorage — assertions
+ * observe the actual `POST /usage-events` request via `page.route()`
+ * interception (same helper as usage-event-instrumentation.spec.ts's file
+ * doc comment explains), and `userId` is intentionally never asserted —
+ * identity comes from the session, never the request body. Navigation
+ * stays in-app (see answer-ok-feedback.spec.ts's file doc comment for why
+ * a real page.reload() is never used here — it wipes the mock AuthClient's
  * in-memory session).
  */
 
-const USAGE_EVENTS_KEY = "ai-km:mock-usage-events";
+type CapturedUsageEvent = { name: string; conversationId?: string; answerState?: string; citationCount?: number; latencyMs?: number; occurredAt: string };
+
+async function captureUsageEvents(page: import("@playwright/test").Page): Promise<CapturedUsageEvent[]> {
+  const captured: CapturedUsageEvent[] = [];
+  await page.route("**/api/v1/usage-events", async (route) => {
+    captured.push(route.request().postDataJSON() as CapturedUsageEvent);
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "e2e-stub-id" }) });
+  });
+  return captured;
+}
 
 async function login(page: import("@playwright/test").Page) {
   await page.goto("/login");
@@ -27,18 +41,11 @@ function sidebarNav(page: import("@playwright/test").Page) {
   return page.getByRole("navigation", { name: "主導覽" });
 }
 
-async function readUsageEvents(page: import("@playwright/test").Page) {
-  return page.evaluate((key) => {
-    const raw = window.sessionStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as Array<{ name: string; userId: string; occurredAt: string }>) : [];
-  }, USAGE_EVENTS_KEY);
-}
-
-test("E13-S010: starting a new conversation from the zero-interaction route persists a conversation_created usage event", async ({
+test("E13-S010: starting a new conversation from the zero-interaction route sends a conversation_created usage event", async ({
   page,
 }) => {
+  const captured = await captureUsageEvents(page);
   await login(page);
-  expect(await readUsageEvents(page)).toEqual([]);
 
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
@@ -54,16 +61,15 @@ test("E13-S010: starting a new conversation from the zero-interaction route pers
   await page.waitForURL((url) => url.pathname === "/conversations/new");
   await page.waitForURL((url) => url.pathname === "/conversations");
 
-  const events = await readUsageEvents(page);
-  expect(events).toHaveLength(1);
-  expect(events[0]).toMatchObject({ name: "conversation_created", userId: MOCK_VALID_USER_ID });
+  await expect.poll(() => captured.length).toBe(1);
+  expect(captured[0]).toMatchObject({ name: "conversation_created" });
 });
 
-test("E13-S010: starting a new conversation from the file-first entry route persists a conversation_created usage event", async ({
+test("E13-S010: starting a new conversation from the file-first entry route sends a conversation_created usage event", async ({
   page,
 }) => {
+  const captured = await captureUsageEvents(page);
   await login(page);
-  expect(await readUsageEvents(page)).toEqual([]);
 
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
@@ -78,7 +84,6 @@ test("E13-S010: starting a new conversation from the file-first entry route pers
   await page.getByRole("button", { name: "開始對話" }).click();
   await page.waitForURL((url) => /^\/conversations\/.+/.test(url.pathname) && url.pathname !== "/conversations/new-file");
 
-  const events = await readUsageEvents(page);
-  expect(events).toHaveLength(1);
-  expect(events[0]).toMatchObject({ name: "conversation_created", userId: MOCK_VALID_USER_ID });
+  await expect.poll(() => captured.length).toBe(1);
+  expect(captured[0]).toMatchObject({ name: "conversation_created" });
 });

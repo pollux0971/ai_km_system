@@ -1,18 +1,29 @@
 import { test, expect } from "@playwright/test";
-import { MOCK_VALID_PASSWORD, MOCK_VALID_USER_ID, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
+import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
 
 /**
- * E13-S013 critical flow: a real send-and-receive round trip persists a
+ * E13-S013 critical flow: a real send-and-receive round trip sends a
  * non-negative, real-elapsed-time `latencyMs` on its own
  * `rag_answer_outcome` usage event (E13-S011's own event, extended here)
  * — the actual data this story's own aggregation (`computeAverageLatencyMs`,
  * usage-events.test.ts) and the `/latency` admin page (admin-latency.spec.ts)
- * are both built around. Navigation stays in-app (see
- * answer-ok-feedback.spec.ts's file doc comment for why a real
+ * are both built around. E13-S020 rewrite: apps/web no longer persists
+ * usage events to its own sessionStorage — assertions observe the actual
+ * outbound request via `page.route()` interception. Navigation stays
+ * in-app (see answer-ok-feedback.spec.ts's file doc comment for why a real
  * page.reload() is never used here).
  */
 
-const USAGE_EVENTS_KEY = "ai-km:mock-usage-events";
+type CapturedUsageEvent = { name: string; conversationId?: string; answerState?: string; citationCount?: number; latencyMs?: number; occurredAt: string };
+
+async function captureUsageEvents(page: import("@playwright/test").Page): Promise<CapturedUsageEvent[]> {
+  const captured: CapturedUsageEvent[] = [];
+  await page.route("**/api/v1/usage-events", async (route) => {
+    captured.push(route.request().postDataJSON() as CapturedUsageEvent);
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "e2e-stub-id" }) });
+  });
+  return captured;
+}
 
 async function login(page: import("@playwright/test").Page) {
   await page.goto("/login");
@@ -30,14 +41,8 @@ async function waitForThreadToSettle(page: import("@playwright/test").Page) {
   await expect(page.getByRole("main").getByRole("status")).toHaveCount(0, { timeout: 20000 });
 }
 
-async function readUsageEvents(page: import("@playwright/test").Page) {
-  return page.evaluate((key) => {
-    const raw = window.sessionStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as Array<{ name: string; userId: string; latencyMs?: number }>) : [];
-  }, USAGE_EVENTS_KEY);
-}
-
-test("E13-S013: a real answer persists a non-negative latencyMs on its rag_answer_outcome event", async ({ page }) => {
+test("E13-S013: a real answer sends a non-negative latencyMs on its rag_answer_outcome event", async ({ page }) => {
+  const captured = await captureUsageEvents(page);
   await login(page);
 
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
@@ -49,12 +54,9 @@ test("E13-S013: a real answer persists a non-negative latencyMs on its rag_answe
   await page.getByRole("button", { name: "送出" }).click();
   await waitForThreadToSettle(page);
 
-  const events = await readUsageEvents(page);
-  const outcomeEvents = events.filter((event) => event.name === "rag_answer_outcome");
-  expect(outcomeEvents).toHaveLength(1);
-  const outcome = outcomeEvents[0];
+  await expect.poll(() => captured.filter((event) => event.name === "rag_answer_outcome").length).toBe(1);
+  const outcome = captured.find((event) => event.name === "rag_answer_outcome");
   if (!outcome) throw new Error("expected a rag_answer_outcome event");
-  expect(outcome.userId).toBe(MOCK_VALID_USER_ID);
   expect(typeof outcome.latencyMs).toBe("number");
   expect(outcome.latencyMs).toBeGreaterThanOrEqual(0);
 });

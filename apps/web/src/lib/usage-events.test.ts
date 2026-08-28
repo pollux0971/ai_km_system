@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { getRecordedUsageEvents } from "@/test/fake-api";
 import {
   computeAverageLatencyMs,
   computeDAU,
@@ -9,150 +10,157 @@ import {
   type UsageEvent,
 } from "./usage-events";
 
-describe("recordUsageEvent / listUsageEvents (E13-S009)", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-  });
+/**
+ * `recordUsageEvent` is deliberately fire-and-forget (E13-S020) — it kicks off a
+ * `POST /usage-events` without returning a promise the caller can await. Tests need to
+ * wait for that in-flight request to actually reach the fake API (a `setTimeout(0)`
+ * macrotask reliably drains the intervening microtask chain: `toResult`'s `await`, the
+ * fake `fetch`'s own `await readJsonBody`, etc.) before asserting on
+ * `getRecordedUsageEvents()`.
+ */
+async function flushRecordUsageEvent(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
-  it("returns an empty list before any event has been recorded", () => {
-    expect(listUsageEvents()).toEqual([]);
-  });
-
-  it("persists a recorded event with its name, userId, and an ISO timestamp", () => {
+describe("recordUsageEvent — POST /usage-events (E13-S009, rewritten for E13-S020)", () => {
+  it("sends a conversation_message_sent event with name and occurredAt, no userId field on the request", async () => {
     recordUsageEvent("conversation_message_sent", "u1");
+    await flushRecordUsageEvent();
 
-    const events = listUsageEvents();
+    const events = getRecordedUsageEvents();
     expect(events).toHaveLength(1);
     const [event] = events;
     if (!event) throw new Error("expected an event");
     expect(event.name).toBe("conversation_message_sent");
-    expect(event.userId).toBe("u1");
     expect(() => new Date(event.occurredAt).toISOString()).not.toThrow();
     expect(new Date(event.occurredAt).toISOString()).toBe(event.occurredAt);
+    // analytics.yaml: identity comes from the session, never the request body —
+    // the fake API's own UsageEventInput ("additionalProperties: false") schema
+    // validation would already have thrown had a userId field been sent at all.
+    expect(Object.prototype.hasOwnProperty.call(event, "userId")).toBe(false);
   });
 
-  it("accumulates multiple events in insertion order, oldest first", () => {
+  it("accumulates multiple events in the order they were sent", async () => {
     recordUsageEvent("conversation_message_sent", "u1");
+    await flushRecordUsageEvent();
     recordUsageEvent("conversation_message_sent", "u2");
+    await flushRecordUsageEvent();
     recordUsageEvent("conversation_message_sent", "u1");
+    await flushRecordUsageEvent();
 
-    const events = listUsageEvents();
-    expect(events.map((event) => event.userId)).toEqual(["u1", "u2", "u1"]);
+    const events = getRecordedUsageEvents();
+    expect(events.map((event) => event.name)).toEqual([
+      "conversation_message_sent",
+      "conversation_message_sent",
+      "conversation_message_sent",
+    ]);
   });
 
-  it("keeps each user's events distinct — recording for one user does not merge with or overwrite another user's events", () => {
-    recordUsageEvent("conversation_message_sent", "alice");
-    recordUsageEvent("conversation_message_sent", "bob");
-
-    const events = listUsageEvents();
-    expect(events.filter((event) => event.userId === "alice")).toHaveLength(1);
-    expect(events.filter((event) => event.userId === "bob")).toHaveLength(1);
-  });
-
-  it("never throws even if the underlying store write fails (telemetry must not corrupt the caller's own flow)", () => {
-    const setItemSpy = vi.spyOn(window.sessionStorage.__proto__, "setItem").mockImplementation(() => {
-      throw new Error("quota exceeded");
-    });
+  it("never throws even when the request fails with a 500 (AC2) — the caller's own flow is unaffected", async () => {
+    const { failNextRequest } = await import("@/test/fake-api");
+    failNextRequest("INTERNAL_ERROR");
 
     expect(() => recordUsageEvent("conversation_message_sent", "u1")).not.toThrow();
+    await flushRecordUsageEvent();
 
-    setItemSpy.mockRestore();
+    // The forced failure means nothing was actually persisted, and — per AC2 — no
+    // retry is attempted: a second flush still finds nothing recorded.
+    expect(getRecordedUsageEvents()).toHaveLength(0);
+    await flushRecordUsageEvent();
+    expect(getRecordedUsageEvents()).toHaveLength(0);
   });
 
-  it("treats corrupted stored JSON as an empty list rather than throwing", () => {
-    window.sessionStorage.setItem("ai-km:mock-usage-events", "not valid json");
+  it("never throws on a real network failure either (AC2), and does not retry", async () => {
+    const { failNextRequestWithNetworkError } = await import("@/test/fake-api");
+    failNextRequestWithNetworkError();
 
-    expect(listUsageEvents()).toEqual([]);
+    expect(() => recordUsageEvent("conversation_message_sent", "u1")).not.toThrow();
+    await flushRecordUsageEvent();
+
+    expect(getRecordedUsageEvents()).toHaveLength(0);
   });
 });
 
-describe("recordUsageEvent / listUsageEvents — conversation_created (E13-S010)", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-  });
-
-  it("accepts conversation_created as a distinct event name", () => {
+describe("recordUsageEvent — conversation_created (E13-S010, rewritten for E13-S020)", () => {
+  it("sends conversation_created as a distinct event name", async () => {
     recordUsageEvent("conversation_created", "u1");
+    await flushRecordUsageEvent();
 
-    const events = listUsageEvents();
+    const events = getRecordedUsageEvents();
     expect(events).toHaveLength(1);
-    const [event] = events;
-    if (!event) throw new Error("expected an event");
-    expect(event.name).toBe("conversation_created");
-    expect(event.userId).toBe("u1");
+    expect(events[0]?.name).toBe("conversation_created");
   });
 
-  it("keeps conversation_created and conversation_message_sent distinguishable when both are recorded for the same user", () => {
+  it("keeps conversation_created and conversation_message_sent distinguishable when both are sent", async () => {
     recordUsageEvent("conversation_created", "u1");
+    await flushRecordUsageEvent();
     recordUsageEvent("conversation_message_sent", "u1");
+    await flushRecordUsageEvent();
 
-    const events = listUsageEvents();
+    const events = getRecordedUsageEvents();
     expect(events.map((event) => event.name)).toEqual(["conversation_created", "conversation_message_sent"]);
   });
 });
 
-describe("recordUsageEvent / listUsageEvents — rag_answer_outcome (E13-S011)", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-  });
-
-  it("accepts rag_answer_outcome as a distinct event name, persisting its answerState and citationCount", () => {
+describe("recordUsageEvent — rag_answer_outcome (E13-S011, rewritten for E13-S020)", () => {
+  it("sends rag_answer_outcome with its answerState and citationCount", async () => {
     recordUsageEvent("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 1 });
+    await flushRecordUsageEvent();
 
-    const events = listUsageEvents();
+    const events = getRecordedUsageEvents();
     expect(events).toHaveLength(1);
     const [event] = events;
     if (!event) throw new Error("expected an event");
     expect(event.name).toBe("rag_answer_outcome");
-    expect(event.userId).toBe("u1");
     expect(event.answerState).toBe("ANSWERED");
     expect(event.citationCount).toBe(1);
   });
 
-  it("persists a non-ANSWERED state (e.g. NO_EVIDENCE) and a zero citationCount distinctly, not defaulted to ANSWERED/1", () => {
+  it("sends a non-ANSWERED state (e.g. NO_EVIDENCE) and a zero citationCount distinctly, not defaulted to ANSWERED/1", async () => {
     recordUsageEvent("rag_answer_outcome", "u1", { answerState: "NO_EVIDENCE", citationCount: 0 });
+    await flushRecordUsageEvent();
 
-    const [event] = listUsageEvents();
+    const [event] = getRecordedUsageEvents();
     if (!event) throw new Error("expected an event");
     expect(event.answerState).toBe("NO_EVIDENCE");
     expect(event.citationCount).toBe(0);
   });
 
-  it("leaves answerState/citationCount undefined for events recorded without details (conversation_message_sent/conversation_created), not populated with stray values", () => {
+  it("leaves answerState/citationCount absent from the request for events sent without details (conversation_message_sent/conversation_created), not populated with stray values", async () => {
     recordUsageEvent("conversation_message_sent", "u1");
+    await flushRecordUsageEvent();
 
-    const [event] = listUsageEvents();
+    const [event] = getRecordedUsageEvents();
     if (!event) throw new Error("expected an event");
     expect(event.answerState).toBeUndefined();
     expect(event.citationCount).toBeUndefined();
   });
 });
 
-describe("recordUsageEvent / listUsageEvents — latencyMs (E13-S013)", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-  });
-
-  it("persists latencyMs alongside answerState/citationCount on a rag_answer_outcome event", () => {
+describe("recordUsageEvent — latencyMs (E13-S013, rewritten for E13-S020)", () => {
+  it("sends latencyMs alongside answerState/citationCount on a rag_answer_outcome event", async () => {
     recordUsageEvent("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 1, latencyMs: 1234 });
+    await flushRecordUsageEvent();
 
-    const [event] = listUsageEvents();
+    const [event] = getRecordedUsageEvents();
     if (!event) throw new Error("expected an event");
     expect(event.latencyMs).toBe(1234);
   });
 
-  it("persists a zero latencyMs distinctly, not treated as absent", () => {
+  it("sends a zero latencyMs distinctly, not treated as absent", async () => {
     recordUsageEvent("rag_answer_outcome", "u1", { answerState: "ANSWERED", citationCount: 0, latencyMs: 0 });
+    await flushRecordUsageEvent();
 
-    const [event] = listUsageEvents();
+    const [event] = getRecordedUsageEvents();
     if (!event) throw new Error("expected an event");
     expect(event.latencyMs).toBe(0);
   });
 
-  it("leaves latencyMs undefined for events recorded without it, not defaulted to 0", () => {
+  it("leaves latencyMs absent from the request for events sent without it, not defaulted to 0", async () => {
     recordUsageEvent("conversation_message_sent", "u1");
+    await flushRecordUsageEvent();
 
-    const [event] = listUsageEvents();
+    const [event] = getRecordedUsageEvents();
     if (!event) throw new Error("expected an event");
     expect(event.latencyMs).toBeUndefined();
   });
@@ -294,24 +302,21 @@ describe("computeAverageLatencyMs (E13-S013)", () => {
   });
 });
 
-// E13-S016 privacy-safe analytics fields. All of E13-S001~S015's
-// telemetry/analytics call sites were individually grepped clean of free
-// text (see this story's EVIDENCE for the full field-by-field audit) —
-// every current caller of recordUsageEvent passes only literal objects
-// containing answerState/citationCount/latencyMs, which TypeScript's
-// excess-property check on object LITERALS already rejects at compile
-// time if a stray field like `comment` were added. That compile-time
-// protection does NOT apply once a caller builds the details object in a
-// variable first — these tests prove recordUsageEvent itself is the
-// enforcement point, not just today's caller discipline, by deliberately
-// bypassing the type system the way a variable-built details object
-// would.
-describe("recordUsageEvent privacy-safe field allowlist (E13-S016)", () => {
-  beforeEach(() => {
-    window.sessionStorage.clear();
-  });
-
-  it("never persists an unexpected field even when the caller's details object carries one", () => {
+// E13-S016 privacy-safe analytics fields, carried forward under E13-S020. All of
+// E13-S001~S015's telemetry/analytics call sites were individually grepped clean of
+// free text (see E13-S016's EVIDENCE for the full field-by-field audit) — every
+// current caller of recordUsageEvent passes only literal objects containing
+// answerState/citationCount/latencyMs, which TypeScript's excess-property check on
+// object LITERALS already rejects at compile time if a stray field like `comment`
+// were added. That compile-time protection does NOT apply once a caller builds the
+// details object in a variable first — these tests prove recordUsageEvent itself is
+// the enforcement point (now: what it puts on the wire), not just today's caller
+// discipline, by deliberately bypassing the type system the way a variable-built
+// details object would. Rewritten for E13-S020: the assertion target is now the
+// captured request body (fake API), not a sessionStorage entry — the same claim
+// (no stray field survives), a different observation point.
+describe("recordUsageEvent privacy-safe field allowlist (E13-S016, rewritten for E13-S020)", () => {
+  it("never sends an unexpected field even when the caller's details object carries one", async () => {
     const contaminatedDetails = {
       answerState: "ANSWERED",
       citationCount: 2,
@@ -321,27 +326,38 @@ describe("recordUsageEvent privacy-safe field allowlist (E13-S016)", () => {
     } as unknown as { answerState: "ANSWERED"; citationCount: number; latencyMs: number };
 
     recordUsageEvent("rag_answer_outcome", "u1", contaminatedDetails);
+    await flushRecordUsageEvent();
 
-    const raw = window.sessionStorage.getItem("ai-km:mock-usage-events");
-    expect(raw).not.toBeNull();
-    expect(raw).not.toContain("敏感留言原文");
-    expect(raw).not.toContain("回答的完整原文");
-    expect(raw).not.toContain("comment");
-    expect(raw).not.toContain("answerContent");
-
-    const [persisted] = listUsageEvents();
+    const [persisted] = getRecordedUsageEvents();
     if (!persisted) throw new Error("expected a persisted event");
-    expect(Object.keys(persisted).sort()).toEqual(["answerState", "citationCount", "latencyMs", "name", "occurredAt", "userId"].sort());
-    expect(persisted.answerState).toBe("ANSWERED");
-    expect(persisted.citationCount).toBe(2);
-    expect(persisted.latencyMs).toBe(500);
+    // `id` is server-assigned (analytics.yaml UsageEventCreated), not part of what
+    // the client sent — excluded from this "what did the client actually send"
+    // allowlist check the same way it's excluded from the request body itself.
+    const { id: _id, ...sent } = persisted;
+    expect(Object.keys(sent).sort()).toEqual(["answerState", "citationCount", "latencyMs", "name", "occurredAt"].sort());
+    expect(sent.answerState).toBe("ANSWERED");
+    expect(sent.citationCount).toBe(2);
+    expect(sent.latencyMs).toBe(500);
   });
 
-  it("persists only name/userId/occurredAt for events given no details at all — no stray keys from a previous call leak in", () => {
+  it("sends only name/occurredAt for events given no details at all — no stray keys from a previous call leak in", async () => {
     recordUsageEvent("conversation_message_sent", "u1");
+    await flushRecordUsageEvent();
 
-    const [persisted] = listUsageEvents();
+    const [persisted] = getRecordedUsageEvents();
     if (!persisted) throw new Error("expected a persisted event");
-    expect(Object.keys(persisted).sort()).toEqual(["name", "occurredAt", "userId"].sort());
+    const { id: _id, ...sent } = persisted;
+    expect(Object.keys(sent).sort()).toEqual(["name", "occurredAt"].sort());
+  });
+});
+
+describe("listUsageEvents (deprecated, E13-S020)", () => {
+  it("always returns an empty list — usage events no longer persist client-side", async () => {
+    recordUsageEvent("conversation_message_sent", "u1");
+    await flushRecordUsageEvent();
+
+    // Even though the event above genuinely reached the fake API (proven by the
+    // describe blocks above), listUsageEvents() has no local store left to read.
+    expect(listUsageEvents()).toEqual([]);
   });
 });

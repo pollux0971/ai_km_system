@@ -1,4 +1,9 @@
+import { toResult } from "@ai-km/api-client";
+import { createLogger } from "@ai-km/logger";
+import { apiClient } from "./api";
 import type { AnswerState } from "./answer-state";
+
+const logger = createLogger("web:usage-events");
 
 /**
  * E13-S009: usage event instrumentation. E11-S021 (Usage dashboard)
@@ -99,6 +104,30 @@ import type { AnswerState } from "./answer-state";
  * logic ready to consume, exactly as E13-S012 already established for
  * DAU/questions.
  *
+ * E13-S020 is that "future Team B-provided cross-app data path" arriving
+ * for the write side: `recordUsageEvent` no longer persists to this tab's
+ * own sessionStorage at all — it fire-and-forgets a `POST /usage-events`
+ * (analytics.yaml, frozen under E13-S018) through the typed `apiClient`,
+ * the same non-blocking spirit `trackEvent`'s own "must never block or
+ * fail the caller's own flow" contract already establishes (AC 4/5
+ * below), now over the network instead of only to the logger. `userId`
+ * is deliberately never part of the request body — analytics.yaml's own
+ * top-level rule is that client-derived identity is rejected, not
+ * trusted; the server derives it from the session cookie.
+ * `recordUsageEvent`'s own exported signature still accepts a `userId`
+ * parameter (unchanged, unused for the request body) purely so its four
+ * existing call sites — outside this story's Domain Ownership Boundary
+ * to touch — don't need a mechanical edit. `listUsageEvents()` is now
+ * deprecated (`[]`, logged warn): its production callers were always
+ * this same file's own aggregation functions, already documented above
+ * (E13-S012) as unreachable from real (non-fixture) data; its only other
+ * caller was this file's own pre-S020 tests, which this story rewrites.
+ * A future E13-S019 (server-side persistence) makes the write side whole;
+ * this story does not implement or assume a working read side exists —
+ * see this story's own EVIDENCE for what a fake-API 500/network failure
+ * looks like from this function's perspective (AC 2: log once, no retry,
+ * caller's own flow unaffected either way).
+ *
  * What "latency" honestly means in this codebase: the elapsed time from
  * `runStream`'s own entry (right when a reply starts generating) to the
  * moment its assistant reply is durably persisted — the full duration
@@ -143,80 +172,76 @@ export function countDistinctCitations(content: string): number {
   return ids.size;
 }
 
-const STORAGE_KEY = "ai-km:mock-usage-events";
-
-/** Same sessionStorage-backed reasoning as messages.ts's readStore/writeStore. */
-function readStore(): UsageEvent[] {
-  if (typeof window === "undefined") return [];
-  const raw = window.sessionStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as UsageEvent[];
-  } catch {
-    return [];
-  }
-}
-
-function writeStore(events: UsageEvent[]): void {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(events));
-}
-
 /**
- * Persists one usage event. Deliberately synchronous and never throws —
- * same "must never block or fail the caller's own flow" rule trackEvent
- * documents (AC 4/5: a dependency issue here must not corrupt an
- * unrelated user action, e.g. a full sessionStorage must not make
- * message sending itself appear to fail).
+ * Fire-and-forget POSTs one usage event to the server. Deliberately
+ * synchronous and never throws — same "must never block or fail the
+ * caller's own flow" rule trackEvent documents (AC 4/5: a dependency
+ * issue here must not corrupt an unrelated user action, e.g. a 500 or a
+ * network failure must not make message sending itself appear to fail).
+ * On failure, logs one warning and does not retry (E13-S020 AC2) — a
+ * silently-dropped analytics event is the correct tradeoff here, the
+ * same one trackEvent already makes for UI telemetry.
  *
  * `details` is optional and only meaningful for `"rag_answer_outcome"` —
  * `conversation_message_sent`/`conversation_created` callers pass
- * nothing, leaving `answerState`/`citationCount`/`latencyMs` undefined on
- * the persisted event rather than defaulted to some stray value.
+ * nothing, leaving `answerState`/`citationCount`/`latencyMs` absent from
+ * the request body rather than sent as some stray value. `userId` is
+ * accepted (signature unchanged from pre-S020) but never placed on the
+ * request body — see this file's own top-of-file S020 note for why.
  *
- * E13-S016 privacy-safe-analytics-fields audit: this is the one function
- * in the codebase that actually persists a `UsageEvent` into the
- * queryable store a future DAU/rate aggregation reads back — the real
- * "analytics" surface this story's name refers to (as opposed to
- * trackEvent, which is fire-and-forget UI telemetry with 50+ unrelated
- * call sites outside this epic's domain, already grepped clean of free
- * text for every feedback/comment-adjacent call site and out of this
- * story's Domain Ownership Boundary to rewrite). Every current call site
- * only ever passes `answerState`/`citationCount`/`latencyMs` — but that
- * safety previously relied entirely on TypeScript's excess-property
- * check on object LITERALS, which does not apply once a caller builds
- * `details` in a variable first. Explicitly picking the three known-safe
- * fields below (instead of spreading `...details`) makes this function
- * itself the enforcement point: even a future call site that
- * accidentally passes an object carrying `comment`/`answerContent` (e.g.
- * copy-pasted from feedback-knowledge-candidates.ts, which legitimately
- * DOES carry free text as a disclosed human-review artifact, not
- * analytics) cannot leak that text into this persisted store.
+ * E13-S016 privacy-safe-analytics-fields audit, carried forward under
+ * S020: this is the one function in the codebase that actually sends a
+ * usage event to the real "analytics" surface this epic's name refers to
+ * (as opposed to trackEvent, which is fire-and-forget UI telemetry with
+ * 50+ unrelated call sites outside this epic's domain, already grepped
+ * clean of free text for every feedback/comment-adjacent call site and
+ * out of this story's Domain Ownership Boundary to rewrite). Every
+ * current call site only ever passes `answerState`/`citationCount`/
+ * `latencyMs` — but that safety previously relied entirely on
+ * TypeScript's excess-property check on object LITERALS, which does not
+ * apply once a caller builds `details` in a variable first. Explicitly
+ * picking the three known-safe fields below (instead of spreading
+ * `...details`) makes this function itself the enforcement point: even a
+ * future call site that accidentally passes an object carrying
+ * `comment`/`answerContent` (e.g. copy-pasted from
+ * feedback-knowledge-candidates.ts, which legitimately DOES carry free
+ * text as a disclosed human-review artifact, not analytics) cannot leak
+ * that text into the request body — the same allowlist discipline
+ * `UsageEventInput`'s own `additionalProperties: false` also enforces
+ * server-side, per this story's AC1 (whitelist on both sides).
  */
 export function recordUsageEvent(
   name: UsageEventName,
   userId: string,
   details?: { answerState?: AnswerState; citationCount?: number; latencyMs?: number },
 ): void {
-  try {
-    const events = readStore();
-    events.push({
-      name,
-      userId,
-      occurredAt: new Date().toISOString(),
-      answerState: details?.answerState,
-      citationCount: details?.citationCount,
-      latencyMs: details?.latencyMs,
-    });
-    writeStore(events);
-  } catch {
-    // Swallowed deliberately — see doc comment above.
-  }
+  void userId; // never sent — identity comes from the session (analytics.yaml).
+  const body = {
+    name,
+    occurredAt: new Date().toISOString(),
+    ...(details?.answerState !== undefined ? { answerState: details.answerState } : {}),
+    ...(details?.citationCount !== undefined ? { citationCount: details.citationCount } : {}),
+    ...(details?.latencyMs !== undefined ? { latencyMs: details.latencyMs } : {}),
+  };
+  void toResult(apiClient.analytics.POST("/usage-events", { body })).then((result) => {
+    if (!result.ok) {
+      logger.warn("recordUsageEvent: POST /usage-events failed", { name, code: result.error.code });
+    }
+  });
 }
 
-/** All recorded usage events, oldest first. Read-only accessor for aggregation (E13-S012). */
+/**
+ * @deprecated E13-S020: usage events no longer persist client-side —
+ * always returns `[]` and logs a warning. `computeDAU`/
+ * `computeQuestionsAsked`/`computeAverageLatencyMs` (E13-S012) are pure
+ * functions over an already-fetched `UsageEvent[]` and remain the
+ * correct way to aggregate a real event list once one exists (e.g. from
+ * a future server-side read path) — this function was never their only
+ * possible input, just the pre-S020 one.
+ */
 export function listUsageEvents(): UsageEvent[] {
-  return readStore();
+  logger.warn("listUsageEvents: deprecated (E13-S020) — usage events no longer persist client-side, always returns []");
+  return [];
 }
 
 /**

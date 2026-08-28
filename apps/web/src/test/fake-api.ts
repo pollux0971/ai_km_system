@@ -29,6 +29,7 @@ const specDocs: Record<string, unknown> = {
   "core.yaml": loadYaml("core"),
   // E03-S041
   "transcriptions.yaml": loadYaml("transcriptions"),
+  "analytics.yaml": loadYaml("analytics"),
 };
 
 function resolvePointer(doc: unknown, pointer: string): unknown {
@@ -68,10 +69,9 @@ function dereference(node: unknown, currentDoc: string): unknown {
   return node;
 }
 
-function schemaFor(name: string): object {
-  const schemas = (specDocs["conversations.yaml"] as { components: { schemas: Record<string, unknown> } }).components
-    .schemas;
-  return dereference(schemas[name], "conversations.yaml") as object;
+function schemaFor(name: string, doc: string = "conversations.yaml"): object {
+  const schemas = (specDocs[doc] as { components: { schemas: Record<string, unknown> } }).components.schemas;
+  return dereference(schemas[name], doc) as object;
 }
 
 // Only "date-time" is registered — NOT "uuid". This fake's seeded conversations
@@ -83,8 +83,8 @@ function schemaFor(name: string): object {
 const ajv = new Ajv({ strict: false });
 addFormats(ajv, { formats: ["date-time"] });
 
-function compile(name: string): ValidateFunction {
-  return ajv.compile(schemaFor(name));
+function compile(name: string, doc: string = "conversations.yaml"): ValidateFunction {
+  return ajv.compile(schemaFor(name, doc));
 }
 
 const validators = {
@@ -103,6 +103,9 @@ const validators = {
   PermissionDeniedErrorBody: compile("PermissionDeniedErrorBody"),
   NotFoundErrorBody: compile("NotFoundErrorBody"),
   InternalErrorBody: compile("InternalErrorBody"),
+  // E13-S020: analytics.yaml (E13-S018) schemas — separate doc, same dereference/Ajv plumbing.
+  UsageEventInput: compile("UsageEventInput", "analytics.yaml"),
+  UsageEventCreated: compile("UsageEventCreated", "analytics.yaml"),
 } as const;
 
 function assertValid(name: keyof typeof validators, data: unknown): void {
@@ -181,8 +184,20 @@ interface FakeMessage {
   citationFeedback?: Record<string, "OK" | "NG">;
 }
 
+/** E13-S020: mirrors analytics.yaml's UsageEventInput + a server-assigned id. */
+interface FakeUsageEvent {
+  id: string;
+  name: string;
+  conversationId?: string;
+  answerState?: string;
+  citationCount?: number;
+  latencyMs?: number;
+  occurredAt: string;
+}
+
 let store: FakeConversation[] = [];
 let messageStore: FakeMessage[] = [];
+let usageEventStore: FakeUsageEvent[] = [];
 let failNext: { code: string; status: number } | null = null;
 
 const STATUS_FOR_CODE: Record<string, number> = {
@@ -218,6 +233,7 @@ export function getFakeApiRequestCount(): number {
 export function resetFakeApi(): void {
   store = [];
   messageStore = [];
+  usageEventStore = [];
   failNext = null;
   requestCount = 0;
   nextTranscriptionText = null;
@@ -243,6 +259,11 @@ export function setNextTranscriptionText(text: string): void {
  */
 export function setNextTranscriptionError(code: string, reason?: string): void {
   nextTranscriptionError = reason !== undefined ? { code, reason } : { code };
+}
+
+/** E13-S020 test hook: every usage event the fake API has recorded, oldest first. */
+export function getRecordedUsageEvents(): FakeUsageEvent[] {
+  return usageEventStore;
 }
 
 /** Test hook: the same 3 conversations `SAMPLE_CONVERSATIONS` used to seed, now as full `Conversation` records. */
@@ -657,6 +678,33 @@ async function handleCreateTranscription(request: Request): Promise<Response> {
   return jsonResponse(200, response);
 }
 
+// ---- Analytics route handlers (E13-S020) ----------------------------------------------
+
+/**
+ * `additionalProperties: false` on `UsageEventInput` already rejects a stray `userId`
+ * field at the schema layer (analytics.yaml's own "client-derived identity is rejected"
+ * rule) — this handler doesn't need a second check, `assertValid` below throws first.
+ */
+async function handleCreateUsageEvent(request: Request): Promise<Response> {
+  const body = await readJsonBody(request);
+  assertValid("UsageEventInput", body);
+  const input = body as {
+    name: string;
+    conversationId?: string;
+    answerState?: string;
+    citationCount?: number;
+    latencyMs?: number;
+    occurredAt: string;
+  };
+
+  const record: FakeUsageEvent = { id: crypto.randomUUID(), ...input };
+  usageEventStore = [...usageEventStore, record];
+
+  const created = { id: record.id };
+  assertValid("UsageEventCreated", created);
+  return jsonResponse(201, created);
+}
+
 export async function fakeFetch(request: Request): Promise<Response> {
   requestCount += 1;
   if (failNext) {
@@ -678,6 +726,10 @@ export async function fakeFetch(request: Request): Promise<Response> {
   if (pathname === "/api/v1/conversations") {
     if (method === "GET") return handleList(url);
     if (method === "POST") return handleCreate(request);
+  }
+
+  if (pathname === "/api/v1/usage-events") {
+    if (method === "POST") return handleCreateUsageEvent(request);
   }
 
   const citationMatch = pathname.match(

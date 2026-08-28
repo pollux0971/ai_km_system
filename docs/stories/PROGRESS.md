@@ -26,7 +26,7 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 30 | 20 | 0 | 0 | 0 | 10 |
-| E03 AI Conversation Experience | 46 | 36 | 0 | 0 | 0 | 10 |
+| E03 AI Conversation Experience | 46 | 35 | 0 | 1 | 0 | 10 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S048) | 10 | 3 | 0 | 0 | 0 | 7 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 1 | 0 | 0 | 0 | 3 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 0 | 0 | 2 |
-| **合計** | **220** | 182 | 0 | 0 | 1 | 37 |
+| **合計** | **220** | 182 | 0 | 1 | 1 | 36 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -112,7 +112,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S032 | approved | story/E03-S032-message-retry-ux | [E03-S032.md](E03-S032.md) | 獨立審核 APPROVE(Message retry UX,SOURCE_BASELINE 無此 story 章節(E03 條目在 S30 結束);修正 `handleRetryStream` 遺失 `reviseTarget`/`answerState` 的真實 bug——重試一次失敗的 regenerate 原本會產生重複訊息而非更新原訊息,直接違反 AC 5;審核者獨立重建 fix 前的舊程式碼親自追蹤確認 bug 屬實可達、兩個新測試在舊碼下確實會失敗;`stream-disconnected` 同形狀缺口因目前不可達,刻意不動,審核者亦獨立確認;0 次 FIX 循環;typecheck/lint/build/454 unit/32 個目標 E2E 皆綠,force 全量兩輪皆綠;1 個 MINOR(測試註解鑑別力宣稱過度)已修正) |
 | E03-S033 | approved | story/E03-S033-conversation-e2e-mocked-backend | [E03-S033.md](E03-S033.md) | 獨立審核 APPROVE(conversation E2E with mocked backend,**E03 全部 33 個 story 完成**;SOURCE_BASELINE 無此 story 章節,範圍依 epic 標題本身+SOURCE_BASELINE §11 團隊分工+稽核既有 30+ 個 spec 找到的組合層級覆蓋缺口判斷,審核者親自複驗四個缺口全部屬實,不需 advisor;純新增一個 spec 檔(2 個測試),無任何原始碼變更;1 次 FIX 循環(測試自己的 locator scope 遺漏,非產品 bug);typecheck/lint/build/454 unit/27 個目標 E2E 皆綠,force 全量兩輪(107 E2E)皆綠;1 個 MINOR——FIX 根因原判斷有誤(誤歸因 NotificationCenter),審核者指出後實測確認真正原因是 Next.js route announcer,已更正 EVIDENCE 與測試註解) |
 | E03-S034 | approved | story/E03-S034-api-client-codegen | [E03-S034.md](E03-S034.md) | 獨立審核 APPROVE(`@ai-km/api-client` codegen pipeline + `openapi-fetch` runtime client + drift gate;epic 章節與 spec.md 逐字核對無出入;diff 邊界確認乾淨(只有 `packages/api-client/**`、`turbo.json`、`pnpm-lock.yaml`、`docs/stories/**`);獨立重跑 typecheck/lint/21 unit/check 皆綠;零 skip/only/passWithNoTests/`\|\| true` 等造假跡象;0 個 BLOCKER/MAJOR/MINOR)。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S034.spec.md](specs/E03-S034.spec.md) |
-| E03-S035 | approved | story/E03-S035-http-auth-client | [E03-S035.md](E03-S035.md) | 獨立審核 APPROVE(HTTP AuthClient 與 web 接線;epic 章節與 spec.md 逐字核對無出入;diff 邊界乾淨,`session-gate.tsx`/`login-form.tsx`/`mock.ts` 確認零 diff;獨立重跑 typecheck/lint/24+1577 unit 皆綠;AC1–4、6 綠,AC5 明確延後至 E03-S038 合併後補;0 個 BLOCKER/MAJOR,1 個 MINOR——AC3「5xx→SERVICE_UNAVAILABLE」字面與 auth.yaml 實際契約(INTERNAL_ERROR)有落差,已用「code 原樣保留、session-gate 只看 ok:false」的理由記錄於 EVIDENCE,不阻擋)。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S035.spec.md](specs/E03-S035.spec.md) |
+| E03-S035 | in-progress | story/E03-S035-http-auth-client | [E03-S035.md](E03-S035.md) | **程式碼已 merge 到 main(349ec67),但依 spec 第 202/205 行不得標 Done**——`Definition of Done` 明文:「AC 1–4、6 綠;AC 5 於 E03-S038 合併後補齊 evidence 才 Done」,且「L5 若 E03-S038 尚未完成,明列為待補**並不得標 Done**」。AC5(登入後第二分頁/重整/登出的跨分頁 session 存活 E2E)尚未取證,需等 W7 的 E03-S038 merge 後回補,回補完成才可改 approved。總指揮 2026-08-28 由 approved 更正為 in-progress。原審核結論保留於後:獨立審核 APPROVE(HTTP AuthClient 與 web 接線;epic 章節與 spec.md 逐字核對無出入;diff 邊界乾淨,`session-gate.tsx`/`login-form.tsx`/`mock.ts` 確認零 diff;獨立重跑 typecheck/lint/24+1577 unit 皆綠;AC1–4、6 綠,AC5 明確延後至 E03-S038 合併後補;0 個 BLOCKER/MAJOR,1 個 MINOR——AC3「5xx→SERVICE_UNAVAILABLE」字面與 auth.yaml 實際契約(INTERNAL_ERROR)有落差,已用「code 原樣保留、session-gate 只看 ok:false」的理由記錄於 EVIDENCE,不阻擋)。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S035.spec.md](specs/E03-S035.spec.md) |
 | E03-S036 | todo | — | — | `lib/conversations.ts` 改 typed-client adapter + contract-validated fake API；HARD 依賴：E04-S038、E03-S034、E03-S035；wave 2；既有 lib 測試逐案對照改寫。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S036.spec.md](specs/E03-S036.spec.md) |
 | E03-S037 | todo | — | — | `lib/messages.ts` 改 typed-client adapter（訊息／修訂／四維回饋）；HARD 依賴：E03-S036；wave 3；`message-thread.tsx` 零改動。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S037.spec.md](specs/E03-S037.spec.md) |
 | E03-S038 | todo | — | — | E2E 基礎設施（apps/api webServer、test sandbox、fake ASR、假麥克風），既有 264 E2E 零修改全綠；HARD 依賴：E02-S032、E04-S041、E04-S042、E04-S043、E03-S035、E03-S036、E03-S037；wave 5。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S038.spec.md](specs/E03-S038.spec.md) |

@@ -38,7 +38,11 @@ for (const { width, height, label } of DESKTOP_RESOLUTIONS) {
     await page.waitForURL((url) => url.pathname === "/");
 
     await expect(page.getByRole("navigation", { name: "主導覽" })).toBeVisible();
-    await expect(page.getByText("AI KM", { exact: true })).toBeVisible();
+    // E01-S033: scoped to the header's "banner" landmark — an unscoped
+    // getByText("AI KM") also matches Next.js's own route-announcer div
+    // (id="__next-route-announcer__", carries the same static site title
+    // during navigation), causing an intermittent strict-mode violation.
+    await expect(page.getByRole("banner").getByText("AI KM", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "歡迎回來", level: 1 })).toBeVisible();
     expect(await hasNoHorizontalOverflow(page)).toBe(true);
   });

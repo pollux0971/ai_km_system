@@ -34,7 +34,11 @@ test("authenticated shell shows the sidebar, header, and user-menu", async ({ pa
 
   await expect(page.getByRole("navigation", { name: "主導覽" })).toBeVisible();
   await expect(page.getByRole("link", { name: "首頁" })).toBeVisible();
-  await expect(page.getByText("AI KM", { exact: true })).toBeVisible();
+  // E01-S033: scoped to the header's "banner" landmark — an unscoped
+  // getByText("AI KM") also matches Next.js's own route-announcer div
+  // (id="__next-route-announcer__", carries the same static site title
+  // during navigation), causing an intermittent strict-mode violation.
+  await expect(page.getByRole("banner").getByText("AI KM", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: MOCK_VALID_USER_ID })).toBeVisible();
 });
 

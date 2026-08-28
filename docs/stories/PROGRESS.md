@@ -25,7 +25,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 33 | 30 | 1 | 0 | 0 | 2 |
+| E01 Application Shell & User Workspace | 33 | 30 | 2 | 0 | 0 | 1 |
 | E03 AI Conversation Experience | 46 | 39 | 0 | 3 | 0 | 4 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 15 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **229** | 213 | 1 | 7 | 1 | 7 |
+| **合計** | **229** | 213 | 2 | 7 | 1 | 6 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -75,7 +75,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S030 | approved | `story/E01-S030-playwright-ci-safety` | [E01-S030.md](E01-S030.md) | Playwright `reuseExistingServer` CI 安全模式（避免舊 process 造成假綠燈）；HARD 依賴：E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節）。`reuseExistingServer: !process.env.CI` + `helpers/port-check.ts` 新增明確 port 佔用檢查（CI 模式），單輪全量 265/277 通過、12 個失敗與既有已知結構性失敗完全一致，無新增回歸。規格：[E01-S030.spec.md](specs/E01-S030.spec.md) |
 | E01-S031 | approved | story/E01-S031-e2e-stale-assumptions | [E01-S031.md](E01-S031.md) | **修正 12 支既有 E2E 的過時假設(解除 4 個 story 的 AC)**:10 支把「硬導覽會登出」(舊 mock 的記憶體 session)當成切換使用者的手段,而 E03-S035 的真實 cookie session **正確地**撐過硬導覽;2 支 `knowledge-selector` 因真實網路延遲打破 `.check()` 的驗證視窗。全部 12 支已改為明確 `logout()` / `.click()`+`toBeChecked()`,AC3 反向驗證(暫還原 2 支確認會紅)通過。三輪全量 813 次執行:12 支清單內 100% 通過;清單外 4 次一次性逾時(`knowledge-ui-e2e`/`smoke`/`model-selector`/`multi-turn-conversation`,各僅出現 1 次、無重複),依 ROADMAP_TEMP.md 第 5-ter 節門檻不構成已具名 flaky,記錄為觀察事實。ai-km-e4 逐條對照 AC1–4 後裁示 approved。E01-S027/E03-S038/E01-S030 EVIDENCE 已補雙向留痕註記。規格:[E01-S031.spec.md](specs/E01-S031.spec.md) |
 | E01-S032 | approved | `story/E01-S032-web-build-serialization` | [E01-S032.md](E01-S032.md) | **建置競爭,擋住所有 story 的 L1 gate**:`@ai-km/e2e` 沒把 `@ai-km/web`/`@ai-km/admin` 宣告為依賴,所以 turbo 的 `^build` 不會把 `web:build` 排在 `e2e:test` 之前 → `next build` 與 e2e webServer 的 `next dev` **同時寫 `apps/web/.next`** → `Cannot find module './<chunk>.js'`/`PageNotFoundError`,且每次指向不同頁面(競爭特徵,非快取損毀;W4 已清 `.next` 後原樣重現)。目前各 lane 只能用 `--filter` 繞開,拿不到一次完整 `pnpm test` 綠燈。由 W4 發現、總指揮驗證機制。**由 W7 執行**(它是 `turbo.json` 與 `tests/e2e` 的近期修改者),排在 E03-S046 之後。修法:`tests/e2e/package.json` 新增 `@ai-km/web`/`@ai-km/admin` devDependency,讓 turbo `^build` 自然排序。反向驗證時在 `admin:build` 真實重現同一類 `PageNotFoundError`(4 秒內命中);修正後連續兩輪完整 `pnpm test`(8m50s、6m20s)皆跑完、零 race 症狀,265/277 通過,12 個失敗與既有已知結構性失敗完全一致。規格:[E01-S032.spec.md](specs/E01-S032.spec.md) |
-| E01-S033 | todo | — | — | **既有測試缺陷(非 flaky)**:`smoke.spec.ts:50` 的 `getByText('AI KM', {exact:true})` 撞上 Next.js 每次導覽注入的 `__next-route-announcer__` → strict-mode violation。觸發窗口窄故只在部分輪次命中,但 2026-08-29 已**兩次獨立重現逐字相同錯誤**(E01-S031 rebase 前、統一 E2E 驗證)。**repo 內已有三支 spec 處理過同一碰撞**(`error-boundary`、`knowledge-documents`、`knowledge-create`),本支是漏網。AC2 要求以注入 route-announcer 的方式反向驗證,**不得用「跑幾輪沒中」當證據**。由 W1 在統一驗證中發現、總指揮查證先例。**由 W2 執行** 規格:[E01-S033.spec.md](specs/E01-S033.spec.md) |
+| E01-S033 | done | `story/E01-S033-route-announcer-selector-fix` | [E01-S033.md](E01-S033.md) | `smoke.spec.ts` 的 `getByText('AI KM', {exact:true})` 撞 Next.js route-announcer 已修正(scope 到 `getByRole("banner")`,比照既有 `getByRole("main")` 先例)。AC2 以真實注入 DOM 碰撞的方式反向驗證(修正前逐字重現 strict-mode violation、修正後同一注入下通過),非空洞驗證。AC3 掃描額外發現 2 個同類漏網(`app-shell.spec.ts`、`responsive-baseline.spec.ts`)一併修正;其餘 `getByRole("alert")` 用法皆已安全。全量 E2E 306 passed/8 failed(既有 E01-S027 環境性 flaky,與本 story 無關),針對性 `--repeat-each=3` 45/45 全綠。規格:[E01-S033.spec.md](specs/E01-S033.spec.md) |
 
 ## E03 AI Conversation Experience(46)
 

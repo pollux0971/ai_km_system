@@ -64,7 +64,13 @@ test("E01-S020: golden path — anonymous visit, login, dashboard, profile, noti
   // 3. The authenticated shell chrome and dashboard content both render
   //    (E01-S005/S007/S008/S009).
   await expect(page.getByRole("navigation", { name: "主導覽" })).toBeVisible();
-  await expect(page.getByText("AI KM", { exact: true })).toBeVisible();
+  // E01-S033: scoped to the header's <header> "banner" landmark — an
+  // unscoped getByText("AI KM") also matches Next.js's own route-announcer
+  // div (id="__next-route-announcer__", injected during navigation, same
+  // page-title text), causing an intermittent strict-mode violation. Same
+  // scoping pattern knowledge-documents.spec.ts already established for the
+  // analogous getByRole("alert") collision.
+  await expect(page.getByRole("banner").getByText("AI KM", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "歡迎回來", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "最近對話", level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "快速入口", level: 2 })).toBeVisible();

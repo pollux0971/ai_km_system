@@ -34,8 +34,8 @@ mock 也做不了才標 `blocked-team-b`。
 | E13 Feedback & Analytics | 21 | 18 | 0 | 0 | 0 | 3 |
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S050) | 12 | 6 | 0 | 0 | 0 | 6 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 3 | 0 | 0 | 0 | 1 |
-| E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 0 | 0 | 2 |
-| **合計** | **222** | 189 | 0 | 2 | 1 | 30 |
+| E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 2 | 0 | 0 | 0 | 1 |
+| **合計** | **222** | 190 | 0 | 2 | 1 | 29 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -330,4 +330,4 @@ mock 也做不了才標 `blocked-team-b`。
 |---|---|---|---|---|
 | E12-S029 | approved | `story/E12-S029-transcription-contract` | [E12-S029.md](E12-S029.md) | Contract 凍結：transcription API（`contracts/openapi/transcriptions.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S029.spec.md](specs/E12-S029.spec.md) |
 | E12-S030 | todo | — | — | ASR 環境就緒（whisper-server CUDA 建置／模型指引、check-asr／verify-asr 以真實中英夾雜音檔驗證）；HARD 依賴：無；wave 0；比照 E04-S037，L3 需使用者於目標機器手動完成。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S030.spec.md](specs/E12-S030.spec.md) |
-| E12-S031 | todo | — | — | Transcription 端點（TranscriptionProvider 抽象、whisper-server adapter、fake provider、WAV 驗證、OpenCC 繁體化）；HARD 依賴：E12-S029、E04-S039；wave 1；L3 需 E12-S030。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S031.spec.md](specs/E12-S031.spec.md) |
+| E12-S031 | approved | story/E12-S031-transcription-endpoint | [E12-S031.md](E12-S031.md) | 獨立審核 APPROVE(重新獨立跑 typecheck/lint/test 皆綠——model-gateway 65/65、apps/api 91/91;範圍/邊界核對通過;發現並修正 1 個 MINOR——outer Content-Type 檢查缺測試;2 項誠實記錄的非阻擋落差:conversationId 無對應 contract reason 值改安靜捨棄、AC8 L3 真實 sidecar 需 E12-S030 尚未 approved 故未驗證)。Transcription 端點（TranscriptionProvider 抽象、whisper-server adapter、fake provider、WAV 驗證、OpenCC 繁體化）；HARD 依賴：E12-S029、E04-S039；wave 1；L3 需 E12-S030。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S031.spec.md](specs/E12-S031.spec.md) |

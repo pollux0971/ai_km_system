@@ -187,6 +187,34 @@ story 繼續逐字轉寫,**可隨時推翻本決定**,把 E04-S050 標回不做�
 - 影響範圍:
 -->
 
+### [2026-08-28] E12-S031 — `conversationId` 非 uuid 時,契約沒有對應的 `TranscriptionRejectionReason`
+
+**背景**:AC6 明文要求「`conversationId` 非uuid → 400」,但
+`contracts/openapi/transcriptions.yaml` 的 `ValidationErrorBody.details.reason`
+是必填、且只能是 `TranscriptionRejectionReason` 五個值之一
+(`MISSING_AUDIO`/`BAD_WAV_HEADER`/`UNSUPPORTED_SAMPLE_RATE`/
+`AUDIO_TOO_LONG`/`AUDIO_TOO_SHORT`),沒有一個語意上合理對應「格式錯誤的
+conversationId」。E12-S031 不在 E13-S018 那個「使用者已批准可新增 yaml」
+的例外名單內,不能自行加值配合。已用 node 一次性腳本 + 測試核實這個落差
+是真的(不是我看漏),見 `docs/stories/E12-S031.md` Assumptions 第 3 點。
+
+目前實作:`conversationId` 依 spec 本身的 Data/Contract Acceptance 明文
+「不是 authorization input、不影響行為」,格式錯誤時安靜捨棄(不記錄、
+不回 400),已用測試明確斷言。不阻擋 E12-S031 標記完成。
+
+**選項**:
+1. (推薦)維持現況(安靜捨棄) — `conversationId` 只是 telemetry
+   correlation 用途,格式錯誤不影響安全性或行為,不值得為了嚴格驗證
+   單獨開一輪 contract 變更流程。
+2. 在 `transcriptions.yaml` 補一個 `TranscriptionRejectionReason` 列舉值
+   (例如 `INVALID_CONVERSATION_ID`),讓格式驗證可以合規實作 400 — 需
+   domain owner(Team B,E12 domain)review 這個 contract 變更,並回頭
+   修改 `services/model-gateway/src/routes/transcriptions.ts` 補上驗證。
+
+**影響範圍**:只影響 E12-S031 對 AC6 這一小條的完整度;不影響其餘 7 條
+AC 與 regression 測試,不阻擋本 story approved/merge。若後續 E03-S041
+或其他 story 需要嚴格的 conversationId 驗證,屆時再回來處理。
+
 ## 已批示
 
 (目前無)

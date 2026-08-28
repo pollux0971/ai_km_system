@@ -15,10 +15,11 @@
  * budget, rather than mid-test on a spec's normal timeout.
  */
 export default async function globalSetup(): Promise<void> {
-  // apps/admin has no /login route (admin-smoke.spec.ts: "admin console
-  // home renders directly — no session gate exists yet"), so its own
-  // home page is the right warm-up target instead.
-  const targets = ["http://localhost:3000/login", "http://localhost:3001/"];
+  // E11-S026: apps/admin now has its own /login route too (previously it
+  // had none — admin-smoke.spec.ts's own comment described that earlier
+  // reality, which this story's whole point is to change), so it gets
+  // the same warm-up target as apps/web.
+  const targets = ["http://localhost:3000/login", "http://localhost:3001/login"];
   const deadline = Date.now() + 90000;
 
   await Promise.all(

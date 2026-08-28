@@ -26,6 +26,7 @@ const nextConfig: NextConfig = {
     "@ai-km/auth-client",
     "@ai-km/permissions",
     "@ai-km/logger",
+    "@ai-km/validation",
   ],
   async headers() {
     return [
@@ -40,6 +41,18 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         has: [{ type: "header", key: "x-forwarded-proto", value: "https" }],
         headers: [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }],
+      },
+    ];
+  },
+  // E11-S026 (mirrors apps/web/next.config.ts from E03-S035): same-origin
+  // proxy so the browser only ever talks to :3001. Server-side only —
+  // API_INTERNAL_URL never reaches the client bundle.
+  async rewrites() {
+    const apiInternalUrl = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:4000";
+    return [
+      {
+        source: "/api/v1/:path*",
+        destination: `${apiInternalUrl}/v1/:path*`,
       },
     ];
   },

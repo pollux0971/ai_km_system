@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import "./globals.css";
-import AdminShell from "./_components/admin-shell";
 
 export const metadata = {
   title: "AI KM Admin",
@@ -10,16 +9,15 @@ export const metadata = {
 
 /**
  * Application bootstrap root (E11-S001) — mirrors apps/web's own root
- * layout (E01-S001) for this second, separately-deployed app. Session/
- * route-level authorization remains a later concern (E11-S023 "admin
- * route authorization" built the structural guard; it stays unwired
- * until a real session source exists — see AdminRouteGuard's own doc
- * comment).
+ * layout (E01-S001) for this second, separately-deployed app.
  *
- * ux/admin-ui-overhaul: pages now render inside AdminShell (sidebar +
- * header chrome), the same layered-on-later chrome apps/web's own (app)
- * layout added in E01-S005. The shell is pure chrome and carries no
- * authorization.
+ * E11-S026: route skeleton now splits below this into a (public) zone
+ * (login — no shell, no session check) and an (app) zone (session gate
+ * + AdminRouteGuard + AdminShell chrome) — see
+ * apps/admin/src/app/(public) and apps/admin/src/app/(app). This root
+ * layout stays deliberately minimal (same as apps/web's own root
+ * layout.tsx) so neither zone inherits chrome or auth logic it
+ * shouldn't.
  */
 export default async function RootLayout({ children }: { children: ReactNode }) {
   // E01-S029: see apps/web/src/app/layout.tsx's doc comment — reading
@@ -29,9 +27,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   await headers();
   return (
     <html lang="zh-Hant">
-      <body>
-        <AdminShell>{children}</AdminShell>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

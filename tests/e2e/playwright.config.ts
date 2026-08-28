@@ -4,6 +4,7 @@ import path from "node:path";
 import { defineConfig } from "@playwright/test";
 import { ensureFakeMicrophoneWav } from "./helpers/fake-microphone";
 import { assertPortsFreeForCI, resolveReuseExistingServer } from "./helpers/port-check";
+import { STORAGE_STATE_PATH } from "./auth-storage-state";
 
 /**
  * E11-S001 adds apps/admin as a second, independently-deployed app
@@ -175,9 +176,24 @@ export default defineConfig({
       },
     },
     {
+      // E11-S026: logs into apps/admin once as demo-super and saves the
+      // resulting session cookie — see auth.setup.ts's own doc comment.
+      // Not matched by `admin`'s own testMatch (that pattern requires an
+      // `admin-` FILE prefix; this file is named `auth.setup.ts`), so it
+      // needs its own explicit testMatch here.
+      name: "setup",
+      // Overrides the top-level `testDir: "./specs"` — auth.setup.ts lives
+      // directly under tests/e2e/, not tests/e2e/specs/ (spec's own
+      // Development Boundaries name that exact path).
+      testDir: "./",
+      testMatch: /auth\.setup\.ts$/,
+      use: { baseURL: "http://localhost:3001" },
+    },
+    {
       name: "admin",
       testMatch: /admin-.*\.spec\.ts$/,
-      use: { baseURL: "http://localhost:3001" },
+      dependencies: ["setup"],
+      use: { baseURL: "http://localhost:3001", storageState: STORAGE_STATE_PATH },
     },
   ],
 });

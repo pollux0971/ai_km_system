@@ -13,6 +13,7 @@
   "dependencies": {
     "@ai-km/ui": "workspace:*",
     "@ai-km/types": "workspace:*",
+    "@ai-km/validation": "workspace:*",
     "@ai-km/api-client": "workspace:*",
     "@ai-km/auth-client": "workspace:*",
     "@ai-km/permissions": "workspace:*",

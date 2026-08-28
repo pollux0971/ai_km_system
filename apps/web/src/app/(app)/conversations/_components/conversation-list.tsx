@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { listConversations, type ConversationSummary } from "@/lib/conversations";
+import { NoConversationsIllustration } from "@/components/illustrations/empty-state-illustrations";
 
 const logger = createLogger("web:conversation-list");
 
@@ -165,6 +166,7 @@ export default function ConversationList() {
                 ? "尚無已封存的對話。"
                 : "尚無對話，開始你的第一個對話。"
           }
+          illustration={<NoConversationsIllustration />}
         />
       )}
 

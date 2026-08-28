@@ -8,7 +8,22 @@ import type { ReactNode } from "react";
  * danger-colored treatment; same plain visual register as
  * LoadingIndicator, which this and E01-S012's ErrorMessage complete the
  * loading/error/empty trio alongside.
+ *
+ * E01-S026: optional `illustration` prop — purely decorative
+ * (`aria-hidden`), so text stays the primary message; omitted entirely
+ * (no wrapper) when not given, matching the original plain-text render.
  */
-export function EmptyState({ message, children }: { message?: string; children?: ReactNode } = {}) {
-  return <p>{children ?? message ?? "目前沒有內容。"}</p>;
+export function EmptyState({
+  message,
+  children,
+  illustration,
+}: { message?: string; children?: ReactNode; illustration?: ReactNode } = {}) {
+  const text = <p>{children ?? message ?? "目前沒有內容。"}</p>;
+  if (!illustration) return text;
+  return (
+    <div>
+      <span aria-hidden="true">{illustration}</span>
+      {text}
+    </div>
+  );
 }

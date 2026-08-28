@@ -69,6 +69,16 @@ describe("ConversationList (E03-S001)", () => {
     expect(await screen.findByText("尚無對話，開始你的第一個對話。")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("E01-S026: the empty state renders the no-conversations illustration, decorative (aria-hidden)", async () => {
+    mockedListConversations.mockResolvedValue(singlePage([]));
+
+    render(<ConversationList />);
+
+    await screen.findByText("尚無對話，開始你的第一個對話。");
+    const illustration = screen.getByTestId("illustration-no-conversations");
+    expect(illustration.closest("[aria-hidden='true']")).toBeInTheDocument();
+  });
 });
 
 describe("ConversationList pagination (E03-S022)", () => {

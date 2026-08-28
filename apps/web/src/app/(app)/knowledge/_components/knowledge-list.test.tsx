@@ -81,6 +81,22 @@ describe("KnowledgeList search (E05-S002)", () => {
     expect(screen.queryByText("尚無知識庫。")).not.toBeInTheDocument();
   });
 
+  it("E01-S026: the empty state renders the no-results illustration, decorative (aria-hidden)", async () => {
+    mockedListKnowledgeBases.mockResolvedValue({
+      ok: true,
+      value: [{ id: "kb1", name: "測試知識庫", description: "測試描述", updatedAt: "2026-08-13T01:00:00.000Z" }],
+    });
+    render(<KnowledgeList />);
+    await screen.findByText("測試知識庫");
+
+    mockedListKnowledgeBases.mockResolvedValueOnce({ ok: true, value: [] });
+    fireEvent.change(screen.getByLabelText("搜尋知識庫"), { target: { value: "找不到" } });
+
+    await screen.findByText("查無符合「找不到」的知識庫。");
+    const illustration = screen.getByTestId("illustration-no-results");
+    expect(illustration.closest("[aria-hidden='true']")).toBeInTheDocument();
+  });
+
   it("the search box stays visible and keeps its typed value through a loading render, then an error render, not just the loaded state", async () => {
     mockedListKnowledgeBases.mockResolvedValue({
       ok: true,

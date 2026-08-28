@@ -165,6 +165,17 @@ describe("KnowledgeDocumentList (E05-S010)", () => {
     expect(await screen.findByText("這個知識庫尚無文件。")).toBeInTheDocument();
   });
 
+  it("E01-S026: the empty state renders the no-documents illustration, decorative (aria-hidden)", async () => {
+    mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
+    mockedListKnowledgeBaseDocuments.mockResolvedValue({ ok: true, value: [] });
+
+    render(<KnowledgeDocumentList id="kb1" />);
+
+    await screen.findByText("這個知識庫尚無文件。");
+    const illustration = screen.getByTestId("illustration-no-documents");
+    expect(illustration.closest("[aria-hidden='true']")).toBeInTheDocument();
+  });
+
   it("lists each document's name, formatted size, and upload time", async () => {
     mockedGetKnowledgeBase.mockResolvedValue({ ok: true, value: sampleKnowledgeBase });
     mockedListKnowledgeBaseDocuments.mockResolvedValue({

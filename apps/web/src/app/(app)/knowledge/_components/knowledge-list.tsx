@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { NoResultsIllustration } from "@/components/illustrations/empty-state-illustrations";
 import { listKnowledgeBases, type KnowledgeBaseSummary } from "@/lib/knowledge-bases";
 
 const logger = createLogger("web:knowledge-list");
@@ -87,7 +88,10 @@ export default function KnowledgeList() {
       {state.status === "error" && <ErrorMessage message="無法載入知識庫列表。" />}
 
       {state.status === "loaded" && state.items.length === 0 && (
-        <EmptyState message={query.trim() ? `查無符合「${query.trim()}」的知識庫。` : "尚無知識庫。"} />
+        <EmptyState
+          message={query.trim() ? `查無符合「${query.trim()}」的知識庫。` : "尚無知識庫。"}
+          illustration={<NoResultsIllustration />}
+        />
       )}
 
       {state.status === "loaded" && state.items.length > 0 && (

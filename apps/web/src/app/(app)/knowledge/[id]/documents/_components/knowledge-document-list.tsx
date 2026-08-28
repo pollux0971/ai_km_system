@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { NoDocumentsIllustration } from "@/components/illustrations/empty-state-illustrations";
 import { getKnowledgeBase, type KnowledgeBaseSummary } from "@/lib/knowledge-bases";
 import { listKnowledgeBaseDocuments, type KnowledgeBaseDocument } from "@/lib/knowledge-documents";
 import KnowledgeDocumentUpload from "./knowledge-document-upload";
@@ -402,7 +403,10 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
       )}
 
       {documents.length === 0 && (
-        <EmptyState message={viewingArchived ? "尚無已封存的文件。" : "這個知識庫尚無文件。"} />
+        <EmptyState
+          message={viewingArchived ? "尚無已封存的文件。" : "這個知識庫尚無文件。"}
+          illustration={<NoDocumentsIllustration />}
+        />
       )}
 
       {documents.length > 0 && (

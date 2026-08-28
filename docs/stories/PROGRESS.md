@@ -31,11 +31,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 26 | 0 | 0 | 0 | 0 |
-| E13 Feedback & Analytics | 21 | 19 | 0 | 1 | 0 | 1 |
+| E13 Feedback & Analytics | 21 | 19 | 0 | 2 | 0 | 0 |
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 15 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **228** | 208 | 0 | 10 | 1 | 9 |
+| **合計** | **228** | 208 | 0 | 11 | 1 | 8 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -277,7 +277,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E13-S018 | approved | story/E13-S018-analytics-contract | [E13-S018.md](E13-S018.md) | 獨立審核 APPROVE(gate 全綠含 rebase 後重跑、獨立重新產生 `analytics.d.ts` 與 committed 版本逐位元一致、獨立補做一次不同於 EVIDENCE 記錄的 mutation 測試證明 gate 有效;1 個 MINOR——`date` 查詢參數 required 為合理但未記錄的判斷,不阻擋)。Contract：analytics API（usage-events、usage/latency metrics、feedback queue、admin health）；HARD 依賴：E02-S031、E04-S038（皆 approved）；wave D1。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S018.spec.md](specs/E13-S018.spec.md) |
 | E13-S019 | approved | `story/E13-S019-feedback-service` | [E13-S019.md](E13-S019.md) | `services/feedback` 實作(usage-events 持久化、彙總、跨 owner feedback read model 角色守門)。新套件 `@ai-km/service-feedback`:`POST /usage-events`(body schema 來自真正的 `getSchema`)、`GET /admin/metrics/{usage,latency}`、`GET /admin/feedback`、`GET /admin/feedback/{id}`,`requireAnyRole` 直接從 identity 匯入(無狀態純函式,同 E04-S047 `/admin/health` 既有模式)。跨 owner read model(`adminListMessagesWithFeedback`/`adminGetMessage`)放在 `services/conversation`(該 domain 擁有 `messages` 表),grep 迴歸測試鎖住只有 admin route 能呼叫、已對抗性複驗確認會抓到違規呼叫。`server.ts` 比照 E04-S050 條件註冊於 `"analytics"` spec。副帶修正 `csrf-route-scan.test.ts`(E04-S048)缺少新路由的 payload 項(既有 forcing-function 設計本身要求,只新增不修改)。`apps/api` 152/152(145+7 新增)、`service-feedback` 43/43(全新)、`service-conversation` 208/208(198+10 新增)、`service-identity`/`service-model-gateway` 零修改全綠、`contracts/` 零 diff。HARD 依賴:E13-S018、E04-S040、E04-S043、E02-S033(皆 approved) 規格:[E13-S019.spec.md](specs/E13-S019.spec.md) |
 | E13-S020 | in-progress | `story/E13-S020-usage-events-server` | [E13-S020.md](E13-S020.md) | apps/web `usage-events.ts` 改送 server（純函式保留，E13-S009～S013/S017 測試對照改寫）；typecheck 27/27、lint 27/27、unit 全綠（`apps/web` 1617/1617 含新 34+12 個測試、`api-client` 21/21 零修改）、AC4 grep 零命中、`packages/api-client` 加 `analytics` spec（跨 story 授權擴充，見 EVIDENCE）皆已完成。**5 支 E2E 待 E03-S038 完成 sandbox 種子接線後補跑**（curl 已證實真實後端 `GET /v1/conversations` 目前回空清單，5 支 spec 依賴的種子對話「產品保固政策詢問」尚未存在，非本 story 造成的回歸；ai-km-e4 裁示不需為取得正式紅燈記錄而重跑已知會失敗的 Playwright）；HARD 依賴：E13-S018、E03-S034、E03-S036（皆 approved）；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S020.spec.md](specs/E13-S020.spec.md) |
-| E13-S021 | todo | — | — | apps/admin 回饋佇列／使用量／延遲／系統健康接真實 API（移除永遠空／零／null／unknown stub）；HARD 依賴：E11-S026、E13-S018、E03-S034；wave D3；E11-S016/S017/S021/S022、E13-S007/S008/S012/S013/S014 空殼補完。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S021.spec.md](specs/E13-S021.spec.md) |
+| E13-S021 | in-progress | `story/E13-S021-admin-real-api` | — | apps/admin 回饋佇列／使用量／延遲／系統健康接真實 API（移除永遠空／零／null／unknown stub）；HARD 依賴：E11-S026、E13-S018、E03-S034；wave D3；E11-S016/S017/S021/S022、E13-S007/S008/S012/S013/S014 空殼補完。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S021.spec.md](specs/E13-S021.spec.md) |
 
 
 ## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,16)

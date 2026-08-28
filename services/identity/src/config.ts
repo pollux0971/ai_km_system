@@ -19,6 +19,13 @@ export interface IdentityConfig {
   readonly devTriggers: boolean;
   readonly testSandbox: boolean;
   readonly seedDemoUsers: boolean;
+  /**
+   * `AI_KM_SESSION_COOKIE_DOMAIN` (E02-S033, optional). Unset -> host-only
+   * cookie, the right default when apps/web/apps/admin share a host. Not a
+   * security bypass flag, so unlike the three booleans above it carries no
+   * production restriction.
+   */
+  readonly sessionCookieDomain: string | undefined;
 }
 
 export class IdentityConfigError extends Error {
@@ -53,6 +60,8 @@ export function loadIdentityConfig(env: NodeJS.ProcessEnv = process.env): Identi
   // production, so the default flips with nodeEnv rather than needing every
   // production deploy to remember to opt out.
   const seedDemoUsers = readBoolean(env, "AI_KM_SEED_DEMO_USERS", nodeEnv !== "production");
+  const rawCookieDomain = env.AI_KM_SESSION_COOKIE_DOMAIN;
+  const sessionCookieDomain = rawCookieDomain === undefined || rawCookieDomain === "" ? undefined : rawCookieDomain;
 
   if (nodeEnv === "production" && devTriggers) {
     throw new IdentityConfigError(
@@ -70,5 +79,5 @@ export function loadIdentityConfig(env: NodeJS.ProcessEnv = process.env): Identi
     );
   }
 
-  return Object.freeze({ nodeEnv, devTriggers, testSandbox, seedDemoUsers });
+  return Object.freeze({ nodeEnv, devTriggers, testSandbox, seedDemoUsers, sessionCookieDomain });
 }

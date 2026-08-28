@@ -9,6 +9,8 @@ import {
   SESSION_COOKIE_NAME,
   buildRealRequireSession,
   composeRequireSession,
+  requireAnyRole,
+  setSessionCookie,
 } from "./require-session.js";
 
 const NOW = "2026-08-28T05:00:00.000Z";
@@ -195,5 +197,159 @@ describe("composeRequireSession (AC9 / preserves the E04-S039 seam)", () => {
     });
     expect(res.statusCode).toBe(401);
     expect(previous).not.toHaveBeenCalled();
+  });
+});
+
+describe("requireAnyRole (E02-S033, AC2/AC3)", () => {
+  async function tokenFor(username: string): Promise<string> {
+    await seedDemoUsers(db, { seedDemoUsers: true }, NOW);
+    const user = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as { id: string };
+    const token = generateSessionToken();
+    insertSession(db, {
+      id: `sess-${username}`,
+      tokenHash: hashSessionToken(token),
+      userId: user.id,
+      ownerKey: user.id,
+      createdAt: NOW,
+      lastSeenAt: NOW,
+      expiresAt: FAR_FUTURE,
+    });
+    return token;
+  }
+
+  async function buildGuardedApp(): Promise<FastifyInstance> {
+    const instance = Fastify();
+    await instance.register(cookie);
+    instance.get(
+      "/auditor-only",
+      { preHandler: [buildRealRequireSession(db), requireAnyRole(["auditor"])] },
+      async () => ({ ok: true }),
+    );
+    await instance.ready();
+    return instance;
+  }
+
+  it("200s for a user who holds the required role (demo-auditor)", async () => {
+    const token = await tokenFor("demo-auditor");
+    app = await buildGuardedApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/auditor-only",
+      cookies: { [SESSION_COOKIE_NAME]: token },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("403s PERMISSION_DENIED for a user who does not hold the required role (demo-user)", async () => {
+    const token = await tokenFor("demo-user");
+    app = await buildGuardedApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/auditor-only",
+      cookies: { [SESSION_COOKIE_NAME]: token },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe("PERMISSION_DENIED");
+  });
+
+  it("does not leak the required roles list in the 403 body", async () => {
+    const token = await tokenFor("demo-user");
+    app = await buildGuardedApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/auditor-only",
+      cookies: { [SESSION_COOKIE_NAME]: token },
+    });
+    expect(res.body).not.toContain("auditor");
+  });
+
+  it("401s with no session at all (requireSession denies before requireAnyRole runs)", async () => {
+    app = await buildGuardedApp();
+    const res = await app.inject({ method: "GET", url: "/auditor-only" });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("super_administrator always passes, even though it is not in the required roles list (implicit pass)", async () => {
+    const token = await tokenFor("demo-super");
+    app = await buildGuardedApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/auditor-only",
+      cookies: { [SESSION_COOKIE_NAME]: token },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("regression: an empty required-roles intersection still passes for super_administrator", async () => {
+    const token = await tokenFor("demo-super");
+    const instance = Fastify();
+    await instance.register(cookie);
+    instance.get(
+      "/nobody-else-qualifies",
+      { preHandler: [buildRealRequireSession(db), requireAnyRole(["knowledge_manager"])] },
+      async () => ({ ok: true }),
+    );
+    await instance.ready();
+    app = instance;
+    const res = await app.inject({
+      method: "GET",
+      url: "/nobody-else-qualifies",
+      cookies: { [SESSION_COOKIE_NAME]: token },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("403s when the role intersection is genuinely empty (regression: intersection-empty must still deny)", async () => {
+    const token = await tokenFor("demo-km");
+    const instance = Fastify();
+    await instance.register(cookie);
+    instance.get(
+      "/it-only",
+      { preHandler: [buildRealRequireSession(db), requireAnyRole(["it_administrator"])] },
+      async () => ({ ok: true }),
+    );
+    await instance.ready();
+    app = instance;
+    const res = await app.inject({
+      method: "GET",
+      url: "/it-only",
+      cookies: { [SESSION_COOKIE_NAME]: token },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("session cookie Domain attribute (E02-S033 AC4)", () => {
+  it("setSessionCookie includes Domain when a domain is passed", async () => {
+    const instance = Fastify();
+    await instance.register(cookie);
+    instance.get("/set", async (request, reply) => {
+      setSessionCookie(reply, request, "tok", "example.internal");
+      return { ok: true };
+    });
+    await instance.ready();
+    app = instance;
+    const res = await app.inject({ method: "GET", url: "/set" });
+    expect(res.headers["set-cookie"]).toMatch(/Domain=example\.internal/i);
+  });
+
+  it("setSessionCookie omits Domain when none is passed", async () => {
+    const instance = Fastify();
+    await instance.register(cookie);
+    instance.get("/set", async (request, reply) => {
+      setSessionCookie(reply, request, "tok");
+      return { ok: true };
+    });
+    await instance.ready();
+    app = instance;
+    const res = await app.inject({ method: "GET", url: "/set" });
+    expect(res.headers["set-cookie"]).not.toMatch(/Domain=/i);
+  });
+
+  it("clearSessionCookie (deny path) also carries Domain, so a browser can actually delete a domain-scoped cookie", async () => {
+    app = await buildApp(buildRealRequireSession(db, "example.internal"));
+    const res = await app.inject({ method: "GET", url: "/protected" });
+    expect(res.statusCode).toBe(401);
+    expect(res.headers["set-cookie"]).toMatch(/Domain=example\.internal/i);
   });
 });

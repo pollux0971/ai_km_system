@@ -9,6 +9,7 @@ import { findSessionWithUserByTokenHash } from "./repository.js";
 import { hashSessionToken } from "./crypto.js";
 import { _resetSandboxSeedersForTest, registerSandboxSeeder } from "./sandbox-seeders.js";
 import { identityPlugin } from "./plugin.js";
+import { requireAnyRole } from "./require-session.js";
 
 let harness: Awaited<ReturnType<typeof buildTestApp>> | undefined;
 
@@ -494,7 +495,7 @@ describe("AC8 — seeding is idempotent across a restart against the same databa
     await second.ready();
 
     const count = (db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n;
-    expect(count).toBe(4);
+    expect(count).toBe(10); // 4 (E02-S032) + 6 admin accounts (E02-S033)
 
     await second.close();
     // `harness` (= first) is closed by the afterEach hook, which also closes `db`.
@@ -506,5 +507,105 @@ describe("no dependency on apps/api's own contract/error-envelope machinery", ()
     const { app } = await build();
     const res = await app.inject({ method: "GET", url: "/v1/auth/session" });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe("E02-S033 AC2 — requireAnyRole chained after app.requireSession, through the full plugin", () => {
+  let db: Database;
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  async function buildGuardedApp(): Promise<FastifyInstance> {
+    db = createTestDatabase();
+    app = Fastify();
+    await app.register(cookiePlugin);
+    app.decorate("db", db);
+    app.addHook("onClose", async () => db.close());
+    await app.register(identityPlugin);
+    app.get(
+      "/__audit__",
+      { preHandler: [app.requireSession, requireAnyRole(["auditor"])] },
+      async () => ({ ok: true }),
+    );
+    await app.ready();
+    return app;
+  }
+
+  async function loginAs(instance: FastifyInstance, username: string): Promise<string> {
+    const res = await instance.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username, password: "demo-pass-123" },
+    });
+    const match = String(res.headers["set-cookie"]).match(/ai_km_session=([^;]+)/);
+    if (!match?.[1]) throw new Error("login did not set a session cookie");
+    return match[1];
+  }
+
+  it("200s for demo-auditor", async () => {
+    const instance = await buildGuardedApp();
+    const cookieValue = await loginAs(instance, "demo-auditor");
+    const res = await instance.inject({ method: "GET", url: "/__audit__", cookies: { ai_km_session: cookieValue } });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("403s for demo-user", async () => {
+    const instance = await buildGuardedApp();
+    const cookieValue = await loginAs(instance, "demo-user");
+    const res = await instance.inject({ method: "GET", url: "/__audit__", cookies: { ai_km_session: cookieValue } });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("401s when not logged in", async () => {
+    const instance = await buildGuardedApp();
+    const res = await instance.inject({ method: "GET", url: "/__audit__" });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("200s for demo-super (implicit super_administrator pass)", async () => {
+    const instance = await buildGuardedApp();
+    const cookieValue = await loginAs(instance, "demo-super");
+    const res = await instance.inject({ method: "GET", url: "/__audit__", cookies: { ai_km_session: cookieValue } });
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+describe("E02-S033 AC4 — AI_KM_SESSION_COOKIE_DOMAIN, end to end through login/logout", () => {
+  it("login's Set-Cookie carries Domain when configured", async () => {
+    const { app } = await build({ AI_KM_SESSION_COOKIE_DOMAIN: "example.internal" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    expect(setCookieHeader(res)).toMatch(/Domain=example\.internal/i);
+  });
+
+  it("login's Set-Cookie has no Domain when unset", async () => {
+    const { app } = await build();
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    expect(setCookieHeader(res)).not.toMatch(/Domain=/i);
+  });
+
+  it("logout's clearing Set-Cookie ALSO carries the same Domain (otherwise a browser would not actually delete it)", async () => {
+    const { app } = await build({ AI_KM_SESSION_COOKIE_DOMAIN: "example.internal" });
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/logout",
+      cookies: { ai_km_session: sessionCookieFrom(login) },
+    });
+    expect(setCookieHeader(res)).toMatch(/Domain=example\.internal/i);
   });
 });

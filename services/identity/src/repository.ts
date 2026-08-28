@@ -10,6 +10,7 @@
  * domain table.
  */
 import type { Database } from "better-sqlite3";
+import type { Role } from "@ai-km/permissions";
 import { hashPassword } from "./crypto.js";
 import type { IdentityConfig } from "./config.js";
 
@@ -130,7 +131,8 @@ interface DemoAccountSeed {
   readonly email: string;
   readonly department: string;
   readonly group: string;
-  readonly roles: readonly string[];
+  /** Must come from `@ai-km/permissions`'s `Role` union (E02-S033: type-checked, not a bare string). */
+  readonly roles: readonly Role[];
   readonly disabled: boolean;
 }
 
@@ -138,7 +140,10 @@ interface DemoAccountSeed {
  * Field-for-field `packages/auth-client/src/mock.ts`'s `ACCOUNTS` (per AC8 /
  * the story's Scope), plus one disabled account exercising `ACCOUNT_DISABLED`
  * — the mock's `username === "disabled"` trigger has no ACCOUNTS entry of
- * its own to copy, so this row's shape is this story's to define.
+ * its own to copy, so this row's shape is this story's to define — plus
+ * (E02-S033) one admin account per remaining `Role`, one role each, so
+ * `requireAnyRole` has a real account to prove every role in isolation
+ * against.
  */
 const DEMO_ACCOUNTS: readonly DemoAccountSeed[] = [
   {
@@ -184,6 +189,72 @@ const DEMO_ACCOUNTS: readonly DemoAccountSeed[] = [
     group: "一般使用者群組",
     roles: ["general_user"],
     disabled: true,
+  },
+  {
+    id: "mock-user-super",
+    username: "demo-super",
+    password: "demo-pass-123",
+    name: "示範最高管理員",
+    email: "demo-super@example.com",
+    department: "資訊部",
+    group: "系統管理群組",
+    roles: ["super_administrator"],
+    disabled: false,
+  },
+  {
+    id: "mock-user-it-admin",
+    username: "demo-it",
+    password: "demo-pass-123",
+    name: "示範資訊管理員",
+    email: "demo-it@example.com",
+    department: "資訊部",
+    group: "系統管理群組",
+    roles: ["it_administrator"],
+    disabled: false,
+  },
+  {
+    id: "mock-user-ai-admin",
+    username: "demo-ai",
+    password: "demo-pass-123",
+    name: "示範 AI 管理員",
+    email: "demo-ai@example.com",
+    department: "資訊部",
+    group: "系統管理群組",
+    roles: ["ai_administrator"],
+    disabled: false,
+  },
+  {
+    id: "mock-user-auditor",
+    username: "demo-auditor",
+    password: "demo-pass-123",
+    name: "示範稽核人員",
+    email: "demo-auditor@example.com",
+    department: "稽核部",
+    group: "稽核群組",
+    roles: ["auditor"],
+    disabled: false,
+  },
+  {
+    id: "mock-user-km",
+    username: "demo-km",
+    password: "demo-pass-123",
+    name: "示範知識管理員",
+    email: "demo-km@example.com",
+    department: "知識管理部",
+    group: "知識管理群組",
+    roles: ["knowledge_manager"],
+    disabled: false,
+  },
+  {
+    id: "mock-user-manager",
+    username: "demo-manager",
+    password: "demo-pass-123",
+    name: "示範部門主管",
+    email: "demo-manager@example.com",
+    department: "業務部",
+    group: "部門主管群組",
+    roles: ["department_manager"],
+    disabled: false,
   },
 ];
 

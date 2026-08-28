@@ -66,9 +66,9 @@ describe("seedDemoUsers (AC8: idempotent)", () => {
     expect(countUsers(db)).toBe(0);
   });
 
-  it("seeds exactly the 4 demo accounts (3 mock ACCOUNTS + disabled)", async () => {
+  it("seeds exactly the 10 demo accounts (3 mock ACCOUNTS + disabled + 6 admin roles, E02-S033)", async () => {
     await seedDemoUsers(db, { seedDemoUsers: true }, NOW);
-    expect(countUsers(db)).toBe(4);
+    expect(countUsers(db)).toBe(10);
     const demoUser = findUserByUsername(db, "demo-user");
     expect(demoUser).toMatchObject({
       id: "mock-user-1",
@@ -96,7 +96,36 @@ describe("seedDemoUsers (AC8: idempotent)", () => {
   it("does not re-create users on a second call once users exist (idempotent restart)", async () => {
     await seedDemoUsers(db, { seedDemoUsers: true }, NOW);
     await seedDemoUsers(db, { seedDemoUsers: true }, NOW);
-    expect(countUsers(db)).toBe(4);
+    expect(countUsers(db)).toBe(10);
+  });
+
+  describe("E02-S033 — 6 admin accounts, one Role each", () => {
+    const ADMIN_ACCOUNTS: Array<{ username: string; role: string }> = [
+      { username: "demo-super", role: "super_administrator" },
+      { username: "demo-it", role: "it_administrator" },
+      { username: "demo-ai", role: "ai_administrator" },
+      { username: "demo-auditor", role: "auditor" },
+      { username: "demo-km", role: "knowledge_manager" },
+      { username: "demo-manager", role: "department_manager" },
+    ];
+
+    it.each(ADMIN_ACCOUNTS)("seeds $username with exactly [$role], not disabled", async ({ username, role }) => {
+      await seedDemoUsers(db, { seedDemoUsers: true }, NOW);
+      const account = findUserByUsername(db, username);
+      expect(account).toBeDefined();
+      expect(account?.disabled).toBe(0);
+      expect(JSON.parse(account!.roles)).toEqual([role]);
+    });
+
+    it("gives every admin account a distinct id (no collision with the E02-S032 accounts)", async () => {
+      await seedDemoUsers(db, { seedDemoUsers: true }, NOW);
+      const ids = new Set(
+        ["demo-user", "demo-maintenance", "demo-sales", "disabled", ...ADMIN_ACCOUNTS.map((a) => a.username)].map(
+          (username) => findUserByUsername(db, username)!.id,
+        ),
+      );
+      expect(ids.size).toBe(10);
+    });
   });
 });
 

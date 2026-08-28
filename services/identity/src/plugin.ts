@@ -148,19 +148,19 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
       expiresAt: expiresAtIso,
     });
 
-    setSessionCookie(reply, request, token);
+    setSessionCookie(reply, request, token, config.sessionCookieDomain);
     reply.code(200);
     return toAuthSessionBodyFromUser(user, expiresAtIso);
   };
 }
 
-function buildLogoutHandler(app: FastifyInstance) {
+function buildLogoutHandler(app: FastifyInstance, config: IdentityConfig) {
   return async function logout(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> {
     const token = request.cookies?.[SESSION_COOKIE_NAME];
     if (typeof token === "string" && token.length > 0) {
       deleteSessionByTokenHash(app.db, hashSessionToken(token));
     }
-    clearSessionCookie(reply, request);
+    clearSessionCookie(reply, request, config.sessionCookieDomain);
     reply.code(204);
     return reply.send();
   };
@@ -216,11 +216,11 @@ const identityPluginImpl: FastifyPluginAsync = async (app) => {
     clearInterval(cleanupTimer);
   });
 
-  const realRequireSession = buildRealRequireSession(app.db);
-  app.requireSession = composeRequireSession(realRequireSession, previousRequireSession);
+  const realRequireSession = buildRealRequireSession(app.db, config.sessionCookieDomain);
+  app.requireSession = composeRequireSession(realRequireSession, previousRequireSession, config.sessionCookieDomain);
 
   app.post("/v1/auth/login", { schema: { body: LOGIN_REQUEST_SCHEMA } }, buildLoginHandler(app, config));
-  app.post("/v1/auth/logout", buildLogoutHandler(app));
+  app.post("/v1/auth/logout", buildLogoutHandler(app, config));
   app.get("/v1/auth/session", { preHandler: realRequireSession }, buildSessionHandler(app));
 };
 

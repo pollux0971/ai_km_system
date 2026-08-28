@@ -3,6 +3,7 @@ import { cpus, tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig } from "@playwright/test";
 import { ensureFakeMicrophoneWav } from "./helpers/fake-microphone";
+import { assertPortsFreeForCI, resolveReuseExistingServer } from "./helpers/port-check";
 
 /**
  * E11-S001 adds apps/admin as a second, independently-deployed app
@@ -57,6 +58,15 @@ const API_BASE_URL = `http://127.0.0.1:${API_PORT}`;
 // too late to reach `use.launchOptions.args`).
 const FAKE_MIC_WAV = ensureFakeMicrophoneWav();
 
+// E01-S030: also synchronous and also before defineConfig() — a CI run
+// with a leftover process still on 3000/3001 (e.g. an interrupted previous
+// run) must fail loudly right here, before Playwright even attempts to
+// start `web`/`admin`'s webServer, not silently test old code under a
+// false green. See helpers/port-check.ts's own doc comment. No-op outside
+// CI (local dev keeps `reuseExistingServer: true` below and relies on
+// that, not this check).
+assertPortsFreeForCI([3000, 3001]);
+
 export default defineConfig({
   testDir: "./specs",
   // Warms up /login on both apps after webServer readiness but before any
@@ -99,7 +109,11 @@ export default defineConfig({
     {
       command: "pnpm --filter @ai-km/web dev",
       url: "http://localhost:3000",
-      reuseExistingServer: true,
+      // E01-S030: `!process.env.CI` — local dev keeps the old `true`
+      // (convenient: don't restart on every run); CI always starts fresh,
+      // backed by the loud pre-flight check above instead of silently
+      // adopting a leftover process. See helpers/port-check.ts.
+      reuseExistingServer: resolveReuseExistingServer(),
       timeout: 120000,
       env: {
         API_INTERNAL_URL: API_BASE_URL,
@@ -108,7 +122,8 @@ export default defineConfig({
     {
       command: "pnpm --filter @ai-km/admin dev -p 3001",
       url: "http://localhost:3001",
-      reuseExistingServer: true,
+      // E01-S030: see the `web` entry above — same reasoning.
+      reuseExistingServer: resolveReuseExistingServer(),
       timeout: 120000,
       env: {
         API_INTERNAL_URL: API_BASE_URL,

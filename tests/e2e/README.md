@@ -19,9 +19,9 @@ started manually.
 
 | Server | Port | Started by | `reuseExistingServer` |
 |---|---|---|---|
-| `apps/web` | 3000 | Playwright `webServer` | `true` (pre-existing behaviour; E01-S030 will make this CI-conditional) |
-| `apps/admin` | 3001 | Playwright `webServer` | `true` (same) |
-| `apps/api` | **4100** — deliberately NOT 4000 | Playwright `webServer` | **`false`** |
+| `apps/web` | 3000 | Playwright `webServer` | `!process.env.CI` (E01-S030) |
+| `apps/admin` | 3001 | Playwright `webServer` | `!process.env.CI` (same) |
+| `apps/api` | **4100** — deliberately NOT 4000 | Playwright `webServer` | **`false`** (always — see below) |
 
 `apps/api` runs on 4100, not the "default" 4000, and always starts its own
 fresh instance (`reuseExistingServer: false`). This is deliberate, not an
@@ -35,6 +35,38 @@ this story's own development, see `docs/stories/E03-S038.md`'s EVIDENCE. A
 brand-new webServer entry doesn't need to wait on E01-S030's CI-conditional
 fix to get this right: if port 4100 is ever unexpectedly occupied, this
 config fails loudly instead of silently adopting whatever is there.
+
+## Local vs CI: `reuseExistingServer` (E01-S030)
+
+`web`/`admin` use `reuseExistingServer: !process.env.CI` — local dev keeps
+the old `true` (convenient: skip the ~10-20s dev-server boot on every run
+if one's already up), but any run with `CI` set always starts a fresh
+server and treats an occupied port as a hard failure, never a silent reuse.
+
+**Why this matters more here than in most repos**: this suite now runs
+against a real backend with real persisted state (E03-S038) instead of a
+stateless client-side mock. A CI run that silently reused a leftover
+`apps/web`/`apps/admin` process from an interrupted previous run wouldn't
+just be wasteful — it would test **old code** and report a false green,
+with a real (if throwaway) database making the failure mode more
+convincing, not less.
+
+On top of Playwright's own default behaviour (which would eventually fail
+with a possibly-cryptic `EADDRINUSE` from the underlying `next dev`
+process), `playwright.config.ts` calls `helpers/port-check.ts`'s
+`assertPortsFreeForCI([3000, 3001])` synchronously at module load time —
+before Playwright even attempts to start any webServer — so a CI run with
+a leftover process fails immediately with the port number AND the
+occupying process (via `ss -ltnp`, the same tool this fleet's own
+`.e2e.lock` scripts use). No-op outside CI. `apps/api` doesn't need this
+same check: it's already `reuseExistingServer: false` unconditionally (see
+above), so an occupied :4100 already fails loudly via the underlying
+dev-server's own bind failure.
+
+`helpers/port-check.ts`'s own unit tests (`specs/port-check.spec.ts`)
+exercise this logic directly — a real (if ephemeral, throwaway) `net`
+listener standing in for "something left the port occupied" — deliberately
+without needing a real CI run or a real leftover process to reproduce.
 
 ## `apps/api`'s E2E environment
 

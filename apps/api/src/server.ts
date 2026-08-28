@@ -29,7 +29,7 @@ import { registerAuth } from "./auth-decorator.js";
 import { loadContracts, resolveContractsDir, type ContractRegistry } from "./contracts.js";
 import { databasePlugin } from "./db/plugin.js";
 import { resolveMigrationsDir } from "./db/migrate.js";
-import { conversationPlugin, conversationSandboxSeeders, messageSandboxSeeders, toOwnerKey } from "@ai-km/service-conversation";
+import { conversationPlugin, conversationSandboxSeeders, toOwnerKey } from "@ai-km/service-conversation";
 import { identityPlugin, registerSandboxSeeder, requireAnyRole } from "@ai-km/service-identity";
 import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
 import { createHealthChecker, overallStatus } from "./health/checks.js";
@@ -58,6 +58,18 @@ import "./types.js";
  * Safe under this test suite's actual concurrency model (vitest isolates
  * module state per test FILE, and within a file, tests build one server at a
  * time — never two live `buildServer()` instances needing to seed at once).
+ *
+ * E04-S053: only `conversationSandboxSeeders` is wired in — NOT
+ * `messageSandboxSeeders`. The existing 264 E2E specs are written against
+ * `apps/web/src/test/fake-api.ts`'s client-side fake, whose sandbox seeds
+ * conversations but leaves every one of them empty (`messageStore = []`)
+ * — that IS the established contract those specs assert against. Seeding
+ * messages too (E04-S052's original scope) made every "opening a
+ * conversation should show no messages yet" spec fail. `messageSandboxSeeders`
+ * itself is untouched and still exported from `@ai-km/service-conversation`
+ * (E04-S042's legitimate output) — a future story that specifically needs
+ * seeded messages (e.g. E03-S044) can call it explicitly; it is simply no
+ * longer part of the sandbox's DEFAULT starting state.
  */
 let sandboxDb: Database | undefined;
 let sandboxSeederRegistered = false;
@@ -69,7 +81,6 @@ function ensureSandboxSeederRegistered(): void {
     if (!sandboxDb) return;
     const owner = toOwnerKey(ownerKey);
     for (const seeder of conversationSandboxSeeders) seeder.seed(sandboxDb!, owner);
-    for (const seeder of messageSandboxSeeders) seeder.seed(sandboxDb!, owner);
   });
 }
 

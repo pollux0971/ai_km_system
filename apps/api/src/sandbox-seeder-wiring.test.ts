@@ -57,7 +57,7 @@ async function buildRealServer(): Promise<FastifyInstance> {
 }
 
 describe("sandbox seeder wiring (E04-S052)", () => {
-  it("AC1: AI_KM_TEST_SANDBOX=true — a real login's ownerKey has seeded conversations and messages", async () => {
+  it("AC1: AI_KM_TEST_SANDBOX=true — a real login's ownerKey has seeded conversations, each still empty (E04-S053)", async () => {
     process.env.AI_KM_TEST_SANDBOX = "true";
     const server = await buildRealServer();
     const cookie = await loginAsDemoSuperAdmin(server);
@@ -70,14 +70,19 @@ describe("sandbox seeder wiring (E04-S052)", () => {
       ["Q3 銷售報表彙整", "產品保固政策詢問", "設備 E-204 錯誤代碼排查"].sort(),
     );
 
-    const withMessages = body.items.find((c) => c.title === "產品保固政策詢問")!;
+    // E04-S053: sandbox seeding was narrowed to conversations only — the
+    // existing 264 E2E specs (apps/web/src/test/fake-api.ts's own fake
+    // sandbox) assert every conversation starts with zero messages.
+    // `messageSandboxSeeders` still exists and is unit-tested on its own
+    // (E04-S042); it is just no longer part of this default wiring.
+    const withoutMessages = body.items.find((c) => c.title === "產品保固政策詢問")!;
     const messages = await server.inject({
       method: "GET",
-      url: `/v1/conversations/${withMessages.id}/messages`,
+      url: `/v1/conversations/${withoutMessages.id}/messages`,
       headers: { cookie },
     });
     expect(messages.statusCode).toBe(200);
-    expect((messages.json() as unknown[]).length).toBeGreaterThan(0);
+    expect(messages.json()).toEqual([]);
   });
 
   it("AC2: AI_KM_TEST_SANDBOX not set — a real login's ownerKey has NO seeded data (no side effect)", async () => {

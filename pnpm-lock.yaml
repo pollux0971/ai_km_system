@@ -99,6 +99,9 @@ importers:
       '@ai-km/service-conversation':
         specifier: workspace:*
         version: link:../../services/conversation
+      '@ai-km/service-feedback':
+        specifier: workspace:*
+        version: link:../../services/feedback
       '@ai-km/service-identity':
         specifier: workspace:*
         version: link:../../services/identity

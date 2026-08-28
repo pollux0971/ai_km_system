@@ -32,6 +32,7 @@ import { resolveMigrationsDir } from "./db/migrate.js";
 import { conversationPlugin, conversationSandboxSeeders, toOwnerKey } from "@ai-km/service-conversation";
 import { identityPlugin, registerSandboxSeeder, requireAnyRole } from "@ai-km/service-identity";
 import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
+import { feedbackPlugin } from "@ai-km/service-feedback";
 import { createHealthChecker, overallStatus } from "./health/checks.js";
 import "./types.js";
 
@@ -243,6 +244,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // there is nothing to authorize because the route was never registered).
   if (contracts.specNames().includes("conversations")) {
     await app.register(conversationPlugin);
+  }
+  // E13-S019 — usage-events + admin metrics/feedback read model. Same
+  // conditional-registration guard as `conversationPlugin` above, and for
+  // the identical reason: its routes bind schemas from `app.contracts
+  // .getSchema("analytics", ...)` at registration time.
+  if (contracts.specNames().includes("analytics")) {
+    await app.register(feedbackPlugin);
   }
   // E12-S031 — POST /v1/transcriptions (ASR). config.ts is outside this
   // story's allowed-modify list, so the two fields it already reads

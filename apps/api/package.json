@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ai-km/service-conversation": "workspace:*",
+    "@ai-km/service-feedback": "workspace:*",
     "@ai-km/service-identity": "workspace:*",
     "@ai-km/service-model-gateway": "workspace:*",
     "@apidevtools/json-schema-ref-parser": "^11.7.2",

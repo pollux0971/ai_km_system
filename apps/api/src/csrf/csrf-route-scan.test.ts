@@ -56,6 +56,12 @@ function payloadFor(route: RouteEntry): Record<string, unknown> {
   if (route.path === "/v1/auth/login") {
     return { username: "demo-user", password: "demo-pass-123" };
   }
+  if (route.path === "/v1/usage-events") {
+    // E13-S019: a schema-conforming, non-future timestamp — this route's own
+    // 400 (occurredAt >5 min in the future) is a business-rule check that
+    // runs AFTER the CSRF-fused preHandler, so it must never fire here.
+    return { name: "conversation_created", occurredAt: "2026-01-01T00:00:00.000Z" };
+  }
   if (route.path === "/v1/conversations/:conversationId/messages/:messageId/feedback") {
     return { verdict: "NG" };
   }

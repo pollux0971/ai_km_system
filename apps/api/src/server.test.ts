@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { buildServer } from "./server.js";
 import { ApiHttpError, ERROR_CODES } from "./errors.js";
 import { loadConfig } from "./config.js";
@@ -309,5 +309,23 @@ describe("CORS (Security AC)", () => {
 describe("ApiHttpError is usable by downstream plugins", () => {
   it("is exported for E02-S032 / E04-S040+ to throw", () => {
     expect(new ApiHttpError(ERROR_CODES.PERMISSION_DENIED, 403, "無權限。").statusCode).toBe(403);
+  });
+});
+
+describe("bootstrap order (E04-S049 AC1/AC2)", () => {
+  it("makes app.contracts available at route-registration time, at the same point real domain plugins register", async () => {
+    let sawSchema: unknown;
+    const probePlugin: FastifyPluginAsync = async (probeApp) => {
+      // Synchronous call during THIS plugin's own registration — this is
+      // exactly what a domain route's `schema: { body: app.contracts
+      // .getSchema(...) }` does. Before the E04-S049 fix, app.contracts was
+      // still undefined here and this threw a TypeError.
+      sawSchema = probeApp.contracts.getSchema("conversations", "Conversation");
+    };
+
+    const config = loadConfig({ NODE_ENV: "test", AI_KM_LOG_LEVEL: "silent" });
+    app = await buildServer({ config, testExtraPlugin: probePlugin });
+
+    expect(sawSchema).toBeDefined();
   });
 });

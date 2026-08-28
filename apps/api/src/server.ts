@@ -11,7 +11,7 @@
  * authentication seam. See README.md for how to add one.
  */
 import { randomUUID } from "node:crypto";
-import Fastify, { LogController, type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyInstance, type FastifyPluginAsync } from "fastify";
 import ajvModule from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 
@@ -54,6 +54,14 @@ export interface BuildServerOptions {
    * refused — see the assertion below.
    */
   enableTestAuthProvider?: boolean;
+  /**
+   * Registered at the exact point real domain plugins are (E04-S049). Lets a
+   * regression test prove `app.contracts` is available at route-registration
+   * time — the point a domain plugin's `schema: { body: app.contracts
+   * .getSchema(...) }` runs — without adding a fake domain to the real app.
+   * `undefined` in production; zero behaviour change when omitted.
+   */
+  testExtraPlugin?: FastifyPluginAsync;
 }
 
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
@@ -121,6 +129,19 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   registerAuth(app, { enableTestProvider: enableTestAuthProvider });
 
+  // E04-S049: every app.decorate(...) below MUST complete before any
+  // app.register(<route plugin>) call. Fastify's register() awaits a
+  // plugin's own body to finish running before resolving, so a domain
+  // plugin registered here executes ITS route definitions synchronously —
+  // and a route that binds its schema from `app.contracts.getSchema(...)`
+  // (apps/api/README.md rule #3) would otherwise find that decorator still
+  // undefined. This bit E04-S041 (see its EVIDENCE): the fix is ordering,
+  // not the route code, so no route's schema-binding style needs to change.
+  const contracts: ContractRegistry = await loadContracts(
+    options.contractsDir ?? resolveContractsDir(),
+  );
+  app.decorate("contracts", contracts);
+
   // E04-S040 — SQLite connection + migrations (fastify.db).
   await app.register(databasePlugin, {
     dbPath: options.dbPath ?? config.dbPath,
@@ -133,10 +154,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // E02-S032 — session-cookie login/logout/session + the real requireSession.
   await app.register(identityPlugin);
 
-  const contracts: ContractRegistry = await loadContracts(
-    options.contractsDir ?? resolveContractsDir(),
-  );
-  app.decorate("contracts", contracts);
+  if (options.testExtraPlugin) {
+    await app.register(options.testExtraPlugin);
+  }
 
   const startedAt = Date.now();
   app.get(`${API_PREFIX}/health`, async () => ({

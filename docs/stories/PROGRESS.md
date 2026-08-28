@@ -30,12 +30,12 @@ mock 也做不了才標 `blocked-team-b`。
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
-| E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
+| E11 Admin Console | 26 | 25 | 0 | 1 | 0 | 0 |
 | E13 Feedback & Analytics | 21 | 19 | 0 | 1 | 0 | 1 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 14 | 0 | 0 | 0 | 2 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 15 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **226** | 202 | 0 | 7 | 1 | 16 |
+| **合計** | **226** | 203 | 0 | 8 | 1 | 14 |
 
 > 總覽表在每次狀態轉換時一併更新。
 

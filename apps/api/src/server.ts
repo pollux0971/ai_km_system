@@ -165,7 +165,23 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // `app.contracts`.
   await app.register(identityPlugin);
   // E04-S040 — conversation domain mount point; routes arrive in E04-S041+.
-  await app.register(conversationPlugin);
+  //
+  // E04-S050: registration is conditional on the "conversations" spec
+  // actually being loaded — same pattern the `__test__` routes below already
+  // use for "sample". Without this, a conversation route that binds its
+  // schema from `app.contracts.getSchema("conversations", ...)` at
+  // registration time throws under `apps/api`'s own fixture-only bootstrap
+  // tests (`server.test.ts`, `db/migrate.test.ts` — they build the server
+  // against `src/testing/fixtures`, which only defines `sample`), forcing
+  // every domain route to transcribe its JSON Schema by hand instead
+  // (E04-S041 EVIDENCE, then E04-S042 EVIDENCE found this second, independent
+  // cause after E04-S049 fixed the first). Skipping registration entirely
+  // when the spec isn't loaded means those routes simply don't exist under
+  // the fixture — a 404, not a 500 at boot, and no auth bypass (Security AC:
+  // there is nothing to authorize because the route was never registered).
+  if (contracts.specNames().includes("conversations")) {
+    await app.register(conversationPlugin);
+  }
   // E12-S031 — POST /v1/transcriptions (ASR). config.ts is outside this
   // story's allowed-modify list, so the two fields it already reads
   // (E04-S039) are passed through here rather than re-read.

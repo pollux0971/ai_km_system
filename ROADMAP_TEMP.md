@@ -124,6 +124,29 @@ W7 在 E03-S038 前置未齊時,可先做 E13-S020 或協助 review 其他 lane 
    ```
 
    - 任何會啟動 dev server 或跑 Playwright 的指令都必須包在這個 `flock` 內。
+   **2026-08-28 事故後強化(強制)**:`flock` 必須是**單一 Bash 呼叫內的單一
+   指令**,把「查 port → 清孤兒 → 跑測試 → 收尾」全部包在同一個 `flock` 的
+   子指令裡:
+
+   ```bash
+   flock -w 3600 /data/python/AI_KM-worktrees/.e2e.lock bash -c '
+     echo "<lane> pid=$$ $(date -Is)" > /data/python/AI_KM-worktrees/.e2e.owner
+     ss -ltnp | grep -E ":300[01]"   # 有 listener 才清
+     pnpm test
+     rm -f /data/python/AI_KM-worktrees/.e2e.owner
+   '
+   ```
+
+   - **絕對不可**用 `exec 200>lock; flock 200` 然後在**另一個 Bash 呼叫**裡跑
+     測試——Claude Code 的 Bash 工具**不保留 shell 狀態**,前一個呼叫的 shell
+     一結束,鎖就釋放了,你會在毫無自覺的情況下無鎖執行。
+   - `.e2e.owner` 是**可觀測的所有權宣告**。動手 kill 任何 process 前先讀它:
+     若檔案存在且**不是你自己**,代表鎖語意出了問題 → **立刻停手、回報總指揮,
+     不准 kill**。若不存在或是你自己,才適用下面的孤兒判定。
+   - 兩種 flock 寫法對**同一個 inode** 是真互斥(2026-08-28 以 `fuser`/`lsof`
+     實測確認 fd 9 與 fd 200 兩種風格掛在同一 inode 上),語法差異不影響互斥性;
+     出事的原因是**跨 Bash 呼叫導致鎖提早釋放**,不是語法。
+
    - 取得鎖之後、跑測試之前,先確認 `:3000`/`:3001` 沒有殘留 server
      (`ss -ltnp | grep -E ':300[01]'`);有殘留代表是上一輪沒收乾淨的孤兒
      process,清掉再跑。**不變式:持有這把鎖 = 唯一有權使用 3000/3001 的

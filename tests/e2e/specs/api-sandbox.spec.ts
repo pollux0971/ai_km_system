@@ -143,10 +143,13 @@ test("a fake microphone is available: getUserMedia({audio:true}) resolves with a
  * E04-S056 AC2: this test's own purpose is the ROUTE (does the rewrite
  * reach a real apps/api at all), not ASR's operational status — asserting
  * a literal `status: "ok"` coupled this route test to an unrelated optional
- * subsystem (the previous version of this file's own doc comment explains
- * how that produced a permanently-degraded dev/test `/v1/health` once
- * E04-S047 added the ASR subsystem check). Asserting the full response
- * shape (same 3 keys `apps/api/src/server.test.ts`'s own
+ * subsystem (E04-S056's own EVIDENCE has the full story: this specific
+ * assertion was never actually broken by it, since playwright.config.ts's
+ * api webServer has set `AI_KM_ASR_PROVIDER=fake` since E03-S038, but the
+ * coupling was real and would have broken this test for an unrelated
+ * reason the moment that stopped being true — the same seam this whole
+ * batch of fixes exists to close). Asserting the full response shape
+ * (same 3 keys `apps/api/src/server.test.ts`'s own
  * "leaks neither filesystem paths..." test locks in) proves the real
  * backend answered without caring which way ASR happens to be configured.
  * The `ok` direction (default dev/test config, ASR unaffected) is covered

@@ -20,7 +20,7 @@ import {
 } from "../repository/messages.repository.js";
 import { appendChangeEvent } from "../repository/change-events.repository.js";
 import { toOwnerKey, type OwnerKey } from "../repository/owner-scope.js";
-import { hostChangeEventBus, hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
+import { hostChangeEventBus, hostContracts, hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
 import { ConversationDomainError } from "../domain-error.js";
 
 const PREFIX = "/v1";
@@ -35,54 +35,26 @@ const ANSWER_STATES = [
 ] as const;
 
 /**
- * Transcribed from `contracts/openapi/conversations.yaml`
- * `CreateMessageRequest` / `CreateRevisionRequest`, NOT pulled from
- * `app.contracts.getSchema(...)` — same treatment `routes/conversations.ts`
- * (E04-S041) already uses, but for a DIFFERENT reason than E04-S041 had.
- *
- * E04-S041's original blocker (`app.contracts` decorated after domain
- * plugins registered) was fixed by E04-S049. This story tried switching to
- * real `getSchema()` calls once that landed, and found a SECOND, separate
- * problem: `conversationPlugin` is registered unconditionally in
- * `apps/api/src/server.ts` regardless of which `contractsDir` was passed,
- * but several of `apps/api`'s OWN tests (`server.test.ts`, `db/migrate.
- * test.ts`) deliberately build the server against a narrow fixture spec set
- * (`src/testing/fixtures`, only "sample") to test bootstrap concerns in
- * isolation from domain contracts. A domain route that calls `app.contracts
- * .getSchema("conversations", ...)` at registration time then throws
- * `契約 "conversations" 不存在` under those fixtures — confirmed empirically:
- * switching to `getSchema()` here made all 25 fixture-based apps/api tests
- * fail. Fixing THAT would mean either loading the real contracts dir in
- * those tests or making domain-plugin registration conditional the way the
- * `__test__` routes already are — both are `apps/api` changes outside this
- * story's allowed-modify list (`services/conversation/**`). Flagged to the
- * coordinator for a `PENDING_DECISIONS.md` entry rather than worked around
- * here a second time.
- *
- * `attachmentNames.maxItems: 10` here matches the CONTRACT's actual cap.
+ * `attachmentNames.maxItems: 10` matches the CONTRACT's actual cap.
  * This story's own spec text (Functional AC8) says "attachmentNames >20 個"
  * — that number does not match the frozen contract, which caps at 10. The
  * contract is the higher-authority source (CLAUDE.md 參考順位; STORY_WORKFLOW
  * "Contract 是唯一真相來源"), so the implementation follows 10, not 20; this
  * discrepancy is recorded in EVIDENCE as a spec/contract mismatch, not
  * silently reconciled.
+ *
+ * `CreateRevisionRequest` is still transcribed from `contracts/openapi/
+ * conversations.yaml`, NOT pulled from `app.contracts.getSchema(...)`.
+ * `CreateMessageRequest` below WAS transcribed for the same reason
+ * (`conversationPlugin` used to register unconditionally in
+ * `apps/api/src/server.ts`, so a route calling `getSchema("conversations",
+ * ...)` at registration time threw under `apps/api`'s fixture-only bootstrap
+ * tests) — E04-S050 made that registration conditional on
+ * `contracts.specNames().includes("conversations")`, so this one route now
+ * pulls its schema from the real contract to prove the mechanism works.
+ * Converting `CreateRevisionRequest` too is explicitly Scope Out for
+ * E04-S050 (only one conversion is required); left transcribed here.
  */
-const CREATE_MESSAGE_BODY_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["role", "content"],
-  properties: {
-    role: { type: "string", enum: ["user", "assistant"] },
-    content: { type: "string", maxLength: 20000 },
-    attachmentNames: {
-      type: "array",
-      items: { type: "string", maxLength: 255 },
-      maxItems: 10,
-    },
-    state: { type: "string", enum: ANSWER_STATES },
-  },
-} as const;
-
 const CREATE_REVISION_BODY_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -138,7 +110,10 @@ export function registerMessageRoutes(app: FastifyInstance): void {
 
   app.post(
     `${PREFIX}/conversations/:conversationId/messages`,
-    { preHandler: requireSession, schema: { body: CREATE_MESSAGE_BODY_SCHEMA } },
+    {
+      preHandler: requireSession,
+      schema: { body: hostContracts(app).getSchema("conversations", "CreateMessageRequest") },
+    },
     async (request, reply) => {
       const owner = ownerKeyOf(request);
       const { conversationId } = request.params as { conversationId: string };

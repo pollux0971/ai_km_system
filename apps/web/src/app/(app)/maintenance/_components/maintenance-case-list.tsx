@@ -76,9 +76,9 @@ export default function MaintenanceCaseList() {
   }
 
   return (
-    <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+    <ul className="m3-list">
       {state.items.map((item) => (
-        <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
+        <li key={item.id} className="m3-list-item">
           <strong>{item.title}</strong>
           <br />
           {item.serialNumber && (

@@ -74,7 +74,16 @@ export function generateSessionToken(): string {
   return randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
 }
 
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
 /** The DB stores only this — never the token itself (ADR 0005 §2). */
 export function hashSessionToken(token: string): string {
-  return createHash("sha256").update(token, "utf8").digest("hex");
+  return sha256Hex(token);
+}
+
+/** For telemetry only (E02-S034): a username must never appear in a log line unhashed. */
+export function hashUsernameForTelemetry(username: string): string {
+  return sha256Hex(username);
 }

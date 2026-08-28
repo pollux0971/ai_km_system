@@ -42,9 +42,17 @@ function registerStrictBodyValidation(app: FastifyInstance): void {
   app.setValidatorCompiler(({ schema }) => strict.compile(schema as object));
 }
 
-export async function buildTestApp(env: Record<string, string> = {}): Promise<TestApp> {
+export interface BuildTestAppOptions {
+  /** Captures pino output (e.g. the E02-S034 LOGIN_RATE_LIMITED line) — only `write` is required. */
+  readonly loggerStream?: { write(chunk: string): void };
+}
+
+export async function buildTestApp(
+  env: Record<string, string> = {},
+  options: BuildTestAppOptions = {},
+): Promise<TestApp> {
   const db = createTestDatabase();
-  const app = Fastify();
+  const app = Fastify(options.loggerStream ? { logger: { level: "warn", stream: options.loggerStream } } : {});
   registerStrictBodyValidation(app);
   await app.register(cookie);
   app.decorate("db", db);

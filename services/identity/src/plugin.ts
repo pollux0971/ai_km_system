@@ -16,7 +16,14 @@ import { randomUUID } from "node:crypto";
 import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { loadIdentityConfig, type IdentityConfig } from "./config.js";
-import { DUMMY_SALT, dummyHash, generateSessionToken, hashSessionToken, verifyPassword } from "./crypto.js";
+import {
+  DUMMY_SALT,
+  dummyHash,
+  generateSessionToken,
+  hashSessionToken,
+  hashUsernameForTelemetry,
+  verifyPassword,
+} from "./crypto.js";
 import {
   countRecentFailuresByIp,
   countRecentFailuresByUsername,
@@ -153,6 +160,20 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
 
     if (throttled) {
       recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: false, attemptedAt: nowIso });
+      // Metadata only (E02-S034 技術決策): hashed username, ip, and the
+      // count that tripped the throttle — never the password, never the
+      // raw username. This is a log line, not the client-facing response,
+      // so it does not affect AC5's byte-identical requirement.
+      app.log.warn(
+        {
+          code: "LOGIN_RATE_LIMITED",
+          usernameHash: hashUsernameForTelemetry(username),
+          ip,
+          usernameFailures,
+          ipFailures,
+        },
+        "login rate limited",
+      );
       reply.code(401);
       return { code: "INVALID_CREDENTIALS", message: "帳號或密碼不正確。" };
     }

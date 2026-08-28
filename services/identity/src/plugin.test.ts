@@ -18,6 +18,31 @@ async function build(env: Record<string, string> = {}) {
   return harness;
 }
 
+/** Captures pino NDJSON output for assertions (mirrors apps/api/src/server.test.ts's LogSink). */
+class LogSink {
+  lines: Record<string, unknown>[] = [];
+  raw = "";
+  write(chunk: string): boolean {
+    this.raw += chunk;
+    for (const line of chunk.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        this.lines.push(JSON.parse(line) as Record<string, unknown>);
+      } catch {
+        /* pino only ever writes NDJSON here */
+      }
+    }
+    return true;
+  }
+}
+
+async function buildWithLogSink(env: Record<string, string> = {}): Promise<{ harness: Awaited<ReturnType<typeof buildTestApp>>; sink: LogSink }> {
+  const sink = new LogSink();
+  const built = await buildTestApp(env, { loggerStream: sink });
+  harness = built;
+  return { harness: built, sink };
+}
+
 function setCookieHeader(res: { headers: Record<string, unknown> }): string {
   const raw = res.headers["set-cookie"];
   return Array.isArray(raw) ? raw.join("\n") : String(raw ?? "");
@@ -762,5 +787,43 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
     const { app } = await build();
     const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.13");
     expect(res.statusCode).toBe(200);
+  });
+
+  describe("telemetry (E02-S034 技術決策: LOGIN_RATE_LIMITED, metadata only)", () => {
+    it("logs a LOGIN_RATE_LIMITED event when a request is throttled", async () => {
+      const { harness, sink } = await buildWithLogSink({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1" });
+      const ip = "198.51.100.20";
+      await login(harness.app, "demo-user", "wrong", ip);
+      await login(harness.app, "demo-user", "demo-pass-123", ip);
+
+      const event = sink.lines.find((l) => l.code === "LOGIN_RATE_LIMITED");
+      expect(event).toBeDefined();
+      expect(event?.ip).toBe(ip);
+      expect(typeof event?.usernameHash).toBe("string");
+      expect(event?.usernameFailures).toBeGreaterThanOrEqual(1);
+    });
+
+    it("never logs the raw username or the password anywhere", async () => {
+      const { harness, sink } = await buildWithLogSink({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1" });
+      const ip = "198.51.100.21";
+      await login(harness.app, "demo-user", "wrong-password-should-not-leak", ip);
+      await login(harness.app, "demo-user", "demo-pass-123", ip);
+
+      expect(sink.raw).not.toContain("wrong-password-should-not-leak");
+      expect(sink.raw).not.toContain("demo-pass-123");
+      // The raw username itself must not appear either — only its hash.
+      const event = sink.lines.find((l) => l.code === "LOGIN_RATE_LIMITED") as
+        | { usernameHash?: string }
+        | undefined;
+      expect(event?.usernameHash).not.toBe("demo-user");
+      expect(sink.raw).not.toMatch(/"username":"demo-user"/);
+    });
+
+    it("does not log LOGIN_RATE_LIMITED for a normal (non-throttled) wrong-password attempt", async () => {
+      const { harness, sink } = await buildWithLogSink();
+      await login(harness.app, "demo-user", "wrong", "198.51.100.22");
+
+      expect(sink.lines.find((l) => l.code === "LOGIN_RATE_LIMITED")).toBeUndefined();
+    });
   });
 });

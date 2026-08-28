@@ -5,6 +5,7 @@ import {
   generateSessionToken,
   hashPassword,
   hashSessionToken,
+  hashUsernameForTelemetry,
   verifyPassword,
 } from "./crypto.js";
 
@@ -73,5 +74,20 @@ describe("hashSessionToken", () => {
 
   it("gives different tokens different hashes", () => {
     expect(hashSessionToken(generateSessionToken())).not.toBe(hashSessionToken(generateSessionToken()));
+  });
+});
+
+describe("hashUsernameForTelemetry (E02-S034)", () => {
+  it("is deterministic", () => {
+    expect(hashUsernameForTelemetry("demo-user")).toBe(hashUsernameForTelemetry("demo-user"));
+  });
+
+  it("never returns the plaintext username", () => {
+    expect(hashUsernameForTelemetry("demo-user")).not.toBe("demo-user");
+    expect(hashUsernameForTelemetry("demo-user")).not.toContain("demo-user");
+  });
+
+  it("gives different usernames different hashes", () => {
+    expect(hashUsernameForTelemetry("demo-user")).not.toBe(hashUsernameForTelemetry("demo-sales"));
   });
 });

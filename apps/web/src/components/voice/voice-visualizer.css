@@ -1,0 +1,171 @@
+/* E03-S042 VoiceVisualizer. Reads M3 tokens (--md-sys-color-*) when
+   E01-S021 lands; falls back to the existing brand tokens in globals.css
+   until then, per this story's spec ("缺 token 時 fallback 既有 --primary-soft"). */
+
+.voice-visualizer {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex: none;
+}
+
+.voice-visualizer--idle,
+.voice-visualizer--transcribing {
+  background: var(--md-sys-color-primary-container, var(--primary-soft));
+  color: var(--md-sys-color-primary, var(--primary));
+}
+
+.voice-visualizer--listening {
+  color: var(--md-sys-color-primary, var(--primary));
+}
+
+.voice-visualizer--error {
+  background: var(--md-sys-color-error, var(--danger));
+  color: var(--md-sys-color-on-error, #ffffff);
+}
+
+.vv-icon {
+  width: 55%;
+  height: 55%;
+}
+
+.vv-icon--faded {
+  opacity: 0.6;
+}
+
+/* listening: animated ripple + 5-bar equalizer */
+
+.vv-listening {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vv-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.35;
+  transition: transform 80ms linear;
+  pointer-events: none;
+}
+
+.vv-ripple--inner {
+  inset: 15%;
+  opacity: 0.55;
+}
+
+.vv-bars {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 1;
+}
+
+.vv-bar {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: height 80ms linear;
+}
+
+/* listening, prefers-reduced-motion: single static bar, width = level */
+
+.vv-listening--reduced {
+  width: 70%;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+  overflow: hidden;
+}
+
+.vv-bar-static {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: currentColor;
+}
+
+/* transcribing: contained rotating arc */
+
+.vv-transcribing {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vv-arc {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  animation: vv-spin 1.2s cubic-bezier(0.2, 0, 0, 1) infinite;
+}
+
+.vv-arc--static {
+  animation: none;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  border-bottom-color: currentColor;
+  transform: rotate(-45deg);
+}
+
+@keyframes vv-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* error: shake once on entry */
+
+.voice-visualizer--error {
+  animation: none;
+}
+
+.vv-error--shake {
+  animation: vv-shake 200ms ease-in-out;
+}
+
+@keyframes vv-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vv-ripple,
+  .vv-bar {
+    transition: none;
+  }
+
+  .vv-arc {
+    animation: none;
+  }
+
+  .vv-error--shake {
+    animation: none;
+  }
+}

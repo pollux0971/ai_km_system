@@ -29,6 +29,7 @@ Single source of truth for cross-team API contracts (Contract-First policy).
 | `auth.yaml` | E02-S031 | E02 (Team B); authored by Team A | E02-S032, E03-S034/S035, E11-S026, E13-S018 |
 | `conversations.yaml` | E04-S038 | E04 (Team B); authored by Team A | E03-S034/S036/S037/S039, E04-S041~S044, E13-S018 |
 | `transcriptions.yaml` | E12-S029 | E12 (Team B); authored by Team A | E12-S031, E03-S034/S041 |
+| `analytics.yaml` | E13-S018 | E13 (Team A); admin paths surface E04/E12-owned data, review requested | E13-S019/S020/S021, E04-S047 |
 
 `conversations.yaml` covers conversation + message persistence and the
 `GET /v1/conversations/events` change-event stream. Its event semantics —
@@ -50,3 +51,14 @@ rather than restate it.
 `transcriptions.yaml` covers `POST /v1/transcriptions` (server-side whisper,
 ADR 0004). It `$ref`s `auth.yaml`'s `sessionCookie` rather than restating it —
 the pattern new specs should follow.
+
+`analytics.yaml` is the data bridge apps/admin and apps/web never had:
+`POST /v1/usage-events` plus four `/v1/admin/*` privileged reads (usage
+metrics, latency metrics, feedback queue + detail, system health). It `$ref`s
+`auth.yaml`'s `sessionCookie` and `conversations.yaml`'s `AnswerState`, and
+every `/admin/*` operation carries an `x-required-roles` vendor extension
+(informational for reviewers and future server wiring, not itself an
+enforcement mechanism). `FeedbackItem` is aligned to
+`apps/admin/src/lib/feedback.ts`'s existing shape rather than to
+`conversations.yaml`'s `AnswerFeedbackVerdict` — the two use different casing
+(`ok`/`ng` vs `OK`/`NG`) on purpose, per this story's own spec.

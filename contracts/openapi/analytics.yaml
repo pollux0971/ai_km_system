@@ -1,0 +1,629 @@
+openapi: 3.1.0
+info:
+  title: AI KM Analytics Contracts
+  version: 1.0.0
+  description: >
+    The data bridge apps/admin has never had. E11-S016/S017/S021/S022 and
+    E13-S007/S008/S012/S013/S014 all honestly render empty/zero/null/unknown
+    admin views, because nothing ever wrote a usage event or feedback record
+    apps/admin could read back — there was no contract for either side to
+    build against. This spec freezes that bridge; it does not implement it
+    (E13-S019, E13-S020, E13-S021 and E04-S047 do).
+
+
+    Authored under E13-S018 (Team A's own epic — E13 is not a Team B
+    domain — but three of its five endpoints surface data owned by other
+    epics: message/conversation shape from E04, `asr` subsystem health from
+    E12. Those owners still get a review pass before this freezes).
+
+
+    **Client-derived identity is rejected, not trusted.** `POST
+    /usage-events` never accepts a caller-supplied user id — the server
+    derives it from the session, exactly as `auth.yaml`'s `LoginRequest`
+    already refuses to accept one. A body that tries anyway is a 400
+    `VALIDATION_ERROR`, not a silently-ignored field, because
+    `additionalProperties: false` rejects it at the schema layer.
+
+
+    **Admin reads are privileged, not public.** Every `/admin/*` path is
+    documented with `x-required-roles` (a vendor extension — informational
+    for reviewers and future server wiring, not itself an enforcement
+    mechanism) and defines both 401 and 403. None of them ever return a
+    user's message content verbatim: `FeedbackItem` carries `answerExcerpt`
+    (bounded to 200 characters), never the full answer.
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+  contact:
+    name: E13 owner (Team A); admin-path domain review requested from E04/E12 owners under E13-S018
+servers:
+  - url: /v1
+    description: Same-origin path prefix (ADR 0003 §6).
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: usage-events
+    description: Client-observed usage telemetry.
+  - name: admin-analytics
+    description: Privileged admin reads over usage, feedback and system health.
+
+paths:
+  /usage-events:
+    post:
+      tags: [usage-events]
+      operationId: createUsageEvent
+      summary: Record one usage event.
+      description: >
+        The event's `name` must be one of the three E13-S016 whitelisted
+        values already recorded by apps/web's own mock pipeline
+        (`conversation_message_sent`, `conversation_created`,
+        `rag_answer_outcome`) — this endpoint does not widen that whitelist.
+        `userId` is never a request field: identity comes from the session,
+        matching this contract's own top-level rule.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageEventInput"
+      responses:
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageEventCreated"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/metrics/usage:
+    get:
+      tags: [admin-analytics]
+      operationId: getUsageMetrics
+      summary: Daily active users and questions asked for one UTC calendar day.
+      description: >
+        Semantics match apps/web's own `computeDAU`/`computeQuestionsAsked`
+        (E13-S012): `dailyActiveUsers` counts distinct users with at least
+        one usage event on `date`'s UTC calendar day; `questionsAsked` counts
+        `conversation_message_sent` events (implementation decides the exact
+        window — this contract only freezes the response shape).
+      x-required-roles: [it_administrator, ai_administrator, auditor, super_administrator]
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: UTC calendar day, `YYYY-MM-DD`.
+          examples:
+            default:
+              value: "2026-08-28"
+      responses:
+        "200":
+          description: Usage metrics for the requested day.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageMetrics"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/metrics/latency:
+    get:
+      tags: [admin-analytics]
+      operationId: getLatencyMetrics
+      summary: Average answer latency over a trailing window.
+      description: >
+        Semantics match apps/web's own `computeAverageLatencyMs` (E13-S013):
+        the mean `latencyMs` across `rag_answer_outcome` events that carry
+        one. Zero samples reports `averageLatencyMs: null`, never `0` — a
+        0ms average and "no data yet" are different facts an admin should not
+        confuse.
+      x-required-roles: [it_administrator, ai_administrator, auditor, super_administrator]
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: >
+            Trailing window size in days. Implementation decides the default
+            — this contract only freezes the response shape.
+          examples:
+            default:
+              value: 7
+      responses:
+        "200":
+          description: Latency metrics for the requested window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LatencyMetrics"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/feedback:
+    get:
+      tags: [admin-analytics]
+      operationId: listAdminFeedback
+      summary: Paged feedback queue.
+      description: >
+        Cross-owner privileged read: the caller did not submit these
+        feedback records, so the role gate is mandatory. `answerExcerpt` is
+        bounded to 200 characters — this endpoint never returns a message's
+        full content.
+      x-required-roles: [auditor, ai_administrator, super_administrator]
+      parameters:
+        - name: verdict
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/FeedbackVerdict"
+        - name: hasReason
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: One page of the feedback queue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackQueuePage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/feedback/{messageId}:
+    get:
+      tags: [admin-analytics]
+      operationId: getAdminFeedback
+      summary: One feedback item by the message it was submitted for.
+      x-required-roles: [auditor, ai_administrator, super_administrator]
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The feedback item for this message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackItem"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/health:
+    get:
+      tags: [admin-analytics]
+      operationId: getAdminHealth
+      summary: Current status of every backing subsystem.
+      description: >
+        Named subsystems are exactly `api`, `database`, `migrations`, `asr`
+        — the four E13-S018 spec calls out. This is the root cause fix for
+        E11-S022's own always-"unknown" admin health shell.
+      x-required-roles: [it_administrator, ai_administrator, auditor, super_administrator]
+      responses:
+        "200":
+          description: Point-in-time system health snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemHealth"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      # Canonical definition lives in auth.yaml (E02-S031); referenced rather
+      # than restated so the two can never drift.
+      $ref: "./auth.yaml#/components/securitySchemes/sessionCookie"
+
+  schemas:
+    UsageEventName:
+      type: string
+      description: >
+        Exactly apps/web's own `UsageEventName` union (E13-S009/S010/S011) —
+        the E13-S016 whitelist this contract does not widen.
+      enum:
+        - conversation_message_sent
+        - conversation_created
+        - rag_answer_outcome
+      examples: [conversation_message_sent]
+
+    UsageEventInput:
+      type: object
+      description: >
+        Exactly the E13-S016 whitelisted fields. No `userId`: identity comes
+        from the session, never from the request body.
+      required: [name, occurredAt]
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/UsageEventName"
+        conversationId:
+          type: string
+          format: uuid
+        answerState:
+          $ref: "./conversations.yaml#/components/schemas/AnswerState"
+        citationCount:
+          type: integer
+          minimum: 0
+        latencyMs:
+          type: integer
+          minimum: 0
+        occurredAt:
+          type: string
+          format: date-time
+          description: >
+            UTC ISO-8601, client-observed event time. Rejected as
+            `VALIDATION_ERROR` when more than 5 minutes in the future
+            (implementation decision, E13-S019) — this contract only freezes
+            the field's shape.
+      examples:
+        - name: conversation_message_sent
+          conversationId: 8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77
+          occurredAt: 2026-08-28T05:12:00.000Z
+        - name: rag_answer_outcome
+          conversationId: 8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77
+          answerState: ANSWERED
+          citationCount: 2
+          latencyMs: 1450
+          occurredAt: 2026-08-28T05:12:04.000Z
+
+    UsageEventCreated:
+      type: object
+      required: [id]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+      examples:
+        - id: 3c9a2f10-4b1e-4c9a-8f2e-1a2b3c4d5e6f
+
+    UsageMetrics:
+      type: object
+      description: >
+        E13-S012 semantics (`computeDAU`/`computeQuestionsAsked`), now with a
+        server behind them instead of a client-only aggregation.
+      required: [date, dailyActiveUsers, questionsAsked]
+      additionalProperties: false
+      properties:
+        date:
+          type: string
+          format: date
+        dailyActiveUsers:
+          type: integer
+          minimum: 0
+        questionsAsked:
+          type: integer
+          minimum: 0
+      examples:
+        - date: "2026-08-28"
+          dailyActiveUsers: 12
+          questionsAsked: 47
+
+    LatencyMetrics:
+      type: object
+      description: E13-S013 semantics — zero samples is `null`, never `0`.
+      required: [averageLatencyMs, sampleCount]
+      additionalProperties: false
+      properties:
+        averageLatencyMs:
+          type: [number, "null"]
+          minimum: 0
+        sampleCount:
+          type: integer
+          minimum: 0
+      examples:
+        - averageLatencyMs: 1320.5
+          sampleCount: 84
+        - averageLatencyMs: null
+          sampleCount: 0
+
+    FeedbackVerdict:
+      type: string
+      description: >
+        Exactly `apps/admin/src/lib/feedback.ts`'s own `FeedbackItem["verdict"]`
+        union — lowercase, distinct from `conversations.yaml`'s
+        `AnswerFeedbackVerdict` (`OK`/`NG`), which this schema deliberately
+        does not reuse: the spec's instruction is to align `FeedbackItem` to
+        apps/admin's existing shape, not to conversations.yaml's.
+      enum: [ok, ng]
+      examples: [ok]
+
+    FeedbackCitationVerdict:
+      type: object
+      description: Field-for-field apps/admin's `citationFeedback` array entry.
+      required: [citationId, verdict]
+      additionalProperties: false
+      properties:
+        citationId:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/FeedbackVerdict"
+
+    FeedbackItem:
+      type: object
+      description: >
+        Aligned to `apps/admin/src/lib/feedback.ts`'s existing `FeedbackItem`
+        (id, verdict, reason?, comment?, citationFeedback?, submittedAt) plus
+        the identifiers and excerpt an admin queue needs that a client-local
+        mock never had to carry: `messageId`, `conversationId`,
+        `answerExcerpt`.
+      required: [id, verdict, submittedAt, messageId, conversationId, answerExcerpt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/FeedbackVerdict"
+        reason:
+          type: string
+        comment:
+          type: string
+        citationFeedback:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackCitationVerdict"
+        submittedAt:
+          type: string
+          format: date-time
+        messageId:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        answerExcerpt:
+          type: string
+          maxLength: 200
+          description: >
+            Excerpt only, never the full answer — this endpoint's Security
+            AC is that admin reads never carry a user's message content
+            verbatim.
+      examples:
+        - id: fb-0001
+          verdict: ng
+          reason: INCORRECT
+          comment: 保固期數字錯了。
+          citationFeedback:
+            - citationId: "1"
+              verdict: ok
+          submittedAt: 2026-08-28T05:15:00.000Z
+          messageId: 1b6a1f2c-3d4e-4f50-8a61-7c8d9e0f1a2b
+          conversationId: 8f0d6b1e-0a5d-4a3c-9c2e-2f2c4a9a1b77
+          answerExcerpt: 保固期從出貨日起算 12 個月。[1]
+
+    FeedbackQueuePage:
+      type: object
+      required: [items, page, pageSize, totalCount, totalPages]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackItem"
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 200
+        totalCount:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 1
+      examples:
+        - items: []
+          page: 1
+          pageSize: 20
+          totalCount: 0
+          totalPages: 1
+
+    SubsystemName:
+      type: string
+      description: >
+        Exactly the four subsystems E13-S018 names. Not open-ended — a fifth
+        subsystem needs a contract change, not a free-text value.
+      enum: [api, database, migrations, asr]
+      examples: [database]
+
+    SubsystemStatus:
+      type: string
+      enum: [ok, degraded, down, unknown]
+      examples: [ok]
+
+    Subsystem:
+      type: object
+      required: [name, status]
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/SubsystemName"
+        status:
+          $ref: "#/components/schemas/SubsystemStatus"
+        detail:
+          type: string
+
+    SystemHealth:
+      type: object
+      required: [checkedAt, subsystems]
+      additionalProperties: false
+      properties:
+        checkedAt:
+          type: string
+          format: date-time
+        subsystems:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subsystem"
+      examples:
+        - checkedAt: 2026-08-28T05:20:00.000Z
+          subsystems:
+            - name: api
+              status: ok
+            - name: database
+              status: ok
+            - name: migrations
+              status: ok
+            - name: asr
+              status: degraded
+              detail: whisper-server 未回應健康檢查。
+
+    ValidationErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR]
+          required: [code]
+      examples:
+        - code: VALIDATION_ERROR
+          message: 事件欄位不正確。
+
+    UnauthenticatedBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [UNAUTHENTICATED]
+          required: [code]
+      examples:
+        - code: UNAUTHENTICATED
+          message: 請先登入。
+
+    ForbiddenBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [PERMISSION_DENIED]
+          required: [code]
+      examples:
+        - code: PERMISSION_DENIED
+          message: 您沒有權限執行此操作。
+
+    NotFoundBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [NOT_FOUND]
+          required: [code]
+      examples:
+        - code: NOT_FOUND
+          message: 找不到指定的回饋紀錄。
+
+    InternalErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [INTERNAL_ERROR]
+          required: [code]
+      examples:
+        - code: INTERNAL_ERROR
+          message: 系統發生未預期的錯誤。
+
+  responses:
+    ValidationError:
+      description: The event body failed schema validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorBody"
+    Unauthenticated:
+      description: No valid session.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnauthenticatedBody"
+    Forbidden:
+      description: >
+        Authenticated, but the caller's roles do not include any role listed
+        in this operation's `x-required-roles`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ForbiddenBody"
+    NotFound:
+      description: No feedback item exists for the given `messageId`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/NotFoundBody"
+    InternalError:
+      description: Unexpected server error. Never contains a stack trace.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorBody"

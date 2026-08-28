@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import UsageDashboard from "./usage-dashboard";
 import { getUsageMetrics } from "@/lib/usage-metrics";
 
@@ -26,8 +26,16 @@ describe("UsageDashboard (E11-S021)", () => {
     expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 
+  it("AC2: shows a distinct forbidden message on a 403, not the generic error", async () => {
+    mockedGetUsageMetrics.mockResolvedValue({ ok: false, error: { code: "PERMISSION_DENIED", message: "denied" } });
+
+    render(<UsageDashboard />);
+
+    expect(await screen.findByText("您沒有權限查看使用量數據。")).toBeInTheDocument();
+  });
+
   it("shows the daily active users count once loaded", async () => {
-    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { dailyActiveUsers: 0, questionsAsked: 0 } });
+    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { date: "2026-08-29", dailyActiveUsers: 0, questionsAsked: 0 } });
 
     render(<UsageDashboard />);
 
@@ -37,7 +45,7 @@ describe("UsageDashboard (E11-S021)", () => {
   });
 
   it("shows the questions-asked count once loaded", async () => {
-    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { dailyActiveUsers: 0, questionsAsked: 0 } });
+    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { date: "2026-08-29", dailyActiveUsers: 0, questionsAsked: 0 } });
 
     render(<UsageDashboard />);
 
@@ -45,7 +53,7 @@ describe("UsageDashboard (E11-S021)", () => {
   });
 
   it("shows each metric's own distinct value, not the other metric's value copied over", async () => {
-    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { dailyActiveUsers: 3, questionsAsked: 7 } });
+    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { date: "2026-08-29", dailyActiveUsers: 3, questionsAsked: 7 } });
 
     render(<UsageDashboard />);
 
@@ -55,7 +63,7 @@ describe("UsageDashboard (E11-S021)", () => {
   });
 
   it("binds each value to its own label's own block, not just anywhere on the page — a field-mapping swap would slip past a same-page-anywhere check", async () => {
-    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { dailyActiveUsers: 3, questionsAsked: 7 } });
+    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { date: "2026-08-29", dailyActiveUsers: 3, questionsAsked: 7 } });
 
     render(<UsageDashboard />);
 
@@ -69,12 +77,30 @@ describe("UsageDashboard (E11-S021)", () => {
     expect(within(questionsBlock!).getByText("7")).toBeInTheDocument();
     expect(within(questionsBlock!).queryByText("3")).not.toBeInTheDocument();
   });
+});
 
-  it("shows an explanatory note that no real usage tracking exists yet", async () => {
-    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { dailyActiveUsers: 0, questionsAsked: 0 } });
+describe("UsageDashboard date picker (E13-S021)", () => {
+  it("defaults to today's UTC date and passes it to getUsageMetrics", async () => {
+    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { date: "2026-08-29", dailyActiveUsers: 0, questionsAsked: 0 } });
 
     render(<UsageDashboard />);
+    await screen.findByText("每日活躍使用者（DAU）");
 
-    expect(await screen.findByText("尚未建置使用量追蹤機制，以上數據皆為零。")).toBeInTheDocument();
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    expect(screen.getByLabelText("查詢日期（UTC）")).toHaveValue(todayUtc);
+    expect(mockedGetUsageMetrics).toHaveBeenCalledWith(todayUtc);
+  });
+
+  it("re-fetches with the new date when the picker changes", async () => {
+    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { date: "2026-08-29", dailyActiveUsers: 0, questionsAsked: 0 } });
+
+    render(<UsageDashboard />);
+    await screen.findByText("每日活躍使用者（DAU）");
+
+    mockedGetUsageMetrics.mockResolvedValue({ ok: true, value: { date: "2026-08-01", dailyActiveUsers: 9, questionsAsked: 4 } });
+    fireEvent.change(screen.getByLabelText("查詢日期（UTC）"), { target: { value: "2026-08-01" } });
+
+    await screen.findByText("9");
+    expect(mockedGetUsageMetrics).toHaveBeenLastCalledWith("2026-08-01");
   });
 });

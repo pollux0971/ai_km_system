@@ -73,7 +73,14 @@ test("E13-S017: consecutively visiting the feedback queue, usage dashboard, and 
   await page.getByRole("main").getByRole("link", { name: "使用量儀表板" }).click();
   await page.waitForURL((url) => url.pathname === "/usage");
   await expect(page.getByText("每日活躍使用者（DAU）", { exact: true })).toBeVisible();
-  await expect(page.getByText("尚未建置使用量追蹤機制，以上數據皆為零。", { exact: true })).toBeVisible();
+  // E13-S021 (real API): the old assertion checked for the "尚未建置..."
+  // disclaimer paragraph verbatim; that paragraph no longer exists
+  // (removing it WAS this story's whole point). The sandbox account this
+  // E2E runs as has never recorded usage today, so the real server
+  // honestly returns 0 — asserted here instead, a stronger check (proves
+  // the real pipeline works) than the placeholder text it replaces.
+  const dauBlock = page.getByText("每日活躍使用者（DAU）", { exact: true }).locator("..");
+  await expect(dauBlock.getByText("0", { exact: true })).toBeVisible();
   await expect(page.getByText("尚無回饋。")).toHaveCount(0);
 
   await page.goto("/");

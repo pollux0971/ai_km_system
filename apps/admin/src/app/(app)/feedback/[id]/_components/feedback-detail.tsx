@@ -10,6 +10,7 @@ const logger = createLogger("admin:feedback-detail");
 type State =
   | { status: "loading" }
   | { status: "error" }
+  | { status: "forbidden" }
   | { status: "not-found" }
   | { status: "loaded"; feedback: FeedbackItem };
 
@@ -45,7 +46,7 @@ export default function FeedbackDetail({ feedbackId }: { feedbackId: string }) {
 
       if (!result.ok) {
         logger.error("failed to load feedback detail", { correlationId, feedbackId, code: result.error.code });
-        setState({ status: "error" });
+        setState(result.error.code === "PERMISSION_DENIED" ? { status: "forbidden" } : { status: "error" });
         return;
       }
 
@@ -70,6 +71,10 @@ export default function FeedbackDetail({ feedbackId }: { feedbackId: string }) {
 
   if (state.status === "error") {
     return <ErrorMessage message="無法載入回饋資料。" />;
+  }
+
+  if (state.status === "forbidden") {
+    return <ErrorMessage message="您沒有權限查看這筆回饋。" />;
   }
 
   if (state.status === "not-found") {

@@ -7,17 +7,20 @@ import { getLatencyMetrics, type LatencyMetrics } from "@/lib/latency-metrics";
 
 const logger = createLogger("admin:latency-dashboard");
 
-type State = { status: "loading" } | { status: "error" } | { status: "loaded"; metrics: LatencyMetrics };
+type State =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "forbidden" }
+  | { status: "loaded"; metrics: LatencyMetrics };
 
 /**
- * E13-S013 "Latency dashboard" — same loading/error/loaded shape
- * usage-dashboard.tsx (E11-S021) already establishes. No empty state —
- * the metrics object always has a value (null today, see
- * latency-metrics.ts's own doc comment), same single-object reasoning
- * SystemSettingsPanel (E11-S020) and UsageDashboard already use.
- * `averageLatencyMs === null` renders "尚無資料" rather than a number —
- * distinct from a real "0ms" measurement, which this page would show as
- * "0" the same way UsageDashboard shows a real zero count.
+ * E13-S013 "Latency dashboard" / E13-S021 "接真實 API" — adds `sampleCount`
+ * display (the contract's own required field) and a `"forbidden"` state
+ * distinct from a generic error (AC2); removes the "尚未建置..."
+ * disclaimer now that the numbers are real. `averageLatencyMs === null`
+ * still renders "尚無資料" rather than a number — unchanged reasoning,
+ * now genuinely reachable (zero real samples) rather than the only
+ * possible outcome.
  */
 export default function LatencyDashboard() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -32,7 +35,7 @@ export default function LatencyDashboard() {
 
       if (!result.ok) {
         logger.error("failed to load latency metrics", { correlationId, code: result.error.code });
-        setState({ status: "error" });
+        setState(result.error.code === "PERMISSION_DENIED" ? { status: "forbidden" } : { status: "error" });
         return;
       }
 
@@ -53,15 +56,20 @@ export default function LatencyDashboard() {
     return <ErrorMessage message="無法載入延遲數據。" />;
   }
 
+  if (state.status === "forbidden") {
+    return <ErrorMessage message="您沒有權限查看延遲數據。" />;
+  }
+
   return (
-    <div>
-      <div className="stat-grid">
-        <div className="stat-card">
-          <strong>平均回應延遲</strong>
-          <p>{state.metrics.averageLatencyMs === null ? "尚無資料" : `${state.metrics.averageLatencyMs}ms`}</p>
-        </div>
+    <div className="stat-grid">
+      <div className="stat-card">
+        <strong>平均回應延遲</strong>
+        <p>{state.metrics.averageLatencyMs === null ? "尚無資料" : `${state.metrics.averageLatencyMs}ms`}</p>
       </div>
-      <p className="page-note">尚未建置跨應用資料管道，無法顯示真實延遲數據。</p>
+      <div className="stat-card">
+        <strong>樣本數</strong>
+        <p>{state.metrics.sampleCount}</p>
+      </div>
     </div>
   );
 }

@@ -1,41 +1,35 @@
+import { toResult } from "@ai-km/api-client";
 import type { ApiError, Result } from "@ai-km/types";
+import { apiClient } from "./api";
 
 /**
- * E11-S022 "System health dashboard". The two subsystems named below
- * are real, already-approved admin domains (`connectors.ts` / E11-S014,
- * `models.ts` / E11-S013) — not invented. What's genuinely missing is
- * the HEALTH READING for each: `AI_KM_BMAD_High_Granularity/epics/
- * E10_Enterprise_Data_Integration.md`'s own "E10-S04 Connector health
- * check" and `.../E12_Model_&_Prompt_Platform.md`'s own "E12-S005
- * Model health/status" (both Owner: Team B) are the real capabilities
- * that would ever produce a genuine HEALTHY/DEGRADED/FAILED reading —
- * neither is built, and `contracts/` has zero health content either
- * way. Same "only model what's real, not the computed reading nobody
- * has built yet" discipline `connectors.ts`'s own doc comment already
- * establishes for its own 4-value Connector State enum.
+ * E11-S022 "System health dashboard" / E13-S021 "接真實 API".
  *
- * `status` is a single-value union today (`"unknown"`) rather than a
- * boolean or omitted field — deliberately typed so a future story that
- * wires up the real E10-S04/E12-S005 checks can widen it to add
- * `"healthy" | "degraded" | "failed"` without a breaking shape change.
- * `getSystemHealth()` returns a fixed, hardcoded list — no write path,
- * since there is no legitimate way for this story to ever produce a
- * real health reading itself.
+ * This is a STRUCTURAL rewrite, not just a data-source swap: the old stub
+ * modeled 2 subsystems it could name without a real check
+ * (`connectors`/`models`, Chinese display names, single `"unknown"`
+ * status). The frozen contract (`contracts/openapi/analytics.yaml`
+ * `SystemHealth`, E13-S018/E04-S047) names 4 different subsystems
+ * (`api`/`database`/`migrations`/`asr`) with a real 4-value status enum —
+ * these are not the same 2 concepts renamed, they are what
+ * `apps/api/src/health/checks.ts` (E04-S047) actually measures. Chinese
+ * display labels for the 4 real names live in `system-health-dashboard.tsx`
+ * (a presentation concern), not here.
  */
-export type SubsystemHealthStatus = "unknown";
+export type SubsystemHealthStatus = "ok" | "degraded" | "down" | "unknown";
+export type SubsystemName = "api" | "database" | "migrations" | "asr";
 
 export interface SubsystemHealth {
-  id: string;
-  name: string;
+  name: SubsystemName;
   status: SubsystemHealthStatus;
+  detail?: string;
 }
 
-export async function getSystemHealth(): Promise<Result<SubsystemHealth[], ApiError>> {
-  return {
-    ok: true,
-    value: [
-      { id: "connectors", name: "連接器", status: "unknown" },
-      { id: "models", name: "模型服務", status: "unknown" },
-    ],
-  };
+export interface SystemHealth {
+  checkedAt: string;
+  subsystems: SubsystemHealth[];
+}
+
+export async function getSystemHealth(): Promise<Result<SystemHealth, ApiError>> {
+  return toResult(apiClient.analytics.GET("/admin/health", {}));
 }

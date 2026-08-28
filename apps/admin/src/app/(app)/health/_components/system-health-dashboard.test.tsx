@@ -1,13 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import SystemHealthDashboard from "./system-health-dashboard";
-import { getSystemHealth } from "@/lib/system-health";
+import { getSystemHealth, type SystemHealth } from "@/lib/system-health";
 
 vi.mock("@/lib/system-health", () => ({
   getSystemHealth: vi.fn(),
 }));
 
 const mockedGetSystemHealth = vi.mocked(getSystemHealth);
+
+const ALL_OK: SystemHealth = {
+  checkedAt: "2026-08-29T00:00:00.000Z",
+  subsystems: [
+    { name: "api", status: "ok" },
+    { name: "database", status: "ok" },
+    { name: "migrations", status: "ok" },
+    { name: "asr", status: "ok" },
+  ],
+};
 
 describe("SystemHealthDashboard (E11-S022)", () => {
   it("shows a loading indicator before the fetch resolves", () => {
@@ -26,51 +36,79 @@ describe("SystemHealthDashboard (E11-S022)", () => {
     expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 
-  it("shows every subsystem it's given, each with its own 狀態未知 label, once loaded", async () => {
-    mockedGetSystemHealth.mockResolvedValue({
-      ok: true,
-      value: [
-        { id: "connectors", name: "連接器", status: "unknown" },
-        { id: "models", name: "模型服務", status: "unknown" },
-      ],
-    });
+  it("AC2: shows a distinct forbidden message on a 403, not the generic error", async () => {
+    mockedGetSystemHealth.mockResolvedValue({ ok: false, error: { code: "PERMISSION_DENIED", message: "denied" } });
 
     render(<SystemHealthDashboard />);
 
-    await screen.findByText("連接器");
-    expect(screen.getByText("模型服務")).toBeInTheDocument();
-    expect(screen.getAllByText("狀態未知")).toHaveLength(2);
+    expect(await screen.findByText("您沒有權限查看系統健康狀態。")).toBeInTheDocument();
   });
 
-  it("renders every subsystem it's given, not just the first — a silent truncation would slip past a 2-item fixture", async () => {
-    mockedGetSystemHealth.mockResolvedValue({
-      ok: true,
-      value: [
-        { id: "s1", name: "子系統 1", status: "unknown" },
-        { id: "s2", name: "子系統 2", status: "unknown" },
-        { id: "s3", name: "子系統 3", status: "unknown" },
-        { id: "s4", name: "子系統 4", status: "unknown" },
-      ],
-    });
+  it("AC5 (E13-S021): shows all 4 real subsystems, each with a non-\"狀態未知\" label, when every check passes", async () => {
+    mockedGetSystemHealth.mockResolvedValue({ ok: true, value: ALL_OK });
 
     render(<SystemHealthDashboard />);
 
-    await screen.findByText("子系統 1");
-    for (const name of ["子系統 1", "子系統 2", "子系統 3", "子系統 4"]) {
-      expect(screen.getByText(name)).toBeInTheDocument();
+    await screen.findByText("API 服務");
+    for (const label of ["API 服務", "資料庫", "資料庫遷移", "語音辨識"]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
     }
+    expect(screen.getAllByText("正常")).toHaveLength(4);
+    expect(screen.queryByText("狀態未知")).not.toBeInTheDocument();
   });
 
-  it("shows an explanatory note that unknown does not mean broken", async () => {
+  it("renders every subsystem it's given, not just the first — a silent truncation would slip past a 4-item fixture", async () => {
+    mockedGetSystemHealth.mockResolvedValue({ ok: true, value: ALL_OK });
+
+    render(<SystemHealthDashboard />);
+
+    await screen.findByText("API 服務");
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+  });
+
+  it("shows a degraded subsystem's own status and detail, distinct from the others", async () => {
     mockedGetSystemHealth.mockResolvedValue({
       ok: true,
-      value: [{ id: "connectors", name: "連接器", status: "unknown" }],
+      value: {
+        checkedAt: "2026-08-29T00:00:00.000Z",
+        subsystems: [
+          { name: "api", status: "ok" },
+          { name: "database", status: "ok" },
+          { name: "migrations", status: "ok" },
+          { name: "asr", status: "degraded", detail: "whisper-server 未回應健康檢查。" },
+        ],
+      },
     });
 
     render(<SystemHealthDashboard />);
 
-    expect(
-      await screen.findByText("尚未建置真正的健康檢查機制，以上狀態皆為「未知」，不代表系統異常。"),
-    ).toBeInTheDocument();
+    await screen.findByText("語音辨識");
+    expect(screen.getByText("部分異常")).toBeInTheDocument();
+    expect(screen.getByText("whisper-server 未回應健康檢查。")).toBeInTheDocument();
+    expect(screen.getAllByText("正常")).toHaveLength(3);
+  });
+
+  it("shows a down subsystem distinctly from degraded", async () => {
+    mockedGetSystemHealth.mockResolvedValue({
+      ok: true,
+      value: {
+        checkedAt: "2026-08-29T00:00:00.000Z",
+        subsystems: [{ name: "database", status: "down", detail: "connection refused" }],
+      },
+    });
+
+    render(<SystemHealthDashboard />);
+
+    expect(await screen.findByText("中斷")).toBeInTheDocument();
+    expect(screen.queryByText("部分異常")).not.toBeInTheDocument();
+  });
+
+  it("shows the checked-at time", async () => {
+    mockedGetSystemHealth.mockResolvedValue({ ok: true, value: ALL_OK });
+
+    render(<SystemHealthDashboard />);
+
+    await screen.findByText("API 服務");
+    expect(document.querySelector('time[datetime="2026-08-29T00:00:00.000Z"]')).toBeInTheDocument();
   });
 });

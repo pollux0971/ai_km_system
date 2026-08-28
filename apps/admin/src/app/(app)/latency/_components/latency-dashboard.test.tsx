@@ -26,8 +26,16 @@ describe("LatencyDashboard (E13-S013)", () => {
     expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 
+  it("AC2: shows a distinct forbidden message on a 403, not the generic error", async () => {
+    mockedGetLatencyMetrics.mockResolvedValue({ ok: false, error: { code: "PERMISSION_DENIED", message: "denied" } });
+
+    render(<LatencyDashboard />);
+
+    expect(await screen.findByText("您沒有權限查看延遲數據。")).toBeInTheDocument();
+  });
+
   it("shows the average latency label once loaded", async () => {
-    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: null } });
+    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: null, sampleCount: 0 } });
 
     render(<LatencyDashboard />);
 
@@ -35,7 +43,7 @@ describe("LatencyDashboard (E13-S013)", () => {
   });
 
   it("shows '尚無資料' (not '0ms' or 'null') when averageLatencyMs is null", async () => {
-    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: null } });
+    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: null, sampleCount: 0 } });
 
     render(<LatencyDashboard />);
 
@@ -45,7 +53,7 @@ describe("LatencyDashboard (E13-S013)", () => {
   });
 
   it("shows a real numeric average distinctly from the null case, when one is available", async () => {
-    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: 1234 } });
+    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: 1234, sampleCount: 10 } });
 
     render(<LatencyDashboard />);
 
@@ -54,7 +62,7 @@ describe("LatencyDashboard (E13-S013)", () => {
   });
 
   it("shows a real zero-latency average as '0ms', not conflated with the null/no-data case", async () => {
-    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: 0 } });
+    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: 0, sampleCount: 1 } });
 
     render(<LatencyDashboard />);
 
@@ -62,11 +70,21 @@ describe("LatencyDashboard (E13-S013)", () => {
     expect(screen.queryByText("尚無資料")).not.toBeInTheDocument();
   });
 
-  it("shows an explanatory note that no real cross-app data pipeline exists yet", async () => {
-    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: null } });
+  it("AC3 (E13-S021): shows the real sample count alongside the average", async () => {
+    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: 1320.5, sampleCount: 84 } });
 
     render(<LatencyDashboard />);
 
-    expect(await screen.findByText("尚未建置跨應用資料管道，無法顯示真實延遲數據。")).toBeInTheDocument();
+    expect(await screen.findByText("樣本數")).toBeInTheDocument();
+    expect(screen.getByText("84")).toBeInTheDocument();
+  });
+
+  it("shows a zero sample count distinctly, matching the null average it always accompanies", async () => {
+    mockedGetLatencyMetrics.mockResolvedValue({ ok: true, value: { averageLatencyMs: null, sampleCount: 0 } });
+
+    render(<LatencyDashboard />);
+
+    await screen.findByText("尚無資料");
+    expect(screen.getByText("樣本數").closest("div")).toHaveTextContent("0");
   });
 });

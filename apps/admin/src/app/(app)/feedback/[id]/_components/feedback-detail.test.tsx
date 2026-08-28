@@ -14,6 +14,9 @@ const sampleFeedback = {
   verdict: "ok" as const,
   reason: "回答完全解決問題",
   submittedAt: "2026-08-17T01:00:00.000Z",
+  messageId: "f1",
+  conversationId: "conv-1",
+  answerExcerpt: "摘要",
 };
 
 describe("FeedbackDetail (E11-S017)", () => {
@@ -51,10 +54,18 @@ describe("FeedbackDetail (E11-S017)", () => {
     expect(document.querySelector('time[datetime="2026-08-17T01:00:00.000Z"]')).toBeInTheDocument();
   });
 
+  it("AC2: shows a distinct forbidden message on a 403, not the generic error", async () => {
+    mockedGetFeedback.mockResolvedValue({ ok: false, error: { code: "PERMISSION_DENIED", message: "denied" } });
+
+    render(<FeedbackDetail feedbackId="f1" />);
+
+    expect(await screen.findByText("您沒有權限查看這筆回饋。")).toBeInTheDocument();
+  });
+
   it("shows an NG verdict distinctly, without a reason paragraph when none was given", async () => {
     mockedGetFeedback.mockResolvedValue({
       ok: true,
-      value: { id: "f2", verdict: "ng", submittedAt: "2026-08-17T01:00:00.000Z" },
+      value: { id: "f2", verdict: "ng", submittedAt: "2026-08-17T01:00:00.000Z", messageId: "f2", conversationId: "conv-1", answerExcerpt: "摘要" },
     });
 
     render(<FeedbackDetail feedbackId="f2" />);

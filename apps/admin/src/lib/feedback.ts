@@ -1,31 +1,19 @@
+import { toResult } from "@ai-km/api-client";
 import type { ApiError, Result } from "@ai-km/types";
+import { apiClient } from "./api";
 
 /**
- * E11-S016 "Feedback queue". Same treatment `audit.ts`'s own E11-S015
- * doc comment already establishes for a sibling "true historical record"
- * concept: a feedback item represents a real user's real OK/NG verdict
- * on a real answer — fabricating sample entries here would misrepresent
- * events that never happened, a different and more serious kind of
- * dishonesty than an empty catalog an admin can freely populate (like
- * `prompts.ts`). Unlike every prior Team-B-dependency story though, the
- * missing piece here is Team A's own sibling epic — `AI_KM_BMAD_High_
- * Granularity/epics/E13_Feedback_&_Analytics.md`'s own "E13-S001 Answer
- * OK feedback"/"E13-S002 Answer NG feedback" (Owner: Team A) — which
- * hasn't been reached yet in this codebase's own E01→E03→E05→E07→E09→
- * E11→E13 development sequencing (`.claude/rules/STORY_WORKFLOW.md`'s
- * own global rule #2), not a cross-team gap. `contracts/` has zero
- * feedback content either way.
- *
- * `FeedbackItem`'s shape below is Team A's own provisional DISPLAY
- * shape for this queue shell — originally verdict + optional reason
- * only (matching E13-S001/S002/S003's scope at the time E11-S016 was
- * written). E13-S008 "feedback detail view" extends it with `comment`
- * (E13-S004 free-text feedback) and `citationFeedback` (E13-S005
- * citation-specific feedback), both of which now exist in apps/web's
- * `Message` shape. Both new fields are optional, backward-compatible
- * additions — `listFeedback()` still always returns an empty list, the
- * one honest answer today — no write path exists, since admins cannot
- * legitimately fabricate a user's feedback.
+ * E11-S016 "Feedback queue" / E13-S008 "Feedback detail view" / E13-S021
+ * "接真實 API". `FeedbackItem` now mirrors `contracts/openapi/analytics.yaml`
+ * `FeedbackItem` field-for-field — `messageId`/`conversationId`/
+ * `answerExcerpt` are additions (E13-S021), everything else (`id`, `verdict`,
+ * `reason?`, `comment?`, `citationFeedback?`, `submittedAt`) is unchanged
+ * from the shape E11-S016/E13-S004/E13-S005 already established. `id` and
+ * `messageId` happen to carry the same value server-side (E13-S019's own
+ * EVIDENCE: a message has at most one feedback record, so there is no
+ * second id space) — both fields are kept because the contract declares
+ * both as required, not because this type invents a distinction the
+ * server doesn't have.
  */
 export interface FeedbackItem {
   id: string;
@@ -34,33 +22,72 @@ export interface FeedbackItem {
   comment?: string;
   citationFeedback?: { citationId: string; verdict: "ok" | "ng" }[];
   submittedAt: string;
+  messageId: string;
+  conversationId: string;
+  answerExcerpt: string;
 }
 
-export async function listFeedback(): Promise<Result<FeedbackItem[], ApiError>> {
-  return { ok: true, value: [] };
+export interface FeedbackPage {
+  items: FeedbackItem[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+export interface ListFeedbackOptions {
+  verdict?: FeedbackItem["verdict"];
+  hasReason?: boolean;
+  page?: number;
+  pageSize?: number;
 }
 
 /**
- * E11-S017 "Feedback detail". Same `T | null` shape `getUser`/`getRole`
- * already establish for a single-record lookup by id — but here the
- * answer is unconditionally `null` for every id, the direct consequence
- * of `listFeedback()` above always being empty: there has never been a
- * real feedback item for any id to match.
+ * E13-S021: `verdict`/`hasReason` are now sent as real query parameters to
+ * `GET /admin/feedback` — the server does the filtering, not
+ * `filterFeedback` below (which stays exported and tested as a pure
+ * function, per the story's own technical decision, but is no longer
+ * called from `feedback-list.tsx`). This is the "移除 client 篩選" branch
+ * of that decision, not the "second-guess the server" one: a paged
+ * response only ever contains one page's worth of items, so re-filtering
+ * client-side would silently show fewer than a page even when more
+ * matches exist on other pages.
  */
-export async function getFeedback(_id: string): Promise<Result<FeedbackItem | null, ApiError>> {
-  return { ok: true, value: null };
+export async function listFeedback(options: ListFeedbackOptions = {}): Promise<Result<FeedbackPage, ApiError>> {
+  // Conditional spread, not `field: options.field` — an explicit `undefined`
+  // value still serializes onto the query string (as the literal string
+  // "undefined") rather than being omitted, same reasoning
+  // `listConversations` (apps/web/src/lib/conversations.ts) already
+  // establishes for its own optional `q` parameter.
+  return toResult(
+    apiClient.analytics.GET("/admin/feedback", {
+      params: {
+        query: {
+          ...(options.verdict !== undefined ? { verdict: options.verdict } : {}),
+          ...(options.hasReason !== undefined ? { hasReason: options.hasReason } : {}),
+          ...(options.page !== undefined ? { page: options.page } : {}),
+          ...(options.pageSize !== undefined ? { pageSize: options.pageSize } : {}),
+        },
+      },
+    }),
+  );
+}
+
+export async function getFeedback(id: string): Promise<Result<FeedbackItem | null, ApiError>> {
+  const result = await toResult(
+    apiClient.analytics.GET("/admin/feedback/{messageId}", { params: { path: { messageId: id } } }),
+  );
+  if (result.ok) return result;
+  if (result.error.code === "NOT_FOUND") return { ok: true, value: null };
+  return result;
 }
 
 /**
- * E13-S007 "feedback queue filter". A pure narrowing function, not a new
- * data source — `listFeedback()` above still always returns an empty
- * list (the E11-S016 honesty constraint this story does not touch), so
- * there is nothing real to filter in production today. This function's
- * correctness is proven with fixture data at the unit-test layer, same
- * technique `feedback-list.test.tsx`'s own "loaded" tests already use to
- * verify `FeedbackList`'s render logic despite the same always-empty
- * constraint — the UI only ever calls this on whatever `listFeedback()`
- * actually returned, never on fabricated data.
+ * E13-S007 "feedback queue filter". Pure narrowing function — kept exactly
+ * as E13-S007 wrote it (still unit-tested against fixture data below), but
+ * no longer called from `feedback-list.tsx` as of E13-S021: filtering now
+ * happens server-side via `listFeedback`'s `verdict`/`hasReason` query
+ * params (see that function's own doc comment for why).
  */
 export interface FeedbackFilterCriteria {
   verdict?: FeedbackItem["verdict"];
@@ -83,16 +110,14 @@ export function filterFeedback(items: FeedbackItem[], criteria: FeedbackFilterCr
 }
 
 /**
- * E13-S014 "OK/NG rate dashboard". Same "presentation layer already
- * exists" situation E13-S012 (DAU/questions) established, not the
- * "brand-new page" situation E13-S013 (latency) required: `feedback-list.tsx`
- * (E11-S016, extended by E13-S007/S008) already is this queue's dashboard —
- * this story's real, non-duplicate value is a pure aggregation over
- * `listFeedback()`'s already-loaded items, not a new fetch, new endpoint,
- * or new page. `okRatePercent` is `null` for zero samples (same "no
- * natural zero" reasoning `computeAverageLatencyMs`, E13-S013, already
- * establishes) rather than `0`, since a 0%-OK rate and "no feedback exists
- * at all" are different facts an admin should not confuse.
+ * E13-S014 "OK/NG rate dashboard". Computed over whatever `items` array is
+ * passed in — as of E13-S021, `feedback-list.tsx` passes the CURRENT
+ * PAGE's items, not the whole queue (the frozen contract has no aggregate
+ * count endpoint, and inventing one is out of scope — CLAUDE.md 鐵律 1).
+ * The rate is therefore honestly a per-page statistic once more than one
+ * page of feedback exists; this is a real, disclosed semantic narrowing
+ * from the pre-pagination "whole queue" behaviour, not a hidden one (see
+ * docs/stories/E13-S021.md Assumptions).
  */
 export interface FeedbackOkNgRate {
   okCount: number;

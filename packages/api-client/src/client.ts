@@ -9,6 +9,18 @@ import type { paths as AnalyticsPaths } from "./generated/analytics";
 const CLIENT_ID_STORAGE_KEY = "ai-km:client-id";
 const CORRELATION_ID_HEADER = "x-correlation-id";
 const CLIENT_ID_HEADER = "x-client-id";
+/**
+ * CSRF defence (E04-S048, ADR 0005 addendum). A plain cross-site `<form>`
+ * submission cannot set a custom header at all (setting one from `fetch`/XHR
+ * triggers a CORS preflight, and CORS stays off by default — ADR 0003 §6),
+ * so requiring this on every request is what makes `apps/api`'s
+ * `x-requested-with` check work: a real browser session-cookie ride-along
+ * from a malicious site can never carry it. The exact value does not matter
+ * server-side (`services/identity`'s `checkCsrf` only checks presence); this
+ * is the conventional string other frameworks use for the same purpose.
+ */
+const CSRF_HEADER = "x-requested-with";
+const CSRF_HEADER_VALUE = "XMLHttpRequest";
 
 export interface ApiClientOptions {
   /** Root URL every request is resolved against. The caller decides this — this package never reads env. */
@@ -61,6 +73,9 @@ function attachHeaderMiddleware(client: Client<Record<string, never>>, clientId:
       if (!request.headers.has(CLIENT_ID_HEADER)) {
         request.headers.set(CLIENT_ID_HEADER, clientId);
       }
+      if (!request.headers.has(CSRF_HEADER)) {
+        request.headers.set(CSRF_HEADER, CSRF_HEADER_VALUE);
+      }
       return request;
     },
   });
@@ -69,7 +84,8 @@ function attachHeaderMiddleware(client: Client<Record<string, never>>, clientId:
 /**
  * Builds the typed API client for every spec under contracts/openapi, grouped by spec
  * name. Every request gets `credentials: "include"`, an auto-generated (overridable)
- * `x-correlation-id`, and a per-tab `x-client-id`.
+ * `x-correlation-id`, a per-tab `x-client-id`, and `x-requested-with` (E04-S048's
+ * CSRF defence — see the constant above).
  */
 export function createApiClient(options: ApiClientOptions): ApiClient {
   const { baseUrl, fetch, clientId } = options;

@@ -58,3 +58,33 @@ sessionStorage」天然隔離、可平行執行；改成共用一台 API + 一�
 - Sandbox 讓資料不會跨 context 累積；「跨裝置持久化」的自動化證據以
   Playwright `storageState` 複製 cookie 至第二個 context 取得，真正的跨
   瀏覽器登入證據列為 L3 手動 evidence（sandbox 關閉時執行）。
+
+## Addendum（E04-S048，2026-08-28）：CSRF 防禦
+
+`SameSite=Lax` 擋住多數但非全部跨站情境（例如某些子網域／舊瀏覽器），且
+cookie session 上線後任何會自動帶 cookie 的跨站請求都可能觸發狀態變更。
+補上一道防線：**所有 state-changing（POST/PUT/PATCH/DELETE）請求必須帶
+自訂 header `x-requested-with`**（任何非空值即可）；缺席 → 403
+`CSRF_HEADER_MISSING`（`contracts/openapi/core.yaml` 的 `Error.code` 文件
+補上這個平台級 code，維持 free-form string，不改成 enum，避免 breaking）。
+
+原理：瀏覽器的簡單跨站 `<form>` 提交無法設定自訂 header；用 `fetch`/XHR
+才能設定，但那會觸發 CORS preflight，而 CORS 預設關閉（本 ADR 決策 6 之外
+的既有規則）——攻擊者的頁面因此天然被擋。GET/HEAD/OPTIONS 一律不檢查
+（不變更狀態，且 `EventSource` 等 API 技術上無法設定自訂 header）。
+
+`multipart/form-data` 例外：`POST /transcriptions` 這類路由，`<form>`
+天生能送 multipart 卻無法附加自訂 header，因此改查 `Origin`／`Referer`
+是否落在允許清單（loopback，或 `AI_KM_CORS_ORIGINS` 設定的 origin）。
+
+**掛載機制與 spec 原始設想不同**：原規劃是在
+identity／conversation／feedback／model-gateway 四個 plugin 各自的 route
+定義加一行 preHandler。實測發現這會讓 conversation／model-gateway 各自
+隔離的單元測試 harness（各自 decorate 一份假 `requireSession`）也跟著執行
+這個新 preHandler，而它們的既有測試從不帶這個 header，會造成大量既有測試
+見紅——與「既有 route 測試零修改」的驗收要求直接衝突。改為將檢查融進
+`services/identity` 的 `requireSession` 本體（`buildRealRequireSession`）：
+conversation／model-gateway 的每個受保護 route 早就透過 `app.requireSession`
+使用它，真實組裝的 apps/api server 因此自動獲得保護，而各自的隔離測試（用
+假版本）完全不受影響。完整理由與紅燈證據見
+`docs/stories/PENDING_DECISIONS.md` 與 `docs/stories/E04-S048.md`。

@@ -253,6 +253,84 @@ conversationId」。E12-S031 不在 E13-S018 那個「使用者已批准可新�
 AC 與 regression 測試,不阻擋本 story approved/merge。若後續 E03-S041
 或其他 story 需要嚴格的 conversationId 驗證,屆時再回來處理。
 
+### [2026-08-28] E04-S048 — CSRF 掛載機制偏離 spec 字面
+
+**背景**:spec 原文要求「掛載到 identity／conversation／feedback／model-gateway
+四個 plugin 的所有 state-changing route(preHandler 一行)」——即在
+`conversations.ts`／`transcriptions.ts`等各自 route 定義的 `preHandler`
+陣列裡加一行新的 CSRF 檢查。
+
+**為何字面照做會衝突**:實測確認(見 `docs/stories/E04-S048.md` 附完整紅燈輸出)
+`services/conversation`／`services/model-gateway` 各自的隔離單元測試 harness
+(`testing/build-test-app.ts`)是自己 `app.decorate("requireSession", <假的>)`
+之後才 `app.register(conversationPlugin)`——若 CSRF preHandler 寫進 route
+定義本身,不管掛在哪個 Fastify instance 上都會執行,這些從不帶
+`x-requested-with` 的既有測試會大量見紅(實測:conversations.test.ts 28/34
+見紅,整個 services/conversation 147 個測試見紅 53 個)。而 **AC2 明文要求
+「既有 route 測試零修改」**,字面掛法與自己的 AC2 直接矛盾。
+
+**改用什麼**:把 CSRF 檢查融進 `services/identity`(本 story 允許清單內的
+「四個 plugin」之一)的 `requireSession` 本體(`buildRealRequireSession`)。
+`conversations.ts`／`transcriptions.ts` 的每個受保護 route(GET 也是)早就
+透過 `hostRequireSession(app)` 使用 `app.requireSession`;真實 apps/api
+組裝出來的 server 用 identityPlugin 的真實版本,domain 自己的隔離測試用
+各自的假版本互不影響。`login`／`logout` 不經過 `requireSession`,在
+`services/identity` 自己的 `plugin.ts` 內另外 inline 處理(伴隨測試,見
+EVIDENCE)。`apps/api/src/csrf/**` 改放這個機制唯一做不到的部分:對真實
+組裝 server 的路由表逐條掃描驗證(AC5 的安全網測試)。
+
+**行為等價或更強的理由**:
+1. 觀察得到的行為完全相同——真實 server 的每個受保護 state-changing route
+   在缺 header 時一律 403 `CSRF_HEADER_MISSING`。
+2. AC5 的驗證方式更強:掃描**真實路由表**(`app.printRoutes()` 解析)逐條
+   送跨站請求,而非檢查程式碼裡有沒有那一行——前者能抓到未來新增卻忘記走
+   `requireSession` 的 route,後者不能。
+3. 沒有修改任何一條既有測試的斷言內容,只新增了 `services/identity` 自己
+   的測試(該套件本來就在允許清單內)。
+
+**影響範圍**:僅影響「CSRF 檢查程式碼實際掛在哪個檔案」這個實作細節,不
+影響任何對外可觀察行為、不影響其他 story 的檔案。domain owner 日後 review
+可直接看這則記錄,不必翻 EVIDENCE。
+
+---
+
+### [2026-08-28] apps/api `server.ts` 註冊順序 — `conversationPlugin` 綁死 E04-S039 舊 stub,真實 session 完全打不進去(獨立於 E04-S048,已回報 ai-km-e4)
+
+**背景**:寫 E04-S048 AC5 的真實路由掃描測試時意外發現:`services/conversation`
+的 `hostRequireSession(app)` 在 `registerConversationRoutes(app)` **註冊當下**
+讀一次 `app.requireSession` 存成區域變數,而 `apps/api/src/server.ts` 的順序是
+`conversationPlugin` 先註冊、`identityPlugin` 後註冊(`identityPlugin` 才會把
+`app.requireSession` 從 E04-S039 的 deny-by-default stub 換成真正的 cookie
+驗證)。結果:`conversations`／`messages` 底下**每一條** route,不論真實登入
+與否,一律永久綁死舊 stub。
+
+**已用除錯腳本重現**(完整輸出見對 ai-km-e4 的回報訊息,2026-08-28):
+- production 等效設定(`enableTestAuthProvider: false`)下,用真實登入拿到的
+  合法 session cookie 打 `POST /v1/conversations` → 401 `UNAUTHENTICATED`。
+  對話功能在正式環境目前完全無法使用。
+- dev/test 設定(`enableTestAuthProvider: true`)下,完全不登入、只送
+  `x-test-user: <任意 userId>` → 201 成功建立對話,等於繞過真實登入直接
+  以任意身分操作。
+
+`services/model-gateway`(`transcriptions.ts`,同樣用 `hostRequireSession`
+模式)**已驗證不受影響**——因為它在 `server.ts` 裡排在 `identityPlugin`
+**之後**註冊,讀到的已經是真正版本。純粹是這一個 plugin 的註冊順序問題。
+
+**選項**:
+1. 調整 `server.ts`,讓 `identityPlugin` 排在 `conversationPlugin` 之前
+   註冊。
+2. 更根本的修法:`hostRequireSession` 改成回傳一個「每次請求都動態讀
+   `app.requireSession`」的 thunk,而不是快照註冊當下的值——不會因為未來
+   又有 plugin 排序問題而重蹈覆轍,`services/conversation`／
+   `services/model-gateway` 的 `plugin-types.ts` 都要改。
+
+**影響範圍**:`apps/api/src/server.ts` 的註冊順序、或 `services/conversation`
+與 `services/model-gateway` 的 `plugin-types.ts`——皆不在 E04-S048 允許修改
+清單內,本 story 未動手修,已回報 ai-km-e4 由其決定另開修正 story 或指派
+現有 lane 處理。E04-S048 自己的 CSRF 邏輯已對此誠實記錄「此 bug 修好前,
+conversations／messages route 的『帶正確 CSRF header 應該放行』無法被正面
+驗證」,測試不假裝通過,見 `docs/stories/E04-S048.md`。
+
 ## 已批示
 
 (目前無)

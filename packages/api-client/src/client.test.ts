@@ -101,4 +101,48 @@ describe("createApiClient", () => {
     expect(client.conversations).toBeTruthy();
     expect(client.transcriptions).toBeTruthy();
   });
+
+  describe("x-requested-with (E04-S048 CSRF defence, AC6)", () => {
+    it("sends x-requested-with on every request, on every spec's client", async () => {
+      const seen: Request[] = [];
+      const client = createApiClient({ baseUrl: "https://api.example.test", fetch: fakeFetch(seen) });
+
+      await client.conversations.GET("/conversations", {});
+      await client.auth.GET("/auth/session", {});
+
+      expect(seen).toHaveLength(2);
+      expect(seen[0]!.headers.get("x-requested-with")).toBe("XMLHttpRequest");
+      expect(seen[1]!.headers.get("x-requested-with")).toBe("XMLHttpRequest");
+    });
+
+    it("sends it on GET requests too, not just state-changing ones (this package never knows or cares which — apps/api's own CSRF check is what method-gates)", async () => {
+      const seen: Request[] = [];
+      const client = createApiClient({ baseUrl: "https://api.example.test", fetch: fakeFetch(seen) });
+
+      await client.conversations.GET("/conversations", {});
+
+      expect(seen[0]!.headers.get("x-requested-with")).toBeTruthy();
+    });
+
+    it("lets the caller override it, same as x-correlation-id — this package sets a default, it does not enforce one", async () => {
+      const seen: Request[] = [];
+      const client = createApiClient({ baseUrl: "https://api.example.test", fetch: fakeFetch(seen) });
+
+      await client.conversations.GET("/conversations", { headers: { "x-requested-with": "caller-value" } });
+
+      expect(seen[0]!.headers.get("x-requested-with")).toBe("caller-value");
+    });
+
+    it("does not disturb x-correlation-id or x-client-id — all three headers are present together, unmodified from before this story", async () => {
+      const seen: Request[] = [];
+      const client = createApiClient({ baseUrl: "https://api.example.test", fetch: fakeFetch(seen) });
+
+      await client.conversations.GET("/conversations", {});
+
+      const req = seen[0]!;
+      expect(req.headers.get("x-correlation-id")).toMatch(UUID_V4_RE);
+      expect(req.headers.get("x-client-id")).toBeTruthy();
+      expect(req.headers.get("x-requested-with")).toBe("XMLHttpRequest");
+    });
+  });
 });

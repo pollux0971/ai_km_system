@@ -28,6 +28,18 @@ export interface IdentityConfig {
   readonly sessionCookieDomain: string | undefined;
   /** `AI_KM_LOGIN_RATE_LIMIT` (E02-S034). See `parseLoginRateLimit`'s docstring for the format. */
   readonly loginRateLimit: LoginRateLimitConfig;
+  /**
+   * `AI_KM_CORS_ORIGINS` (E04-S048, optional) — the SAME env var
+   * `apps/api/src/config.ts` already reads for CORS (E04-S039), re-read
+   * here rather than threaded through `ApiConfig` for the same
+   * self-contained reason as every other flag in this file. Used as the
+   * allowlist for the multipart-upload CSRF exception's Origin/Referer
+   * check (`require-session.ts`) — these ARE exactly the origins the
+   * platform already considers legitimate cross-origin callers. Loopback
+   * is always additionally allowed regardless of this list, so local dev
+   * (an unconfigured `AI_KM_CORS_ORIGINS`) still works.
+   */
+  readonly corsOrigins: readonly string[];
 }
 
 export interface LoginRateLimitConfig {
@@ -42,7 +54,11 @@ const DEFAULT_LOGIN_RATE_LIMIT: LoginRateLimitConfig = Object.freeze({
   windowMinutes: 15,
 });
 
-const LOGIN_RATE_LIMIT_KEYS = ["perUsernameMaxFailures", "perIpMaxFailures", "windowMinutes"] as const;
+const LOGIN_RATE_LIMIT_KEYS = [
+  "perUsernameMaxFailures",
+  "perIpMaxFailures",
+  "windowMinutes",
+] as const;
 type LoginRateLimitKey = (typeof LOGIN_RATE_LIMIT_KEYS)[number];
 
 /**
@@ -59,10 +75,14 @@ type LoginRateLimitKey = (typeof LOGIN_RATE_LIMIT_KEYS)[number];
  * itself is tested by seeding old `attempted_at` timestamps directly,
  * documented in EVIDENCE, not by shrinking the window).
  */
-export function parseLoginRateLimit(raw: string | undefined): LoginRateLimitConfig {
+export function parseLoginRateLimit(
+  raw: string | undefined,
+): LoginRateLimitConfig {
   if (raw === undefined || raw === "") return DEFAULT_LOGIN_RATE_LIMIT;
 
-  const result: Record<LoginRateLimitKey, number> = { ...DEFAULT_LOGIN_RATE_LIMIT };
+  const result: Record<LoginRateLimitKey, number> = {
+    ...DEFAULT_LOGIN_RATE_LIMIT,
+  };
   for (const entry of raw.split(",")) {
     const trimmed = entry.trim();
     if (trimmed === "") continue;
@@ -94,13 +114,40 @@ export class IdentityConfigError extends Error {
   override readonly name = "IdentityConfigError";
 }
 
+/** Mirrors apps/api/src/config.ts's readOriginList exactly (same env var, same validation). */
+function readOriginList(env: NodeJS.ProcessEnv, key: string): string[] {
+  const raw = env[key];
+  if (raw === undefined || raw.trim() === "") return [];
+  const origins = raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  for (const origin of origins) {
+    try {
+      // eslint-disable-next-line no-new
+      new URL(origin);
+    } catch {
+      throw new IdentityConfigError(
+        `${key} 設定無效:"${origin}" 不是合法的 origin。`,
+      );
+    }
+  }
+  return origins;
+}
+
 /** Only the exact strings "true"/"false" are accepted — see apps/api/src/config.ts for the rationale. */
-function readBoolean(env: NodeJS.ProcessEnv, key: string, fallback: boolean): boolean {
+function readBoolean(
+  env: NodeJS.ProcessEnv,
+  key: string,
+  fallback: boolean,
+): boolean {
   const raw = env[key];
   if (raw === undefined || raw === "") return fallback;
   if (raw === "true") return true;
   if (raw === "false") return false;
-  throw new IdentityConfigError(`${key} 設定無效:必須是 "true" 或 "false",收到 "${raw}"。`);
+  throw new IdentityConfigError(
+    `${key} 設定無效:必須是 "true" 或 "false",收到 "${raw}"。`,
+  );
 }
 
 function readNodeEnv(env: NodeJS.ProcessEnv): IdentityNodeEnv {
@@ -113,7 +160,9 @@ function readNodeEnv(env: NodeJS.ProcessEnv): IdentityNodeEnv {
   return "development";
 }
 
-export function loadIdentityConfig(env: NodeJS.ProcessEnv = process.env): IdentityConfig {
+export function loadIdentityConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): IdentityConfig {
   const nodeEnv = readNodeEnv(env);
   const devTriggers = readBoolean(env, "AI_KM_DEV_TRIGGERS", false);
   const testSandbox = readBoolean(env, "AI_KM_TEST_SANDBOX", false);
@@ -121,10 +170,18 @@ export function loadIdentityConfig(env: NodeJS.ProcessEnv = process.env): Identi
   // them is the useful default in development/test and a credential leak in
   // production, so the default flips with nodeEnv rather than needing every
   // production deploy to remember to opt out.
-  const seedDemoUsers = readBoolean(env, "AI_KM_SEED_DEMO_USERS", nodeEnv !== "production");
+  const seedDemoUsers = readBoolean(
+    env,
+    "AI_KM_SEED_DEMO_USERS",
+    nodeEnv !== "production",
+  );
   const rawCookieDomain = env.AI_KM_SESSION_COOKIE_DOMAIN;
-  const sessionCookieDomain = rawCookieDomain === undefined || rawCookieDomain === "" ? undefined : rawCookieDomain;
+  const sessionCookieDomain =
+    rawCookieDomain === undefined || rawCookieDomain === ""
+      ? undefined
+      : rawCookieDomain;
   const loginRateLimit = parseLoginRateLimit(env.AI_KM_LOGIN_RATE_LIMIT);
+  const corsOrigins = readOriginList(env, "AI_KM_CORS_ORIGINS");
 
   if (nodeEnv === "production" && devTriggers) {
     throw new IdentityConfigError(
@@ -142,5 +199,13 @@ export function loadIdentityConfig(env: NodeJS.ProcessEnv = process.env): Identi
     );
   }
 
-  return Object.freeze({ nodeEnv, devTriggers, testSandbox, seedDemoUsers, sessionCookieDomain, loginRateLimit });
+  return Object.freeze({
+    nodeEnv,
+    devTriggers,
+    testSandbox,
+    seedDemoUsers,
+    sessionCookieDomain,
+    loginRateLimit,
+    corsOrigins,
+  });
 }

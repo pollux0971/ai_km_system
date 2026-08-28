@@ -7,7 +7,10 @@ import { createTestDatabase } from "./testing/db.js";
 import { validateAgainstAuthContract } from "./testing/contract.js";
 import { findSessionWithUserByTokenHash } from "./repository.js";
 import { hashSessionToken } from "./crypto.js";
-import { _resetSandboxSeedersForTest, registerSandboxSeeder } from "./sandbox-seeders.js";
+import {
+  _resetSandboxSeedersForTest,
+  registerSandboxSeeder,
+} from "./sandbox-seeders.js";
 import { identityPlugin } from "./plugin.js";
 import { requireAnyRole } from "./require-session.js";
 
@@ -36,7 +39,12 @@ class LogSink {
   }
 }
 
-async function buildWithLogSink(env: Record<string, string> = {}): Promise<{ harness: Awaited<ReturnType<typeof buildTestApp>>; sink: LogSink }> {
+async function buildWithLogSink(
+  env: Record<string, string> = {},
+): Promise<{
+  harness: Awaited<ReturnType<typeof buildTestApp>>;
+  sink: LogSink;
+}> {
   const sink = new LogSink();
   const built = await buildTestApp(env, { loggerStream: sink });
   harness = built;
@@ -65,6 +73,7 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
@@ -86,6 +95,7 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
@@ -102,7 +112,10 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/auth/login",
-      headers: { "x-forwarded-proto": "https" },
+      headers: {
+        "x-requested-with": "XMLHttpRequest",
+        "x-forwarded-proto": "https",
+      },
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
     expect(setCookieHeader(res)).toMatch(/Secure/i);
@@ -112,6 +125,7 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "wrong-password" },
     });
@@ -123,6 +137,7 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "no-such-user", password: "anything" },
     });
@@ -134,6 +149,7 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "wrong-password" },
     });
@@ -144,6 +160,7 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "disabled", password: "demo-pass-123" },
     });
@@ -155,6 +172,7 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "disabled", password: "wrong-password" },
     });
@@ -166,6 +184,7 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user" },
     });
@@ -176,8 +195,13 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
-      payload: { username: "demo-user", password: "demo-pass-123", role: "admin" },
+      payload: {
+        username: "demo-user",
+        password: "demo-pass-123",
+        role: "admin",
+      },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -186,10 +210,16 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
-    const result = await validateAgainstAuthContract("/auth/login", "post", 200, res.json());
+    const result = await validateAgainstAuthContract(
+      "/auth/login",
+      "post",
+      200,
+      res.json(),
+    );
     expect(result.errors).toEqual([]);
     expect(result.valid).toBe(true);
   });
@@ -198,10 +228,16 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "wrong" },
     });
-    const result = await validateAgainstAuthContract("/auth/login", "post", 401, res.json());
+    const result = await validateAgainstAuthContract(
+      "/auth/login",
+      "post",
+      401,
+      res.json(),
+    );
     expect(result.valid).toBe(true);
   });
 
@@ -209,10 +245,16 @@ describe("POST /v1/auth/login (AC1, AC2, AC3)", () => {
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "disabled", password: "demo-pass-123" },
     });
-    const result = await validateAgainstAuthContract("/auth/login", "post", 403, res.json());
+    const result = await validateAgainstAuthContract(
+      "/auth/login",
+      "post",
+      403,
+      res.json(),
+    );
     expect(result.valid).toBe(true);
   });
 });
@@ -222,6 +264,7 @@ describe("Dev trigger (AC6)", () => {
     const { app } = await build({ AI_KM_DEV_TRIGGERS: "true" });
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "service-error", password: "anything" },
     });
@@ -233,10 +276,16 @@ describe("Dev trigger (AC6)", () => {
     const { app } = await build({ AI_KM_DEV_TRIGGERS: "true" });
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "service-error", password: "anything" },
     });
-    const result = await validateAgainstAuthContract("/auth/login", "post", 503, res.json());
+    const result = await validateAgainstAuthContract(
+      "/auth/login",
+      "post",
+      503,
+      res.json(),
+    );
     expect(result.valid).toBe(true);
   });
 
@@ -244,6 +293,7 @@ describe("Dev trigger (AC6)", () => {
     const { app } = await build({ AI_KM_DEV_TRIGGERS: "false" });
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "service-error", password: "anything" },
     });
@@ -257,16 +307,24 @@ describe("Test sandbox (AC7)", () => {
     const { app, db } = await build({ AI_KM_TEST_SANDBOX: "true" });
     const first = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
     const second = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
-    const firstOwner = findSessionWithUserByTokenHash(db, hashSessionToken(sessionCookieFrom(first)))?.owner_key;
-    const secondOwner = findSessionWithUserByTokenHash(db, hashSessionToken(sessionCookieFrom(second)))?.owner_key;
+    const firstOwner = findSessionWithUserByTokenHash(
+      db,
+      hashSessionToken(sessionCookieFrom(first)),
+    )?.owner_key;
+    const secondOwner = findSessionWithUserByTokenHash(
+      db,
+      hashSessionToken(sessionCookieFrom(second)),
+    )?.owner_key;
     expect(firstOwner).toMatch(/^mock-user-1:sbx:/);
     expect(secondOwner).toMatch(/^mock-user-1:sbx:/);
     expect(firstOwner).not.toBe(secondOwner);
@@ -276,6 +334,7 @@ describe("Test sandbox (AC7)", () => {
     const { app } = await build({ AI_KM_TEST_SANDBOX: "true" });
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
@@ -289,10 +348,14 @@ describe("Test sandbox (AC7)", () => {
 
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
-    const ownerKey = findSessionWithUserByTokenHash(db, hashSessionToken(sessionCookieFrom(res)))?.owner_key;
+    const ownerKey = findSessionWithUserByTokenHash(
+      db,
+      hashSessionToken(sessionCookieFrom(res)),
+    )?.owner_key;
 
     expect(seeder).toHaveBeenCalledTimes(1);
     expect(seeder).toHaveBeenCalledWith(ownerKey);
@@ -305,10 +368,14 @@ describe("Test sandbox (AC7)", () => {
 
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
-    const ownerKey = findSessionWithUserByTokenHash(db, hashSessionToken(sessionCookieFrom(res)))?.owner_key;
+    const ownerKey = findSessionWithUserByTokenHash(
+      db,
+      hashSessionToken(sessionCookieFrom(res)),
+    )?.owner_key;
 
     expect(ownerKey).toBe("mock-user-1");
     expect(seeder).not.toHaveBeenCalled();
@@ -320,11 +387,15 @@ describe("GET /v1/auth/session (AC4)", () => {
     const { app, db } = await build();
     const login = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
     const cookie = sessionCookieFrom(login);
-    const before = findSessionWithUserByTokenHash(db, hashSessionToken(cookie))?.last_seen_at;
+    const before = findSessionWithUserByTokenHash(
+      db,
+      hashSessionToken(cookie),
+    )?.last_seen_at;
 
     await new Promise((resolve) => setTimeout(resolve, 5));
     const res = await app.inject({
@@ -335,7 +406,10 @@ describe("GET /v1/auth/session (AC4)", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().userId).toBe("mock-user-1");
-    const after = findSessionWithUserByTokenHash(db, hashSessionToken(cookie))?.last_seen_at;
+    const after = findSessionWithUserByTokenHash(
+      db,
+      hashSessionToken(cookie),
+    )?.last_seen_at;
     expect(Date.parse(after!)).toBeGreaterThan(Date.parse(before!));
   });
 
@@ -343,6 +417,7 @@ describe("GET /v1/auth/session (AC4)", () => {
     const { app } = await build();
     const login = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
@@ -351,7 +426,12 @@ describe("GET /v1/auth/session (AC4)", () => {
       url: "/v1/auth/session",
       cookies: { ai_km_session: sessionCookieFrom(login) },
     });
-    const result = await validateAgainstAuthContract("/auth/session", "get", 200, res.json());
+    const result = await validateAgainstAuthContract(
+      "/auth/session",
+      "get",
+      200,
+      res.json(),
+    );
     expect(result.errors).toEqual([]);
     expect(result.valid).toBe(true);
   });
@@ -377,7 +457,12 @@ describe("GET /v1/auth/session (AC4)", () => {
   it("the 401 body satisfies auth.yaml's UnauthenticatedBody schema", async () => {
     const { app } = await build();
     const res = await app.inject({ method: "GET", url: "/v1/auth/session" });
-    const result = await validateAgainstAuthContract("/auth/session", "get", 401, res.json());
+    const result = await validateAgainstAuthContract(
+      "/auth/session",
+      "get",
+      401,
+      res.json(),
+    );
     expect(result.valid).toBe(true);
   });
 });
@@ -387,6 +472,7 @@ describe("POST /v1/auth/logout (AC5)", () => {
     const { app, db } = await build();
     const login = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
@@ -394,12 +480,15 @@ describe("POST /v1/auth/logout (AC5)", () => {
 
     const logout = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/logout",
       cookies: { ai_km_session: cookie },
     });
     expect(logout.statusCode).toBe(204);
     expect(logout.body).toBe("");
-    expect(findSessionWithUserByTokenHash(db, hashSessionToken(cookie))).toBeUndefined();
+    expect(
+      findSessionWithUserByTokenHash(db, hashSessionToken(cookie)),
+    ).toBeUndefined();
 
     const sessionAfter = await app.inject({
       method: "GET",
@@ -413,11 +502,13 @@ describe("POST /v1/auth/logout (AC5)", () => {
     const { app } = await build();
     const login = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/logout",
       cookies: { ai_km_session: sessionCookieFrom(login) },
     });
@@ -426,7 +517,11 @@ describe("POST /v1/auth/logout (AC5)", () => {
 
   it("204s idempotently with no cookie at all", async () => {
     const { app } = await build();
-    const res = await app.inject({ method: "POST", url: "/v1/auth/logout" });
+    const res = await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/logout",
+    });
     expect(res.statusCode).toBe(204);
   });
 
@@ -434,12 +529,23 @@ describe("POST /v1/auth/logout (AC5)", () => {
     const { app } = await build();
     const login = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
     const cookie = sessionCookieFrom(login);
-    await app.inject({ method: "POST", url: "/v1/auth/logout", cookies: { ai_km_session: cookie } });
-    const second = await app.inject({ method: "POST", url: "/v1/auth/logout", cookies: { ai_km_session: cookie } });
+    await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/logout",
+      cookies: { ai_km_session: cookie },
+    });
+    const second = await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/logout",
+      cookies: { ai_km_session: cookie },
+    });
     expect(second.statusCode).toBe(204);
   });
 });
@@ -481,14 +587,19 @@ describe("AC9 — a protected route denies with 401 and never runs the handler w
     app.addHook("onClose", async () => db.close());
     await app.register(identityPlugin);
 
-    app.get("/__protected__", { preHandler: app.requireSession }, async (request) => ({
-      userId: request.auth?.userId,
-      ownerKey: request.auth?.ownerKey,
-    }));
+    app.get(
+      "/__protected__",
+      { preHandler: app.requireSession },
+      async (request) => ({
+        userId: request.auth?.userId,
+        ownerKey: request.auth?.ownerKey,
+      }),
+    );
     await app.ready();
 
     const login = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
@@ -499,7 +610,10 @@ describe("AC9 — a protected route denies with 401 and never runs the handler w
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ userId: "mock-user-1", ownerKey: "mock-user-1" });
+    expect(res.json()).toEqual({
+      userId: "mock-user-1",
+      ownerKey: "mock-user-1",
+    });
   });
 });
 
@@ -519,7 +633,9 @@ describe("AC8 — seeding is idempotent across a restart against the same databa
     await second.register(identityPlugin);
     await second.ready();
 
-    const count = (db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n;
+    const count = (
+      db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }
+    ).n;
     expect(count).toBe(10); // 4 (E02-S032) + 6 admin accounts (E02-S033)
 
     await second.close();
@@ -559,13 +675,19 @@ describe("E02-S033 AC2 — requireAnyRole chained after app.requireSession, thro
     return app;
   }
 
-  async function loginAs(instance: FastifyInstance, username: string): Promise<string> {
+  async function loginAs(
+    instance: FastifyInstance,
+    username: string,
+  ): Promise<string> {
     const res = await instance.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username, password: "demo-pass-123" },
     });
-    const match = String(res.headers["set-cookie"]).match(/ai_km_session=([^;]+)/);
+    const match = String(res.headers["set-cookie"]).match(
+      /ai_km_session=([^;]+)/,
+    );
     if (!match?.[1]) throw new Error("login did not set a session cookie");
     return match[1];
   }
@@ -573,14 +695,22 @@ describe("E02-S033 AC2 — requireAnyRole chained after app.requireSession, thro
   it("200s for demo-auditor", async () => {
     const instance = await buildGuardedApp();
     const cookieValue = await loginAs(instance, "demo-auditor");
-    const res = await instance.inject({ method: "GET", url: "/__audit__", cookies: { ai_km_session: cookieValue } });
+    const res = await instance.inject({
+      method: "GET",
+      url: "/__audit__",
+      cookies: { ai_km_session: cookieValue },
+    });
     expect(res.statusCode).toBe(200);
   });
 
   it("403s for demo-user", async () => {
     const instance = await buildGuardedApp();
     const cookieValue = await loginAs(instance, "demo-user");
-    const res = await instance.inject({ method: "GET", url: "/__audit__", cookies: { ai_km_session: cookieValue } });
+    const res = await instance.inject({
+      method: "GET",
+      url: "/__audit__",
+      cookies: { ai_km_session: cookieValue },
+    });
     expect(res.statusCode).toBe(403);
   });
 
@@ -593,16 +723,23 @@ describe("E02-S033 AC2 — requireAnyRole chained after app.requireSession, thro
   it("200s for demo-super (implicit super_administrator pass)", async () => {
     const instance = await buildGuardedApp();
     const cookieValue = await loginAs(instance, "demo-super");
-    const res = await instance.inject({ method: "GET", url: "/__audit__", cookies: { ai_km_session: cookieValue } });
+    const res = await instance.inject({
+      method: "GET",
+      url: "/__audit__",
+      cookies: { ai_km_session: cookieValue },
+    });
     expect(res.statusCode).toBe(200);
   });
 });
 
 describe("E02-S033 AC4 — AI_KM_SESSION_COOKIE_DOMAIN, end to end through login/logout", () => {
   it("login's Set-Cookie carries Domain when configured", async () => {
-    const { app } = await build({ AI_KM_SESSION_COOKIE_DOMAIN: "example.internal" });
+    const { app } = await build({
+      AI_KM_SESSION_COOKIE_DOMAIN: "example.internal",
+    });
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
@@ -613,6 +750,7 @@ describe("E02-S033 AC4 — AI_KM_SESSION_COOKIE_DOMAIN, end to end through login
     const { app } = await build();
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
@@ -620,14 +758,18 @@ describe("E02-S033 AC4 — AI_KM_SESSION_COOKIE_DOMAIN, end to end through login
   });
 
   it("logout's clearing Set-Cookie ALSO carries the same Domain (otherwise a browser would not actually delete it)", async () => {
-    const { app } = await build({ AI_KM_SESSION_COOKIE_DOMAIN: "example.internal" });
+    const { app } = await build({
+      AI_KM_SESSION_COOKIE_DOMAIN: "example.internal",
+    });
     const login = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username: "demo-user", password: "demo-pass-123" },
     });
     const res = await app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/logout",
       cookies: { ai_km_session: sessionCookieFrom(login) },
     });
@@ -644,6 +786,7 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
   ) {
     return app.inject({
       method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
       url: "/v1/auth/login",
       payload: { username, password },
       remoteAddress,
@@ -655,8 +798,18 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
     for (let i = 0; i < 5; i += 1) {
       await login(app, "demo-user", "wrong-password", "198.51.100.1");
     }
-    const locked = await login(app, "demo-user", "demo-pass-123", "198.51.100.1");
-    const wrongPassword = await login(app, "demo-user", "wrong-password-2", "198.51.100.1");
+    const locked = await login(
+      app,
+      "demo-user",
+      "demo-pass-123",
+      "198.51.100.1",
+    );
+    const wrongPassword = await login(
+      app,
+      "demo-user",
+      "wrong-password-2",
+      "198.51.100.1",
+    );
 
     expect(locked.statusCode).toBe(401);
     expect(locked.statusCode).toBe(wrongPassword.statusCode);
@@ -665,7 +818,9 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
   });
 
   it("AC1/AC7: a low AI_KM_LOGIN_RATE_LIMIT threshold locks after fewer attempts", async () => {
-    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2" });
+    const { app } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2",
+    });
     await login(app, "demo-user", "wrong", "198.51.100.2");
     await login(app, "demo-user", "wrong", "198.51.100.2");
     const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.2");
@@ -673,7 +828,9 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
   });
 
   it("does not lock a username that has fewer failures than the threshold", async () => {
-    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:3" });
+    const { app } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:3",
+    });
     await login(app, "demo-user", "wrong", "198.51.100.3");
     await login(app, "demo-user", "wrong", "198.51.100.3");
     const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.3");
@@ -681,36 +838,52 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
   });
 
   it("AC2: once the failures fall outside the window, the correct password succeeds again", async () => {
-    const { app, db } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2" });
+    const { app, db } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2",
+    });
     await login(app, "demo-user", "wrong", "198.51.100.4");
     await login(app, "demo-user", "wrong", "198.51.100.4");
-    const stillLocked = await login(app, "demo-user", "demo-pass-123", "198.51.100.4");
+    const stillLocked = await login(
+      app,
+      "demo-user",
+      "demo-pass-123",
+      "198.51.100.4",
+    );
     expect(stillLocked.statusCode).toBe(401);
 
     // "Test 以可注入時鐘推進" — implemented here by rewriting the recorded
     // attempts' timestamps to 20 minutes in the past (outside the default
     // 15-minute window) rather than threading a clock through production
     // code; see docs/stories/E02-S034.md's Assumptions for why.
-    db.prepare("UPDATE login_attempts SET attempted_at = ? WHERE username = 'demo-user'").run(
-      new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-    );
+    db.prepare(
+      "UPDATE login_attempts SET attempted_at = ? WHERE username = 'demo-user'",
+    ).run(new Date(Date.now() - 20 * 60 * 1000).toISOString());
 
     const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.4");
     expect(res.statusCode).toBe(200);
   });
 
   it("AC3: 20 different accounts each failing once from the SAME IP locks the 21st attempt, even for a brand-new username", async () => {
-    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:20" });
+    const { app } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:20",
+    });
     const ip = "198.51.100.5";
     for (let i = 0; i < 20; i += 1) {
       await login(app, `nonexistent-user-${i}`, "wrong", ip);
     }
-    const res = await login(app, "brand-new-never-seen-username", "anything", ip);
+    const res = await login(
+      app,
+      "brand-new-never-seen-username",
+      "anything",
+      ip,
+    );
     expect(res.statusCode).toBe(401);
   });
 
   it("AC3/AC7: a low perIpMaxFailures locks the IP after fewer distinct-account failures", async () => {
-    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:3" });
+    const { app } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:3",
+    });
     const ip = "198.51.100.6";
     await login(app, "u1", "wrong", ip);
     await login(app, "u2", "wrong", ip);
@@ -720,7 +893,9 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
   });
 
   it("a different IP is not affected by another IP's failures", async () => {
-    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:2" });
+    const { app } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:2",
+    });
     await login(app, "u1", "wrong", "198.51.100.7");
     await login(app, "u2", "wrong", "198.51.100.7");
     const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.8");
@@ -728,7 +903,9 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
   });
 
   it("AC4: a successful login resets that username's failure count but not the IP's", async () => {
-    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2, perIpMaxFailures:100" });
+    const { app } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2, perIpMaxFailures:100",
+    });
     const ip = "198.51.100.9";
     await login(app, "demo-user", "wrong", ip);
     const success = await login(app, "demo-user", "demo-pass-123", ip);
@@ -742,19 +919,33 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
   });
 
   it("AC5: the locked response never differs from INVALID_CREDENTIALS in any observable field", async () => {
-    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1" });
+    const { app } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1",
+    });
     const ip = "198.51.100.10";
     await login(app, "demo-user", "wrong", ip);
     const res = await login(app, "demo-user", "demo-pass-123", ip);
-    const result = await validateAgainstAuthContract("/auth/login", "post", 401, res.json());
+    const result = await validateAgainstAuthContract(
+      "/auth/login",
+      "post",
+      401,
+      res.json(),
+    );
     expect(result.valid).toBe(true);
     expect(Object.keys(res.json())).toEqual(["code", "message"]);
   });
 
   it("regression: a locked response must stay indistinguishable from a wrong-password response (permanent — do not special-case lockout)", async () => {
-    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1" });
+    const { app } = await build({
+      AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1",
+    });
     const ip = "198.51.100.11";
-    const wrongPasswordBaseline = await login(app, "someone-never-locked", "wrong", "198.51.100.12");
+    const wrongPasswordBaseline = await login(
+      app,
+      "someone-never-locked",
+      "wrong",
+      "198.51.100.12",
+    );
     await login(app, "demo-user", "wrong", ip);
     const locked = await login(app, "demo-user", "demo-pass-123", ip);
     expect(locked.statusCode).toBe(wrongPasswordBaseline.statusCode);
@@ -777,7 +968,9 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
     await app.register(identityPlugin);
     await app.ready();
 
-    const remaining = db.prepare("SELECT id FROM login_attempts").all() as { id: string }[];
+    const remaining = db.prepare("SELECT id FROM login_attempts").all() as {
+      id: string;
+    }[];
     expect(remaining.map((r) => r.id)).toEqual(["recent-1"]);
 
     await app.close();
@@ -791,7 +984,9 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
 
   describe("telemetry (E02-S034 技術決策: LOGIN_RATE_LIMITED, metadata only)", () => {
     it("logs a LOGIN_RATE_LIMITED event when a request is throttled", async () => {
-      const { harness, sink } = await buildWithLogSink({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1" });
+      const { harness, sink } = await buildWithLogSink({
+        AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1",
+      });
       const ip = "198.51.100.20";
       await login(harness.app, "demo-user", "wrong", ip);
       await login(harness.app, "demo-user", "demo-pass-123", ip);
@@ -804,17 +999,23 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
     });
 
     it("never logs the raw username or the password anywhere", async () => {
-      const { harness, sink } = await buildWithLogSink({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1" });
+      const { harness, sink } = await buildWithLogSink({
+        AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1",
+      });
       const ip = "198.51.100.21";
-      await login(harness.app, "demo-user", "wrong-password-should-not-leak", ip);
+      await login(
+        harness.app,
+        "demo-user",
+        "wrong-password-should-not-leak",
+        ip,
+      );
       await login(harness.app, "demo-user", "demo-pass-123", ip);
 
       expect(sink.raw).not.toContain("wrong-password-should-not-leak");
       expect(sink.raw).not.toContain("demo-pass-123");
       // The raw username itself must not appear either — only its hash.
       const event = sink.lines.find((l) => l.code === "LOGIN_RATE_LIMITED") as
-        | { usernameHash?: string }
-        | undefined;
+        { usernameHash?: string } | undefined;
       expect(event?.usernameHash).not.toBe("demo-user");
       expect(sink.raw).not.toMatch(/"username":"demo-user"/);
     });
@@ -823,7 +1024,131 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
       const { harness, sink } = await buildWithLogSink();
       await login(harness.app, "demo-user", "wrong", "198.51.100.22");
 
-      expect(sink.lines.find((l) => l.code === "LOGIN_RATE_LIMITED")).toBeUndefined();
+      expect(
+        sink.lines.find((l) => l.code === "LOGIN_RATE_LIMITED"),
+      ).toBeUndefined();
     });
+  });
+});
+
+describe("E04-S048 — CSRF: login/logout require x-requested-with (they never go through requireSession, so this is checked inline)", () => {
+  it("POST /v1/auth/login WITHOUT x-requested-with is 403 CSRF_HEADER_MISSING, even with the correct password", async () => {
+    const { app } = await build();
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe("CSRF_HEADER_MISSING");
+  });
+
+  it("does not set a session cookie when the CSRF check denies the login", async () => {
+    const { app } = await build();
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    expect(res.headers["set-cookie"]).toBeUndefined();
+  });
+
+  it("does not record a login_attempts row when denied for a missing CSRF header (never reached the throttle/credential logic)", async () => {
+    const { app, db } = await build();
+    await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    const rows = db.prepare("SELECT COUNT(*) AS n FROM login_attempts").get() as { n: number };
+    expect(rows.n).toBe(0);
+  });
+
+  it("POST /v1/auth/login WITH x-requested-with succeeds normally (unaffected by CSRF)", async () => {
+    const { app } = await build();
+    const res = await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("POST /v1/auth/logout WITHOUT x-requested-with is 403 CSRF_HEADER_MISSING, even with a valid session cookie", async () => {
+    const { app } = await build();
+    const login = await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    const cookie = sessionCookieFrom(login);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/logout",
+      cookies: { ai_km_session: cookie },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe("CSRF_HEADER_MISSING");
+  });
+
+  it("a CSRF-denied logout does NOT delete the session — the victim stays logged in, exactly as if the attack had not happened", async () => {
+    const { app, db } = await build();
+    const login = await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    const cookie = sessionCookieFrom(login);
+
+    await app.inject({ method: "POST", url: "/v1/auth/logout", cookies: { ai_km_session: cookie } });
+
+    expect(findSessionWithUserByTokenHash(db, hashSessionToken(cookie))).toBeDefined();
+  });
+
+  it("POST /v1/auth/logout WITH x-requested-with succeeds normally (unaffected by CSRF)", async () => {
+    const { app } = await build();
+    const login = await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    const res = await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/logout",
+      cookies: { ai_km_session: sessionCookieFrom(login) },
+    });
+    expect(res.statusCode).toBe(204);
+  });
+
+  it("GET /v1/auth/session is completely unaffected — no header needed (red line: GET is never checked)", async () => {
+    const { app } = await build();
+    const login = await app.inject({
+      method: "POST",
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/auth/session",
+      cookies: { ai_km_session: sessionCookieFrom(login) },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("the 403 body satisfies the general Error envelope (code + message, nothing else)", async () => {
+    const { app } = await build();
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username: "demo-user", password: "demo-pass-123" },
+    });
+    expect(Object.keys(res.json()).sort()).toEqual(["code", "message"]);
   });
 });

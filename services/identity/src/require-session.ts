@@ -19,12 +19,21 @@
  * approved/merged under E04-S039. Composing over it, instead of replacing
  * it, is what makes both stories' contracts true at once.
  */
-import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
+import type {
+  FastifyReply,
+  FastifyRequest,
+  preHandlerHookHandler,
+} from "fastify";
 import type { Database } from "better-sqlite3";
 import type { Role } from "@ai-km/permissions";
 import { hashSessionToken } from "./crypto.js";
-import { deleteSessionById, findSessionWithUserByTokenHash, touchSession } from "./repository.js";
+import {
+  deleteSessionById,
+  findSessionWithUserByTokenHash,
+  touchSession,
+} from "./repository.js";
 import type { AuthContext } from "./fastify-types.js";
+import { CSRF_ERROR_CODE, CSRF_ERROR_MESSAGE, checkCsrf } from "./csrf.js";
 
 export const SESSION_COOKIE_NAME = "ai_km_session";
 export const SESSION_IDLE_LIMIT_MS = 12 * 60 * 60 * 1000;
@@ -42,7 +51,11 @@ export function isHttps(request: FastifyRequest): boolean {
   return request.protocol === "https";
 }
 
-const COOKIE_ATTRIBUTES = { httpOnly: true, sameSite: "lax" as const, path: "/" };
+const COOKIE_ATTRIBUTES = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+};
 
 /**
  * `AI_KM_SESSION_COOKIE_DOMAIN` (E02-S033, optional). Unset (the default) ->
@@ -66,7 +79,11 @@ export function setSessionCookie(
   });
 }
 
-export function clearSessionCookie(reply: FastifyReply, request: FastifyRequest, domain?: string): void {
+export function clearSessionCookie(
+  reply: FastifyReply,
+  request: FastifyRequest,
+  domain?: string,
+): void {
   reply.clearCookie(SESSION_COOKIE_NAME, {
     ...COOKIE_ATTRIBUTES,
     secure: isHttps(request),
@@ -80,7 +97,20 @@ async function denyUnauthenticated(
   domain?: string,
 ): Promise<void> {
   clearSessionCookie(reply, request, domain);
-  await reply.code(401).send({ code: "UNAUTHENTICATED", message: "請先登入。" });
+  await reply
+    .code(401)
+    .send({ code: "UNAUTHENTICATED", message: "請先登入。" });
+}
+
+async function denyCsrf(reply: FastifyReply): Promise<void> {
+  // Deliberately no cookie-clearing here (unlike denyUnauthenticated): this
+  // is not a session judgement, and clearing a perfectly valid session
+  // cookie just because THIS request lacked the CSRF header would force a
+  // real logged-in user to re-authenticate for something that was never
+  // about their session at all.
+  await reply
+    .code(403)
+    .send({ code: CSRF_ERROR_CODE, message: CSRF_ERROR_MESSAGE });
 }
 
 /**
@@ -89,9 +119,27 @@ async function denyUnauthenticated(
  * 401 `UNAUTHENTICATED` with the cookie cleared, and the route handler never
  * runs (AC9) because a preHandler that has already sent a reply stops
  * Fastify's lifecycle there.
+ *
+ * E04-S048: the CSRF check runs FIRST, before the cookie is even read —
+ * "先查 header 再查 session" (spec's own ordering requirement) — so a 403
+ * CSRF response can never be used to probe whether a session cookie is
+ * valid; every caller missing the header gets the identical 403 whether or
+ * not they also happen to be logged in.
  */
-export function buildRealRequireSession(db: Database, cookieDomain?: string): preHandlerHookHandler {
-  return async function realRequireSession(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+export function buildRealRequireSession(
+  db: Database,
+  cookieDomain?: string,
+  csrfAllowedOrigins: readonly string[] = [],
+): preHandlerHookHandler {
+  return async function realRequireSession(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
+    if (!checkCsrf(request, csrfAllowedOrigins).allowed) {
+      await denyCsrf(reply);
+      return;
+    }
+
     const token = request.cookies?.[SESSION_COOKIE_NAME];
     if (typeof token !== "string" || token.length === 0) {
       await denyUnauthenticated(request, reply, cookieDomain);
@@ -108,7 +156,11 @@ export function buildRealRequireSession(db: Database, cookieDomain?: string): pr
     const expiresAtMs = Date.parse(row.expires_at);
     const idleMs = nowMs - Date.parse(row.last_seen_at);
 
-    if (nowMs >= expiresAtMs || idleMs > SESSION_IDLE_LIMIT_MS || row.disabled === 1) {
+    if (
+      nowMs >= expiresAtMs ||
+      idleMs > SESSION_IDLE_LIMIT_MS ||
+      row.disabled === 1
+    ) {
       // Tampered/expired/idle/since-disabled all collapse to the same 401 —
       // none of them should be distinguishable to the caller, and the row is
       // purged either way so a retried request does the same work again
@@ -135,19 +187,26 @@ export function composeRequireSession(
   previous: preHandlerHookHandler | undefined,
   cookieDomain?: string,
 ): preHandlerHookHandler {
-  return async function requireSession(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  return async function requireSession(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
     const token = request.cookies?.[SESSION_COOKIE_NAME];
     if (typeof token === "string" && token.length > 0) {
-      await (realRequireSession as (req: FastifyRequest, rep: FastifyReply) => Promise<unknown>)(
-        request,
-        reply,
-      );
+      await (
+        realRequireSession as (
+          req: FastifyRequest,
+          rep: FastifyReply,
+        ) => Promise<unknown>
+      )(request, reply);
       return;
     }
     if (previous) {
       // Neither E04-S039 handler this ever falls back to reads `this`, so a
       // plain call (no `.call(app, …)`) is safe — see the module docstring.
-      await (previous as (req: FastifyRequest, rep: FastifyReply) => Promise<unknown>)(request, reply);
+      await (
+        previous as (req: FastifyRequest, rep: FastifyReply) => Promise<unknown>
+      )(request, reply);
       return;
     }
     await denyUnauthenticated(request, reply, cookieDomain);
@@ -168,12 +227,17 @@ export function composeRequireSession(
  * not accidentally lock the top role out.
  */
 export function requireAnyRole(roles: readonly Role[]): preHandlerHookHandler {
-  return async function requireAnyRoleHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  return async function requireAnyRoleHandler(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
     const auth = request.auth;
     if (!auth) {
       // requireSession did not run first, or denied — either way there is
       // nothing to authorize. Fail closed rather than assume "allow".
-      await reply.code(401).send({ code: "UNAUTHENTICATED", message: "請先登入。" });
+      await reply
+        .code(401)
+        .send({ code: "UNAUTHENTICATED", message: "請先登入。" });
       return;
     }
 
@@ -182,6 +246,8 @@ export function requireAnyRole(roles: readonly Role[]): preHandlerHookHandler {
 
     // AC3: the required-roles list never appears in the body — it would
     // hand an unauthorized caller a map of what to try next.
-    await reply.code(403).send({ code: "PERMISSION_DENIED", message: "沒有執行這個操作的權限。" });
+    await reply
+      .code(403)
+      .send({ code: "PERMISSION_DENIED", message: "沒有執行這個操作的權限。" });
   };
 }

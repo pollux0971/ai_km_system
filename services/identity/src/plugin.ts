@@ -14,7 +14,13 @@
  */
 import { randomUUID } from "node:crypto";
 import fp from "fastify-plugin";
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
+import type {
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+  preHandlerHookHandler,
+} from "fastify";
 import { loadIdentityConfig, type IdentityConfig } from "./config.js";
 import {
   DUMMY_SALT,
@@ -49,6 +55,7 @@ import {
   composeRequireSession,
   setSessionCookie,
 } from "./require-session.js";
+import { CSRF_ERROR_CODE, CSRF_ERROR_MESSAGE, checkCsrf } from "./csrf.js";
 // `fastify-types.d.ts` is a pure ambient-declaration file (module
 // augmentation only, no runtime exports); tsconfig's `include: ["src"]`
 // already pulls it into this package's typecheck without an explicit
@@ -78,7 +85,10 @@ interface AuthSessionBody {
   group: string;
 }
 
-function toAuthSessionBodyFromUser(user: UserRow, expiresAtIso: string): AuthSessionBody {
+function toAuthSessionBodyFromUser(
+  user: UserRow,
+  expiresAtIso: string,
+): AuthSessionBody {
   return {
     userId: user.id,
     roles: JSON.parse(user.roles) as string[],
@@ -110,14 +120,32 @@ function sweepOldLoginAttempts(app: FastifyInstance): void {
   // `users`/`sessions` during an in-place upgrade — see
   // loginAttemptsTableExists's docstring.
   if (!loginAttemptsTableExists(app.db)) return;
-  const cutoffIso = new Date(Date.now() - LOGIN_ATTEMPTS_RETENTION_MS).toISOString();
+  const cutoffIso = new Date(
+    Date.now() - LOGIN_ATTEMPTS_RETENTION_MS,
+  ).toISOString();
   const removed = deleteOldLoginAttempts(app.db, cutoffIso);
   if (removed > 0) app.log.debug({ removed }, "swept old login attempts");
 }
 
 function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
-  return async function login(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
-    const { username, password } = request.body as { username: string; password: string };
+  return async function login(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<unknown> {
+    // E04-S048: login/logout don't go through requireSession (there is no
+    // session yet to require), so the CSRF check is inline here instead of
+    // fused into buildRealRequireSession like every other protected route —
+    // checked first, before any credential work, same "gate before business
+    // logic" ordering as the rest of the platform's checks.
+    if (!checkCsrf(request, config.corsOrigins).allowed) {
+      reply.code(403);
+      return { code: CSRF_ERROR_CODE, message: CSRF_ERROR_MESSAGE };
+    }
+
+    const { username, password } = request.body as {
+      username: string;
+      password: string;
+    };
 
     // Dev trigger (AC6): checked before any DB lookup, so it works even for
     // a username with no seeded row, and never fires unless explicitly
@@ -125,13 +153,20 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
     // in production.
     if (config.devTriggers && username === "service-error") {
       reply.code(503);
-      return { code: "SERVICE_UNAVAILABLE", message: "認證服務暫時無法使用,請稍後再試。" };
+      return {
+        code: "SERVICE_UNAVAILABLE",
+        message: "認證服務暫時無法使用,請稍後再試。",
+      };
     }
 
     const user = findUserByUsername(app.db, username);
     let passwordOk: boolean;
     if (user) {
-      passwordOk = await verifyPassword(password, user.password_salt, user.password_hash);
+      passwordOk = await verifyPassword(
+        password,
+        user.password_salt,
+        user.password_hash,
+      );
     } else {
       // AC2 (E02-S032): pay for a real scrypt computation even though there
       // is no row, so "unknown username" and "wrong password" cost the same
@@ -151,15 +186,27 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
     const nowMs = Date.now();
     const nowIso = new Date(nowMs).toISOString();
     const ip = request.ip;
-    const windowStartIso = new Date(nowMs - config.loginRateLimit.windowMinutes * 60_000).toISOString();
-    const usernameFailures = countRecentFailuresByUsername(app.db, username, windowStartIso);
+    const windowStartIso = new Date(
+      nowMs - config.loginRateLimit.windowMinutes * 60_000,
+    ).toISOString();
+    const usernameFailures = countRecentFailuresByUsername(
+      app.db,
+      username,
+      windowStartIso,
+    );
     const ipFailures = countRecentFailuresByIp(app.db, ip, windowStartIso);
     const throttled =
       usernameFailures >= config.loginRateLimit.perUsernameMaxFailures ||
       ipFailures >= config.loginRateLimit.perIpMaxFailures;
 
     if (throttled) {
-      recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: false, attemptedAt: nowIso });
+      recordLoginAttempt(app.db, {
+        id: randomUUID(),
+        username,
+        ip,
+        succeeded: false,
+        attemptedAt: nowIso,
+      });
       // Metadata only (E02-S034 技術決策): hashed username, ip, and the
       // count that tripped the throttle — never the password, never the
       // raw username. This is a log line, not the client-facing response,
@@ -179,7 +226,13 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
     }
 
     if (!user || !passwordOk) {
-      recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: false, attemptedAt: nowIso });
+      recordLoginAttempt(app.db, {
+        id: randomUUID(),
+        username,
+        ip,
+        succeeded: false,
+        attemptedAt: nowIso,
+      });
       reply.code(401);
       return { code: "INVALID_CREDENTIALS", message: "帳號或密碼不正確。" };
     }
@@ -189,20 +242,39 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
     // ordering matters: a disabled account with a WRONG password must stay
     // indistinguishable from any other wrong-password attempt.
     if (user.disabled === 1) {
-      recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: false, attemptedAt: nowIso });
+      recordLoginAttempt(app.db, {
+        id: randomUUID(),
+        username,
+        ip,
+        succeeded: false,
+        attemptedAt: nowIso,
+      });
       reply.code(403);
-      return { code: "ACCOUNT_DISABLED", message: "此帳號已停用,請聯絡系統管理員。" };
+      return {
+        code: "ACCOUNT_DISABLED",
+        message: "此帳號已停用,請聯絡系統管理員。",
+      };
     }
 
-    recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: true, attemptedAt: nowIso });
+    recordLoginAttempt(app.db, {
+      id: randomUUID(),
+      username,
+      ip,
+      succeeded: true,
+      attemptedAt: nowIso,
+    });
 
-    const ownerKey = config.testSandbox ? `${user.id}:sbx:${randomUUID()}` : user.id;
+    const ownerKey = config.testSandbox
+      ? `${user.id}:sbx:${randomUUID()}`
+      : user.id;
     if (config.testSandbox) {
       await runSandboxSeeders(ownerKey);
     }
 
     const token = generateSessionToken();
-    const expiresAtIso = new Date(nowMs + SESSION_ABSOLUTE_TTL_MS).toISOString();
+    const expiresAtIso = new Date(
+      nowMs + SESSION_ABSOLUTE_TTL_MS,
+    ).toISOString();
 
     insertSession(app.db, {
       id: randomUUID(),
@@ -221,7 +293,15 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
 }
 
 function buildLogoutHandler(app: FastifyInstance, config: IdentityConfig) {
-  return async function logout(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> {
+  return async function logout(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<FastifyReply> {
+    if (!checkCsrf(request, config.corsOrigins).allowed) {
+      reply.code(403);
+      return reply.send({ code: CSRF_ERROR_CODE, message: CSRF_ERROR_MESSAGE });
+    }
+
     const token = request.cookies?.[SESSION_COOKIE_NAME];
     if (typeof token === "string" && token.length > 0) {
       deleteSessionByTokenHash(app.db, hashSessionToken(token));
@@ -233,7 +313,10 @@ function buildLogoutHandler(app: FastifyInstance, config: IdentityConfig) {
 }
 
 function buildSessionHandler(app: FastifyInstance) {
-  return async function getSession(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
+  return async function getSession(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<unknown> {
     // requireSession already proved this cookie is valid and populated
     // request.auth; re-reading it here gets the profile fields (name/email/…)
     // that AuthContext deliberately does not carry.
@@ -286,12 +369,30 @@ const identityPluginImpl: FastifyPluginAsync = async (app) => {
     clearInterval(cleanupTimer);
   });
 
-  const realRequireSession = buildRealRequireSession(app.db, config.sessionCookieDomain);
-  app.requireSession = composeRequireSession(realRequireSession, previousRequireSession, config.sessionCookieDomain);
+  const realRequireSession = buildRealRequireSession(
+    app.db,
+    config.sessionCookieDomain,
+    config.corsOrigins,
+  );
+  app.requireSession = composeRequireSession(
+    realRequireSession,
+    previousRequireSession,
+    config.sessionCookieDomain,
+  );
 
-  app.post("/v1/auth/login", { schema: { body: LOGIN_REQUEST_SCHEMA } }, buildLoginHandler(app, config));
+  app.post(
+    "/v1/auth/login",
+    { schema: { body: LOGIN_REQUEST_SCHEMA } },
+    buildLoginHandler(app, config),
+  );
   app.post("/v1/auth/logout", buildLogoutHandler(app, config));
-  app.get("/v1/auth/session", { preHandler: realRequireSession }, buildSessionHandler(app));
+  app.get(
+    "/v1/auth/session",
+    { preHandler: realRequireSession },
+    buildSessionHandler(app),
+  );
 };
 
-export const identityPlugin = fp(identityPluginImpl, { name: "ai-km-identity" });
+export const identityPlugin = fp(identityPluginImpl, {
+  name: "ai-km-identity",
+});

@@ -32,10 +32,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
 | E13 Feedback & Analytics | 21 | 18 | 0 | 0 | 0 | 3 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S050) | 12 | 7 | 0 | 0 | 0 | 5 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S051) | 13 | 7 | 0 | 0 | 0 | 6 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 1 | 0 | 1 |
-| **合計** | **222** | 191 | 0 | 3 | 1 | 27 |
+| **合計** | **223** | 191 | 0 | 3 | 1 | 28 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -278,7 +278,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E13-S021 | todo | — | — | apps/admin 回饋佇列／使用量／延遲／系統健康接真實 API（移除永遠空／零／null／unknown stub）；HARD 依賴：E11-S026、E13-S018、E03-S034；wave D3；E11-S016/S017/S021/S022、E13-S007/S008/S012/S013/S014 空殼補完。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S021.spec.md](specs/E13-S021.spec.md) |
 
 
-## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,12)
+## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,13)
 
 > E04 屬 Team B epic,本表只追蹤使用者明示指示插入規格庫 epic 檔的增補
 > story(2026-08-20 插入 E04-S037;2026-08-28 插入 E04-S038～S047,使用者明示
@@ -302,6 +302,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S048 | todo | — | — | CSRF 防禦：state-changing API 要求自訂 header（`x-requested-with`）+ multipart Origin 檢查；HARD 依賴：E04-S039、E02-S032；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E04-S048.spec.md](specs/E04-S048.spec.md) |
 | E04-S049 | approved | `story/E04-S049-server-bootstrap-order` | [E04-S049.md](E04-S049.md) | `apps/api` bootstrap 順序修正:`app.decorate` 必須在 route plugin 註冊前完成,讓 route 定義可直接用 `app.contracts.getSchema()`;HARD 依賴:E04-S039、E04-S041(皆 approved);**使用者 2026-08-28 裁示新增**(E04-S041 開發中發現的既有 bootstrap 缺陷,不修的話後續 9 個 apps/api story 都要重複逐字轉寫 JSON Schema,且 schema 與 contract 之間無機器檢查、為 contract drift 溫床;分析與選項見 [PENDING_DECISIONS.md](PENDING_DECISIONS.md));由 W3 於 E04-S042 之前插隊執行 規格:[E04-S049.spec.md](specs/E04-S049.spec.md) |
 | E04-S050 | todo | — | — | domain plugin 依「該 domain 的 spec 是否已載入」條件註冊,讓 route 能真正使用 `app.contracts.getSchema()`;HARD 依賴:E04-S049、E04-S042(皆 approved);**E04-S049 的後續**——順序修好後 W3 實測仍有第二個獨立成因(bootstrap 測試用只含 `sample` 的 fixture 契約目錄,而 `conversationPlugin` 無條件註冊,改用 `getSchema()` 會讓 apps/api 91 個測試中 28 個失敗);不修則 E04-S044/S047/S048、E02-S034、E12-S031 都得繼續逐字轉寫 JSON Schema、無 drift 防護。總指揮 2026-08-28 依使用者對 E04-S049 的同類裁示授權新增,分析見 [PENDING_DECISIONS.md](PENDING_DECISIONS.md);**排程:E04-S043 之後、E04-S044 之前**(不得延後 E04-S043,它是 E03-S038 的前置) 規格:[E04-S050.spec.md](specs/E04-S050.spec.md) |
+| E04-S051 | todo | — | — | **缺陷修正(阻擋 E03-S038)**:`hostRequireSession` 在 route 註冊當下快照 `app.requireSession`,而 `server.ts` 把 `conversationPlugin`(154 行)排在 `identityPlugin`(156 行,會重新賦值 `app.requireSession`)之前 → production 等效設定下,**真實登入的合法 session cookie 打 conversation/messages/feedback route 一律 401**,對話功能完全不可用;各 domain 隔離測試都用假 requireSession,且無任何「真的登入→打受保護 route」全鏈路測試,故從未被發現。model-gateway 註冊於 identityPlugin 之後,**實測不受影響**。由 W2 於 E04-S048 掃描真實路由表時發現,總指揮逐行覆核確認。HARD 依賴:E02-S032、E04-S041(皆 approved);**W3 優先於 E04-S044/E04-S050 執行** 規格:[E04-S051.spec.md](specs/E04-S051.spec.md) |
 
 ## E02 Identity, RBAC & Authorization(僅追蹤使用者增補,4)
 

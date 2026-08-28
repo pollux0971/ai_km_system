@@ -178,6 +178,44 @@ story 繼續逐字轉寫,**可隨時推翻本決定**,把 E04-S050 標回不做�
 **影響範圍**:`apps/api/src/server.ts`、`services/conversation`(僅為證明機制可用
 而改回一處 `getSchema()`)。`contracts/` 零 diff。PROGRESS.md 總數 221 → 222。
 
+### [2026-08-28] `x-test-user` 測試通道在 dev/staging 是否需要加固(**需使用者裁示**)
+
+**背景**:W2 開發 E04-S048 時發現,當 `enableTestAuthProvider=true`(預設為
+`NODE_ENV=test` 或 `testSandbox` 開啟)時,**任何人送 `x-test-user: <任意 userId>`
+即可繞過真實登入,以該 userId 的身分操作資料**。`buildServer` 在 `NODE_ENV=production`
+會拒絕啟動這個組合,所以**不是 production 漏洞**;但 dev/staging 若誤開,就是真實
+的權限繞過。
+
+**選項**:
+1. (推薦)維持現狀。它是 E04-S039 刻意設計的測試通道,production 已由啟動時斷言
+   擋住,且 E01-S028 的內網部署會把 api 綁 loopback。
+2. 加固:額外要求一個共享密鑰 header,或限制僅接受 loopback 來源。需新增 story。
+3. 移除:改由 E03-S038 的 test sandbox 機制取代。影響既有測試,成本最高。
+
+**影響範圍**:`apps/api/src/auth-decorator.ts`;若選 2/3 需新增 story。
+
+### [2026-08-28] `E04-S051` — `hostRequireSession` 快照綁定缺陷(總指揮已依授權決定,使用者可推翻)
+
+**背景**:W2 在 E04-S048 寫「掃描真實路由表」的測試時發現,production 等效設定下
+**真實登入的合法 session cookie 打 `POST /v1/conversations` 一律 401**,對話功能
+完全不可用。總指揮逐行覆核確認:`hostRequireSession` 在 route 註冊當下快照
+`app.requireSession`,而 `server.ts` 把 `conversationPlugin`(154 行)排在
+`identityPlugin`(156 行,重新賦值該屬性)之前。model-gateway 註冊於其後,**實測
+不受影響**。從未被發現的原因是各 domain 隔離測試都用假 `requireSession`,且
+**整個 repo 沒有任何「真的登入 → 打受保護 route」的全鏈路測試**。
+
+**總指揮的決定**:新增 `E04-S051`,由 W3 執行,**優先於 E04-S044/E04-S050**——
+因為 E03-S038(全專案 E2E 匯流點)要求既有 264 個 E2E 對真實 apps/api 零修改
+全綠,此 bug 未修則 conversation 相關 E2E 必然失敗。修法含動態讀取 + 註冊順序
+調整 + 補上缺失的全鏈路測試(後者才是核心交付)。
+
+**為什麼沒有再問使用者**:使用者已對 E04-S049/E04-S050 兩個同類技術債裁示
+「插隊做一個修正 story」,並指示「未來遇到問題,由你來回答」。本項是同一決定的
+延續,且屬於明確的功能缺陷而非政策選擇。使用者可隨時推翻。
+
+**影響範圍**:兩個 `plugin-types.ts`、`server.ts` 註冊順序、新增 apps/api 全鏈路
+測試。`contracts/` 零 diff。PROGRESS.md 總數 222 → 223。
+
 <!-- 模板:
 ### [YYYY-MM-DD] EXX-SYYY — 一句話問題
 - 背景:

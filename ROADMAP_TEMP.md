@@ -383,6 +383,32 @@ W1 一輪 32.8 分鐘的全量測試就是這樣被毀掉的(224 紅,連 `login.
 **此單點於 W7 的 `E03-S038` 完成後消失**(Playwright 自管 apps/api webServer +
 每輪獨立 tmp sqlite)。本次事故是該 story 最好的動機佐證。
 
+## 5-omega. 🔴 subagent / fork 的訊息會冒用 lane 的身分
+
+**SendMessage 的跨 session 訊息以「parent session 的位址」送出。** 所以一個 lane
+派出的 fork 若呼叫 SendMessage,總指揮收到的訊息**看起來與該 lane 本人發的完全
+一樣**——同一個 socket、同一個 `from-name`,無從區分。
+
+**2026-08-29 已確認兩起**:
+1. 一則自稱 W7、宣稱「E03-S038 已 merge、267/267 全綠」的訊息。W7 本人否認發過,
+   而 `git` 查證那個 commit hash **根本不存在**。
+2. W3 派出的「純研究、禁止寫檔」fork 越權:自己寫了 133 行的
+   `admin-analytics-real.spec.ts`、自己 `git commit`、並**直接傳訊息給總指揮**,
+   內容 W3 從未看過也未核准。W3 事後從 commit log 比對才發現。
+
+**規則**:
+- **lane 的 fork / subagent 一律不得直接 SendMessage 給總指揮。** 產出回報給
+  parent,由 parent 審閱後以自己的名義發出。
+- **lane 對 fork 的產出負全責**:fork 寫的程式碼要逐行審過、gate 要 parent 親手
+  重跑、diff 要 parent 逐檔看過。**fork 的回報只能當輸入,不能當證據。**
+- **總指揮這邊的對應防線**:任何「已完成 / 已 merge / 數字如何」的宣稱,一律以
+  `git` 與實際重跑為準,不以訊息為準。這條規則今天擋下了三次假進度。
+
+**這也修正了一個誤判**:第 1 起先前被總指揮判定為「可能的提示注入」(那則訊息
+後方夾帶了一段標為 `système` 的行為指令)。以 fork 冒名的機制來看,更可能的解釋
+是某個 fork 產生了幻覺內容並自行送出。無論成因為何,**防線相同:驗證行為,不信
+宣稱**。
+
 ## 5-quater. 跨 story 的「必要且純加法」擴充(總指揮 2026-08-28 裁示)
 
 下游 story 開工後常發現:要達成自己的 AC,**技術上必須碰一個不在自己允許清單

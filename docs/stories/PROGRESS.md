@@ -31,11 +31,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
-| E13 Feedback & Analytics | 21 | 18 | 0 | 0 | 0 | 3 |
+| E13 Feedback & Analytics | 21 | 18 | 0 | 1 | 0 | 2 |
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S051) | 13 | 9 | 0 | 0 | 0 | 4 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **223** | 193 | 0 | 5 | 1 | 24 |
+| **合計** | **223** | 193 | 0 | 6 | 1 | 23 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -274,7 +274,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E13-S017 | approved | story/E13-S017-analytics-e2e | [E13-S017.md](E13-S017.md) | analytics E2E(E13 最後一個 story);零 production code 變更,同 E01-S020/E03-S033/E05-S031/E07-S025/E09-S024/E11-S025/E13-S006 既有前例——稽核全部 E13 相關 E2E spec(apps/web 11 個+apps/admin 4 個)找出兩個組合層級落差:(1) S009~S013 各自只測「單一動作 → 單一事件」,從未有測試證明一個真實多動作 session(送 2 則訊息+對第一則回覆給 NG+原因+留言+標記知識落差候選、對第二則給 OK+留言)累積出的完整 usage-events 序列本身正確一致(同 userId、依真實順序遞增排列、無交叉污染),且 S006 的四維度組合測試完成時 S015 的知識落差候選標記還不存在;(2) `admin-e2e.spec.ts` 的 `ALL_ADMIN_ENTRIES`(E11-S025 凍結)只有 15 個入口,E13-S013 後來新增的「延遲儀表板」(`/latency`)入口從未被組合測試涵蓋過,E13 自己在 apps/admin 新增的三個 analytics 頁面(回饋佇列+使用量+延遲儀表板)也從未在同一 session 連續造訪過。新增 2 個 E2E spec(apps/web 1 個關鍵流程測試+apps/admin 2 個組合測試,含自己完整的 16 項入口清單,不修改既有凍結的 15 項陣列)。撰寫過程 2 處非邏輯錯誤自我糾正(reason 欄位斷言誤用顯示標籤而非 enum 值、兩處空狀態文字憑記憶猜測寫錯,皆於首次 VERIFY 前修正)。對抗性複驗:突變 `recordUsageEvent` 把 `push` 改 `unshift`(事件順序寫反),既有 1 個 S010 單元測試與本 story 新增的 E2E 測試皆精準命中,已還原確認乾淨。unit web 1531/1531、admin 350/350(皆不變,零 production 變更);E2E 264/264(較 S016 的 261 淨增 3)。獨立審核 APPROVE(1 round,0 個 finding;審核者確認 `admin-e2e.spec.ts` 的既有凍結清單真的零改動,獨立 grep `apps/admin/src/app/page.tsx` 確認確實有 16 個真實入口,與本 story 新測試清單完全吻合,判定「不動舊測試、新增獨立測試涵蓋現況」是正確做法;審核者實際讀過兩個新 spec 全文確認真的測到 5 維度組合(含 count/歸屬/順序/候選範圍的具體 sessionStorage 斷言)與 16 項導覽+3 頁連續造訪隔離,非灌水;獨立重做 push→unshift 突變,確認同時精準命中既有 1 個 S010 單元測試與新 E2E 排序斷言,已還原;獨立確認 `apps/web/src`/`apps/admin/src` 零命中;獨立重跑 gate 數字與 DEV 自報一致)。**E13 Feedback & Analytics epic 全部 17/17 approved 完成。** |
 | E13-S018 | approved | story/E13-S018-analytics-contract | [E13-S018.md](E13-S018.md) | 獨立審核 APPROVE(gate 全綠含 rebase 後重跑、獨立重新產生 `analytics.d.ts` 與 committed 版本逐位元一致、獨立補做一次不同於 EVIDENCE 記錄的 mutation 測試證明 gate 有效;1 個 MINOR——`date` 查詢參數 required 為合理但未記錄的判斷,不阻擋)。Contract：analytics API（usage-events、usage/latency metrics、feedback queue、admin health）；HARD 依賴：E02-S031、E04-S038（皆 approved）；wave D1。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S018.spec.md](specs/E13-S018.spec.md) |
 | E13-S019 | todo | — | — | `services/feedback` 實作（usage-events 持久化、彙總、跨 owner feedback read model 角色守門）；HARD 依賴：E13-S018、E04-S040、E04-S043、E02-S033；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S019.spec.md](specs/E13-S019.spec.md) |
-| E13-S020 | todo | — | — | apps/web `usage-events.ts` 改送 server（純函式保留，E13-S009～S013/S017 測試對照改寫）；HARD 依賴：E13-S018、E03-S034、E03-S036；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S020.spec.md](specs/E13-S020.spec.md) |
+| E13-S020 | in-progress | `story/E13-S020-usage-events-server` | [E13-S020.md](E13-S020.md) | apps/web `usage-events.ts` 改送 server（純函式保留，E13-S009～S013/S017 測試對照改寫）；typecheck 27/27、lint 27/27、unit 全綠（`apps/web` 1617/1617 含新 34+12 個測試、`api-client` 21/21 零修改）、AC4 grep 零命中、`packages/api-client` 加 `analytics` spec（跨 story 授權擴充，見 EVIDENCE）皆已完成。**5 支 E2E 待 E03-S038 完成 sandbox 種子接線後補跑**（curl 已證實真實後端 `GET /v1/conversations` 目前回空清單，5 支 spec 依賴的種子對話「產品保固政策詢問」尚未存在，非本 story 造成的回歸；ai-km-e4 裁示不需為取得正式紅燈記錄而重跑已知會失敗的 Playwright）；HARD 依賴：E13-S018、E03-S034、E03-S036（皆 approved）；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S020.spec.md](specs/E13-S020.spec.md) |
 | E13-S021 | todo | — | — | apps/admin 回饋佇列／使用量／延遲／系統健康接真實 API（移除永遠空／零／null／unknown stub）；HARD 依賴：E11-S026、E13-S018、E03-S034；wave D3；E11-S016/S017/S021/S022、E13-S007/S008/S012/S013/S014 空殼補完。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S021.spec.md](specs/E13-S021.spec.md) |
 
 

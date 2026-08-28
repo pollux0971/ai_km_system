@@ -48,7 +48,19 @@ async function build(overrides: Record<string, string> = {}, sink?: LogSink) {
 
 describe("GET /v1/health (AC1)", () => {
   it("returns 200 with status, version and uptimeMs", async () => {
-    const res = await (await build()).inject({ method: "GET", url: "/v1/health" });
+    // E04-S047: this test's intent is "every subsystem healthy -> status
+    // ok". The default config's asrProvider ("whisper-server", E04-S039's
+    // fallback) genuinely has no reachable sidecar in this environment —
+    // that is a true fact about this test's environment, not something to
+    // paper over by loosening the assertion below. Fixing the PRECONDITION
+    // (an explicit healthy ASR config) rather than the assertion keeps this
+    // test proving what it always proved; see server.test.ts's own
+    // "ASR down -> degraded" test right below for the other, equally real,
+    // direction.
+    const res = await (await build({ AI_KM_ASR_PROVIDER: "fake" })).inject({
+      method: "GET",
+      url: "/v1/health",
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.status).toBe("ok");
@@ -73,6 +85,30 @@ describe("GET /v1/health (AC1)", () => {
   it("echoes a correlation id header on the response", async () => {
     const res = await (await build()).inject({ method: "GET", url: "/v1/health" });
     expect(res.headers["x-correlation-id"]).toBeTruthy();
+  });
+
+  it("AC1/AC3: reports status degraded when a subsystem (asr, unreachable whisper-server default) is down", async () => {
+    // No AI_KM_ASR_PROVIDER override here — this is the default config's
+    // genuinely-unreachable-sidecar case, the opposite side of the fix
+    // above. Both directions are now locked by a real test.
+    const res = await (await build()).inject({ method: "GET", url: "/v1/health" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("degraded");
+  });
+
+  it("AC1's own literal example: status degraded when the database connection is closed", async () => {
+    const server = await build({ AI_KM_ASR_PROVIDER: "fake" });
+    server.db.close();
+    const res = await server.inject({ method: "GET", url: "/v1/health" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("degraded");
+  });
+
+  it("stays 2xx even when degraded — every lane's E2E setup polls this with `curl -sf`, which fails on any non-2xx", async () => {
+    const res = await (await build()).inject({ method: "GET", url: "/v1/health" });
+    expect(res.json().status).toBe("degraded"); // non-vacuity: this run genuinely is degraded
+    expect(res.statusCode).toBeGreaterThanOrEqual(200);
+    expect(res.statusCode).toBeLessThan(300);
   });
 });
 

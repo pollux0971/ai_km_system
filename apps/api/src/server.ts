@@ -28,9 +28,11 @@ import { registerCorrelation, readCorrelationId } from "./correlation.js";
 import { registerAuth } from "./auth-decorator.js";
 import { loadContracts, resolveContractsDir, type ContractRegistry } from "./contracts.js";
 import { databasePlugin } from "./db/plugin.js";
+import { resolveMigrationsDir } from "./db/migrate.js";
 import { conversationPlugin, conversationSandboxSeeders, messageSandboxSeeders, toOwnerKey } from "@ai-km/service-conversation";
-import { identityPlugin, registerSandboxSeeder } from "@ai-km/service-identity";
+import { identityPlugin, registerSandboxSeeder, requireAnyRole } from "@ai-km/service-identity";
 import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
+import { createHealthChecker, overallStatus } from "./health/checks.js";
 import "./types.js";
 
 /**
@@ -70,6 +72,9 @@ function ensureSandboxSeederRegistered(): void {
     for (const seeder of messageSandboxSeeders) seeder.seed(sandboxDb!, owner);
   });
 }
+
+/** contracts/openapi/analytics.yaml's `/admin/health`'s `x-required-roles`, copied verbatim (frozen contract, not this story's to invent). */
+const ADMIN_HEALTH_ROLES = ["it_administrator", "ai_administrator", "auditor", "super_administrator"] as const;
 
 export const API_PREFIX = "/v1";
 
@@ -242,11 +247,37 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   }
 
   const startedAt = Date.now();
-  app.get(`${API_PREFIX}/health`, async () => ({
-    status: "ok" as const,
-    version: API_VERSION,
-    uptimeMs: Date.now() - startedAt,
-  }));
+  // E04-S047. One checker per buildServer() call — see createHealthChecker's
+  // docstring for why this is not a module-level singleton.
+  const healthChecker = createHealthChecker({
+    db: app.db,
+    migrationsDir: options.migrationsDir ?? resolveMigrationsDir(),
+    config,
+  });
+
+  // Unauthenticated (AC1): every lane's own E2E setup polls this with
+  // `curl -sf`, which only tolerates a 2xx — so this ALWAYS returns 200,
+  // carrying the aggregate `status` rather than the HTTP status code. No
+  // subsystem detail here (would leak internal topology to a caller who
+  // has not proven who they are); that detail is what AC2's
+  // `/v1/admin/health` is for.
+  app.get(`${API_PREFIX}/health`, async () => {
+    const health = await healthChecker.getHealth();
+    return {
+      status: overallStatus(health),
+      version: API_VERSION,
+      uptimeMs: Date.now() - startedAt,
+    };
+  });
+
+  // AC2: role-gated, full detail. `app.requireSession` is read here — after
+  // identityPlugin's registration above — not snapshotted earlier, for the
+  // same live-read reason E04-S051 fixed `hostRequireSession` over.
+  app.get(
+    `${API_PREFIX}/admin/health`,
+    { preHandler: [app.requireSession, requireAnyRole([...ADMIN_HEALTH_ROLES])] },
+    async () => healthChecker.getHealth(),
+  );
 
   // Test-only routes exercising the platform behaviours (contract-bound
   // validation, the error envelope, requireSession). Gated on BOTH

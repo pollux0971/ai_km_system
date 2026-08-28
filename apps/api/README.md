@@ -34,7 +34,29 @@ curl -i http://127.0.0.1:4000/v1/health
 `/v1/health` is an **operations** endpoint: it needs no session, is not part of
 any contract in `contracts/openapi/`, and deliberately returns only
 `{status, version, uptimeMs}` — no paths, no environment, no dependency
-details. (E04-S047 later extends it into a per-subsystem view.)
+details. `status` is `"ok"` unless a subsystem (`api`/`database`/`migrations`/
+`asr`, checked and cached for 5s — see `src/health/checks.ts`) is `down`, in
+which case it is `"degraded"` — but the HTTP status stays `2xx` either way,
+because every lane's own E2E setup polls this with `curl -sf` (which fails on
+any non-2xx), and a temporarily-unreachable ASR sidecar must not read as "the
+whole API is down" to that check.
+
+For the full per-subsystem breakdown (`contracts/openapi/analytics.yaml`'s
+`SystemHealth`), see `GET /v1/admin/health` below (E04-S047 AC2) — gated by
+`requireAnyRole` to `it_administrator`/`ai_administrator`/`auditor`/
+`super_administrator`, since the detail `/v1/health` deliberately omits would
+leak internal topology to an unauthenticated caller:
+
+```bash
+curl -i http://127.0.0.1:4000/v1/admin/health -H "Cookie: ai_km_session=<real session>"
+# HTTP/1.1 200 OK
+# {"checkedAt":"2026-08-28T12:00:00.000Z","subsystems":[
+#   {"name":"api","status":"ok"},
+#   {"name":"database","status":"ok"},
+#   {"name":"migrations","status":"ok"},
+#   {"name":"asr","status":"down","detail":"fetch failed"}
+# ]}
+```
 
 ## Configuration
 
@@ -230,5 +252,4 @@ server through `inject()` instead of a mock of it.
 | Conversation / message / feedback routes | E04-S041 – S043 |
 | Change-event SSE endpoint | E04-S044 |
 | Transcription endpoint | E12-S031 |
-| Per-subsystem `/v1/health` | E04-S047 |
 | Rate limiting, HTTPS termination | reverse proxy (E01-S028) |

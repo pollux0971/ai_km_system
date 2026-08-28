@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { failNextRequest, failNextRequestWithNetworkError } from "@/test/fake-api";
 import {
   CONVERSATIONS_PAGE_SIZE,
   archiveConversation,
@@ -14,6 +15,18 @@ import {
   setConversationModel,
   unarchiveConversation,
 } from "./conversations";
+
+/**
+ * E03-S036: a syntactically valid UUID that is never seeded or created, for exercising
+ * the "id doesn't exist" path. Pre-S036 tests used the literal string "does-not-exist"
+ * for this — that stopped working once conversations moved off a plain in-memory array
+ * and onto the real contract, whose `conversationId` path parameter is `format: uuid`;
+ * a non-UUID id now fails closed with 400 VALIDATION_ERROR (a real server would reject
+ * it identically) before ever reaching the "not found" check. Every occurrence below
+ * that used to read "does-not-exist" now uses this constant instead — the INTENT of
+ * each test (exercise the not-found path) is unchanged; only the sentinel value is.
+ */
+const NONEXISTENT_ID = "00000000-0000-4000-8000-000000000000";
 
 describe("getRecentConversations", () => {
   it("resolves with a non-empty list of conversation summaries", async () => {
@@ -304,7 +317,7 @@ describe("getConversation (E03-S002)", () => {
   });
 
   it("resolves with null (not an error) for an id that doesn't exist", async () => {
-    const result = await getConversation("does-not-exist");
+    const result = await getConversation(NONEXISTENT_ID);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -334,7 +347,7 @@ describe("setConversationMode (E03-S002)", () => {
   });
 
   it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
-    const result = await setConversationMode("does-not-exist", "advanced");
+    const result = await setConversationMode(NONEXISTENT_ID, "advanced");
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -407,7 +420,7 @@ describe("setConversationKnowledgeScopes (E03-S004)", () => {
   });
 
   it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
-    const result = await setConversationKnowledgeScopes("does-not-exist", ["company"]);
+    const result = await setConversationKnowledgeScopes(NONEXISTENT_ID, ["company"]);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -468,7 +481,7 @@ describe("setConversationModel (E03-S005)", () => {
   });
 
   it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
-    const result = await setConversationModel("does-not-exist", "advanced-local");
+    const result = await setConversationModel(NONEXISTENT_ID, "advanced-local");
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -555,7 +568,7 @@ describe("renameConversation (E03-S024)", () => {
   });
 
   it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
-    const result = await renameConversation("does-not-exist", "新標題");
+    const result = await renameConversation(NONEXISTENT_ID, "新標題");
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -610,7 +623,7 @@ describe("deleteConversation (E03-S025)", () => {
   });
 
   it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
-    const result = await deleteConversation("does-not-exist");
+    const result = await deleteConversation(NONEXISTENT_ID);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -703,7 +716,7 @@ describe("archiveConversation / unarchiveConversation (E03-S026)", () => {
   });
 
   it("archiveConversation fails closed with NOT_FOUND for an id that doesn't exist", async () => {
-    const result = await archiveConversation("does-not-exist");
+    const result = await archiveConversation(NONEXISTENT_ID);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -712,7 +725,7 @@ describe("archiveConversation / unarchiveConversation (E03-S026)", () => {
   });
 
   it("unarchiveConversation fails closed with NOT_FOUND for an id that doesn't exist", async () => {
-    const result = await unarchiveConversation("does-not-exist");
+    const result = await unarchiveConversation(NONEXISTENT_ID);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -873,5 +886,54 @@ describe("listActiveConversations (ux/enterprise-polish sidebar history)", () =>
       expect(timestamps).toEqual(sorted);
       expect(result.value[0]?.id).toBe(created.value.id);
     }
+  });
+});
+
+describe("error mapping (E03-S036 AC2) — call sites' existing error rendering is unchanged, since it only ever branches on error.code", () => {
+  it("maps a 403 from the server to ok:false PERMISSION_DENIED", async () => {
+    failNextRequest("PERMISSION_DENIED");
+
+    const result = await listConversations();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("PERMISSION_DENIED");
+  });
+
+  it("maps a 500 from the server to ok:false with a real failure code (not silently treated as empty/success)", async () => {
+    failNextRequest("INTERNAL_ERROR");
+
+    const result = await listConversations();
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("maps a network failure to ok:false SERVICE_UNAVAILABLE", async () => {
+    failNextRequestWithNetworkError();
+
+    const result = await listConversations();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SERVICE_UNAVAILABLE");
+  });
+
+  it("getConversation also maps a 403 to ok:false PERMISSION_DENIED (not folded into null, unlike a real 404)", async () => {
+    failNextRequest("PERMISSION_DENIED");
+
+    const result = await getConversation(NONEXISTENT_ID);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("PERMISSION_DENIED");
+  });
+
+  it("a mutation (renameConversation) also maps a 403 from the server to ok:false PERMISSION_DENIED", async () => {
+    const created = await createConversation();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    failNextRequest("PERMISSION_DENIED");
+
+    const result = await renameConversation(created.value.id, "新標題");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("PERMISSION_DENIED");
   });
 });

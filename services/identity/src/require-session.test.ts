@@ -13,8 +13,21 @@ import {
   setSessionCookie,
 } from "./require-session.js";
 
-const NOW = "2026-08-28T05:00:00.000Z";
-const FAR_FUTURE = "2026-09-04T05:00:00.000Z";
+/**
+ * E04-S055: relative to `Date.now()` at test-run time, not a hardcoded
+ * literal. `buildRealRequireSession` compares `last_seen_at` against REAL
+ * wall-clock time (`SESSION_IDLE_LIMIT_MS`, 12h — a real product rule, not
+ * something this file may weaken), so a fixed-in-the-past literal here
+ * eventually crosses that 12h window and every test seeding a session with
+ * it starts failing — which is exactly what happened: this file was green
+ * on 2026-08-28 and red by 2026-08-29 with zero code change, purely from
+ * wall-clock drift. Anchoring both constants to `Date.now()` means they are
+ * always "1 minute ago" / "7 days from now" relative to whenever the suite
+ * actually runs, so this holds on any date, not just today (verified by
+ * simulating a 30-day time jump — see docs/stories/E04-S055.md).
+ */
+const NOW = new Date(Date.now() - 60_000).toISOString();
+const FAR_FUTURE = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
 let db: Database;
 let app: FastifyInstance;

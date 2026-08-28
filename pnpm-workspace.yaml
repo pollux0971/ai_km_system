@@ -3,6 +3,7 @@ packages:
   - "packages/*"
   - "services/*"
   - "tests/*"
+  - "tools/*"
 allowBuilds:
   # esbuild's install script only downloads the platform-specific binary
   # (needed transitively by vitest/vite, added in E01-S001) — no arbitrary

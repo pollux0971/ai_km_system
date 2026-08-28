@@ -25,7 +25,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 30 | 21 | 1 | 0 | 0 | 8 |
+| E01 Application Shell & User Workspace | 30 | 22 | 0 | 0 | 0 | 8 |
 | E03 AI Conversation Experience | 46 | 37 | 0 | 3 | 0 | 6 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S053) | 15 | 14 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **225** | 199 | 1 | 6 | 1 | 18 |
+| **合計** | **225** | 200 | 0 | 6 | 1 | 18 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -70,7 +70,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S025 | todo | — | — | 其餘頁面 M3 一致性（knowledge/maintenance/ERP/profile/login）；HARD 依賴：E01-S021、E01-S022、E01-S023、E01-S024；wave 6；P2 可延後；`globals.css` 最後修改者。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S025.spec.md](specs/E01-S025.spec.md) |
 | E01-S026 | approved | story/E01-S026-brand-empty-state-assets | [E01-S026.md](E01-S026.md) | 獨立審核 APPROVE（重新獨立跑 typecheck/lint/test 皆綠——`@ai-km/ui` 21/21、`web` 1650/1650；範圍/邊界核對通過，2 個允許清單外但技術必要的新檔案（`empty-state-illustrations.tsx`、`app/favicon.ico`）已個別記錄理由；7 個新 SVG 逐一以 `pnpm dlx svgo --multipass` 驗證 idempotent 且無 script/外部參照；靜態 SVG 與對應 JSX component 的 path 座標逐一核對一致；AC5 視覺驗收用 Playwright 真實 Chromium 對 light/dark 各截 3 張存於 `docs/design/brand-assets/`，過程中發現並修正 1 個真 bug——插圖背景圓的 M3 token fallback 只有單層，dark mode 下與淺色線稿對比度幾乎消失，改用 `globals.css` 既有的 `--surface-2` 作中間層 fallback 後重新截圖確認修正）。品牌與空狀態素材（logo mark、favicon、3 張空狀態 SVG、EmptyState `illustration` prop）；HARD 依賴：無；wave 0；P2 可延後。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S026.spec.md](specs/E01-S026.spec.md) |
 | E01-S027 | todo | — | — | E2E 穩定性強化（資源競爭型 flaky 根因量測與處理，零 retries）；HARD 依賴：E03-S038；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E01-S027.spec.md](specs/E01-S027.spec.md) |
-| E01-S028 | done | `story/E01-S028-onprem-https-deploy` | [E01-S028.md](E01-S028.md) | 內網 HTTPS 部署與一鍵啟動（Caddy、compose、dev-all 腳本、runbook）；HARD 依賴：E04-S039；wave D1；語音功能在 http 內網不可用之根治。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E01-S028.spec.md](specs/E01-S028.spec.md)。由 ai-km-e4 從 W6 lane 改派給 W2(2026-08-28)。gate 全綠(真實 docker compose 部署驗證,見 EVIDENCE),待 `/story-review`。 |
+| E01-S028 | approved | `story/E01-S028-onprem-https-deploy` | [E01-S028.md](E01-S028.md) | 內網 HTTPS 部署與一鍵啟動（Caddy、compose、dev-all 腳本、runbook）；HARD 依賴：E04-S039；wave D1；語音功能在 http 內網不可用之根治。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E01-S028.spec.md](specs/E01-S028.spec.md)。由 ai-km-e4 從 W6 lane 改派給 W2(2026-08-28)。獨立審核 APPROVE(真實 docker compose 部署驗證、Playwright 截圖、gate 全綠,已 merge 回 main)。 |
 | E01-S029 | todo | — | — | 安全性 HTTP headers（CSP/HSTS/X-Frame-Options/Referrer-Policy/Permissions-Policy）；HARD 依賴：E04-S039；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E01-S029.spec.md](specs/E01-S029.spec.md) |
 | E01-S030 | todo | — | — | Playwright `reuseExistingServer` CI 安全模式（避免舊 process 造成假綠燈）；HARD 依賴：E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E01-S030.spec.md](specs/E01-S030.spec.md) |
 

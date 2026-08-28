@@ -153,11 +153,12 @@ export function registerConversationRoutes(app: FastifyInstance): void {
       const id = randomUUID();
 
       const row = createConversation(db, owner, { id, mode: body.mode ?? "normal", now });
+      const originClientId = originClientIdOf(request);
       appendChangeEvent(db, owner, {
         type: "conversation.created",
         conversationId: row.id,
         occurredAt: now,
-        ...(originClientIdOf(request) ? { originClientId: originClientIdOf(request) } : {}),
+        ...(originClientId ? { originClientId } : {}),
       });
 
       void reply.status(201);
@@ -220,11 +221,12 @@ export function registerConversationRoutes(app: FastifyInstance): void {
 
       const now = new Date().toISOString();
       const updated = updateConversation(db, owner, conversationId, patch, now);
+      const originClientId = originClientIdOf(request);
       appendChangeEvent(db, owner, {
         type: "conversation.updated",
         conversationId,
         occurredAt: now,
-        ...(originClientIdOf(request) ? { originClientId: originClientIdOf(request) } : {}),
+        ...(originClientId ? { originClientId } : {}),
       });
       return updated;
     },

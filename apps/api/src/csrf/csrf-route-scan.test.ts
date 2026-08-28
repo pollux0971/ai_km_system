@@ -182,7 +182,22 @@ describe("E04-S048 AC5 — every real state-changing route enforces CSRF (route-
     const instance = await buildRealServer();
     const cookie = await loginAndGetCookie(instance);
     const printed = instance.printRoutes({ commonPrefix: false });
-    const getRoutes = parseFastifyRoutes(printed).filter((r) => r.method === "GET" && !r.path.includes(":"));
+    const getRoutes = parseFastifyRoutes(printed).filter(
+      (r) =>
+        r.method === "GET" &&
+        !r.path.includes(":") &&
+        // /v1/conversations/events (E04-S044) calls reply.hijack() and keeps
+        // the connection open as an SSE stream — exactly the EventSource
+        // case this red line exists to protect. `inject()` awaits the full
+        // response body, which for a hijacked stream never arrives, so it
+        // would hang this test forever rather than prove anything. The
+        // GET/HEAD/OPTIONS exemption itself is a METHOD-level gate in
+        // checkCsrf (services/identity/src/csrf.ts), not a per-route one,
+        // and is already exhaustively covered by csrf.test.ts's red-line
+        // suite — excluding this one route from the per-route walk does not
+        // reduce that guarantee.
+        r.path !== "/v1/conversations/events",
+    );
 
     expect(getRoutes.length).toBeGreaterThan(0);
     for (const route of getRoutes) {

@@ -18,12 +18,17 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest,
 import { loadIdentityConfig, type IdentityConfig } from "./config.js";
 import { DUMMY_SALT, dummyHash, generateSessionToken, hashSessionToken, verifyPassword } from "./crypto.js";
 import {
+  countRecentFailuresByIp,
+  countRecentFailuresByUsername,
   deleteExpiredSessions,
+  deleteOldLoginAttempts,
   deleteSessionByTokenHash,
   findSessionWithUserByTokenHash,
   findUserByUsername,
   identityTablesExist,
   insertSession,
+  loginAttemptsTableExists,
+  recordLoginAttempt,
   seedDemoUsers,
   type UserRow,
 } from "./repository.js";
@@ -54,6 +59,7 @@ const LOGIN_REQUEST_SCHEMA = {
 } as const;
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const LOGIN_ATTEMPTS_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 interface AuthSessionBody {
   userId: string;
@@ -91,6 +97,17 @@ function sweepExpiredSessions(app: FastifyInstance): void {
   if (removed > 0) app.log.debug({ removed }, "swept expired/idle sessions");
 }
 
+function sweepOldLoginAttempts(app: FastifyInstance): void {
+  // Same AI_KM_AUTO_MIGRATE=false guard as sweepExpiredSessions, but its own
+  // table check: `login_attempts` (this story's migration) can lag behind
+  // `users`/`sessions` during an in-place upgrade — see
+  // loginAttemptsTableExists's docstring.
+  if (!loginAttemptsTableExists(app.db)) return;
+  const cutoffIso = new Date(Date.now() - LOGIN_ATTEMPTS_RETENTION_MS).toISOString();
+  const removed = deleteOldLoginAttempts(app.db, cutoffIso);
+  if (removed > 0) app.log.debug({ removed }, "swept old login attempts");
+}
+
 function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
   return async function login(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
     const { username, password } = request.body as { username: string; password: string };
@@ -105,16 +122,43 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
     }
 
     const user = findUserByUsername(app.db, username);
-    if (!user) {
-      // AC2: pay for a real scrypt computation even though there is no row,
-      // so "unknown username" and "wrong password" cost the same wall clock.
+    let passwordOk: boolean;
+    if (user) {
+      passwordOk = await verifyPassword(password, user.password_salt, user.password_hash);
+    } else {
+      // AC2 (E02-S032): pay for a real scrypt computation even though there
+      // is no row, so "unknown username" and "wrong password" cost the same
+      // wall clock. Always `false` — an unknown user can never be a
+      // correct-password login, whatever the dummy comparison returns.
       await verifyPassword(password, DUMMY_SALT, await dummyHash());
+      passwordOk = false;
+    }
+
+    // E02-S034: the throttle query runs AFTER the password check (real or
+    // dummy) and BEFORE any response decision, in every request, whether or
+    // not the account is locked — so a locked-out request pays exactly the
+    // same wall-clock cost as a normal wrong-password one, and its own
+    // response is byte-identical to the ordinary INVALID_CREDENTIALS body
+    // (AC1/AC5: a lockout must never be distinguishable from "wrong
+    // password").
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const ip = request.ip;
+    const windowStartIso = new Date(nowMs - config.loginRateLimit.windowMinutes * 60_000).toISOString();
+    const usernameFailures = countRecentFailuresByUsername(app.db, username, windowStartIso);
+    const ipFailures = countRecentFailuresByIp(app.db, ip, windowStartIso);
+    const throttled =
+      usernameFailures >= config.loginRateLimit.perUsernameMaxFailures ||
+      ipFailures >= config.loginRateLimit.perIpMaxFailures;
+
+    if (throttled) {
+      recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: false, attemptedAt: nowIso });
       reply.code(401);
       return { code: "INVALID_CREDENTIALS", message: "帳號或密碼不正確。" };
     }
 
-    const passwordOk = await verifyPassword(password, user.password_salt, user.password_hash);
-    if (!passwordOk) {
+    if (!user || !passwordOk) {
+      recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: false, attemptedAt: nowIso });
       reply.code(401);
       return { code: "INVALID_CREDENTIALS", message: "帳號或密碼不正確。" };
     }
@@ -124,9 +168,12 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
     // ordering matters: a disabled account with a WRONG password must stay
     // indistinguishable from any other wrong-password attempt.
     if (user.disabled === 1) {
+      recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: false, attemptedAt: nowIso });
       reply.code(403);
       return { code: "ACCOUNT_DISABLED", message: "此帳號已停用,請聯絡系統管理員。" };
     }
+
+    recordLoginAttempt(app.db, { id: randomUUID(), username, ip, succeeded: true, attemptedAt: nowIso });
 
     const ownerKey = config.testSandbox ? `${user.id}:sbx:${randomUUID()}` : user.id;
     if (config.testSandbox) {
@@ -134,8 +181,6 @@ function buildLoginHandler(app: FastifyInstance, config: IdentityConfig) {
     }
 
     const token = generateSessionToken();
-    const nowMs = Date.now();
-    const nowIso = new Date(nowMs).toISOString();
     const expiresAtIso = new Date(nowMs + SESSION_ABSOLUTE_TTL_MS).toISOString();
 
     insertSession(app.db, {
@@ -210,7 +255,11 @@ const identityPluginImpl: FastifyPluginAsync = async (app) => {
   }
 
   sweepExpiredSessions(app);
-  const cleanupTimer = setInterval(() => sweepExpiredSessions(app), CLEANUP_INTERVAL_MS);
+  sweepOldLoginAttempts(app);
+  const cleanupTimer = setInterval(() => {
+    sweepExpiredSessions(app);
+    sweepOldLoginAttempts(app);
+  }, CLEANUP_INTERVAL_MS);
   cleanupTimer.unref();
   app.addHook("onClose", async () => {
     clearInterval(cleanupTimer);

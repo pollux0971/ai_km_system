@@ -26,6 +26,68 @@ export interface IdentityConfig {
    * production restriction.
    */
   readonly sessionCookieDomain: string | undefined;
+  /** `AI_KM_LOGIN_RATE_LIMIT` (E02-S034). See `parseLoginRateLimit`'s docstring for the format. */
+  readonly loginRateLimit: LoginRateLimitConfig;
+}
+
+export interface LoginRateLimitConfig {
+  readonly perUsernameMaxFailures: number;
+  readonly perIpMaxFailures: number;
+  readonly windowMinutes: number;
+}
+
+const DEFAULT_LOGIN_RATE_LIMIT: LoginRateLimitConfig = Object.freeze({
+  perUsernameMaxFailures: 5,
+  perIpMaxFailures: 20,
+  windowMinutes: 15,
+});
+
+const LOGIN_RATE_LIMIT_KEYS = ["perUsernameMaxFailures", "perIpMaxFailures", "windowMinutes"] as const;
+type LoginRateLimitKey = (typeof LOGIN_RATE_LIMIT_KEYS)[number];
+
+/**
+ * `AI_KM_LOGIN_RATE_LIMIT` (E02-S034, optional) — a brand-new env var this
+ * story introduces, so its shape is this story's to define, not something
+ * copied from an existing contract. Format: comma-separated `key:value`
+ * pairs, any subset of the three keys below; unset -> the spec's own
+ * defaults (5 per-username / 20 per-IP / 15-minute window).
+ *
+ * Example: `AI_KM_LOGIN_RATE_LIMIT=perUsernameMaxFailures:2,perIpMaxFailures:3`
+ * — tests use exactly this to trigger a lockout after a handful of real
+ * `POST /auth/login` calls instead of the production thresholds (AC7 asks
+ * for the THRESHOLDS to be tunable for fast tests; the 15-minute WINDOW
+ * itself is tested by seeding old `attempted_at` timestamps directly,
+ * documented in EVIDENCE, not by shrinking the window).
+ */
+export function parseLoginRateLimit(raw: string | undefined): LoginRateLimitConfig {
+  if (raw === undefined || raw === "") return DEFAULT_LOGIN_RATE_LIMIT;
+
+  const result: Record<LoginRateLimitKey, number> = { ...DEFAULT_LOGIN_RATE_LIMIT };
+  for (const entry of raw.split(",")) {
+    const trimmed = entry.trim();
+    if (trimmed === "") continue;
+    const separatorIndex = trimmed.indexOf(":");
+    if (separatorIndex === -1) {
+      throw new IdentityConfigError(
+        `AI_KM_LOGIN_RATE_LIMIT 設定無效:項目 "${trimmed}" 必須是 key:value 格式。`,
+      );
+    }
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const valueRaw = trimmed.slice(separatorIndex + 1).trim();
+    if (!(LOGIN_RATE_LIMIT_KEYS as readonly string[]).includes(key)) {
+      throw new IdentityConfigError(
+        `AI_KM_LOGIN_RATE_LIMIT 設定無效:未知欄位 "${key}"。合法欄位:${LOGIN_RATE_LIMIT_KEYS.join(", ")}。`,
+      );
+    }
+    const value = Number(valueRaw);
+    if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) {
+      throw new IdentityConfigError(
+        `AI_KM_LOGIN_RATE_LIMIT 設定無效:"${key}" 必須是正整數,收到 "${valueRaw}"。`,
+      );
+    }
+    result[key as LoginRateLimitKey] = value;
+  }
+  return Object.freeze(result) as LoginRateLimitConfig;
 }
 
 export class IdentityConfigError extends Error {
@@ -62,6 +124,7 @@ export function loadIdentityConfig(env: NodeJS.ProcessEnv = process.env): Identi
   const seedDemoUsers = readBoolean(env, "AI_KM_SEED_DEMO_USERS", nodeEnv !== "production");
   const rawCookieDomain = env.AI_KM_SESSION_COOKIE_DOMAIN;
   const sessionCookieDomain = rawCookieDomain === undefined || rawCookieDomain === "" ? undefined : rawCookieDomain;
+  const loginRateLimit = parseLoginRateLimit(env.AI_KM_LOGIN_RATE_LIMIT);
 
   if (nodeEnv === "production" && devTriggers) {
     throw new IdentityConfigError(
@@ -79,5 +142,5 @@ export function loadIdentityConfig(env: NodeJS.ProcessEnv = process.env): Identi
     );
   }
 
-  return Object.freeze({ nodeEnv, devTriggers, testSandbox, seedDemoUsers, sessionCookieDomain });
+  return Object.freeze({ nodeEnv, devTriggers, testSandbox, seedDemoUsers, sessionCookieDomain, loginRateLimit });
 }

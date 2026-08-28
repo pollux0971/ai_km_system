@@ -609,3 +609,158 @@ describe("E02-S033 AC4 — AI_KM_SESSION_COOKIE_DOMAIN, end to end through login
     expect(setCookieHeader(res)).toMatch(/Domain=example\.internal/i);
   });
 });
+
+describe("E02-S034 — login rate limiting and account lockout", () => {
+  async function login(
+    app: FastifyInstance,
+    username: string,
+    password: string,
+    remoteAddress = "203.0.113.50",
+  ) {
+    return app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { username, password },
+      remoteAddress,
+    });
+  }
+
+  it("AC1: the 6th attempt (default threshold) locks even with the CORRECT password, and is byte-identical to a wrong-password 401", async () => {
+    const { app } = await build();
+    for (let i = 0; i < 5; i += 1) {
+      await login(app, "demo-user", "wrong-password", "198.51.100.1");
+    }
+    const locked = await login(app, "demo-user", "demo-pass-123", "198.51.100.1");
+    const wrongPassword = await login(app, "demo-user", "wrong-password-2", "198.51.100.1");
+
+    expect(locked.statusCode).toBe(401);
+    expect(locked.statusCode).toBe(wrongPassword.statusCode);
+    expect(locked.body).toBe(wrongPassword.body);
+    expect(locked.json().code).toBe("INVALID_CREDENTIALS");
+  });
+
+  it("AC1/AC7: a low AI_KM_LOGIN_RATE_LIMIT threshold locks after fewer attempts", async () => {
+    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2" });
+    await login(app, "demo-user", "wrong", "198.51.100.2");
+    await login(app, "demo-user", "wrong", "198.51.100.2");
+    const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.2");
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("does not lock a username that has fewer failures than the threshold", async () => {
+    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:3" });
+    await login(app, "demo-user", "wrong", "198.51.100.3");
+    await login(app, "demo-user", "wrong", "198.51.100.3");
+    const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.3");
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("AC2: once the failures fall outside the window, the correct password succeeds again", async () => {
+    const { app, db } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2" });
+    await login(app, "demo-user", "wrong", "198.51.100.4");
+    await login(app, "demo-user", "wrong", "198.51.100.4");
+    const stillLocked = await login(app, "demo-user", "demo-pass-123", "198.51.100.4");
+    expect(stillLocked.statusCode).toBe(401);
+
+    // "Test 以可注入時鐘推進" — implemented here by rewriting the recorded
+    // attempts' timestamps to 20 minutes in the past (outside the default
+    // 15-minute window) rather than threading a clock through production
+    // code; see docs/stories/E02-S034.md's Assumptions for why.
+    db.prepare("UPDATE login_attempts SET attempted_at = ? WHERE username = 'demo-user'").run(
+      new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+    );
+
+    const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.4");
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("AC3: 20 different accounts each failing once from the SAME IP locks the 21st attempt, even for a brand-new username", async () => {
+    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:20" });
+    const ip = "198.51.100.5";
+    for (let i = 0; i < 20; i += 1) {
+      await login(app, `nonexistent-user-${i}`, "wrong", ip);
+    }
+    const res = await login(app, "brand-new-never-seen-username", "anything", ip);
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("AC3/AC7: a low perIpMaxFailures locks the IP after fewer distinct-account failures", async () => {
+    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:3" });
+    const ip = "198.51.100.6";
+    await login(app, "u1", "wrong", ip);
+    await login(app, "u2", "wrong", ip);
+    await login(app, "u3", "wrong", ip);
+    const res = await login(app, "demo-user", "demo-pass-123", ip); // correct password, still IP-locked
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("a different IP is not affected by another IP's failures", async () => {
+    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:2" });
+    await login(app, "u1", "wrong", "198.51.100.7");
+    await login(app, "u2", "wrong", "198.51.100.7");
+    const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.8");
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("AC4: a successful login resets that username's failure count but not the IP's", async () => {
+    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:2, perIpMaxFailures:100" });
+    const ip = "198.51.100.9";
+    await login(app, "demo-user", "wrong", ip);
+    const success = await login(app, "demo-user", "demo-pass-123", ip);
+    expect(success.statusCode).toBe(200);
+
+    // The username's own count is back to 0, so 2 MORE failures are needed
+    // before it locks again — not "already at 1 from before the success".
+    await login(app, "demo-user", "wrong", ip);
+    const stillOk = await login(app, "demo-user", "demo-pass-123", ip);
+    expect(stillOk.statusCode).toBe(200);
+  });
+
+  it("AC5: the locked response never differs from INVALID_CREDENTIALS in any observable field", async () => {
+    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1" });
+    const ip = "198.51.100.10";
+    await login(app, "demo-user", "wrong", ip);
+    const res = await login(app, "demo-user", "demo-pass-123", ip);
+    const result = await validateAgainstAuthContract("/auth/login", "post", 401, res.json());
+    expect(result.valid).toBe(true);
+    expect(Object.keys(res.json())).toEqual(["code", "message"]);
+  });
+
+  it("regression: a locked response must stay indistinguishable from a wrong-password response (permanent — do not special-case lockout)", async () => {
+    const { app } = await build({ AI_KM_LOGIN_RATE_LIMIT: "perUsernameMaxFailures:1" });
+    const ip = "198.51.100.11";
+    const wrongPasswordBaseline = await login(app, "someone-never-locked", "wrong", "198.51.100.12");
+    await login(app, "demo-user", "wrong", ip);
+    const locked = await login(app, "demo-user", "demo-pass-123", ip);
+    expect(locked.statusCode).toBe(wrongPasswordBaseline.statusCode);
+    expect(locked.json()).toEqual(wrongPasswordBaseline.json());
+  });
+
+  it("AC6: the startup sweep removes login_attempts rows older than 24h", async () => {
+    const db = createTestDatabase();
+    db.prepare(
+      "INSERT INTO login_attempts (id, username, ip, succeeded, attempted_at) VALUES ('old-1','u','1.2.3.4',0,?)",
+    ).run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString());
+    db.prepare(
+      "INSERT INTO login_attempts (id, username, ip, succeeded, attempted_at) VALUES ('recent-1','u','1.2.3.4',0,?)",
+    ).run(new Date().toISOString());
+
+    const app = Fastify();
+    await app.register(cookiePlugin);
+    app.decorate("db", db);
+    app.addHook("onClose", async () => db.close());
+    await app.register(identityPlugin);
+    await app.ready();
+
+    const remaining = db.prepare("SELECT id FROM login_attempts").all() as { id: string }[];
+    expect(remaining.map((r) => r.id)).toEqual(["recent-1"]);
+
+    await app.close();
+  });
+
+  it("does not throttle an account with no prior attempts at all", async () => {
+    const { app } = await build();
+    const res = await login(app, "demo-user", "demo-pass-123", "198.51.100.13");
+    expect(res.statusCode).toBe(200);
+  });
+});

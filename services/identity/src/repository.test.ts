@@ -3,14 +3,19 @@ import BetterSqlite3 from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase } from "./testing/db.js";
 import {
+  countRecentFailuresByIp,
+  countRecentFailuresByUsername,
   countUsers,
   deleteExpiredSessions,
+  deleteOldLoginAttempts,
   deleteSessionById,
   deleteSessionByTokenHash,
   findSessionWithUserByTokenHash,
   findUserByUsername,
   identityTablesExist,
   insertSession,
+  loginAttemptsTableExists,
+  recordLoginAttempt,
   seedDemoUsers,
   touchSession,
 } from "./repository.js";
@@ -236,5 +241,117 @@ describe("sessions repository", () => {
     expect(findSessionWithUserByTokenHash(db, "th-expired")).toBeUndefined();
     expect(findSessionWithUserByTokenHash(db, "th-idle")).toBeUndefined();
     expect(findSessionWithUserByTokenHash(db, "th-live")).toBeDefined();
+  });
+});
+
+describe("login_attempts (E02-S034)", () => {
+  const FIFTEEN_MIN_AGO = "2026-08-28T04:45:00.000Z"; // NOW = 2026-08-28T05:00:00.000Z
+  let seq = 0;
+  function attempt(overrides: Partial<Parameters<typeof recordLoginAttempt>[1]> = {}) {
+    seq += 1;
+    recordLoginAttempt(db, {
+      id: `attempt-${seq}`,
+      username: "demo-user",
+      ip: "203.0.113.1",
+      succeeded: false,
+      attemptedAt: NOW,
+      ...overrides,
+    });
+  }
+
+  it("loginAttemptsTableExists is true once the migration has been applied", () => {
+    expect(loginAttemptsTableExists(db)).toBe(true);
+  });
+
+  it("loginAttemptsTableExists is false against a database with no schema at all", () => {
+    const bareDb = new BetterSqlite3(":memory:");
+    expect(loginAttemptsTableExists(bareDb)).toBe(false);
+    bareDb.close();
+  });
+
+  describe("countRecentFailuresByUsername", () => {
+    it("counts failures within the window for that username", () => {
+      attempt({ username: "u1" });
+      attempt({ username: "u1" });
+      expect(countRecentFailuresByUsername(db, "u1", FIFTEEN_MIN_AGO)).toBe(2);
+    });
+
+    it("never counts a success itself as a failure", () => {
+      attempt({ username: "u1", succeeded: true });
+      expect(countRecentFailuresByUsername(db, "u1", FIFTEEN_MIN_AGO)).toBe(0);
+    });
+
+    it("does not count failures outside the window", () => {
+      attempt({ username: "u1", attemptedAt: "2026-08-28T04:00:00.000Z" }); // 1h before NOW, outside a 15-min window
+      expect(countRecentFailuresByUsername(db, "u1", FIFTEEN_MIN_AGO)).toBe(0);
+    });
+
+    it("is scoped per username — another username's failures do not count", () => {
+      attempt({ username: "other-user" });
+      expect(countRecentFailuresByUsername(db, "u1", FIFTEEN_MIN_AGO)).toBe(0);
+    });
+
+    it("AC4: a success resets the count immediately, even for failures still inside the window", () => {
+      attempt({ username: "u1", attemptedAt: "2026-08-28T04:50:00.000Z" });
+      attempt({ username: "u1", attemptedAt: "2026-08-28T04:51:00.000Z" });
+      attempt({ username: "u1", succeeded: true, attemptedAt: "2026-08-28T04:52:00.000Z" });
+      // Both failures happened BEFORE the success and are still within the 15-min window,
+      // but AC4 requires the count to be zero right after a success, not to wait for them
+      // to age out on their own.
+      expect(countRecentFailuresByUsername(db, "u1", FIFTEEN_MIN_AGO)).toBe(0);
+    });
+
+    it("counts a failure that happens AFTER a success normally", () => {
+      attempt({ username: "u1", succeeded: true, attemptedAt: "2026-08-28T04:50:00.000Z" });
+      attempt({ username: "u1", attemptedAt: "2026-08-28T04:55:00.000Z" });
+      expect(countRecentFailuresByUsername(db, "u1", FIFTEEN_MIN_AGO)).toBe(1);
+    });
+  });
+
+  describe("countRecentFailuresByIp", () => {
+    it("counts failures within the window for that IP, across different usernames", () => {
+      attempt({ username: "u1", ip: "203.0.113.9" });
+      attempt({ username: "u2", ip: "203.0.113.9" });
+      attempt({ username: "u3", ip: "203.0.113.9" });
+      expect(countRecentFailuresByIp(db, "203.0.113.9", FIFTEEN_MIN_AGO)).toBe(3);
+    });
+
+    it("is scoped per IP — another IP's failures do not count", () => {
+      attempt({ ip: "203.0.113.9" });
+      expect(countRecentFailuresByIp(db, "203.0.113.10", FIFTEEN_MIN_AGO)).toBe(0);
+    });
+
+    it("AC4 (IP side): a username's success does NOT reset the IP's failure count", () => {
+      attempt({ username: "u1", ip: "203.0.113.9" });
+      attempt({ username: "u2", ip: "203.0.113.9" });
+      attempt({ username: "u1", ip: "203.0.113.9", succeeded: true });
+      expect(countRecentFailuresByIp(db, "203.0.113.9", FIFTEEN_MIN_AGO)).toBe(2);
+    });
+  });
+
+  describe("deleteOldLoginAttempts", () => {
+    it("removes rows past the cutoff, keeps rows at or after it", () => {
+      recordLoginAttempt(db, {
+        id: "old-1",
+        username: "u1",
+        ip: "203.0.113.1",
+        succeeded: false,
+        attemptedAt: "2026-08-26T00:00:00.000Z", // > 24h before NOW
+      });
+      recordLoginAttempt(db, {
+        id: "recent-1",
+        username: "u1",
+        ip: "203.0.113.1",
+        succeeded: false,
+        attemptedAt: NOW,
+      });
+
+      const cutoff = "2026-08-27T05:00:00.000Z"; // 24h before NOW
+      const removed = deleteOldLoginAttempts(db, cutoff);
+
+      expect(removed).toBe(1);
+      const remaining = db.prepare("SELECT id FROM login_attempts").all() as { id: string }[];
+      expect(remaining.map((r) => r.id)).toEqual(["recent-1"]);
+    });
   });
 });

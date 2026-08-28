@@ -123,6 +123,90 @@ export function deleteExpiredSessions(db: Database, nowIso: string, idleCutoffIs
   return result.changes;
 }
 
+/**
+ * `apps/api` supports starting with `AI_KM_AUTO_MIGRATE=false`; before the
+ * first `pnpm migrate`, `login_attempts` may not exist yet even though
+ * `users`/`sessions` already do (this story's migration lands after theirs).
+ * The startup/hourly sweep checks this first and no-ops when false — see
+ * `identityTablesExist`'s docstring for the same pattern.
+ */
+export function loginAttemptsTableExists(db: Database): boolean {
+  const row = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'login_attempts'")
+    .get() as unknown;
+  return row !== undefined;
+}
+
+export interface LoginAttemptInput {
+  readonly id: string;
+  readonly username: string;
+  readonly ip: string;
+  readonly succeeded: boolean;
+  readonly attemptedAt: string;
+}
+
+/**
+ * Records ONE real `POST /auth/login` attempt (E02-S034). `succeeded`
+ * reflects the FINAL outcome the caller actually received — a request
+ * denied for being rate-limited, or against a disabled account, is
+ * `succeeded: false` even if the submitted password happened to be
+ * correct, because "succeeded" means "got a session", not "password
+ * matched".
+ */
+export function recordLoginAttempt(db: Database, attempt: LoginAttemptInput): void {
+  db.prepare(
+    `INSERT INTO login_attempts (id, username, ip, succeeded, attempted_at)
+     VALUES (@id, @username, @ip, @succeeded, @attemptedAt)`,
+  ).run({ ...attempt, succeeded: attempt.succeeded ? 1 : 0 });
+}
+
+/**
+ * Failures for this username within `[windowStartIso, now]`, but bounded to
+ * have happened AFTER the username's own most recent success (if any) — a
+ * successful login resets the count immediately (AC4) rather than waiting
+ * for old failures to age out of the window on their own.
+ */
+export function countRecentFailuresByUsername(
+  db: Database,
+  username: string,
+  windowStartIso: string,
+): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n
+         FROM login_attempts
+        WHERE username = ?
+          AND succeeded = 0
+          AND attempted_at >= ?
+          AND attempted_at > COALESCE(
+                (SELECT MAX(attempted_at) FROM login_attempts WHERE username = ? AND succeeded = 1),
+                ''
+              )`,
+    )
+    .get(username, windowStartIso, username) as { n: number };
+  return row.n;
+}
+
+/**
+ * Failures for this IP within `[windowStartIso, now]`, across EVERY
+ * username. Deliberately NOT reset by any username's success (AC4: "IP
+ * 計數不變") — a single compromised/guessed account must not let an
+ * attacker launder away the throttle on every other account they are
+ * trying from the same IP.
+ */
+export function countRecentFailuresByIp(db: Database, ip: string, windowStartIso: string): number {
+  const row = db
+    .prepare("SELECT COUNT(*) AS n FROM login_attempts WHERE ip = ? AND succeeded = 0 AND attempted_at >= ?")
+    .get(ip, windowStartIso) as { n: number };
+  return row.n;
+}
+
+/** Startup/hourly sweep: rows older than 24h are pure ledger noise (AC6). Returns the count removed. */
+export function deleteOldLoginAttempts(db: Database, cutoffIso: string): number {
+  const result = db.prepare("DELETE FROM login_attempts WHERE attempted_at <= ?").run(cutoffIso);
+  return result.changes;
+}
+
 interface DemoAccountSeed {
   readonly id: string;
   readonly username: string;

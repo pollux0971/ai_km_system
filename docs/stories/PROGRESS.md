@@ -32,10 +32,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
 | E13 Feedback & Analytics | 21 | 18 | 0 | 0 | 0 | 3 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S050) | 12 | 6 | 0 | 0 | 0 | 6 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S050) | 12 | 6 | 1 | 0 | 0 | 5 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 1 | 0 | 1 |
-| **合計** | **222** | 190 | 0 | 3 | 1 | 28 |
+| **合計** | **222** | 190 | 1 | 3 | 1 | 27 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -296,7 +296,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S040 | approved | `story/E04-S040-sqlite-base` | [E04-S040.md](E04-S040.md) | SQLite 基礎（better-sqlite3、migration runner、conversation schema、change_events、ownerKey helper）；HARD 依賴：E04-S039；wave 1。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S040.spec.md](specs/E04-S040.spec.md) |
 | E04-S041 | approved | `story/E04-S041-conversations-rest` | [E04-S041.md](E04-S041.md) | Conversations REST（list/search/paginate/create/get/patch/delete + 事件 + seed）；HARD 依賴：E04-S038、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S041.spec.md](specs/E04-S041.spec.md) |
 | E04-S042 | approved | `story/E04-S042-messages-rest` | [E04-S042.md](E04-S042.md) | Messages REST（list/create user 與過渡期 assistant/revisions，連動摘要 + seed）；HARD 依賴：E04-S038、E04-S041；wave 3。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S042.spec.md](specs/E04-S042.spec.md) |
-| E04-S043 | todo | — | — | Message feedback endpoints（verdict/reason/comment/citation，fail-closed 規則搬到 server）；HARD 依賴：E04-S038、E04-S042；wave 4。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S043.spec.md](specs/E04-S043.spec.md) |
+| E04-S043 | done | `story/E04-S043-message-feedback` | [E04-S043.md](E04-S043.md) | Message feedback endpoints（verdict/reason/comment/citation，fail-closed 規則搬到 server）；HARD 依賴：E04-S038、E04-S042；wave 4。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S043.spec.md](specs/E04-S043.spec.md) |
 | E04-S044 | todo | — | — | Change-event SSE 端點（每 owner 一條、Last-Event-ID 重播、resync、heartbeat、連線上限）；HARD 依賴：E04-S038、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E04-S044.spec.md](specs/E04-S044.spec.md) |
 | E04-S047 | todo | — | — | `/v1/health` subsystem 三態 + 角色守門 `/v1/admin/health`；HARD 依賴：E04-S040、E13-S018、E02-S033；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E04-S047.spec.md](specs/E04-S047.spec.md) |
 | E04-S048 | todo | — | — | CSRF 防禦：state-changing API 要求自訂 header（`x-requested-with`）+ multipart Origin 檢查；HARD 依賴：E04-S039、E02-S032；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E04-S048.spec.md](specs/E04-S048.spec.md) |

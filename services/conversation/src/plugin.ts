@@ -8,8 +8,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerMessageRoutes } from "./routes/messages.js";
+import { registerMessageFeedbackRoutes } from "./routes/message-feedback.js";
 
 export const conversationPlugin: FastifyPluginAsync = async (app) => {
   registerConversationRoutes(app);
   registerMessageRoutes(app);
+  registerMessageFeedbackRoutes(app);
 };

@@ -46,6 +46,7 @@ export {
   createMessage,
   createRevision,
   getMessage,
+  getMessageByOwner,
   listMessages,
   touchConversationSummary,
   type AnswerFeedbackVerdict,
@@ -55,3 +56,10 @@ export {
   type MessageRole,
   type MessageRow,
 } from "./repository/messages.repository.js";
+export {
+  extractCitationIds,
+  setCitationFeedback,
+  setFeedbackComment,
+  setFeedbackReason,
+  setFeedbackVerdict,
+} from "./repository/message-feedback.repository.js";

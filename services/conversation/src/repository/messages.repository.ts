@@ -151,6 +151,23 @@ export function getMessage(
 }
 
 /**
+ * Re-reads a message by owner + id only (no conversation scoping) — used by
+ * `message-feedback.repository.ts` (E04-S043) to re-select a row immediately
+ * after one of its own owner-scoped writes, where the conversation id isn't
+ * threaded through. Never used to decide 403/404 — `getMessage` (via its
+ * caller's prior conversation-ownership check) already establishes that
+ * before any feedback write happens.
+ */
+export function getMessageByOwner(db: Database, ownerKey: OwnerKey, messageId: string): MessageRow | undefined {
+  const owner = toOwnerKey(ownerKey);
+  const raw = prepareOwnerScoped(
+    db,
+    `SELECT ${SELECT_COLUMNS} FROM messages WHERE id = ? AND owner_key = ?`,
+  ).get(messageId, owner) as RawMessageRow | undefined;
+  return raw ? toMessage(raw) : undefined;
+}
+
+/**
  * Updates the parent conversation's summary fields after a message is
  * created — the "連動摘要" half of AC2/AC3. Callers must have already
  * confirmed ownership (this story never calls it without a preceding

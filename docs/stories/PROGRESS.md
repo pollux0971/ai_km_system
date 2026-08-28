@@ -32,10 +32,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
 | E13 Feedback & Analytics | 21 | 18 | 0 | 1 | 0 | 2 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S052) | 14 | 11 | 1 | 0 | 0 | 2 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S052) | 14 | 12 | 0 | 0 | 0 | 2 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **224** | 195 | 1 | 6 | 1 | 21 |
+| **合計** | **224** | 196 | 0 | 6 | 1 | 21 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -303,7 +303,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S049 | approved | `story/E04-S049-server-bootstrap-order` | [E04-S049.md](E04-S049.md) | `apps/api` bootstrap 順序修正:`app.decorate` 必須在 route plugin 註冊前完成,讓 route 定義可直接用 `app.contracts.getSchema()`;HARD 依賴:E04-S039、E04-S041(皆 approved);**使用者 2026-08-28 裁示新增**(E04-S041 開發中發現的既有 bootstrap 缺陷,不修的話後續 9 個 apps/api story 都要重複逐字轉寫 JSON Schema,且 schema 與 contract 之間無機器檢查、為 contract drift 溫床;分析與選項見 [PENDING_DECISIONS.md](PENDING_DECISIONS.md));由 W3 於 E04-S042 之前插隊執行 規格:[E04-S049.spec.md](specs/E04-S049.spec.md) |
 | E04-S050 | approved | `story/E04-S050-conditional-domain-registration` | [E04-S050.md](E04-S050.md) | domain plugin 依「該 domain 的 spec 是否已載入」條件註冊,讓 route 能真正使用 `app.contracts.getSchema()`;比照既有 `sample`/`__test__` routes 模式,`conversationPlugin` 改為 `if (contracts.specNames().includes("conversations"))` 才註冊;`messages.ts` 的 `CreateMessageRequest` 改回真正的 `getSchema()`(AC5,證明機制可用,`CreateRevisionRequest` 依 spec Scope Out 維持轉寫)。對抗性複驗:暫時移除條件式,確認迴歸測試真的紅在 spec 描述的原始錯誤(`契約 "conversations" 不存在`)。`apps/api` 102/102(98 既有+4 新增)、`service-conversation` 198/198(零修改)全綠,`contracts/` 零 diff。HARD 依賴:E04-S049、E04-S042(皆 approved) 規格:[E04-S050.spec.md](specs/E04-S050.spec.md) |
 | E04-S051 | approved | `story/E04-S051-require-session-live-read` | [E04-S051.md](E04-S051.md) | **缺陷修正(阻擋 E03-S038)**:`hostRequireSession` 在 route 註冊當下快照 `app.requireSession`,而 `server.ts` 把 `conversationPlugin`(154 行)排在 `identityPlugin`(156 行,會重新賦值 `app.requireSession`)之前 → production 等效設定下,**真實登入的合法 session cookie 打 conversation/messages/feedback route 一律 401**,對話功能完全不可用;各 domain 隔離測試都用假 requireSession,且無任何「真的登入→打受保護 route」全鏈路測試,故從未被發現。model-gateway 註冊於 identityPlugin 之後,**實測不受影響**。由 W2 於 E04-S048 掃描真實路由表時發現,總指揮逐行覆核確認。HARD 依賴:E02-S032、E04-S041(皆 approved);**W3 優先於 E04-S044/E04-S050 執行** 規格:[E04-S051.spec.md](specs/E04-S051.spec.md) |
-| E04-S052 | done | `story/E04-S052-sandbox-seeder-wiring` | [E04-S052.md](E04-S052.md) | **缺口補正(阻擋 E03-S038 核心 AC)**:composition root(`apps/api/src/server.ts`)接線 `conversationSandboxSeeders`/`messageSandboxSeeders` → `registerSandboxSeeder`(候選 1,避免新增 `services/conversation`→`services/identity` 跨 domain 依賴)。兩邊 `SandboxSeeder` 型別形狀不同(identity 無 db 參數、conversation 有),composition root 是唯一能不動任一 domain 對外介面就橋接的位置。額外解法:`registerSandboxSeeder` 無法反註冊,而 `buildServer()` 測試套件裡每 process 呼叫數十次——改用「只註冊一次、closure 讀取模組層可變的『目前 db』」而非每次都註冊新 closure,避免歷史測試已關閉的 db 連線在後續 sandbox 登入時被重跑觸發同步例外。AC3 要求的接線前紅燈已用 `git stash` 證實(症狀與總指揮回報的 `totalCount:0` 完全一致)。`apps/api` 118/118(115 既有+3 新增)、`service-conversation`/`service-identity`/`service-model-gateway` 三者皆零修改全綠、`contracts/` 零 diff。HARD 依賴:E02-S032、E04-S041、E04-S042(皆 approved) 規格:[E04-S052.spec.md](specs/E04-S052.spec.md) |
+| E04-S052 | approved | `story/E04-S052-sandbox-seeder-wiring` | [E04-S052.md](E04-S052.md) | **缺口補正(阻擋 E03-S038 核心 AC)**:composition root(`apps/api/src/server.ts`)接線 `conversationSandboxSeeders`/`messageSandboxSeeders` → `registerSandboxSeeder`(候選 1,避免新增 `services/conversation`→`services/identity` 跨 domain 依賴)。兩邊 `SandboxSeeder` 型別形狀不同(identity 無 db 參數、conversation 有),composition root 是唯一能不動任一 domain 對外介面就橋接的位置。額外解法:`registerSandboxSeeder` 無法反註冊,而 `buildServer()` 測試套件裡每 process 呼叫數十次——改用「只註冊一次、closure 讀取模組層可變的『目前 db』」而非每次都註冊新 closure,避免歷史測試已關閉的 db 連線在後續 sandbox 登入時被重跑觸發同步例外。AC3 要求的接線前紅燈已用 `git stash` 證實(症狀與總指揮回報的 `totalCount:0` 完全一致)。`apps/api` 118/118(115 既有+3 新增)、`service-conversation`/`service-identity`/`service-model-gateway` 三者皆零修改全綠、`contracts/` 零 diff。HARD 依賴:E02-S032、E04-S041、E04-S042(皆 approved) 規格:[E04-S052.spec.md](specs/E04-S052.spec.md) |
 
 ## E02 Identity, RBAC & Authorization(僅追蹤使用者增補,4)
 

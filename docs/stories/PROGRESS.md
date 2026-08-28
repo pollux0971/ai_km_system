@@ -32,10 +32,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
 | E13 Feedback & Analytics | 21 | 19 | 0 | 1 | 0 | 1 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S053) | 15 | 14 | 0 | 0 | 0 | 1 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S054) | 16 | 14 | 0 | 0 | 0 | 2 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **225** | 201 | 0 | 7 | 1 | 16 |
+| **合計** | **226** | 201 | 0 | 7 | 1 | 17 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -278,7 +278,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E13-S021 | todo | — | — | apps/admin 回饋佇列／使用量／延遲／系統健康接真實 API（移除永遠空／零／null／unknown stub）；HARD 依賴：E11-S026、E13-S018、E03-S034；wave D3；E11-S016/S017/S021/S022、E13-S007/S008/S012/S013/S014 空殼補完。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E13-S021.spec.md](specs/E13-S021.spec.md) |
 
 
-## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,15)
+## E04 RAG & Conversation Intelligence(僅追蹤使用者增補,16)
 
 > E04 屬 Team B epic,本表只追蹤使用者明示指示插入規格庫 epic 檔的增補
 > story(2026-08-20 插入 E04-S037;2026-08-28 插入 E04-S038～S047,使用者明示
@@ -305,6 +305,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S051 | approved | `story/E04-S051-require-session-live-read` | [E04-S051.md](E04-S051.md) | **缺陷修正(阻擋 E03-S038)**:`hostRequireSession` 在 route 註冊當下快照 `app.requireSession`,而 `server.ts` 把 `conversationPlugin`(154 行)排在 `identityPlugin`(156 行,會重新賦值 `app.requireSession`)之前 → production 等效設定下,**真實登入的合法 session cookie 打 conversation/messages/feedback route 一律 401**,對話功能完全不可用;各 domain 隔離測試都用假 requireSession,且無任何「真的登入→打受保護 route」全鏈路測試,故從未被發現。model-gateway 註冊於 identityPlugin 之後,**實測不受影響**。由 W2 於 E04-S048 掃描真實路由表時發現,總指揮逐行覆核確認。HARD 依賴:E02-S032、E04-S041(皆 approved);**W3 優先於 E04-S044/E04-S050 執行** 規格:[E04-S051.spec.md](specs/E04-S051.spec.md) |
 | E04-S052 | approved | `story/E04-S052-sandbox-seeder-wiring` | [E04-S052.md](E04-S052.md) | **缺口補正(阻擋 E03-S038 核心 AC)**:composition root(`apps/api/src/server.ts`)接線 `conversationSandboxSeeders`/`messageSandboxSeeders` → `registerSandboxSeeder`(候選 1,避免新增 `services/conversation`→`services/identity` 跨 domain 依賴)。兩邊 `SandboxSeeder` 型別形狀不同(identity 無 db 參數、conversation 有),composition root 是唯一能不動任一 domain 對外介面就橋接的位置。額外解法:`registerSandboxSeeder` 無法反註冊,而 `buildServer()` 測試套件裡每 process 呼叫數十次——改用「只註冊一次、closure 讀取模組層可變的『目前 db』」而非每次都註冊新 closure,避免歷史測試已關閉的 db 連線在後續 sandbox 登入時被重跑觸發同步例外。AC3 要求的接線前紅燈已用 `git stash` 證實(症狀與總指揮回報的 `totalCount:0` 完全一致)。`apps/api` 118/118(115 既有+3 新增)、`service-conversation`/`service-identity`/`service-model-gateway` 三者皆零修改全綠、`contracts/` 零 diff。HARD 依賴:E02-S032、E04-S041、E04-S042(皆 approved) 規格:[E04-S052.spec.md](specs/E04-S052.spec.md) |
 | E04-S053 | approved | `story/E04-S053-sandbox-seeder-messages-scope` | [E04-S053.md](E04-S053.md) | **缺口補正(阻擋 E03-S038 核心 AC 與 E01-S021/S022 的 AC4)**:E04-S052 把 conversation 與 message 兩個 seeder 都接進 sandbox,但既有 264 個 E2E 是對著 `apps/web/src/test/fake-api.ts` 寫的,而那個 fake 的起始狀態是「有對話、`messageStore = []` 零訊息」。伺服器 sandbox 多 seed 了訊息,導致所有「開啟一個應該是空的對話」的 spec 斷言不符——W1 實測 220/264,44 紅其中 41 個是此模式(`send-message` 等不到「尚無訊息」、`citation-badge` 期待 2 實得 4)。修法:sandbox 只註冊 conversation seeder;**不得改 seeder 資料內容,也不得改任何 E2E spec**。實作:`server.ts` 移除 `messageSandboxSeeders` 那行接線,`messageSandboxSeeders` 本身保留未刪。AC2 紅燈已用真實 `buildServer()`+真實登入證實(症狀與回報一致:對話回傳 2 則訊息應為 0)。誠實記錄 1 筆必要的既有測試修正:W3 自己在 E04-S052 寫的 `sandbox-seeder-wiring.test.ts` 斷言了舊行為(>0 訊息),與本 story AC1 直接矛盾,已改為斷言新行為(0 訊息)並加註解,其餘測試逐字未動。`apps/api` 145/145、`service-conversation`/`service-identity`/`service-model-gateway` 三者零修改全綠、contracts/seed 零 diff。HARD 依賴:E04-S052(approved);由 W3 執行 規格:[E04-S053.spec.md](specs/E04-S053.spec.md) |
+| E04-S054 | todo | — | — | **阻斷性回歸(生產環境無法登入)**:E04-S048 讓所有 state-changing API 要求 `x-requested-with`,`packages/api-client` 已加注入,但**登入走的是 `packages/auth-client`,它沒送**(grep 零命中)→ `POST /v1/auth/login` 一律 **403 CSRF_HEADER_MISSING**,web app 完全無法登入。這也是 2026-08-28 深夜起所有 lane「原因不明的大範圍 30 秒逾時」的真因(E2E 第一步 login 就過不去)。由 W4 以最小重現腳本找到,總指揮實測驗證。HARD 依賴:E03-S035、E04-S048(皆已 merge);由 **W2** 執行,**最高優先** 規格:[E04-S054.spec.md](specs/E04-S054.spec.md) |
 
 ## E02 Identity, RBAC & Authorization(僅追蹤使用者增補,4)
 

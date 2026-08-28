@@ -63,3 +63,12 @@ export {
   setFeedbackReason,
   setFeedbackVerdict,
 } from "./repository/message-feedback.repository.js";
+export {
+  adminGetMessage,
+  adminListMessagesWithFeedback,
+  type AdminFeedbackCitationVerdict,
+  type AdminFeedbackItem,
+  type AdminFeedbackPage,
+  type AdminFeedbackVerdict,
+  type AdminListFeedbackOptions,
+} from "./repository/admin-read.repository.js";

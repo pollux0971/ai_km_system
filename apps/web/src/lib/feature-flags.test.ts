@@ -44,4 +44,27 @@ describe("isFeatureEnabled", () => {
 
     expect(isFeatureEnabled("voice_input")).toBe(true);
   });
+
+  // E03-S045 (AC3): production (no env override) must default this OFF —
+  // unlike sso/voice_input above, this flag's default is false. `vi.stubEnv`
+  // clears vitest.setup.ts's own global override for this one assertion so
+  // this test genuinely observes FLAGS.mock_triggers's registered default,
+  // not the test-environment override.
+  it("defaults mock_triggers to disabled when no env override is set (production posture)", () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS", undefined);
+
+    expect(isFeatureEnabled("mock_triggers")).toBe(false);
+  });
+
+  it("enables mock_triggers when NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS=true is set explicitly", () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS", "true");
+
+    expect(isFeatureEnabled("mock_triggers")).toBe(true);
+  });
+
+  it("disables mock_triggers when NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS=false is set explicitly", () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS", "false");
+
+    expect(isFeatureEnabled("mock_triggers")).toBe(false);
+  });
 });

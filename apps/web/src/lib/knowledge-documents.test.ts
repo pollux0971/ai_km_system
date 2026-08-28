@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addKnowledgeBaseDocument,
   addKnowledgeBaseDocumentFromText,
@@ -831,5 +831,21 @@ describe("addKnowledgeBaseDocumentFromText (E05-S015)", () => {
     if (all.ok) {
       expect(all.value.some((item) => item.id === "kb-sample-3")).toBe(true);
     }
+  });
+});
+
+// E03-S045 (AC1): vitest.setup.ts sets mock_triggers to "true" globally —
+// this test locally overrides it to exercise the flag-OFF default.
+describe("addKnowledgeBaseDocument respects the mock_triggers flag (E03-S045)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("ignores MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER and leaves status undefined when mock_triggers is disabled", async () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS", "false");
+    const result = await addKnowledgeBaseDocument("kb-sample-3", `毀損檔案${MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER}.pdf`, 500);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.status).toBeUndefined();
   });
 });

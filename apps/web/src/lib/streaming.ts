@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "./feature-flags";
+
 /**
  * E03-S010: SSE/WebSocket streaming renderer. SOURCE_BASELINE.md and
  * the epic file give this story only its title — zero technical
@@ -57,7 +59,13 @@ function delay(ms: number): Promise<void> {
  */
 export const MOCK_STREAM_DISCONNECT_TRIGGER = "[模擬:STREAM_DISCONNECT]";
 
+/**
+ * E03-S045: gated behind the "mock_triggers" flag (defaultEnabled: false)
+ * — see feature-flags.ts's own doc comment. Flag check first, so a
+ * disabled flag always means "don't disconnect" regardless of input.
+ */
 export function shouldSimulateStreamDisconnect(userQuestion: string): boolean {
+  if (!isFeatureEnabled("mock_triggers")) return false;
   return userQuestion.includes(MOCK_STREAM_DISCONNECT_TRIGGER);
 }
 

@@ -1,5 +1,6 @@
 import type { ApiError, Result } from "@ai-km/types";
 import type { Role } from "@ai-km/permissions";
+import { isFeatureEnabled } from "./feature-flags";
 import { getKnowledgeBase } from "./knowledge-bases";
 
 /**
@@ -282,7 +283,11 @@ export async function addKnowledgeBaseDocument(
     name: trimmedName,
     sizeBytes,
     uploadedAt: new Date().toISOString(),
-    ...(trimmedName.includes(MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER) ? { status: "failed" as const } : {}),
+    // E03-S045: gated behind the "mock_triggers" flag — see
+    // feature-flags.ts's own doc comment.
+    ...(isFeatureEnabled("mock_triggers") && trimmedName.includes(MOCK_DOCUMENT_PROCESSING_FAILURE_TRIGGER)
+      ? { status: "failed" as const }
+      : {}),
   };
   writeStore([...readStore(), document]);
   return { ok: true, value: document };

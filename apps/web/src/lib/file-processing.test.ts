@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyFileProcessing, MOCK_FILE_PROCESSING_FAILURE_TRIGGER, simulateFileProcessing } from "./file-processing";
 
 describe("classifyFileProcessing (E03-S029)", () => {
@@ -30,5 +30,18 @@ describe("simulateFileProcessing (E03-S029)", () => {
     const start = Date.now();
     await simulateFileProcessing(["報表.pdf"]);
     expect(Date.now() - start).toBeGreaterThan(0);
+  });
+});
+
+// E03-S045 (AC1): vitest.setup.ts sets mock_triggers to "true" globally —
+// this test locally overrides it to exercise the flag-OFF default.
+describe("classifyFileProcessing respects the mock_triggers flag (E03-S045)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("ignores the trigger phrase and classifies as done when mock_triggers is disabled", () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS", "false");
+    expect(classifyFileProcessing([`損毀檔案${MOCK_FILE_PROCESSING_FAILURE_TRIGGER}.pdf`])).toBe("done");
   });
 });

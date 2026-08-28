@@ -42,6 +42,8 @@
  * placeholder for one, it's how Team A demonstrates and tests the
  * RENDERING side of all 6 states without inventing a fake backend.
  */
+import { isFeatureEnabled } from "./feature-flags";
+
 export type AnswerState = "ANSWERED" | "PARTIAL" | "NO_EVIDENCE" | "ERROR" | "PERMISSION_DENIED" | "SOURCE_UNAVAILABLE";
 
 export const ANSWER_STATES: AnswerState[] = ["ANSWERED", "PARTIAL", "NO_EVIDENCE", "ERROR", "PERMISSION_DENIED", "SOURCE_UNAVAILABLE"];
@@ -108,7 +110,17 @@ export const ANSWER_STATE_FALLBACK_CONTENT: Partial<Record<AnswerState, string>>
  * one trigger. Defaults to "ANSWERED", matching current behavior for
  * every question asked before this story existed.
  */
+/**
+ * E03-S045: gated behind the "mock_triggers" flag (defaultEnabled: false)
+ * — a production user typing `[模擬:PERMISSION_DENIED]` must not be able
+ * to fake that state (this story's own Security Acceptance). Flag check
+ * comes first, before any trigger matching, so a disabled flag always
+ * means ANSWERED regardless of input — same short-circuit shape as
+ * shouldSimulateStreamDisconnect/classifyFileProcessing.
+ */
 export function classifyAnswerState(userQuestion: string): AnswerState {
+  if (!isFeatureEnabled("mock_triggers")) return "ANSWERED";
+
   for (const state of ANSWER_STATES) {
     const trigger = MOCK_ANSWER_STATE_TRIGGERS[state];
     if (trigger !== undefined && userQuestion.includes(trigger)) {

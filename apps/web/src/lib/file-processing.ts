@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "./feature-flags";
+
 /**
  * E03-S029 "File-processing status UI". SOURCE_BASELINE.md gives this
  * story only a bare title; the epic's expanded title
@@ -33,7 +35,13 @@ export type FileProcessingStatus = "done" | "failed";
 
 export const MOCK_FILE_PROCESSING_FAILURE_TRIGGER = "[模擬:PROCESSING_FAILED]";
 
+/**
+ * E03-S045: gated behind the "mock_triggers" flag (defaultEnabled: false)
+ * — see feature-flags.ts's own doc comment. Flag check first, so a
+ * disabled flag always means "done" regardless of the file names given.
+ */
 export function classifyFileProcessing(fileNames: string[]): FileProcessingStatus {
+  if (!isFeatureEnabled("mock_triggers")) return "done";
   return fileNames.some((name) => name.includes(MOCK_FILE_PROCESSING_FAILURE_TRIGGER)) ? "failed" : "done";
 }
 

@@ -14,6 +14,20 @@ import { fakeFetch, resetFakeApi, seedSampleConversations } from "@/test/fake-ap
 // value as before this story, unmodified.
 process.env.NEXT_PUBLIC_CONVERSATIONS_PAGE_SIZE = "2";
 
+// E03-S045: the "mock_triggers" feature flag (feature-flags.ts) now
+// gates every "[模擬:X]" demo/test hook — defaultEnabled: false in
+// production. `isFeatureEnabled()` reads `process.env` fresh on every
+// call (not once at module load, unlike CONVERSATIONS_PAGE_SIZE above),
+// but this is still set at the same top level for consistency and so
+// every existing trigger-dependent test (answer-state.test.ts,
+// streaming.test.ts, file-processing.test.ts, knowledge-documents.test.ts)
+// keeps seeing exactly the same "triggers work" behaviour as before this
+// story, unmodified. Individual tests exercising the flag-OFF default
+// (this story's own new tests) locally override via `vi.stubEnv(...,
+// "false")` + `vi.unstubAllEnvs()` in their own `afterEach`, same pattern
+// feature-flags.test.ts already establishes.
+process.env.NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS = "true";
+
 // Explicit registration (rather than relying on RTL's global-afterEach
 // auto-detection) since this project imports test globals per-file instead
 // of enabling vitest's `test.globals`. Without this, renders from earlier

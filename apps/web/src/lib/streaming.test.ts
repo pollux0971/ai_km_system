@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MOCK_STREAM_DISCONNECT_TRIGGER, shouldSimulateStreamDisconnect, streamAssistantReply } from "./streaming";
 
 describe("streamAssistantReply (E03-S010)", () => {
@@ -65,6 +65,19 @@ describe("shouldSimulateStreamDisconnect (E03-S031)", () => {
   it("returns true when the mock trigger is present anywhere in the text", () => {
     expect(shouldSimulateStreamDisconnect(`保固期限是多久？ ${MOCK_STREAM_DISCONNECT_TRIGGER}`)).toBe(true);
     expect(shouldSimulateStreamDisconnect(MOCK_STREAM_DISCONNECT_TRIGGER)).toBe(true);
+  });
+});
+
+// E03-S045 (AC1): vitest.setup.ts sets mock_triggers to "true" globally —
+// this test locally overrides it to exercise the flag-OFF default.
+describe("shouldSimulateStreamDisconnect respects the mock_triggers flag (E03-S045)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("ignores the trigger phrase and returns false when mock_triggers is disabled", () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS", "false");
+    expect(shouldSimulateStreamDisconnect(MOCK_STREAM_DISCONNECT_TRIGGER)).toBe(false);
   });
 });
 

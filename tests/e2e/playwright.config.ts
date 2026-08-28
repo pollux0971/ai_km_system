@@ -126,6 +126,12 @@ export default defineConfig({
         // E2E fixtures (3-seed-conversation scenarios landing on exactly 2
         // pages) were designed around 2 and stay unmodified.
         NEXT_PUBLIC_CONVERSATIONS_PAGE_SIZE: "2",
+        // E03-S045: production defaults every "[模擬:X]" mock trigger off
+        // (feature-flags.ts's "mock_triggers" flag) — E2E specs exercise
+        // those states deliberately (answer-state/streaming/file-processing/
+        // knowledge-documents specs), so turn the flag back on here, same
+        // as apps/web/vitest.setup.ts does for the unit-test environment.
+        NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS: "true",
       },
     },
     {

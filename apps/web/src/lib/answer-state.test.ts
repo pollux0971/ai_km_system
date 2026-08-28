@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ANSWER_STATES, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS, classifyAnswerState } from "./answer-state";
 
 describe("classifyAnswerState (E03-S021)", () => {
@@ -29,4 +29,24 @@ describe("classifyAnswerState (E03-S021)", () => {
       expect(ANSWER_STATE_LABELS[state]).toBeTruthy();
     }
   });
+});
+
+// E03-S045 (AC1): the "mock_triggers" flag gates every trigger phrase —
+// this codebase's own vitest.setup.ts sets it to "true" globally, so
+// these tests locally override it to exercise the flag-OFF default.
+describe("classifyAnswerState respects the mock_triggers flag (E03-S045)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each(ANSWER_STATES.filter((state) => state !== "ANSWERED"))(
+    "ignores the %s trigger phrase and stays ANSWERED when mock_triggers is disabled",
+    (state) => {
+      vi.stubEnv("NEXT_PUBLIC_FEATURE_MOCK_TRIGGERS", "false");
+      const trigger = MOCK_ANSWER_STATE_TRIGGERS[state];
+      expect(trigger).toBeDefined();
+      if (!trigger) return;
+      expect(classifyAnswerState(trigger)).toBe("ANSWERED");
+    },
+  );
 });

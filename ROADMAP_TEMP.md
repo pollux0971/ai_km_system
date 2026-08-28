@@ -182,6 +182,42 @@ W7 在 E03-S038 前置未齊時,可先做 E13-S020 或協助 review 其他 lane 
      宣稱綠燈**,必須在持鎖且機器不忙時重跑到真的過。
 6. 本檔完成所有 39 個 story 並 merge 後刪除。
 
+## 5-ter. main 的 gate 基準線(2026-08-28,W7 持鎖實測)
+
+對應 main `d1e8286`(含 E03-S034 的 turbo.json 變更),**在持鎖、無 port 互搶、
+機器負載正常的條件下**跑出來的基準:
+
+| Gate | 數字 |
+|---|---|
+| `turbo run typecheck --force` | 23/23 |
+| `turbo run lint --force` | 23/23 |
+| unit(全 package 合計) | **2101/2101 全綠** |
+| E2E(264 spec) | **261 passed / 3 failed**,6.9 分鐘 |
+
+**那 3 個失敗是既有的資源競爭型 flaky,不是回歸**,全部是 `page.goto` /
+`page.waitForURL` **30000ms timeout**,沒有任何斷言內容不符:
+
+- `admin-e2e.spec.ts`(E11-S025)—— 已在四輪基準中重複出現
+- `admin-analytics-e2e.spec.ts`(E13-S017)—— 重複出現
+- `maintenance-e2e.spec.ts`(E07-S025,`[web]` project)—— 同一家族的新成員,
+  原本點名的 4 支清單裡沒有它
+
+**怎麼用這個基準(嚴格,不得濫用)**:你的 story 跑出 E2E 紅燈時,只有**同時
+滿足下列三條**才可歸類為既有 flaky,否則一律當作自己的回歸處理:
+1. 失敗的是上列 spec 之一(或先前記錄的 `admin-knowledge`、`admin-roles`);
+2. 失敗訊號是 30s 導航/載入逾時,**不是斷言內容不符、資料錯誤或型別錯誤**;
+3. 持鎖、機器不忙時**隔離重跑仍能通過**。
+
+「我猜是 flaky」不算證據。歸類為 flaky 時要在 EVIDENCE 附上隔離重跑的輸出。
+
+**turbo.json 回歸已排除**:E03-S034 改了共用的 `turbo.json`,W7 以此基準確認
+無回歸——理由是 task 圖若壞掉會出現 build/import/型別錯誤或功能性斷言失敗,
+而不是清一色的導航逾時,且 typecheck/lint/2101 unit 全綠(這些對 `dependsOn`
+極敏感)。此結論已回填 E03-S034 的 EVIDENCE。
+
+**E01-S027 的原始素材**:上述三支 spec 的逾時就是 W7 後續 E01-S027
+(E2E 穩定性強化、零 retries)要根治的對象。
+
 ## 5-bis. 待回補清單(不得因已 merge 就當完成)
 
 有數個 story 的 `Definition of Done` / `Evidence Required Before Done` 要求

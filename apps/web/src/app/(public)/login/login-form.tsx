@@ -174,7 +174,7 @@ export default function LoginForm() {
         <>
           <hr style={{ margin: "24px 0" }} />
 
-          <button type="button" onClick={() => setSsoNotice(true)}>
+          <button type="button" className="m3-button-outlined" onClick={() => setSsoNotice(true)}>
             使用 SSO 登入
           </button>
           {ssoNotice && (

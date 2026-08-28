@@ -36,6 +36,53 @@ brand-new webServer entry doesn't need to wait on E01-S030's CI-conditional
 fix to get this right: if port 4100 is ever unexpectedly occupied, this
 config fails loudly instead of silently adopting whatever is there.
 
+## Multi-lane development: the shared E2E lock (E04-S057)
+
+Locally, `web`/`admin` default `reuseExistingServer: true` (see below) —
+convenient for solo development, but dangerous when several developers/
+lanes share one machine: an unguarded `playwright test` (directly, via
+`--last-failed`, or via `pnpm test` at the repo root — turbo's `test`
+pipeline runs `@ai-km/e2e:test` = plain `playwright test`) would silently
+**adopt** another lane's already-running `:3000`/`:3001` dev servers
+instead of failing to bind, corrupting both runs' results with no error at
+all. This is exactly what happened to a real E2E rerun on 2026-08-29 (see
+`docs/stories/E04-S057.md`).
+
+**If you're on a shared machine with other lanes, always go through the
+lock:**
+
+```bash
+../../e2e-locked.sh "<your-label>" -- pnpm exec playwright test [...args]
+```
+
+`e2e-locked.sh` (this directory, also deployed at the worktrees-root level
+for direct fleet-wide use) does four things: acquires an `flock` on the
+shared `.e2e.lock` (waiting up to 1h), writes a human-readable
+`.e2e.owner` line for other lanes to eyeball, writes a per-acquisition
+`.e2e.owner.token` + exports `AI_KM_E2E_LOCK_TOKEN` for the command it
+wraps, and removes both files on exit (success, failure, or interrupt).
+
+**Enforcement**: `playwright.config.ts` calls
+`assertNotBlockingLockHolder()` (`helpers/lock-guard.ts`) at module-eval
+time — before `defineConfig()` is even built — so **every** entry point is
+covered by one check. Behavior:
+
+| `.e2e.owner` | Result |
+|---|---|
+| Absent or empty | Proceeds normally — no lock in use, nothing to check |
+| Names a PID that's no longer running | Proceeds, with a `stale claim` warning — a crash left this behind, not a live hold |
+| Names a live PID, `AI_KM_E2E_LOCK_TOKEN` matches its `.e2e.owner.token` | Proceeds — this process IS the lock holder (running via `e2e-locked.sh`) |
+| Names a live PID, no matching token | **Throws**, naming the current holder |
+| Line doesn't match the expected `... pid=<n> ...` format | **Throws** — unparseable is treated as uncertain, not as proof of staleness |
+
+If you're aborting a locked run early, kill the wrapper's **process
+group** (`kill -TERM -<pgid>`), not just its own PID — Playwright's
+webServers run in a different process group from the flock's fd-holding
+group, so killing only that group can release the lock while leaving
+`:3000`/`:3001`/`:4100` still occupied. Verify with `ss -ltnp` showing the
+ports free, not `fuser` on the lock file (which only proves the flock
+itself released).
+
 ## Local vs CI: `reuseExistingServer` (E01-S030)
 
 `web`/`admin` use `reuseExistingServer: !process.env.CI` — local dev keeps

@@ -53,6 +53,9 @@ importers:
       '@ai-km/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@ai-km/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       next:
         specifier: ^15.1.0
         version: 15.5.23(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

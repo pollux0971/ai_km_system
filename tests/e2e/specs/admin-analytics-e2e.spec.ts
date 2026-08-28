@@ -59,41 +59,91 @@ test("E13-S017: navigating through every current admin home entry link — inclu
   }
 });
 
-test("E13-S017: consecutively visiting the feedback queue, usage dashboard, and latency dashboard in one session shows each one's own distinct honest empty/zero state, without any of the three bleeding into another", async ({
+/**
+ * E13-S021 (real API): the ORIGINAL version of this test hardcoded that
+ * all three surfaces show an empty/zero state — true only when nothing
+ * else in the same Playwright run has used this shared `demo-super`
+ * session yet. `admin-analytics-real.spec.ts` (AC5) sends a real
+ * message + feedback under this exact session, and `fullyParallel: true`
+ * gives no cross-file ordering guarantee — confirmed broken on a real
+ * full-suite run (this test failed once that file existed). Same fix as
+ * `admin-feedback.spec.ts`/`admin-usage.spec.ts`/`admin-latency.spec.ts`'s
+ * own E13-S021 rewrites: ask the real API what's true right now, then
+ * assert each page matches it. The actual point of this test — that the
+ * three surfaces are independent and don't bleed into each other — is
+ * unchanged and still fully asserted (the negative "X's text does not
+ * appear on Y's page" checks below are state-independent: they'd fail
+ * regardless of whether the state is empty or real).
+ */
+test("E13-S017: consecutively visiting the feedback queue, usage dashboard, and latency dashboard in one session shows each one's own distinct real state, without any of the three bleeding into another", async ({
   page,
 }) => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Each metric is fetched immediately before the page that renders it —
+  // not once up front for all three — because `admin-analytics-real.spec.ts`
+  // (AC5) can insert real data from a DIFFERENT parallel worker at any
+  // moment (`fullyParallel: true`, same shared `demo-super` session).
+  // Snapshotting all three truths before any navigation left a multi-page
+  // window (three `page.goto`s + assertions) for that other worker to
+  // change the "truth" out from under an already-captured value —
+  // confirmed by an actual failure on a real full-suite run (DAU
+  // mismatch). Fetching right before each check narrows that window to
+  // effectively zero, same pattern `admin-usage.spec.ts`/
+  // `admin-latency.spec.ts`'s own single-page E13-S021 tests already use.
+
   await page.goto("/");
   await page.getByRole("main").getByRole("link", { name: "回饋佇列" }).click();
   await page.waitForURL((url) => url.pathname === "/feedback");
-  await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
+  const feedbackRes = await page.request.get("/api/v1/admin/feedback?page=1&pageSize=20");
+  expect(feedbackRes.ok(), `GET /admin/feedback failed: ${feedbackRes.status()}`).toBe(true);
+  const { totalCount: feedbackCount } = (await feedbackRes.json()) as { totalCount: number };
+  if (feedbackCount === 0) {
+    await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
+    await expect(page.getByText(/OK 比例/)).toHaveCount(0);
+  } else {
+    await expect(page.getByText(/OK 比例/)).toBeVisible();
+  }
   await expect(page.getByRole("radiogroup")).toHaveCount(0);
-  await expect(page.getByText(/OK 比例/)).toHaveCount(0);
 
   await page.goto("/");
   await page.getByRole("main").getByRole("link", { name: "使用量儀表板" }).click();
   await page.waitForURL((url) => url.pathname === "/usage");
   await expect(page.getByText("每日活躍使用者（DAU）", { exact: true })).toBeVisible();
-  // E13-S021 (real API): the old assertion checked for the "尚未建置..."
-  // disclaimer paragraph verbatim; that paragraph no longer exists
-  // (removing it WAS this story's whole point). The sandbox account this
-  // E2E runs as has never recorded usage today, so the real server
-  // honestly returns 0 — asserted here instead, a stronger check (proves
-  // the real pipeline works) than the placeholder text it replaces.
+  const usageRes = await page.request.get(`/api/v1/admin/metrics/usage?date=${today}`);
+  expect(usageRes.ok(), `GET /admin/metrics/usage failed: ${usageRes.status()}`).toBe(true);
+  const { dailyActiveUsers } = (await usageRes.json()) as { dailyActiveUsers: number };
   const dauBlock = page.getByText("每日活躍使用者（DAU）", { exact: true }).locator("..");
-  await expect(dauBlock.getByText("0", { exact: true })).toBeVisible();
+  await expect(dauBlock.getByText(String(dailyActiveUsers), { exact: true })).toBeVisible();
   await expect(page.getByText("尚無回饋。")).toHaveCount(0);
 
   await page.goto("/");
   await page.getByRole("main").getByRole("link", { name: "延遲儀表板" }).click();
   await page.waitForURL((url) => url.pathname === "/latency");
-  await expect(page.getByText("尚無資料", { exact: true })).toBeVisible();
+  const latencyRes = await page.request.get("/api/v1/admin/metrics/latency");
+  expect(latencyRes.ok(), `GET /admin/metrics/latency failed: ${latencyRes.status()}`).toBe(true);
+  const { averageLatencyMs } = (await latencyRes.json()) as { averageLatencyMs: number | null };
+  if (averageLatencyMs === null) {
+    await expect(page.getByText("尚無資料", { exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByText(`${averageLatencyMs}ms`, { exact: true })).toBeVisible();
+  }
   await expect(page.getByText("每日活躍使用者（DAU）")).toHaveCount(0);
   await expect(page.getByText("尚無回饋。")).toHaveCount(0);
 
   // Full loop back to the feedback queue: still its own state, unaffected
-  // by having just visited the other two dashboards in between.
+  // by having just visited the other two dashboards in between. Re-fetched
+  // (not reusing the earlier `feedbackCount`) for the same staleness
+  // reason as every other check in this test.
   await page.goto("/");
   await page.getByRole("main").getByRole("link", { name: "回饋佇列" }).click();
   await page.waitForURL((url) => url.pathname === "/feedback");
-  await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
+  const feedbackRes2 = await page.request.get("/api/v1/admin/feedback?page=1&pageSize=20");
+  expect(feedbackRes2.ok(), `GET /admin/feedback failed: ${feedbackRes2.status()}`).toBe(true);
+  const { totalCount: feedbackCount2 } = (await feedbackRes2.json()) as { totalCount: number };
+  if (feedbackCount2 === 0) {
+    await expect(page.getByText("尚無回饋。", { exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByText(/OK 比例/)).toBeVisible();
+  }
 });

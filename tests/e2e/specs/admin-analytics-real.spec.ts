@@ -7,6 +7,12 @@ import { test, expect, type Page } from "@playwright/test";
  * verify all 4 admin analytics surfaces (:3001) show that same real data
  * — the feedback queue, its detail page, usage, latency, and health.
  *
+ * Every accessible-name string and technical claim below (message-thread
+ * button/label text, `MOCK_REPLY`'s trailing `[1]`, `recordUsageEvent`'s
+ * real `POST /usage-events` call, the seeded conversation title) has been
+ * independently re-verified against the current source by W3, line by
+ * line — not accepted on a research assistant's say-so.
+ *
  * Runs under the `admin` project (this file's `admin-` prefix) so
  * Playwright pre-authenticates its storageState for :3001 — irrelevant
  * here since this test does its own fresh login on :3000 first (see

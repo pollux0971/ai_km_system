@@ -112,7 +112,26 @@ W7 在 E03-S038 前置未齊時,可先做 E13-S020 或協助 review 其他 lane 
 2. contract 只有 E13-S018 可新增 yaml(使用者已批准);其他 story 缺 contract → BLOCKED,不發明。
 3. 一次一個 story;`PROGRESS.md` 狀態轉換即時提交。
 4. 不造假綠燈;L3 需手動的(E12-S030、E12-S031 真實 ASR)誠實標記。
-5. 本檔完成所有 39 個 story 並 merge 後刪除。
+5. **E2E 是全機器互斥資源(2026-08-28 新增,強制)**。`tests/e2e/playwright.config.ts`
+   的 webServer 綁死 `:3000`(web)/`:3001`(admin)且 `reuseExistingServer: true`
+   ——七個 worktree 同時跑 E2E 時,先搶到 port 的 lane 會成為所有其他 lane 的
+   dev server,別人的測試會跑在**你的**程式碼上,產生假綠燈/假紅燈。因此:
+
+   ```bash
+   flock /data/python/AI_KM-worktrees/.e2e.lock -c 'pnpm test'
+   ```
+
+   - 任何會啟動 dev server 或跑 Playwright 的指令都必須包在這個 `flock` 內。
+   - 取得鎖之後、跑測試之前,先確認 `:3000`/`:3001` 沒有殘留 server
+     (`ss -ltnp | grep -E ':300[01]'`);有殘留代表是上一輪沒收乾淨的孤兒
+     process(持鎖期間不可能有別的 lane 正在合法使用),清掉再跑。
+   - typecheck / lint / unit test 不受此限,可並行(實測 8 核 load 32 時
+     2061 個 unit test 仍全數通過)。
+   - E2E 逾時失敗時先比對是否落在已知的資源競爭 flaky 家族(`admin-e2e`、
+     `admin-analytics-e2e`、`admin-knowledge`、`admin-roles` 的 30s
+     navigation timeout),不要誤判成自己 story 的回歸;但**也不得因此直接
+     宣稱綠燈**,必須在持鎖且機器不忙時重跑到真的過。
+6. 本檔完成所有 39 個 story 並 merge 後刪除。
 
 ## 6. 進度勾選
 

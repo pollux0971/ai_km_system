@@ -196,7 +196,7 @@ export default function KnowledgeDocumentBulkActions({
         </span>
       )}
       {isConfirmingDelete && (
-        <div role="alertdialog" aria-label={`確認刪除 ${documentIds.length} 份文件`}>
+        <div role="alertdialog" className="m3-dialog" aria-label={`確認刪除 ${documentIds.length} 份文件`}>
           <p>確定要刪除這 {documentIds.length} 份文件嗎？此操作無法復原。</p>
           <button type="button" onClick={handleConfirmBulkDelete} disabled={pending}>
             確認刪除

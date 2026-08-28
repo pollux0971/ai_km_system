@@ -409,6 +409,17 @@ legend {
 }
 
 /* ---------- tables ---------- */
+/*
+ * M3 data table (E01-S025). Safe to restyle at the bare element level —
+ * unlike button/input/textarea below, `<table>` has exactly one consumer
+ * app-wide (erp-query-detail.tsx, confirmed by a repo-wide grep during
+ * this story's own investigation), so this cannot leak into the
+ * out-of-scope chat page. M3's data table drops the boxed-cell grid look
+ * for row dividers only (bottom-border-only rows, no vertical rules) and
+ * a shaded header row — this is a real visual change, not just a token
+ * substitution, matching the spec's explicit instruction ("所有 <table>
+ * 具 M3 data table 樣式").
+ */
 
 table {
   border-collapse: collapse;
@@ -416,19 +427,45 @@ table {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font-size: 0.92rem;
+  overflow: hidden;
 }
 
 th,
 td {
-  border: 1px solid var(--border);
-  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
   text-align: left;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover td {
+  /* State-layer hover, same color-mix recipe as .home-tile-card and
+     .m3-menu-item below — never `opacity` (E01-S023 found opacity
+     dimming breaks AA contrast; see that story's EVIDENCE). */
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) calc(var(--md-sys-state-hover-opacity) * 100%), var(--surface));
 }
 
 th {
   background: var(--surface-2);
   font-weight: 600;
   color: var(--text-muted);
+  font: var(--md-sys-typescale-label-large-weight) var(--md-sys-typescale-label-large-size) / var(
+      --md-sys-typescale-label-large-line-height
+    )
+    var(--md-sys-typescale-label-large-font);
+}
+
+/*
+ * Horizontal-scroll wrapper (UX AC: "表格於窄螢幕可水平捲動且不破版").
+ * Additive wrapper element, not a DOM rewrite of the table itself —
+ * within this story's "className／wrapper" allowance.
+ */
+.m3-table-wrapper {
+  overflow-x: auto;
 }
 
 /* ---------- app shell ---------- */
@@ -1212,4 +1249,207 @@ th {
     var(--md-sys-typescale-label-medium-font);
   letter-spacing: var(--md-sys-typescale-label-medium-tracking);
   color: var(--text-muted);
+}
+
+/* ---------- M3 remaining pages (E01-S025) ---------- */
+/*
+ * knowledge/maintenance/ERP/profile/login. Deliberately page-agnostic
+ * class names (`.m3-*`, not `.home-*`) — these are new, additive classes
+ * applied only to the five in-scope pages' own components, not a
+ * refactor of `.home-*` (which belongs to E01-S024 and is out of this
+ * story's allowed-modify scope).
+ *
+ * NOT touched here: the bare `button`/`input`/`select`/`textarea`
+ * element rules above ("form elements" section) and `dl`/`fieldset`.
+ * Confirmed by a repo-wide grep during this story's own investigation
+ * that all of those are also used on the chat page and citation views
+ * (E03-S043's scope, explicitly Out for this story) — restyling the bare
+ * element would leak there. `<table>` was safe to restyle directly
+ * (see "tables" section above) because it has exactly one consumer
+ * app-wide. Everything below is therefore either a new opt-in class or,
+ * for the login page, applied through a class already scoped to
+ * `.login-card`.
+ */
+
+/* Knowledge: outlined card grid (spec: "outlined card grid", distinct
+   from home's filled/elevated tiles — border only, no shadow at rest). */
+
+.m3-card-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.m3-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  transition: border-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.m3-card:hover {
+  border-color: var(--primary);
+}
+
+.m3-card-title {
+  display: block;
+  font: var(--md-sys-typescale-title-medium-weight) var(--md-sys-typescale-title-medium-size) / var(
+      --md-sys-typescale-title-medium-line-height
+    )
+    var(--md-sys-typescale-title-medium-font);
+  letter-spacing: var(--md-sys-typescale-title-medium-tracking);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.m3-card-description {
+  display: block;
+  margin-top: 4px;
+  font: var(--md-sys-typescale-body-medium-weight) var(--md-sys-typescale-body-medium-size) / var(
+      --md-sys-typescale-body-medium-line-height
+    )
+    var(--md-sys-typescale-body-medium-font);
+  color: var(--text-muted);
+}
+
+.m3-card-meta {
+  display: block;
+  margin-top: 8px;
+  font: var(--md-sys-typescale-label-medium-weight) var(--md-sys-typescale-label-medium-size) / var(
+      --md-sys-typescale-label-medium-line-height
+    )
+    var(--md-sys-typescale-label-medium-font);
+  letter-spacing: var(--md-sys-typescale-label-medium-tracking);
+  color: var(--text-muted);
+}
+
+/* Maintenance / ERP / knowledge-documents: M3 list tiles. Same visual
+   recipe as .home-list-tile-group/.home-list-tile (E01-S024) — kept as a
+   separate, page-agnostic class rather than reusing those directly, so
+   this story's changes stay isolated from E01-S024's own file. */
+
+.m3-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface-2);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.m3-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 20px;
+}
+
+.m3-list-item + .m3-list-item {
+  border-top: 1px solid var(--border);
+}
+
+.m3-list-item-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.m3-list-item-link:hover {
+  text-decoration: underline;
+}
+
+/* Status assist chips (knowledge documents: 處理失敗/已封存). Outlined
+   pill per M3 assist-chip spec — colored border + matching text, no
+   filled background (keeps it visually distinct from the primary
+   filled button). Color communicates via the *chip's own border/text
+   token pairing*, and the text itself ("處理失敗"/"已封存") still carries
+   the meaning — never color-only signaling. */
+
+.m3-assist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--md-sys-shape-corner-full);
+  border: 1px solid var(--border-strong);
+  font: var(--md-sys-typescale-label-large-weight) var(--md-sys-typescale-label-large-size) / var(
+      --md-sys-typescale-label-large-line-height
+    )
+    var(--md-sys-typescale-label-large-font);
+  letter-spacing: var(--md-sys-typescale-label-large-tracking);
+}
+
+.m3-assist-chip--alert {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.m3-assist-chip--status {
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+/* Dialogs (role="alertdialog" panels — knowledge document delete/bulk
+   actions). Focus-lock behavior is untouched (owned by the component,
+   not CSS); this only gives the panel M3 elevation + shape instead of
+   its previous unstyled <div>. */
+
+.m3-dialog {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--md-sys-elevation-level3);
+  padding: 20px;
+  max-width: 420px;
+}
+
+/* Profile: M3 key/value list. Scoped to .m3-kv-list (not bare dl/dt/dd —
+   <dl> is also used by citation views on the chat page, out of scope). */
+
+.m3-kv-list {
+  margin: 0;
+}
+
+.m3-kv-list dt {
+  font: var(--md-sys-typescale-label-medium-weight) var(--md-sys-typescale-label-medium-size) / var(
+      --md-sys-typescale-label-medium-line-height
+    )
+    var(--md-sys-typescale-label-medium-font);
+  letter-spacing: var(--md-sys-typescale-label-medium-tracking);
+  color: var(--text-muted);
+  margin-top: 16px;
+}
+
+.m3-kv-list dt:first-child {
+  margin-top: 0;
+}
+
+.m3-kv-list dd {
+  margin: 2px 0 0;
+  font: var(--md-sys-typescale-body-large-weight) var(--md-sys-typescale-body-large-size) / var(
+      --md-sys-typescale-body-large-line-height
+    )
+    var(--md-sys-typescale-body-large-font);
+  color: var(--text);
+}
+
+/* Login: outlined SSO button, opt-in class rather than a bare `button`
+   rule change (bare `button` is also the chat composer's icon-button
+   base — out of scope; see the note at the top of this section).
+   `button[type="submit"]` above is already M3's "filled button" in
+   effect (primary background, on-primary text) — no change needed
+   there for the main submit button. */
+
+.m3-button-outlined {
+  background: transparent;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.m3-button-outlined:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) calc(var(--md-sys-state-hover-opacity) * 100%), transparent);
 }

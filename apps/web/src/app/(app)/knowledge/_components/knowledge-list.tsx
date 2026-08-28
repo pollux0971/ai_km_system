@@ -95,16 +95,18 @@ export default function KnowledgeList() {
       )}
 
       {state.status === "loaded" && state.items.length > 0 && (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        <ul className="m3-card-grid">
           {state.items.map((item) => (
-            <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
-              <Link href={`/knowledge/${item.id}`}>
+            <li key={item.id} className="m3-card">
+              <Link className="m3-card-title" href={`/knowledge/${item.id}`}>
                 <strong>{item.name}</strong>
               </Link>
               <br />
-              <span>{item.description}</span>
+              <span className="m3-card-description">{item.description}</span>
               <br />
-              <time dateTime={item.updatedAt}>{new Date(item.updatedAt).toLocaleString("zh-TW")}</time>
+              <time className="m3-card-meta" dateTime={item.updatedAt}>
+                {new Date(item.updatedAt).toLocaleString("zh-TW")}
+              </time>
               <br />
               <Link href={`/knowledge/${item.id}/edit`}>編輯</Link>
             </li>

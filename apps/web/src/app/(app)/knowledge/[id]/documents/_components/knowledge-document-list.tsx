@@ -434,9 +434,9 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
       )}
 
       {documents.length > 0 && (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        <ul className="m3-list">
           {documents.map((document) => (
-            <li key={document.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
+            <li key={document.id} className="m3-list-item">
               <input
                 type="checkbox"
                 aria-label={`選取 ${document.name}`}
@@ -448,7 +448,9 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
               <br />
               {document.status === "failed" && (
                 <>
-                  <span role="alert">處理失敗</span>
+                  <span role="alert" className="m3-assist-chip m3-assist-chip--alert">
+                    處理失敗
+                  </span>
                   <KnowledgeDocumentRetryButton
                     knowledgeBaseId={id}
                     documentId={document.id}
@@ -459,7 +461,9 @@ export default function KnowledgeDocumentList({ id }: { id: string }) {
               )}
               {document.archived && (
                 <>
-                  <span role="status">已封存</span>
+                  <span role="status" className="m3-assist-chip m3-assist-chip--status">
+                    已封存
+                  </span>
                   <br />
                 </>
               )}

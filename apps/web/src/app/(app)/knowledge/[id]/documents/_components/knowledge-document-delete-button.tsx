@@ -96,7 +96,7 @@ export default function KnowledgeDocumentDeleteButton({
   }
 
   return (
-    <div role="alertdialog" aria-label={`確認刪除文件：${name}`}>
+    <div role="alertdialog" className="m3-dialog" aria-label={`確認刪除文件：${name}`}>
       <p>確定要刪除「{name}」嗎？此操作無法復原。</p>
       <button type="button" onClick={handleConfirmDelete} disabled={pending}>
         確認刪除

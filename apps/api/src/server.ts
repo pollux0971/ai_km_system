@@ -150,10 +150,22 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     ...(options.migrationsDir ? { migrationsDir: options.migrationsDir } : {}),
   });
 
+  // E02-S032 — session-cookie login/logout/session + the real requireSession.
+  //
+  // E04-S051: registered BEFORE the domain plugins below, not after. Domain
+  // routes read `app.requireSession` (directly, or via each package's own
+  // `hostRequireSession` proxy) — registering identityPlugin first means
+  // the REAL composed session check is already in place before any domain
+  // route can observe `app.requireSession` at all, so correctness no
+  // longer depends on a domain's own read pattern. This is depth defence
+  // on top of E04-S051's actual fix (making `hostRequireSession` read live
+  // rather than snapshot): the two are independent safeguards for the same
+  // failure mode, same "every decorate/reassignment before any route
+  // plugin registers" principle E04-S049 already established for
+  // `app.contracts`.
+  await app.register(identityPlugin);
   // E04-S040 — conversation domain mount point; routes arrive in E04-S041+.
   await app.register(conversationPlugin);
-  // E02-S032 — session-cookie login/logout/session + the real requireSession.
-  await app.register(identityPlugin);
   // E12-S031 — POST /v1/transcriptions (ASR). config.ts is outside this
   // story's allowed-modify list, so the two fields it already reads
   // (E04-S039) are passed through here rather than re-read.

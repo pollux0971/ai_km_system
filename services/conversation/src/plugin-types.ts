@@ -20,7 +20,7 @@
  * the untyped JSON shape actually on the wire.
  */
 import type { Database } from "better-sqlite3";
-import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 
 /** Mirrors `ContractRegistry.getSchema` (apps/api/src/contracts.ts) — the one method this domain needs. */
 export interface ConversationContractSource {
@@ -36,8 +36,36 @@ export function hostDb(app: FastifyInstance): Database {
   return (app as unknown as { db: Database }).db;
 }
 
+/**
+ * E04-S051: returns a preHandler that reads `app.requireSession`
+ * FRESH on every request, not a snapshot taken once at route-registration
+ * time.
+ *
+ * The bug this fixes: `hostRequireSession(app)` used to just return
+ * `app.requireSession`'s value at the moment it was called. Routes call it
+ * once, during their own registration inside `conversationPlugin`, and
+ * store the result in a local `const`. `apps/api/src/server.ts` registers
+ * `conversationPlugin` BEFORE `identityPlugin`, and `identityPlugin`
+ * REASSIGNS `app.requireSession = composeRequireSession(...)` — a plain
+ * property write, which (correctly, per ordinary JS semantics) does
+ * nothing to a variable that already copied the OLD function reference.
+ * Every conversation-domain route was therefore permanently pinned to
+ * whatever `requireSession` existed before `identityPlugin` ran: the
+ * `apps/api/src/auth-decorator.ts` stub, which denies every request when
+ * the test auth provider is off — i.e. always, in production. A real,
+ * valid session cookie never reached the check that would have accepted
+ * it.
+ *
+ * Returning a thin proxy that reads `app.requireSession` again on every
+ * call — rather than the value itself — makes correctness independent of
+ * registration order: whichever plugin decorates/reassigns it last before
+ * the first real request is served is the one every route actually runs.
+ */
 export function hostRequireSession(app: FastifyInstance): preHandlerHookHandler {
-  return (app as unknown as { requireSession: preHandlerHookHandler }).requireSession;
+  return async function requireSessionProxy(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const current = (app as unknown as { requireSession: preHandlerHookHandler }).requireSession;
+    await (current as (req: FastifyRequest, rep: FastifyReply) => Promise<void> | void)(request, reply);
+  };
 }
 
 export function hostContracts(app: FastifyInstance): ConversationContractSource {

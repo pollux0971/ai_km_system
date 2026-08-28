@@ -25,7 +25,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 33 | 30 | 0 | 0 | 0 | 3 |
+| E01 Application Shell & User Workspace | 33 | 30 | 1 | 0 | 0 | 2 |
 | E03 AI Conversation Experience | 46 | 39 | 0 | 3 | 0 | 4 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 15 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **229** | 213 | 0 | 7 | 1 | 8 |
+| **合計** | **229** | 213 | 1 | 7 | 1 | 7 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -65,7 +65,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S020 | approved | story/E01-S020-e01-e2e-smoke-flow | [E01-S020.md](E01-S020.md) | 獨立審核 APPROVE(fresh gate 連兩輪全綠,無 flaky,scope 未逾界)——**E01 epic 全數 20/20 approved** |
 | E01-S021 | approved | story/E01-S021-m3-design-tokens | [E01-S021.md](E01-S021.md) | 獨立審核 APPROVE。實作完成、typecheck/lint/unit/build 全綠;AC4 由總指揮的統一跨 story E2E 驗證(main `3a41eef`,與 E01-S022/E01-S029/E03-S038 疊加,288 passed/4 failed,見 `docs/stories/unified-e2e-verification.md`)補證,4 個失敗皆不在本 story 允許修改清單內。種子色 `#1e56a0` 已由使用者 2026-08-28 確認,非 ASSUMPTION。HARD 依賴:無;wave 0;`globals.css` 第一修改者。規格:[E01-S021.spec.md](specs/E01-S021.spec.md) |
 | E01-S022 | approved | story/E01-S022-self-hosted-fonts-icons | [E01-S022.md](E01-S022.md) | 自託管字型(Noto Sans TC + Roboto)與 Material Symbols Outlined、`<Icon>`;AC1–3、5、6 綠(build/CDN 檢查、typecheck/lint、unit、Chrome CDP 字型驗證皆完成);AC4 的 264(現 271)E2E 最新實測 255/271,16 個失敗逐一分類:A 類 13 個是 E03-S035 真實 session 持久化帶來的正確行為變化(舊 spec 假設重整會登出已過時)、B 類 2 個已知 flaky、C 類 1 個新發現(route-announcer selector 碰撞)。三類皆與本 story 無關。**AC4 標記待 E01-S031 merge 後重跑補證**。使用者 2026-08-28 指示新增(語音輸入／持久化／跨視窗同步／M3 批次,導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)) 規格:[E01-S022.spec.md](specs/E01-S022.spec.md) |
-| E01-S023 | todo | — | — | App shell M3 化（navigation rail/drawer、top app bar、FAB、M3 list/menu）；HARD 依賴：E01-S021、E01-S022；wave 1；與 E03-S039 同動 sidebar/header，不可同時。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S023.spec.md](specs/E01-S023.spec.md) |
+| E01-S023 | done | story/E01-S023-app-shell-m3 | [E01-S023.md](E01-S023.md) | nav-mode(drawer/rail/modal)三態、FAB、M3 list/menu、圖示;5 元件既有測試零修改全過(19 個),新增 9 個 unit + 5 個新 E2E(nav-mode×3 寬度、modal drawer、axe)。axe 抓到並修正 2 個既有 + 1 個本 story 新增的顏色對比 bug(`opacity` dimming 拖低已合格的 token 配對)。typecheck/lint 32/32、apps/web 全量單元測試 1734/1734、目標 E2E 17/17。HARD 依賴:E01-S021、E01-S022(皆 approved);wave 1;與 E03-S039 同動 sidebar/header,不可同時。規格:[E01-S023.spec.md](specs/E01-S023.spec.md) |
 | E01-S024 | approved | story/E01-S024-home-m3-tiles | [E01-S024.md](E01-S024.md) | 獨立審核 APPROVE（重新獨立跑 typecheck/lint/test 皆綠，123 檔 1726/1726；E2E `home-dashboard`/`smoke`/`app-shell` 14/14；範圍/邊界核對通過；三個既有測試檔逐字未改，只新增；axe 三態 0 violations、8 張 light/dark 截圖存 `docs/design/home-m3/`；過程中抓到並修正 1 個視覺驗證工具的真 bug——`window.fetch`覆寫在`useEffect`裡對已捕捉 fetch binding 的 API client 不生效，改用專案既有的`setApiFetchForTests`後才正確擺出 loaded/empty/error/loading 四態）。首頁 M3 tiles（快速入口 card tiles、最近對話 list tiles）；HARD 依賴：E01-S021、E01-S022（皆已於 main 上可用，AC4 統一驗證待補不影響本 story）；wave 1；與 E03-S039 同動 recent-conversations，不可同時（本 story 先動，維持既有 state machine 骨架未大改，方便 E03-S039 之後插入 hook）。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S024.spec.md](specs/E01-S024.spec.md) |
 | E01-S025 | todo | — | — | 其餘頁面 M3 一致性（knowledge/maintenance/ERP/profile/login）；HARD 依賴：E01-S021、E01-S022、E01-S023、E01-S024；wave 6；P2 可延後；`globals.css` 最後修改者。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S025.spec.md](specs/E01-S025.spec.md) |
 | E01-S026 | approved | story/E01-S026-brand-empty-state-assets | [E01-S026.md](E01-S026.md) | 獨立審核 APPROVE（重新獨立跑 typecheck/lint/test 皆綠——`@ai-km/ui` 21/21、`web` 1650/1650；範圍/邊界核對通過，2 個允許清單外但技術必要的新檔案（`empty-state-illustrations.tsx`、`app/favicon.ico`）已個別記錄理由；7 個新 SVG 逐一以 `pnpm dlx svgo --multipass` 驗證 idempotent 且無 script/外部參照；靜態 SVG 與對應 JSX component 的 path 座標逐一核對一致；AC5 視覺驗收用 Playwright 真實 Chromium 對 light/dark 各截 3 張存於 `docs/design/brand-assets/`，過程中發現並修正 1 個真 bug——插圖背景圓的 M3 token fallback 只有單層，dark mode 下與淺色線稿對比度幾乎消失，改用 `globals.css` 既有的 `--surface-2` 作中間層 fallback 後重新截圖確認修正）。品牌與空狀態素材（logo mark、favicon、3 張空狀態 SVG、EmptyState `illustration` prop）；HARD 依賴：無；wave 0；P2 可延後。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S026.spec.md](specs/E01-S026.spec.md) |

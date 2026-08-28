@@ -34,8 +34,8 @@ mock 也做不了才標 `blocked-team-b`。
 | E13 Feedback & Analytics | 21 | 17 | 0 | 0 | 0 | 4 |
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S048) | 10 | 3 | 0 | 0 | 0 | 7 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 1 | 0 | 0 | 0 | 3 |
-| E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 0 | 1 | 0 | 0 | 2 |
-| **合計** | **220** | 178 | 1 | 0 | 1 | 40 |
+| E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 0 | 0 | 2 |
+| **合計** | **220** | 179 | 0 | 0 | 1 | 40 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -326,6 +326,6 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
-| E12-S029 | done | `story/E12-S029-transcription-contract` | [E12-S029.md](E12-S029.md) | Contract 凍結：transcription API（`contracts/openapi/transcriptions.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S029.spec.md](specs/E12-S029.spec.md) |
+| E12-S029 | approved | `story/E12-S029-transcription-contract` | [E12-S029.md](E12-S029.md) | Contract 凍結：transcription API（`contracts/openapi/transcriptions.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S029.spec.md](specs/E12-S029.spec.md) |
 | E12-S030 | todo | — | — | ASR 環境就緒（whisper-server CUDA 建置／模型指引、check-asr／verify-asr 以真實中英夾雜音檔驗證）；HARD 依賴：無；wave 0；比照 E04-S037，L3 需使用者於目標機器手動完成。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S030.spec.md](specs/E12-S030.spec.md) |
 | E12-S031 | todo | — | — | Transcription 端點（TranscriptionProvider 抽象、whisper-server adapter、fake provider、WAV 驗證、OpenCC 繁體化）；HARD 依賴：E12-S029、E04-S039；wave 1；L3 需 E12-S030。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S031.spec.md](specs/E12-S031.spec.md) |

@@ -12,6 +12,8 @@
     "@ai-km/auth-client": "workspace:*"
   },
   "devDependencies": {
+    "@ai-km/admin": "workspace:*",
+    "@ai-km/web": "workspace:*",
     "@playwright/test": "^1.49.0",
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0"

@@ -556,6 +556,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth-client
     devDependencies:
+      '@ai-km/admin':
+        specifier: workspace:*
+        version: link:../../apps/admin
+      '@ai-km/web':
+        specifier: workspace:*
+        version: link:../../apps/web
       '@playwright/test':
         specifier: ^1.49.0
         version: 1.62.1

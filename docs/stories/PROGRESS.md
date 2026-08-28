@@ -25,7 +25,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 32 | 25 | 0 | 3 | 0 | 4 |
+| E01 Application Shell & User Workspace | 32 | 26 | 0 | 3 | 0 | 3 |
 | E03 AI Conversation Experience | 46 | 38 | 0 | 4 | 0 | 4 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 15 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **228** | 206 | 0 | 11 | 1 | 10 |
+| **合計** | **228** | 207 | 0 | 11 | 1 | 9 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -74,7 +74,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S029 | in-progress | story/E01-S029-security-headers | [E01-S029.md](E01-S029.md) | 6/6 header 已實作(CSP 改採 nonce+`'strict-dynamic'`,使用者 2026-08-29 裁示解除 nonce Non-Goal 並將 `middleware.ts` 納入允許清單)。本 story 自己 15 個 E2E 全綠(含真實瀏覽器 hydration 迴歸測試)、apps/api 157 個 unit test 全綠。**AC4 標記待統一全量驗證(E01-S031 merge 後)涵蓋,見該次結果**——本 story 自跑的 266/279 已顯示 CSP 零回歸(13 個失敗全部與 CSP 完全不阻擋時的既有失敗名單重疊),統一驗證預期同一結論。安全性 HTTP headers(CSP/HSTS/X-Frame-Options/Referrer-Policy/Permissions-Policy);HARD 依賴:E04-S039;wave D1。使用者 2026-08-28 指示新增(第二輪技術債稽核批次,見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節) 規格:[E01-S029.spec.md](specs/E01-S029.spec.md) |
 | E01-S030 | approved | `story/E01-S030-playwright-ci-safety` | [E01-S030.md](E01-S030.md) | Playwright `reuseExistingServer` CI 安全模式（避免舊 process 造成假綠燈）；HARD 依賴：E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節）。`reuseExistingServer: !process.env.CI` + `helpers/port-check.ts` 新增明確 port 佔用檢查（CI 模式），單輪全量 265/277 通過、12 個失敗與既有已知結構性失敗完全一致，無新增回歸。規格：[E01-S030.spec.md](specs/E01-S030.spec.md) |
 | E01-S031 | approved | story/E01-S031-e2e-stale-assumptions | [E01-S031.md](E01-S031.md) | **修正 12 支既有 E2E 的過時假設(解除 4 個 story 的 AC)**:10 支把「硬導覽會登出」(舊 mock 的記憶體 session)當成切換使用者的手段,而 E03-S035 的真實 cookie session **正確地**撐過硬導覽;2 支 `knowledge-selector` 因真實網路延遲打破 `.check()` 的驗證視窗。全部 12 支已改為明確 `logout()` / `.click()`+`toBeChecked()`,AC3 反向驗證(暫還原 2 支確認會紅)通過。三輪全量 813 次執行:12 支清單內 100% 通過;清單外 4 次一次性逾時(`knowledge-ui-e2e`/`smoke`/`model-selector`/`multi-turn-conversation`,各僅出現 1 次、無重複),依 ROADMAP_TEMP.md 第 5-ter 節門檻不構成已具名 flaky,記錄為觀察事實。ai-km-e4 逐條對照 AC1–4 後裁示 approved。E01-S027/E03-S038/E01-S030 EVIDENCE 已補雙向留痕註記。規格:[E01-S031.spec.md](specs/E01-S031.spec.md) |
-| E01-S032 | todo | — | — | **建置競爭,擋住所有 story 的 L1 gate**:`@ai-km/e2e` 沒把 `@ai-km/web`/`@ai-km/admin` 宣告為依賴,所以 turbo 的 `^build` 不會把 `web:build` 排在 `e2e:test` 之前 → `next build` 與 e2e webServer 的 `next dev` **同時寫 `apps/web/.next`** → `Cannot find module './<chunk>.js'`/`PageNotFoundError`,且每次指向不同頁面(競爭特徵,非快取損毀;W4 已清 `.next` 後原樣重現)。目前各 lane 只能用 `--filter` 繞開,拿不到一次完整 `pnpm test` 綠燈。由 W4 發現、總指揮驗證機制。**由 W7 執行**(它是 `turbo.json` 與 `tests/e2e` 的近期修改者),排在 E03-S046 之後 規格:[E01-S032.spec.md](specs/E01-S032.spec.md) |
+| E01-S032 | approved | `story/E01-S032-web-build-serialization` | [E01-S032.md](E01-S032.md) | **建置競爭,擋住所有 story 的 L1 gate**:`@ai-km/e2e` 沒把 `@ai-km/web`/`@ai-km/admin` 宣告為依賴,所以 turbo 的 `^build` 不會把 `web:build` 排在 `e2e:test` 之前 → `next build` 與 e2e webServer 的 `next dev` **同時寫 `apps/web/.next`** → `Cannot find module './<chunk>.js'`/`PageNotFoundError`,且每次指向不同頁面(競爭特徵,非快取損毀;W4 已清 `.next` 後原樣重現)。目前各 lane 只能用 `--filter` 繞開,拿不到一次完整 `pnpm test` 綠燈。由 W4 發現、總指揮驗證機制。**由 W7 執行**(它是 `turbo.json` 與 `tests/e2e` 的近期修改者),排在 E03-S046 之後。修法:`tests/e2e/package.json` 新增 `@ai-km/web`/`@ai-km/admin` devDependency,讓 turbo `^build` 自然排序。反向驗證時在 `admin:build` 真實重現同一類 `PageNotFoundError`(4 秒內命中);修正後連續兩輪完整 `pnpm test`(8m50s、6m20s)皆跑完、零 race 症狀,265/277 通過,12 個失敗與既有已知結構性失敗完全一致。規格:[E01-S032.spec.md](specs/E01-S032.spec.md) |
 
 ## E03 AI Conversation Experience(46)
 

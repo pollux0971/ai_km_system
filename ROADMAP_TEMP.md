@@ -124,7 +124,11 @@ W7 在 E03-S038 前置未齊時,可先做 E13-S020 或協助 review 其他 lane 
    - 任何會啟動 dev server 或跑 Playwright 的指令都必須包在這個 `flock` 內。
    - 取得鎖之後、跑測試之前,先確認 `:3000`/`:3001` 沒有殘留 server
      (`ss -ltnp | grep -E ':300[01]'`);有殘留代表是上一輪沒收乾淨的孤兒
-     process(持鎖期間不可能有別的 lane 正在合法使用),清掉再跑。
+     process,清掉再跑。**不變式:持有這把鎖 = 唯一有權使用 3000/3001 的
+     人。** 因此持鎖時看到的任何 listener 一律是孤兒,即使 `/proc/<pid>/cwd`
+     指向別的 lane 的 worktree 也一樣要清——那代表那條 lane 沒收乾淨,不是
+     它還在合法使用。反過來:**沒持鎖時絕對不准 kill 任何人的 dev server**。
+   - 跑完務必確認自己的 server 已結束,不要留孤兒卡住下一個 lane。
    - typecheck / lint / unit test 不受此限,可並行(實測 8 核 load 32 時
      2061 個 unit test 仍全數通過)。
    - E2E 逾時失敗時先比對是否落在已知的資源競爭 flaky 家族(`admin-e2e`、

@@ -1,17 +1,13 @@
 /**
- * Conversation domain Fastify plugin (E04-S040 skeleton).
+ * Conversation domain Fastify plugin.
  *
- * Routes land here in E04-S041 (conversations REST), E04-S042 (messages),
- * E04-S043 (feedback) and E04-S044 (the change-event stream). This story
- * registers the plugin and nothing else, so those four can be developed
- * against a mount point that already exists.
- *
- * Deliberately empty rather than absent: an empty registered plugin is
- * visible in `apps/api/src/server.ts` and in the route table, whereas a
- * missing one would have to be discovered.
+ * E04-S040 registered this plugin with no routes. E04-S041 adds the
+ * conversations REST surface; E04-S042 (messages), E04-S043 (feedback) and
+ * E04-S044 (the change-event stream) register alongside it here.
  */
 import type { FastifyPluginAsync } from "fastify";
+import { registerConversationRoutes } from "./routes/conversations.js";
 
 export const conversationPlugin: FastifyPluginAsync = async (app) => {
-  app.log.debug("conversation domain plugin registered (no routes yet — E04-S041+)");
+  registerConversationRoutes(app);
 };

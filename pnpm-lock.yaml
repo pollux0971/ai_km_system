@@ -345,12 +345,27 @@ importers:
         specifier: ^5.2.1
         version: 5.12.1
     devDependencies:
+      '@apidevtools/json-schema-ref-parser':
+        specifier: ^11.7.2
+        version: 11.9.3
       '@types/better-sqlite3':
         specifier: ^7.6.12
         version: 7.6.13
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.1
+      ajv:
+        specifier: ^8.17.1
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.3.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

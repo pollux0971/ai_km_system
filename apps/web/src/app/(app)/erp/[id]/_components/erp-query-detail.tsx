@@ -556,24 +556,28 @@ export default function ErpQueryDetail({ id }: { id: string }) {
                 const paginated = paginateErpResultTable(getErpResultTable(erpQuery.selectedScenarioId ?? ""), tablePage);
                 return (
                   <>
-                    <table>
-                      <thead>
-                        <tr>
-                          {paginated.columns.map((column) => (
-                            <th key={column}>{column}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginated.rows.map((row, rowIndex) => (
-                          <tr key={rowIndex}>
-                            {row.map((cell, cellIndex) => (
-                              <td key={cellIndex}>{cell}</td>
+                    <div className="m3-table-wrapper">
+                      <table>
+                        <thead>
+                          <tr>
+                            {paginated.columns.map((column) => (
+                              <th key={column} scope="col">
+                                {column}
+                              </th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {paginated.rows.map((row, rowIndex) => (
+                            <tr key={rowIndex}>
+                              {row.map((cell, cellIndex) => (
+                                <td key={cellIndex}>{cell}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     {paginated.totalPages > 1 && (
                       <nav aria-label="查詢結果分頁">
                         <button

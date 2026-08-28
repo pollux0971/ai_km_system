@@ -66,10 +66,10 @@ export default function ErpQueryList() {
   }
 
   return (
-    <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+    <ul className="m3-list">
       {state.items.map((item) => (
-        <li key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
-          <Link href={`/erp/${item.id}`}>
+        <li key={item.id} className="m3-list-item">
+          <Link className="m3-list-item-link" href={`/erp/${item.id}`}>
             <strong>{item.questionText}</strong>
             <br />
             <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("zh-TW")}</time>

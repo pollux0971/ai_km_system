@@ -39,3 +39,7 @@ test-results/
 
 # SQLite 資料檔(E04-S040,ADR 0003 §2)
 data/
+
+# ASR models and fixtures (E12-S030)
+models/asr/*.bin
+tools/asr-readiness/fixtures/*.wav

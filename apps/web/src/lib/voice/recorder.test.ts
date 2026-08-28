@@ -297,6 +297,89 @@ describe("createVoiceRecorder", () => {
     expect(recorder.state).toBe("idle");
   });
 
+  describe("onAutoStop (E03-S041 addition)", () => {
+    it("delivers the VoiceCapture when auto-stopping on silence", async () => {
+      const harness = createHarness();
+      const recorder = createVoiceRecorder(undefined, harness.deps);
+      let delivered: { capture: unknown; reason: string } | undefined;
+      recorder.onAutoStop((capture, reason) => {
+        delivered = { capture, reason };
+      });
+
+      await recorder.start();
+      feedFrames(harness, sineFrames(800, 16000, 0.5), 16000);
+      feedFrames(harness, sineFrames(1200, 16000, 0), 16000);
+      harness.clock.advance(50); // let any remaining scheduled tick fire
+      await vi.waitFor(() => expect(recorder.state).toBe("idle"));
+
+      expect(delivered?.reason).toBe("silence");
+      expect(delivered?.capture).not.toBeNull();
+      expect((delivered?.capture as { sampleRate: number } | null)?.sampleRate).toBe(16000);
+    });
+
+    it("delivers the VoiceCapture when auto-stopping on max_duration", async () => {
+      const harness = createHarness();
+      const recorder = createVoiceRecorder({ maxDurationMs: 2000 }, harness.deps);
+      let delivered: { capture: unknown; reason: string } | undefined;
+      recorder.onAutoStop((capture, reason) => {
+        delivered = { capture, reason };
+      });
+
+      await recorder.start();
+      feedFrames(harness, sineFrames(2100, 16000, 0.5), 16000);
+      harness.clock.advance(50);
+      await vi.waitFor(() => expect(recorder.state).toBe("idle"));
+
+      expect(delivered?.reason).toBe("max_duration");
+      expect(delivered?.capture).not.toBeNull();
+    });
+
+    it("delivers null when max_duration is reached with no speech ever detected (TOO_SHORT)", async () => {
+      const harness = createHarness();
+      const recorder = createVoiceRecorder({ maxDurationMs: 500 }, harness.deps);
+      let delivered: { capture: unknown; reason: string } | undefined;
+      recorder.onAutoStop((capture, reason) => {
+        delivered = { capture, reason };
+      });
+
+      await recorder.start();
+      feedFrames(harness, sineFrames(600, 16000, 0), 16000); // pure silence throughout
+      harness.clock.advance(50);
+      await vi.waitFor(() => expect(recorder.state).toBe("idle"));
+
+      expect(delivered?.reason).toBe("max_duration");
+      expect(delivered?.capture).toBeNull();
+    });
+
+    it("is NOT called for an explicit manual/cancel stop() — only for internally-triggered auto-stops", async () => {
+      const harness = createHarness();
+      const recorder = createVoiceRecorder(undefined, harness.deps);
+      const calls: unknown[] = [];
+      recorder.onAutoStop((capture, reason) => {
+        calls.push({ capture, reason });
+      });
+
+      await recorder.start();
+      feedFrames(harness, sineFrames(500, 16000, 0.5), 16000);
+      await recorder.stop("manual");
+
+      expect(calls).toHaveLength(0);
+    });
+
+    it("not registering onAutoStop is exactly the pre-E03-S041 behavior (no throw, no unhandled rejection)", async () => {
+      const harness = createHarness();
+      const recorder = createVoiceRecorder({ maxDurationMs: 500 }, harness.deps);
+      // Deliberately no recorder.onAutoStop(...) call.
+
+      await recorder.start();
+      feedFrames(harness, sineFrames(600, 16000, 0), 16000);
+      harness.clock.advance(50);
+      await vi.waitFor(() => expect(recorder.state).toBe("idle"));
+
+      expect(recorder.state).toBe("idle");
+    });
+  });
+
   it("AC4: onLevel fires ~every levelIntervalMs with 0..1 RMS, and stops firing after stop()", async () => {
     const harness = createHarness();
     const recorder = createVoiceRecorder({ levelIntervalMs: 33 }, harness.deps);

@@ -86,6 +86,9 @@ export function createVoiceRecorder(
   let stateChangeCallback:
     | ((state: VoiceRecorderState, reason?: VoiceStopReason) => void)
     | null = null;
+  let autoStopCallback:
+    | ((capture: VoiceCapture | null, reason: "silence" | "max_duration") => void)
+    | null = null;
 
   let stream: MediaStream | null = null;
   let audioContext: VoiceAudioContextLike | null = null;
@@ -113,11 +116,17 @@ export function createVoiceRecorder(
   }
 
   function triggerAutoStop(reason: "silence" | "max_duration"): void {
-    // Fire-and-forget: nothing awaits an internally-triggered stop. The
-    // only rejection stop() can produce here is TOO_SHORT (max_duration
-    // reached with no speech ever detected) — there is no caller to
-    // surface it to, so swallow rather than leave an unhandled rejection.
-    void stop(reason).catch(() => {});
+    // Fire-and-forget: nothing awaits an internally-triggered stop() call
+    // itself (start()'s caller already returned long ago). The resulting
+    // VoiceCapture used to be discarded here entirely — E03-S041 needs it
+    // (auto-stop -> auto-transcribe), so it's now handed to onAutoStop
+    // instead. The only rejection stop() can produce here is TOO_SHORT
+    // (max_duration reached with no speech ever detected); that maps to
+    // `null`, the same "nothing usable" value a manual TOO_SHORT/cancel
+    // caller already gets.
+    void stop(reason)
+      .then((capture) => autoStopCallback?.(capture, reason))
+      .catch(() => autoStopCallback?.(null, reason));
   }
 
   function onIntervalTick(): void {
@@ -253,6 +262,9 @@ export function createVoiceRecorder(
     },
     onStateChange(callback) {
       stateChangeCallback = callback;
+    },
+    onAutoStop(callback) {
+      autoStopCallback = callback;
     },
     get state() {
       return state;

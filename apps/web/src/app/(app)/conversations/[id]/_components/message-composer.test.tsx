@@ -1,11 +1,34 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageComposer } from "./message-composer";
 import { trackEvent } from "@/lib/telemetry";
+import { apiClient } from "@/lib/api";
+import type {
+  VoiceCapture,
+  VoiceRecorder,
+  VoiceRecorderState,
+  VoiceStopReason,
+} from "@/lib/voice";
 
 vi.mock("@/lib/telemetry", () => ({
   trackEvent: vi.fn(),
 }));
+
+// E03-S041: VoiceInputButton (rendered unconditionally by MessageComposer
+// when the voice_input flag is on, the default) needs a controllable fake
+// recorder for the new describe block below — see
+// voice-input-button.test.tsx's top comment for the FakeRecorder shape and
+// why apiClient.transcriptions.POST is spied on directly rather than
+// routed through fake-api.ts (jsdom can't read a Blob out of a FormData
+// body).
+vi.mock("@/lib/voice", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/voice")>("@/lib/voice");
+  return {
+    ...actual,
+    isVoiceCaptureSupported: vi.fn(() => true),
+    createVoiceRecorder: vi.fn(),
+  };
+});
 
 const mockedTrackEvent = vi.mocked(trackEvent);
 
@@ -253,5 +276,113 @@ describe("MessageComposer (E03-S006/S007/S008/S009)", () => {
 
     expect(screen.getByLabelText("訊息")).toHaveValue("你好");
     expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
+  });
+});
+
+// ---- E03-S041: voice input integration (auto-submit / append rule) ------------------
+
+class FakeRecorder implements VoiceRecorder {
+  state: VoiceRecorderState = "idle";
+  private stateCb: ((state: VoiceRecorderState, reason?: VoiceStopReason) => void) | null = null;
+  private autoStopCb: ((capture: VoiceCapture | null, reason: "silence" | "max_duration") => void) | null = null;
+
+  async start() {
+    this.state = "recording";
+    this.stateCb?.("recording");
+  }
+  async stop(reason: VoiceStopReason) {
+    this.state = "idle";
+    this.stateCb?.("idle", reason);
+    return reason === "cancel" ? null : fakeCapture();
+  }
+  onLevel() {}
+  onStateChange(cb: (state: VoiceRecorderState, reason?: VoiceStopReason) => void) {
+    this.stateCb = cb;
+  }
+  onAutoStop(cb: (capture: VoiceCapture | null, reason: "silence" | "max_duration") => void) {
+    this.autoStopCb = cb;
+  }
+  triggerAutoStop(capture: VoiceCapture | null, reason: "silence" | "max_duration") {
+    this.state = "idle";
+    this.autoStopCb?.(capture, reason);
+  }
+}
+
+function fakeCapture(): VoiceCapture {
+  return { wav: new Blob([new Uint8Array(4)], { type: "audio/wav" }), durationMs: 1200, peakRms: 0.4, sampleRate: 16000 };
+}
+
+function fakeTranscriptionResponse(text: string) {
+  const body = {
+    text,
+    rawText: text,
+    language: "zh",
+    durationMs: 1200,
+    processingMs: 200,
+    provider: "fake",
+    model: "fake-model",
+  };
+  return { data: body, error: undefined, response: new Response(JSON.stringify(body), { status: 200 }) };
+}
+
+describe("MessageComposer (E03-S041 voice input)", () => {
+  let recorder: FakeRecorder;
+
+  beforeEach(async () => {
+    recorder = new FakeRecorder();
+    const voiceModule = await import("@/lib/voice");
+    vi.mocked(voiceModule.createVoiceRecorder).mockReturnValue(recorder);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("AC3: recognized text + empty draft -> auto-submits via the same submitDraftWith pipeline as typed Enter/送出 (telemetry + onSubmit)", async () => {
+    vi.spyOn(apiClient.transcriptions, "POST").mockResolvedValue(fakeTranscriptionResponse("明天 deadline 確認") as never);
+    const onSubmit = vi.fn();
+    render(<MessageComposer conversationId="c1" onSubmit={onSubmit} />);
+    expect(screen.getByLabelText("訊息")).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "語音輸入" }));
+    await waitFor(() => expect(recorder.state).toBe("recording"));
+    recorder.triggerAutoStop(fakeCapture(), "silence");
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("明天 deadline 確認", []));
+    expect(screen.getByLabelText("訊息")).toHaveValue(""); // cleared, same as a typed submit
+    expect(mockedTrackEvent).toHaveBeenCalledWith(
+      "conversation_message_compose_submit",
+      expect.objectContaining({ properties: expect.objectContaining({ length: "明天 deadline 確認".length }) }),
+    );
+  });
+
+  it("regression: non-empty draft is NOT auto-sent — recognized text is appended and requires manual confirmation (permanent, per Test Obligations)", async () => {
+    vi.spyOn(apiClient.transcriptions, "POST").mockResolvedValue(fakeTranscriptionResponse("明天 deadline 確認") as never);
+    const onSubmit = vi.fn();
+    render(<MessageComposer conversationId="c1" onSubmit={onSubmit} />);
+    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "先說結論" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "語音輸入" }));
+    await waitFor(() => expect(recorder.state).toBe("recording"));
+    recorder.triggerAutoStop(fakeCapture(), "silence");
+
+    await waitFor(() => expect(screen.getByLabelText("訊息")).toHaveValue("先說結論 明天 deadline 確認"));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("已加入語音文字，請確認後送出")).toBeInTheDocument();
+    expect(screen.getByLabelText("訊息")).toHaveFocus();
+  });
+
+  it("AC1: voice_input flag off -> the button is not rendered at all", () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_VOICE_INPUT", "false");
+    render(<MessageComposer conversationId="c1" />);
+
+    expect(screen.queryByRole("button", { name: "語音輸入" })).not.toBeInTheDocument();
+
+    vi.unstubAllEnvs();
+  });
+
+  it("composer disabled=true disables the voice button too", () => {
+    render(<MessageComposer conversationId="c1" disabled />);
+    expect(screen.getByRole("button", { name: "語音輸入" })).toBeDisabled();
   });
 });

@@ -27,6 +27,8 @@ function loadYaml(name: string): Record<string, unknown> {
 const specDocs: Record<string, unknown> = {
   "conversations.yaml": loadYaml("conversations"),
   "core.yaml": loadYaml("core"),
+  // E03-S041
+  "transcriptions.yaml": loadYaml("transcriptions"),
 };
 
 function resolvePointer(doc: unknown, pointer: string): unknown {
@@ -113,6 +115,42 @@ function assertValid(name: keyof typeof validators, data: unknown): void {
   }
 }
 
+// ---- E03-S041: transcriptions.yaml (isolated from the conversations.yaml
+// validators above — its own ValidationErrorBody/UnauthenticatedBody/etc.
+// are differently-shaped, e.g. this spec's ValidationErrorBody requires
+// details.reason, so reusing the conversations-keyed `validators`/
+// `assertValid` above would validate against the wrong schema) ----------
+
+function schemaForTranscriptions(name: string): object {
+  const schemas = (specDocs["transcriptions.yaml"] as { components: { schemas: Record<string, unknown> } })
+    .components.schemas;
+  return dereference(schemas[name], "transcriptions.yaml") as object;
+}
+
+function compileTranscriptions(name: string): ValidateFunction {
+  return ajv.compile(schemaForTranscriptions(name));
+}
+
+const transcriptionValidators = {
+  Transcription: compileTranscriptions("Transcription"),
+  ValidationErrorBody: compileTranscriptions("ValidationErrorBody"),
+  UnauthenticatedBody: compileTranscriptions("UnauthenticatedBody"),
+  PayloadTooLargeBody: compileTranscriptions("PayloadTooLargeBody"),
+  UnsupportedMediaTypeBody: compileTranscriptions("UnsupportedMediaTypeBody"),
+  AsrUnavailableBody: compileTranscriptions("AsrUnavailableBody"),
+  AsrTimeoutBody: compileTranscriptions("AsrTimeoutBody"),
+} as const;
+
+function assertValidTranscription(name: keyof typeof transcriptionValidators, data: unknown): void {
+  const validate = transcriptionValidators[name];
+  if (!validate(data)) {
+    throw new Error(
+      `[fake-api] ${name} failed contract validation (contracts/openapi/transcriptions.yaml):\n` +
+        `${JSON.stringify(validate.errors, null, 2)}\nOffending value:\n${JSON.stringify(data, null, 2)}`,
+    );
+  }
+}
+
 // ---- In-memory store -------------------------------------------------------------------
 
 interface FakeConversation {
@@ -155,6 +193,10 @@ const STATUS_FOR_CODE: Record<string, number> = {
   UNSUPPORTED_MEDIA_TYPE: 415,
   INTERNAL_ERROR: 500,
   SERVICE_UNAVAILABLE: 503,
+  // E03-S041: transcriptions.yaml's own endpoint-specific codes (distinct
+  // from the platform-generic SERVICE_UNAVAILABLE above).
+  ASR_UNAVAILABLE: 503,
+  ASR_TIMEOUT: 504,
 };
 
 const ERROR_VALIDATOR_FOR_CODE: Partial<Record<string, keyof typeof validators>> = {
@@ -178,6 +220,29 @@ export function resetFakeApi(): void {
   messageStore = [];
   failNext = null;
   requestCount = 0;
+  nextTranscriptionText = null;
+  nextTranscriptionError = null;
+}
+
+// ---- E03-S041: /transcriptions test controls -------------------------------------------
+
+const DEFAULT_FAKE_TRANSCRIPTION_TEXT = "（測試）這是語音辨識的假結果 fake result";
+
+let nextTranscriptionText: string | null = null;
+let nextTranscriptionError: { code: string; reason?: string } | null = null;
+
+/** Test hook: makes the NEXT `POST /transcriptions` succeed with this exact `text`/`rawText`, once. */
+export function setNextTranscriptionText(text: string): void {
+  nextTranscriptionText = text;
+}
+
+/**
+ * Test hook: makes the NEXT `POST /transcriptions` fail with a
+ * transcriptions.yaml-specific error, once. `reason` is required (and only
+ * meaningful) for `code: "VALIDATION_ERROR"` — it becomes `details.reason`.
+ */
+export function setNextTranscriptionError(code: string, reason?: string): void {
+  nextTranscriptionError = reason !== undefined ? { code, reason } : { code };
 }
 
 /** Test hook: the same 3 conversations `SAMPLE_CONVERSATIONS` used to seed, now as full `Conversation` records. */
@@ -530,6 +595,68 @@ async function handleSetCitationFeedback(
   return messageResponse(200, updated);
 }
 
+function transcriptionErrorResponse(status: number, code: string, message: string, reason?: string): Response {
+  const body = reason !== undefined ? { code, message, details: { reason } } : { code, message };
+  const validatorName: keyof typeof transcriptionValidators | undefined =
+    code === "VALIDATION_ERROR"
+      ? "ValidationErrorBody"
+      : code === "UNAUTHENTICATED"
+        ? "UnauthenticatedBody"
+        : code === "PAYLOAD_TOO_LARGE"
+          ? "PayloadTooLargeBody"
+          : code === "UNSUPPORTED_MEDIA_TYPE"
+            ? "UnsupportedMediaTypeBody"
+            : code === "ASR_UNAVAILABLE"
+              ? "AsrUnavailableBody"
+              : code === "ASR_TIMEOUT"
+                ? "AsrTimeoutBody"
+                : undefined;
+  if (validatorName) assertValidTranscription(validatorName, body);
+  return jsonResponse(status, body);
+}
+
+/**
+ * E03-S041. Multipart request → contract-validated `Transcription`
+ * response. Not real ASR — `nextTranscriptionText`/`nextTranscriptionError`
+ * (or a plain default) drive what comes back; never integration evidence
+ * for a real whisper-server (see docs/stories/E12-S031.md for that).
+ */
+async function handleCreateTranscription(request: Request): Promise<Response> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("multipart/form-data")) {
+    return transcriptionErrorResponse(415, "UNSUPPORTED_MEDIA_TYPE", "僅接受 multipart/form-data 的 audio/wav 錄音。");
+  }
+
+  const formData = await request.formData();
+  const audio = formData.get("audio");
+  if (!(audio instanceof Blob) || audio.size === 0) {
+    return transcriptionErrorResponse(400, "VALIDATION_ERROR", "沒有收到錄音內容。", "MISSING_AUDIO");
+  }
+  const language = (formData.get("language") as string | null) ?? "zh";
+
+  if (nextTranscriptionError) {
+    const { code, reason } = nextTranscriptionError;
+    nextTranscriptionError = null;
+    const status = STATUS_FOR_CODE[code] ?? 500;
+    return transcriptionErrorResponse(status, code, `[fake-api] forced transcription failure: ${code}`, reason);
+  }
+
+  const text = nextTranscriptionText ?? DEFAULT_FAKE_TRANSCRIPTION_TEXT;
+  nextTranscriptionText = null;
+
+  const response = {
+    text,
+    rawText: text,
+    language,
+    durationMs: 1500,
+    processingMs: 300,
+    provider: "fake" as const,
+    model: "fake-model",
+  };
+  assertValidTranscription("Transcription", response);
+  return jsonResponse(200, response);
+}
+
 export async function fakeFetch(request: Request): Promise<Response> {
   requestCount += 1;
   if (failNext) {
@@ -543,6 +670,10 @@ export async function fakeFetch(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const { pathname, method } = { pathname: url.pathname, method: request.method };
+
+  if (pathname === "/api/v1/transcriptions") {
+    if (method === "POST") return handleCreateTranscription(request);
+  }
 
   if (pathname === "/api/v1/conversations") {
     if (method === "GET") return handleList(url);

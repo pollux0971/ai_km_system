@@ -1,4 +1,4 @@
-export type FeatureFlagName = "sso";
+export type FeatureFlagName = "sso" | "voice_input";
 
 interface FeatureFlagConfig {
   defaultEnabled: boolean;
@@ -21,6 +21,10 @@ interface FeatureFlagConfig {
  */
 const FLAGS: Record<FeatureFlagName, FeatureFlagConfig> = {
   sso: { defaultEnabled: true },
+  // E03-S041: push-to-talk voice input in the message composer.
+  // Defaults ON per spec's 技術決策; NEXT_PUBLIC_FEATURE_VOICE_INPUT=false
+  // turns it off for a deployment without a working ASR sidecar.
+  voice_input: { defaultEnabled: true },
 };
 
 export function isFeatureEnabled(flag: FeatureFlagName): boolean {

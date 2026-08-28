@@ -1,9 +1,11 @@
 "use client";
 
-import { useId, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { createLogger } from "@ai-km/logger";
 import { trackEvent } from "@/lib/telemetry";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { FileAttachmentPicker } from "./file-attachment-picker";
+import { VoiceInputButton } from "./voice-input-button";
 
 const logger = createLogger("web:message-composer");
 
@@ -68,6 +70,16 @@ const logger = createLogger("web:message-composer");
  * matching how ChatGPT/Claude's input stays live during generation and
  * only the send action itself is gated. Defaults to `false` so every
  * pre-S017 test that doesn't pass it keeps passing unchanged.
+ *
+ * E03-S041 adds push-to-talk voice input (`voice_input` flag; hidden
+ * entirely when off, per AC1). `submitDraft()` is refactored into
+ * `submitDraftWith(content)` so the voice flow's auto-submit path
+ * (recognized text + empty draft) reuses the exact same validation/
+ * telemetry/clear logic as a typed Enter/送出 — not a second, divergent
+ * copy of it. `onVoiceTranscript` is NOT a new external prop (spec:
+ * "不外露"): it's `<VoiceInputButton>`'s own `onTranscript` prop, wired
+ * to an internal handler here — MessageComposer's public API is
+ * unchanged.
  */
 export function MessageComposer({
   conversationId,
@@ -86,19 +98,23 @@ export function MessageComposer({
   accessory?: ReactNode;
 }) {
   const inputId = useId();
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [voiceHint, setVoiceHint] = useState<string | null>(null);
   const isValid = draft.trim().length > 0 || attachments.length > 0;
   const canSubmit = isValid && !disabled;
 
-  function submitDraft() {
-    if (!canSubmit) return;
+  function submitDraftWith(content: string) {
+    const trimmed = content.trim();
+    const valid = trimmed.length > 0 || attachments.length > 0;
+    if (!valid || disabled) return;
 
     const correlationId = crypto.randomUUID();
     logger.info("message draft submitted", {
       correlationId,
       conversationId,
-      length: draft.trim().length,
+      length: trimmed.length,
       attachmentCount: attachments.length,
     });
     // Length/count only — never the raw draft text or attachment file
@@ -106,16 +122,40 @@ export function MessageComposer({
     // audit payload must not contain raw sensitive content).
     trackEvent("conversation_message_compose_submit", {
       correlationId,
-      properties: { conversationId, length: draft.trim().length, attachmentCount: attachments.length },
+      properties: { conversationId, length: trimmed.length, attachmentCount: attachments.length },
     });
 
     onSubmit?.(
-      draft.trim(),
+      trimmed,
       attachments.map((file) => file.name),
     );
 
     setDraft("");
     setAttachments([]);
+    setVoiceHint(null);
+  }
+
+  function submitDraft() {
+    submitDraftWith(draft);
+  }
+
+  /**
+   * `<VoiceInputButton>`'s `onTranscript` — called only with non-empty
+   * recognized text (spec AC3/AC4: empty text is the button's own
+   * "沒有辨識到內容" concern, never reaches here). Returns whether this
+   * auto-submitted (true) or appended to an existing draft instead
+   * (false) — the button needs that to report `autoSent` on its own
+   * `conversation_voice_transcribe_success` telemetry.
+   */
+  function handleVoiceTranscript(text: string): boolean {
+    if (draft.trim().length === 0) {
+      submitDraftWith(text);
+      return true;
+    }
+    setDraft((previous) => `${previous} ${text}`);
+    setVoiceHint("已加入語音文字，請確認後送出");
+    textareaRef.current?.focus();
+    return false;
   }
 
   function handleSubmit(event: FormEvent) {
@@ -145,14 +185,22 @@ export function MessageComposer({
       </label>
       <textarea
         id={inputId}
+        ref={textareaRef}
         rows={3}
         value={draft}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setVoiceHint(null);
+        }}
         onKeyDown={handleKeyDown}
         placeholder="輸入訊息…（Enter 送出，Shift+Enter 換行）"
       />
+      {voiceHint && <p aria-live="polite">{voiceHint}</p>}
       <div className="composer-actions">
         <FileAttachmentPicker files={attachments} onFilesSelected={handleFilesSelected} onRemove={handleRemoveAttachment} />
+        {isFeatureEnabled("voice_input") && (
+          <VoiceInputButton conversationId={conversationId} disabled={disabled} onTranscript={handleVoiceTranscript} />
+        )}
         {accessory}
         <button type="submit" disabled={!canSubmit}>
           送出

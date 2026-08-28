@@ -27,4 +27,21 @@ describe("isFeatureEnabled", () => {
 
     expect(isFeatureEnabled("sso")).toBe(true);
   });
+
+  // E03-S041
+  it("defaults voice_input to enabled when no env override is set", () => {
+    expect(isFeatureEnabled("voice_input")).toBe(true);
+  });
+
+  it("disables voice_input when NEXT_PUBLIC_FEATURE_VOICE_INPUT=false is set", () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_VOICE_INPUT", "false");
+
+    expect(isFeatureEnabled("voice_input")).toBe(false);
+  });
+
+  it("keeps voice_input enabled when NEXT_PUBLIC_FEATURE_VOICE_INPUT=true is set explicitly", () => {
+    vi.stubEnv("NEXT_PUBLIC_FEATURE_VOICE_INPUT", "true");
+
+    expect(isFeatureEnabled("voice_input")).toBe(true);
+  });
 });

@@ -73,5 +73,20 @@ export interface VoiceRecorder {
   onStateChange(
     callback: (state: VoiceRecorderState, reason?: VoiceStopReason) => void,
   ): void;
+  /**
+   * E03-S041 addition: internal silence/max-duration auto-stop used to
+   * discard its own `VoiceCapture` (fire-and-forget) — no AC of this
+   * story required a caller to receive it, only that the transition
+   * happen with the right `reason` (observable via `onStateChange`).
+   * `onAutoStop` hands that previously-discarded result to a caller that
+   * needs it (e.g. auto-transcribe-and-submit). `capture` is `null` for
+   * the same reasons a manual `stop()` can resolve `null`/reject
+   * (TOO_SHORT). Not registering a callback is the pre-E03-S041 behavior
+   * exactly (result silently discarded) — same "no-op until you opt in"
+   * shape as `onLevel`/`onStateChange`.
+   */
+  onAutoStop(
+    callback: (capture: VoiceCapture | null, reason: "silence" | "max_duration") => void,
+  ): void;
   readonly state: VoiceRecorderState;
 }

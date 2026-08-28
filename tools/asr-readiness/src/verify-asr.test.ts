@@ -94,20 +94,17 @@ describe("runVerifyAsr — quality scoring (AC2)", () => {
     }
   });
 
-  it("regression: a response the fake never normalizes to traditional must fail (proves OpenCC step actually runs, not skipped)", async () => {
-    // rawText already contains all keywords in simplified form; if the
-    // OpenCC normalization step were accidentally skipped/no-op'd, this
-    // would still hit-rate-pass (substring match on the raw simplified
-    // keywords isn't being tested here — the keywords themselves are
-    // traditional, so a pure-simplified response can only pass the hit
-    // rate AFTER conversion) — asserting isTraditional catches a
-    // regression where normalization is dropped from the pipeline.
+  it("regression: raw simplified text only matches a traditional keyword after OpenCC conversion (proves the normalization step actually runs, not skipped)", async () => {
+    // "确认" is the simplified form of the traditional keyword "確認". A
+    // substring match against the raw (unconverted) text would score 0/3;
+    // if normalization were accidentally skipped/no-op'd this assertion
+    // would fail with hitRate 0 instead of 1/3.
     const result = await runVerifyAsr(
-      baseDeps({ fetchImpl: async () => new Response(JSON.stringify({ text: "" }), { status: 200 }) }),
+      baseDeps({ fetchImpl: async () => new Response(JSON.stringify({ text: "确认" }), { status: 200 }) }),
     );
     expect(result.kind).toBe("fail_quality");
     if (result.kind === "fail_quality") {
-      expect(result.hitRate).toBe(0);
+      expect(result.hitRate).toBeCloseTo(1 / 3, 5);
     }
   });
 });

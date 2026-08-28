@@ -12,7 +12,7 @@
  * Anti-hallucination Guard: "不得宣稱 ASR 已驗證而實際只跑過 fake"). The
  * real L3 run is recorded in docs/stories/E12-S030.md.
  */
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { findModels, resolveRepoRoot } from "./check-asr.js";
 import { exitCodeForLevel, formatReport, type ReadinessReport } from "./report.js";
@@ -100,7 +100,7 @@ function parseExpectedKeywords(raw: unknown): string[] {
 
 async function defaultFileExists(candidatePath: string): Promise<boolean> {
   try {
-    await readFile(candidatePath);
+    await access(candidatePath);
     return true;
   } catch {
     return false;

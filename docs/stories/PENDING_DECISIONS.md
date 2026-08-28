@@ -92,6 +92,54 @@ M3 視覺細節。為讓 story 可直接開工,以下以 ASSUMPTION 寫入規格
 **影響範圍**:只影響 E01-S021/S022/S023/S024/S025、E03-S042/S043 的視覺
 輸出;不影響後端與資料層 story。
 
+### [2026-08-28] apps/api `server.ts` 裝飾器註冊順序 — 是否新增一個修正 story
+
+**背景**:W3 開發 E04-S041 時發現 `apps/api/src/server.ts` 的
+`await app.register(conversationPlugin)` 排在 `app.decorate("contracts", ...)`
+之前,導致 route 註冊階段同步呼叫 `app.contracts.getSchema()` 會丟 TypeError。
+W3 依鐵律第 6 條(範圍紀律)沒有越界修改(`server.ts` 不在 E04-S041 的允許
+修改清單內),改以「逐字轉寫 JSON Schema」繞過,並記錄於
+`docs/stories/E04-S041.md`。
+
+**影響**:這不是一次性繞道。**後續每個新增 apps/api route 的 story 都要重複
+同一個繞過**,至少涵蓋 E04-S042、E04-S043、E04-S044、E04-S047、E12-S031、
+E02-S032/S033/S034、E04-S048。逐字轉寫的 schema 與 contract 之間沒有機器
+檢查,是 contract drift 的溫床——正好是 E03-S034 建立 drift gate 想防的東西。
+
+**選項**:
+1. (推薦)新增一個小 story(例:`E04-S049 — server.ts bootstrap 順序修正`),
+   只改裝飾器順序 + 加一個「route 註冊時 `app.contracts` 已可用」的迴歸測試,
+   由 W3 在 E04-S042 之前插隊做掉。成本小,之後所有 story 都直接用
+   `app.contracts.getSchema()`,不再繞道。
+2. 維持現狀,每個 story 各自逐字轉寫並在 EVIDENCE 記錄。零風險但債務累積,
+   且 drift 無機器防護。
+3. 授權某個既有 story(例 E04-S042)把 `server.ts` 納入其允許修改清單順手
+   修掉。最省事但破壞範圍紀律的一致性,不建議。
+
+**影響範圍**:`apps/api/src/server.ts`(Team B 資料夾,但使用者 2026-08-28
+已授權 Team A 在增補 story 的允許清單內修改 `apps/api`)。不影響 contract。
+
+### [2026-08-28] E12-S030／E12-S031 的「4070 部署機」是否存在且可用
+
+**背景**:E12-S030 AC6 要求「於開發機(1650)與部署機(4070)**各執行一次**
+`check-asr` 與 `verify-asr`,**兩台皆需通過才 Done**;4070 若尚不可用,記錄為
+`BLOCKED_DEPENDENCY` 並列出已在 1650 通過的證據」。E12-S031 AC8 同樣要求
+「1650 與 4070 各一次」。
+
+總指揮已在**本機(GTX 1650 4GB)**完成環境驗證:whisper.cpp CUDA 建置成功、
+`ggml-large-v3-turbo-q5_0.bin`(548MB)與 F16(1.6GB)已下載、whisper-server
+實測 HTTP 200、11 秒音檔 2.68 秒、模型 573MB 全進 GPU。**1650 這台沒問題。**
+
+**選項**:
+1. 有 4070 機器且可存取 → 請提供存取方式,兩台都跑完才標 Done。
+2. (若目前沒有)4070 尚不可用 → 依 spec 記為 `BLOCKED_DEPENDENCY`,附 1650
+   的完整證據,story 停在 `in-progress` 等硬體到位。
+3. 專案實際上不會有 4070(規格假設已過時)→ 需使用者明示,才能把 AC 改成
+   單機驗證;**這屬於修改驗收標準,必須使用者拍板,AI 不得自行降低標準**。
+
+**影響範圍**:E12-S030、E12-S031 能否達到 approved;連帶 E03-S041(L3 真實
+ASR)與 E03-S044(本批最後一個 story)。
+
 <!-- 模板:
 ### [YYYY-MM-DD] EXX-SYYY — 一句話問題
 - 背景:

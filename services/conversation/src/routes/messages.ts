@@ -37,10 +37,27 @@ const ANSWER_STATES = [
 /**
  * Transcribed from `contracts/openapi/conversations.yaml`
  * `CreateMessageRequest` / `CreateRevisionRequest`, NOT pulled from
- * `app.contracts.getSchema(...)`. Same `apps/api/src/server.ts` decorator-
- * ordering issue documented in `routes/conversations.ts` (E04-S041 EVIDENCE;
- * tracked for a user decision in `docs/stories/PENDING_DECISIONS.md`) — this
- * story hits the identical constraint and uses the identical workaround.
+ * `app.contracts.getSchema(...)` — same treatment `routes/conversations.ts`
+ * (E04-S041) already uses, but for a DIFFERENT reason than E04-S041 had.
+ *
+ * E04-S041's original blocker (`app.contracts` decorated after domain
+ * plugins registered) was fixed by E04-S049. This story tried switching to
+ * real `getSchema()` calls once that landed, and found a SECOND, separate
+ * problem: `conversationPlugin` is registered unconditionally in
+ * `apps/api/src/server.ts` regardless of which `contractsDir` was passed,
+ * but several of `apps/api`'s OWN tests (`server.test.ts`, `db/migrate.
+ * test.ts`) deliberately build the server against a narrow fixture spec set
+ * (`src/testing/fixtures`, only "sample") to test bootstrap concerns in
+ * isolation from domain contracts. A domain route that calls `app.contracts
+ * .getSchema("conversations", ...)` at registration time then throws
+ * `契約 "conversations" 不存在` under those fixtures — confirmed empirically:
+ * switching to `getSchema()` here made all 25 fixture-based apps/api tests
+ * fail. Fixing THAT would mean either loading the real contracts dir in
+ * those tests or making domain-plugin registration conditional the way the
+ * `__test__` routes already are — both are `apps/api` changes outside this
+ * story's allowed-modify list (`services/conversation/**`). Flagged to the
+ * coordinator for a `PENDING_DECISIONS.md` entry rather than worked around
+ * here a second time.
  *
  * `attachmentNames.maxItems: 10` here matches the CONTRACT's actual cap.
  * This story's own spec text (Functional AC8) says "attachmentNames >20 個"

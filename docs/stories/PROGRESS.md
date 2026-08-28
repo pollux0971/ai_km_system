@@ -33,9 +33,9 @@ mock 也做不了才標 `blocked-team-b`。
 | E11 Admin Console | 26 | 25 | 0 | 0 | 0 | 1 |
 | E13 Feedback & Analytics | 21 | 18 | 0 | 0 | 0 | 3 |
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S048) | 10 | 4 | 0 | 0 | 0 | 6 |
-| E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 1 | 0 | 0 | 0 | 3 |
+| E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 1 | 1 | 0 | 0 | 2 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 0 | 0 | 2 |
-| **合計** | **220** | 183 | 0 | 1 | 1 | 35 |
+| **合計** | **220** | 183 | 1 | 1 | 1 | 34 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -313,7 +313,7 @@ mock 也做不了才標 `blocked-team-b`。
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
 | E02-S031 | approved | `story/E02-S031-auth-contract` | [E02-S031.md](E02-S031.md) | Contract 凍結：session-cookie login/logout/session（E02-S009 最小切片，`contracts/openapi/auth.yaml`）；HARD 依賴：無；wave 0。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E02-S031.spec.md](specs/E02-S031.spec.md) |
-| E02-S032 | todo | — | — | 實作 session-cookie 登入薄切片（users/sessions migration、scrypt、requireSession、dev trigger、E2E test sandbox）；HARD 依賴：E02-S031、E04-S039、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E02-S032.spec.md](specs/E02-S032.spec.md) |
+| E02-S032 | approved | `story/E02-S032-session-cookie-login` | [E02-S032.md](E02-S032.md) | 實作 session-cookie 登入薄切片（users/sessions migration、scrypt、requireSession、dev trigger、E2E test sandbox）；HARD 依賴：E02-S031、E04-S039、E04-S040；wave 2。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E02-S032.spec.md](specs/E02-S032.spec.md)。/story-review 通過(2026-08-28)。 |
 | E02-S033 | todo | — | — | 管理員帳號 seed（6 個角色）+ `requireAnyRole` 最小角色守門 + cookie domain env；HARD 依賴：E02-S032；wave D1。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E02-S033.spec.md](specs/E02-S033.spec.md) |
 | E02-S034 | todo | — | — | 登入速率限制與帳號鎖定（per-username/per-IP、恆定時間、不洩漏鎖定狀態）；HARD 依賴：E02-S032；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E02-S034.spec.md](specs/E02-S034.spec.md) |
 

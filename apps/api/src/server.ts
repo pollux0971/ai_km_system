@@ -28,6 +28,7 @@ import { registerAuth } from "./auth-decorator.js";
 import { loadContracts, resolveContractsDir, type ContractRegistry } from "./contracts.js";
 import { databasePlugin } from "./db/plugin.js";
 import { conversationPlugin } from "@ai-km/service-conversation";
+import { identityPlugin } from "@ai-km/service-identity";
 import "./types.js";
 
 export const API_PREFIX = "/v1";
@@ -129,6 +130,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   // E04-S040 — conversation domain mount point; routes arrive in E04-S041+.
   await app.register(conversationPlugin);
+  // E02-S032 — session-cookie login/logout/session + the real requireSession.
+  await app.register(identityPlugin);
 
   const contracts: ContractRegistry = await loadContracts(
     options.contractsDir ?? resolveContractsDir(),

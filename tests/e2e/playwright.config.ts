@@ -117,6 +117,14 @@ export default defineConfig({
       timeout: 120000,
       env: {
         API_INTERNAL_URL: API_BASE_URL,
+        // E03-S046: keeps every existing E2E spec that depends on the old
+        // hardcoded CONVERSATIONS_PAGE_SIZE=2 pagination behaviour
+        // (conversation-history-pagination.spec.ts, model-selector.spec.ts,
+        // conversation-detail.spec.ts, ...) seeing exactly the same value
+        // as before this story — production now defaults to 20, but the
+        // E2E fixtures (3-seed-conversation scenarios landing on exactly 2
+        // pages) were designed around 2 and stay unmodified.
+        NEXT_PUBLIC_CONVERSATIONS_PAGE_SIZE: "2",
       },
     },
     {

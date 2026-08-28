@@ -70,10 +70,41 @@ export interface ConversationListPage {
   totalPages: number;
 }
 
-export const CONVERSATIONS_PAGE_SIZE = 2;
-
 /** Server caps pageSize at 200 (contracts/openapi/conversations.yaml) — used by listActiveConversations to approximate "no pagination". */
 const MAX_PAGE_SIZE = 200;
+
+const DEFAULT_CONVERSATIONS_PAGE_SIZE = 20;
+
+/**
+ * E03-S046. `CONVERSATIONS_PAGE_SIZE` used to be hardcoded to 2 — E03-S022's
+ * own EVIDENCE admits that value existed purely so the 3-conversation seed
+ * fixture landed on exactly 2 pages, not as a real production page size.
+ * `NEXT_PUBLIC_` (not a plain server-only env var) because this value is
+ * read from client-rendered pagination UI — Next.js only inlines
+ * `NEXT_PUBLIC_*` vars into the browser bundle. Exported (not just called
+ * inline below) so it's directly unit-testable without needing
+ * `vi.resetModules()` + dynamic re-import gymnastics to exercise each env
+ * value against a freshly-evaluated module.
+ */
+export function readPageSize(): number {
+  const raw = process.env.NEXT_PUBLIC_CONVERSATIONS_PAGE_SIZE;
+  if (raw === undefined) return DEFAULT_CONVERSATIONS_PAGE_SIZE;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_PAGE_SIZE) {
+    console.warn(
+      `[conversations] Invalid NEXT_PUBLIC_CONVERSATIONS_PAGE_SIZE="${raw}" (must be an integer 1-${MAX_PAGE_SIZE}) — falling back to default ${DEFAULT_CONVERSATIONS_PAGE_SIZE}.`,
+    );
+    return DEFAULT_CONVERSATIONS_PAGE_SIZE;
+  }
+  return parsed;
+}
+
+// Computed once at module load, not per-call — every existing import site
+// (including conversations.test.ts's own assertions) uses this as a plain
+// number, not a function call, so the name/shape stays unchanged; only
+// where its value comes from changes.
+export const CONVERSATIONS_PAGE_SIZE = readPageSize();
 
 /**
  * Home Dashboard's Recent Conversations widget (E01-S008): top 3, unarchived, most

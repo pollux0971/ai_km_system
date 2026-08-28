@@ -4,6 +4,16 @@ import "@testing-library/jest-dom/vitest";
 import { setApiFetchForTests } from "@/lib/api";
 import { fakeFetch, resetFakeApi, seedSampleConversations } from "@/test/fake-api";
 
+// E03-S046: `conversations.ts`'s `CONVERSATIONS_PAGE_SIZE` is now computed
+// once at module load from this env var (default 20) instead of a
+// hardcoded 2 — set it here, before any test file's own imports pull in
+// `conversations.ts` (setupFiles fully evaluate before any test file's
+// module graph loads), so every existing test that depends on 2-per-page
+// pagination behaviour (`conversations.test.ts`'s own assertions,
+// sidebar/history fixtures sized around it) keeps seeing exactly the same
+// value as before this story, unmodified.
+process.env.NEXT_PUBLIC_CONVERSATIONS_PAGE_SIZE = "2";
+
 // Explicit registration (rather than relying on RTL's global-afterEach
 // auto-detection) since this project imports test globals per-file instead
 // of enabling vitest's `test.globals`. Without this, renders from earlier

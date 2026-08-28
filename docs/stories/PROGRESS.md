@@ -26,7 +26,7 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 32 | 24 | 0 | 0 | 0 | 8 |
-| E03 AI Conversation Experience | 46 | 37 | 0 | 4 | 0 | 5 |
+| E03 AI Conversation Experience | 46 | 37 | 1 | 4 | 0 | 4 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 15 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **228** | 204 | 0 | 8 | 1 | 15 |
+| **合計** | **228** | 204 | 1 | 8 | 1 | 14 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -125,7 +125,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S043 | todo | — | — | 對話頁 M3 化（list-detail、訊息卡片、M3 composer 含麥克風 FAB、chips、segmented、side sheet）；HARD 依賴：E01-S021、E01-S022、E03-S039、E03-S041、E03-S042；wave 6。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S043.spec.md](specs/E03-S043.spec.md) |
 | E03-S044 | todo | — | — | 語音＋持久化＋跨視窗同步 E2E（真實 api、fake ASR、假麥克風；真實 ASR 為 L3 手動證據）；HARD 依賴：E03-S038、E03-S039、E03-S041、E03-S043、E04-S044、E12-S031；wave 7；本批最後一個。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S044.spec.md](specs/E03-S044.spec.md) |
 | E03-S045 | todo | — | — | 模擬觸發字串 feature flag 閘門（production 預設關閉，E2E 開啟，既有測試零修改）；HARD 依賴：E03-S041、E03-S038；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E03-S045.spec.md](specs/E03-S045.spec.md) |
-| E03-S046 | todo | — | — | `CONVERSATIONS_PAGE_SIZE` 設定化（production 20，E2E env 2）；HARD 依賴：E03-S036、E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E03-S046.spec.md](specs/E03-S046.spec.md) |
+| E03-S046 | done | `story/E03-S046-conversations-page-size` | [E03-S046.md](E03-S046.md) | `CONVERSATIONS_PAGE_SIZE` 設定化（production 20，E2E env 2）；HARD 依賴：E03-S036、E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)）。`readPageSize()` 設定化 + 8 個單元測試；單輪全量 264/277 通過，13 個失敗全對應既有已知問題（12 結構性 + 1 個間歇性 locator bug），零新增回歸；AC3 用獨立 scratch port 的真實後端＋前端＋Playwright headless Chromium 驗證 production 預設值 20（24 筆對話、第 1 頁精準 20 筆，截圖存證）。規格：[E03-S046.spec.md](specs/E03-S046.spec.md) |
 
 ## E05 Knowledge Management Experience(31)
 

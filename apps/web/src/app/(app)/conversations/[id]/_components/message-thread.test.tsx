@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
+import { apiClient } from "@/lib/api";
+import { ConversationEventsProvider, type ConversationEventSourceLike } from "@/lib/conversation-events-context";
+import type { ConnectionStatus, ConversationEvent } from "@/lib/conversation-events";
 import { MOCK_FILE_PROCESSING_FAILURE_TRIGGER, simulateFileProcessing } from "@/lib/file-processing";
 import { listFeedbackKnowledgeCandidates, submitFeedbackKnowledgeCandidate } from "@/lib/feedback-knowledge-candidates";
 import { runGenerationPhases } from "@/lib/generation-status";
@@ -3708,5 +3711,149 @@ describe("MessageThread feedback-to-knowledge-candidate flow (E13-S015)", () => 
     await screen.findByText("第一輪回覆");
 
     expect(screen.getByRole("button", { name: "標記為知識落差候選" })).toBeEnabled();
+  });
+});
+
+describe("MessageThread: cross-window sync (E03-S039, AC3/AC5, regression)", () => {
+  function makeFakeSource(): ConversationEventSourceLike & { emit(event: ConversationEvent): void } {
+    const changeHandlers = new Set<(event: ConversationEvent) => void>();
+    return {
+      subscribe(handler) {
+        changeHandlers.add(handler);
+        return () => changeHandlers.delete(handler);
+      },
+      onStatusChange: (_handler: (status: ConnectionStatus) => void) => () => {},
+      status: () => "open",
+      close: vi.fn(),
+      emit(event) {
+        for (const handler of changeHandlers) handler(event);
+      },
+    };
+  }
+
+  function renderThreadWithEvents(source: ReturnType<typeof makeFakeSource>, conversationId = "c1") {
+    return render(
+      <ConversationEventsProvider source={source}>
+        <MessageThread conversationId={conversationId} />
+      </ConversationEventsProvider>,
+    );
+  }
+
+  const OTHER_MESSAGE = {
+    id: "m2",
+    conversationId: "c1",
+    role: "user" as const,
+    content: "另一視窗傳來的訊息",
+    attachmentNames: [],
+    createdAt: "2026-08-14T00:01:00.000Z",
+  };
+
+  it("AC3: refetches and shows the new message on a message.created event from ANOTHER tab", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE] });
+    const source = makeFakeSource();
+
+    renderThreadWithEvents(source);
+    await screen.findByText("你好");
+    const callsBeforeEvent = mockedListMessages.mock.calls.length;
+
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [SENT_USER_MESSAGE, OTHER_MESSAGE] });
+    act(() => {
+      source.emit({ id: 1, type: "message.created", conversationId: "c1", messageId: "m2", occurredAt: new Date().toISOString(), originClientId: "some-other-tab" });
+    });
+
+    expect(await screen.findByText("另一視窗傳來的訊息")).toBeInTheDocument();
+    expect(mockedListMessages.mock.calls.length).toBeGreaterThan(callsBeforeEvent);
+  });
+
+  it("AC3: does NOT refetch when originClientId matches this tab's own client id", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE] });
+    const source = makeFakeSource();
+
+    renderThreadWithEvents(source);
+    await screen.findByText("你好");
+    const callsBeforeEvent = mockedListMessages.mock.calls.length;
+
+    act(() => {
+      source.emit({ id: 1, type: "message.created", conversationId: "c1", messageId: "m2", occurredAt: new Date().toISOString(), originClientId: apiClient.clientId });
+    });
+
+    expect(mockedListMessages.mock.calls.length).toBe(callsBeforeEvent);
+  });
+
+  it("ignores a message.created event for a DIFFERENT conversationId", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE] });
+    const source = makeFakeSource();
+
+    renderThreadWithEvents(source);
+    await screen.findByText("你好");
+    const callsBeforeEvent = mockedListMessages.mock.calls.length;
+
+    act(() => {
+      source.emit({
+        id: 1,
+        type: "message.created",
+        conversationId: "some-other-conversation",
+        messageId: "m2",
+        occurredAt: new Date().toISOString(),
+        originClientId: "some-other-tab",
+      });
+    });
+
+    expect(mockedListMessages.mock.calls.length).toBe(callsBeforeEvent);
+  });
+
+  it("AC5: refetches unconditionally on a resync frame, even with no originClientId to compare", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE] });
+    const source = makeFakeSource();
+
+    renderThreadWithEvents(source);
+    await screen.findByText("你好");
+    const callsBeforeEvent = mockedListMessages.mock.calls.length;
+
+    act(() => {
+      source.emit({ type: "resync", reason: "EVENT_LOG_TRUNCATED" });
+    });
+
+    await waitFor(() => expect(mockedListMessages.mock.calls.length).toBeGreaterThan(callsBeforeEvent));
+  });
+
+  it("Regression (Test Obligations: 本分頁事件造成重抓打斷串流): an own-tab message.created event during an active stream must not refetch or disturb the in-flight streaming entry", async () => {
+    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    mockedStreamAssistantReply.mockImplementation(async function* () {
+      yield "第";
+      yield "一";
+      await gate;
+      yield "段";
+    });
+    mockedReceiveAssistantReply.mockResolvedValue({
+      ok: true,
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一段", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+    });
+    const source = makeFakeSource();
+
+    renderThreadWithEvents(source);
+    await screen.findByText("尚無訊息，開始對話吧。");
+    submitViaComposer("你好");
+    await waitFor(() => expect(screen.getByText("第一")).toBeInTheDocument());
+    const callsBeforeEvent = mockedListMessages.mock.calls.length;
+
+    // This tab's own message.created echo (e.g. from the send that just
+    // kicked off the stream above) arrives on the SSE stream while the
+    // reply is still mid-flight.
+    act(() => {
+      source.emit({ id: 1, type: "message.created", conversationId: "c1", messageId: SENT_USER_MESSAGE.id, occurredAt: new Date().toISOString(), originClientId: apiClient.clientId });
+    });
+
+    expect(mockedListMessages.mock.calls.length).toBe(callsBeforeEvent);
+    expect(screen.getByText("第一")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "" })).toHaveTextContent("AI 回覆中…");
+
+    releaseGate();
+    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一段", "ANSWERED"));
   });
 });

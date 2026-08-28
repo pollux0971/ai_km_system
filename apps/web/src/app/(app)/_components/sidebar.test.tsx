@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import Sidebar from "./sidebar";
+import { ConversationEventsProvider, type ConversationEventSourceLike } from "@/lib/conversation-events-context";
+import type { ConnectionStatus, ConversationEvent } from "@/lib/conversation-events";
 import { CurrentUserProvider } from "@/lib/session-context";
+import * as conversationsLib from "@/lib/conversations";
 import { archiveConversation, createConversation } from "@/lib/conversations";
 
 // ux/enterprise-polish: Sidebar now reads usePathname() (active-item
@@ -109,5 +112,83 @@ describe("Sidebar conversation history (ux/enterprise-polish)", () => {
 
     expect(link).toHaveAccessibleName("產品保固政策詢問");
     expect(item.querySelector(".sidebar-history-preview")).toHaveTextContent("保固期從出貨日起算 12 個月，涵蓋原廠零件更換。");
+  });
+
+  describe("E03-S039: cross-window sync (AC2, AC5)", () => {
+    function makeFakeSource(): ConversationEventSourceLike & { emit(event: ConversationEvent): void } {
+      const changeHandlers = new Set<(event: ConversationEvent) => void>();
+      return {
+        subscribe(handler) {
+          changeHandlers.add(handler);
+          return () => changeHandlers.delete(handler);
+        },
+        onStatusChange: (_handler: (status: ConnectionStatus) => void) => () => {},
+        status: () => "open",
+        close: vi.fn(),
+        emit(event) {
+          for (const handler of changeHandlers) handler(event);
+        },
+      };
+    }
+
+    function renderSidebarWithEvents(roles: string[], source: ReturnType<typeof makeFakeSource>) {
+      const session = { userId: "u1", roles, expiresAt: "2099-01-01T00:00:00.000Z" };
+      return render(
+        <CurrentUserProvider value={session}>
+          <ConversationEventsProvider source={source}>
+            <Sidebar />
+          </ConversationEventsProvider>
+        </CurrentUserProvider>,
+      );
+    }
+
+    it("refetches the history rail on a conversation.created event, and the new conversation appears", async () => {
+      const source = makeFakeSource();
+      const listSpy = vi.spyOn(conversationsLib, "listActiveConversations");
+
+      renderSidebarWithEvents(["general_user"], source);
+      await screen.findByRole("link", { name: "產品保固政策詢問" });
+      const callsBeforeEvent = listSpy.mock.calls.length;
+
+      const created = await createConversation();
+      expect(created.ok).toBe(true);
+
+      act(() => {
+        source.emit({ id: 1, type: "conversation.created", conversationId: created.ok ? created.value.id : "", occurredAt: new Date().toISOString() });
+      });
+
+      expect(await screen.findByRole("link", { name: "新對話" })).toBeInTheDocument();
+      expect(listSpy.mock.calls.length).toBeGreaterThan(callsBeforeEvent);
+    });
+
+    it("refetches on a resync frame too (server can't tell us exactly what we missed)", async () => {
+      const source = makeFakeSource();
+      const listSpy = vi.spyOn(conversationsLib, "listActiveConversations");
+
+      renderSidebarWithEvents(["general_user"], source);
+      await screen.findByRole("link", { name: "產品保固政策詢問" });
+      const callsBeforeEvent = listSpy.mock.calls.length;
+
+      act(() => {
+        source.emit({ type: "resync", reason: "SERVER_RESTART" });
+      });
+
+      await vi.waitFor(() => expect(listSpy.mock.calls.length).toBeGreaterThan(callsBeforeEvent));
+    });
+
+    it("does not refetch on an unrelated message.* event with no matching conversation-level change", async () => {
+      const source = makeFakeSource();
+      const listSpy = vi.spyOn(conversationsLib, "listActiveConversations");
+
+      renderSidebarWithEvents(["general_user"], source);
+      await screen.findByRole("link", { name: "產品保固政策詢問" });
+      const callsBeforeEvent = listSpy.mock.calls.length;
+
+      act(() => {
+        source.emit({ id: 1, type: "message.created", conversationId: "sample-1", messageId: "m1", occurredAt: new Date().toISOString() });
+      });
+
+      expect(listSpy.mock.calls.length).toBe(callsBeforeEvent);
+    });
   });
 });

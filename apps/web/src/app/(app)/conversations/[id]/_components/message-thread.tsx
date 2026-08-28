@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState, type AnswerState } from "@/lib/answer-state";
+import { isOwnClientEvent, useConversationEvents } from "@/lib/conversation-events-context";
 import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
 import {
@@ -535,6 +536,63 @@ export function MessageThread({
       cancelled = true;
     };
   }, [conversationId]);
+
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+
+  /**
+   * E03-S039 AC3/AC5/regression test. Re-fetches THIS conversation's
+   * messages and merges by replacing every existing `kind: "sent"` entry
+   * with the fresh server list (picking up both a brand-new message AND
+   * any `message.updated` field change — e.g. feedback given from another
+   * tab), while every local-only entry (`pending`/`streaming`/`failed`/
+   * etc.) is kept exactly as-is and moved to the tail. This is the one
+   * place in the whole file that must NOT disturb an in-flight local
+   * entry: those represent a turn this tab itself is actively
+   * sending/streaming, which the re-fetch has no way to know about yet
+   * (the server hasn't necessarily persisted it), so clobbering it would
+   * make an in-progress send visibly vanish out from under the user.
+   */
+  const refetchAndMergeMessages = useCallback(() => {
+    listMessages(conversationId).then((result) => {
+      if (!mountedRef.current || !result.ok) return;
+      const fresh = result.value;
+      setDisplayMessages((previous) => {
+        const localOnly = previous.filter((entry) => entry.kind !== "sent");
+        return [...fresh.map((message): DisplayMessage => ({ kind: "sent", message })), ...localOnly];
+      });
+    });
+  }, [conversationId]);
+
+  /**
+   * `resync` (no `conversationId` to match against) always refetches —
+   * same "can't tell you what you missed, so re-fetch everything
+   * relevant" handling every other consumer gives it. A targeted
+   * `message.created`/`message.updated` only refetches when it's BOTH
+   * this conversation AND NOT this tab's own mutation
+   * (`isOwnClientEvent`) — this tab's own send/feedback/etc. is already
+   * reflected optimistically; re-fetching it too would be redundant at
+   * best and, mid-stream, would be the exact "own-tab event interrupts
+   * an active stream" regression this story's own Test Obligations name
+   * explicitly (see message-thread.test.tsx's E03-S039 describe block).
+   */
+  useConversationEvents(
+    (event) => {
+      if (event.type === "resync") {
+        refetchAndMergeMessages();
+        return;
+      }
+      if ((event.type === "message.created" || event.type === "message.updated") && event.conversationId === conversationId && !isOwnClientEvent(event)) {
+        refetchAndMergeMessages();
+      }
+    },
+    [conversationId, refetchAndMergeMessages],
+  );
 
   async function attemptSend(localId: string, content: string, attachmentNames: string[]) {
     const correlationId = crypto.randomUUID();

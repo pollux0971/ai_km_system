@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@ai-km/ui";
+import { useConversationEvents } from "@/lib/conversation-events-context";
 import { useCurrentUser } from "@/lib/session-context";
 import { visibleNavItems } from "@/lib/nav-items";
 import { listActiveConversations, type ConversationSummary } from "@/lib/conversations";
@@ -50,7 +51,7 @@ export default function Sidebar() {
   const [history, setHistory] = useState<ConversationSummary[] | null>(null);
   const [historyFailed, setHistoryFailed] = useState(false);
 
-  useEffect(() => {
+  const refetchHistory = useCallback(() => {
     let cancelled = false;
 
     listActiveConversations().then((result) => {
@@ -66,7 +67,28 @@ export default function Sidebar() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, []);
+
+  useEffect(() => refetchHistory(), [pathname, refetchHistory]);
+
+  /**
+   * E03-S039 AC2/AC5: another window creating/renaming/archiving/deleting
+   * a conversation, or a `resync` (server can't tell us exactly what we
+   * missed), makes this rail stale until the next client-side navigation
+   * — refetch on the change types that can affect it. Not filtered by
+   * `originClientId`: re-running this tab's OWN already-current list is
+   * harmless (idempotent), unlike message-thread.tsx's mid-stream refetch,
+   * which specifically must not fire for the tab that's already showing
+   * the optimistic result.
+   */
+  useConversationEvents(
+    (event) => {
+      if (event.type === "resync" || event.type.startsWith("conversation.")) {
+        refetchHistory();
+      }
+    },
+    [refetchHistory],
+  );
 
   function isCurrentNavItem(href: string): boolean {
     if (href === "/") return pathname === "/";

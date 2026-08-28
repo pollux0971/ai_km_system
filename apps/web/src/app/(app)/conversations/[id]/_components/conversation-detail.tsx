@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { useConversationEvents } from "@/lib/conversation-events-context";
 import { getConversation, type ConversationMode, type ConversationSummary } from "@/lib/conversations";
 import { ArchiveConversation } from "./archive-conversation";
 import { ConversationModeMenu } from "./conversation-mode-menu";
@@ -20,7 +22,16 @@ type State =
   | { status: "loading" }
   | { status: "error" }
   | { status: "not-found" }
+  | { status: "deleted-elsewhere" }
   | { status: "loaded"; conversation: ConversationSummary };
+
+/**
+ * E03-S039 AC4: how long the "此對話已在其他視窗刪除" notice stays on
+ * screen before navigating away — long enough to actually be read, short
+ * enough not to feel stuck. Not user-configurable; there is no AC asking
+ * for that.
+ */
+const DELETED_ELSEWHERE_REDIRECT_DELAY_MS = 2000;
 
 /**
  * E03-S002/S003/S005/S006/S009: the conversation detail shell —
@@ -67,10 +78,11 @@ type State =
  * there's nothing to navigate away from.
  */
 export default function ConversationDetail({ id }: { id: string }) {
+  const router = useRouter();
   const [state, setState] = useState<State>({ status: "loading" });
   const [currentMode, setCurrentMode] = useState<ConversationMode | null>(null);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     let cancelled = false;
     const correlationId = crypto.randomUUID();
     logger.info("loading conversation", { correlationId, id });
@@ -100,6 +112,40 @@ export default function ConversationDetail({ id }: { id: string }) {
     };
   }, [id]);
 
+  useEffect(() => refetch(), [refetch]);
+
+  /**
+   * E03-S039 AC4/AC5. `conversation.deleted` for THIS id shows the notice
+   * and (below) redirects — never silently refetches into "not-found",
+   * which would look identical to "this route was always invalid" and
+   * give the user no idea their conversation still exists, just deleted
+   * elsewhere. `conversation.updated` for this id, or a `resync` (no id
+   * to match against — re-fetch unconditionally, matching every other
+   * consumer's resync handling), just re-loads normally. A delete
+   * elsewhere always wins over a same-tick update — there is nothing left
+   * to "update" once it's gone.
+   */
+  useConversationEvents(
+    (event) => {
+      if (event.type === "conversation.deleted" && event.conversationId === id) {
+        setState({ status: "deleted-elsewhere" });
+        return;
+      }
+      if (event.type === "resync" || (event.type === "conversation.updated" && event.conversationId === id)) {
+        refetch();
+      }
+    },
+    [id, refetch],
+  );
+
+  useEffect(() => {
+    if (state.status !== "deleted-elsewhere") return undefined;
+    const timeout = setTimeout(() => {
+      router.replace("/conversations");
+    }, DELETED_ELSEWHERE_REDIRECT_DELAY_MS);
+    return () => clearTimeout(timeout);
+  }, [state.status, router]);
+
   if (state.status === "loading") {
     return (
       <main style={{ padding: 32 }}>
@@ -120,6 +166,20 @@ export default function ConversationDetail({ id }: { id: string }) {
     return (
       <main style={{ padding: 32 }}>
         <ErrorMessage code="NOT_FOUND" />
+      </main>
+    );
+  }
+
+  if (state.status === "deleted-elsewhere") {
+    // NOT role="status" — every message-thread E2E spec's
+    // waitForThreadToSettle() polls `page.getByRole("main").getByRole("status")`
+    // to 0 as its "still busy" signal (see message-thread.tsx's own doc
+    // comment on the same collision for its permanent negative states).
+    // This is a terminal notice before an automatic redirect, not a busy
+    // indicator — aria-live alone announces it without claiming that role.
+    return (
+      <main style={{ padding: 32 }}>
+        <p aria-live="polite">此對話已在其他視窗刪除，即將返回對話列表…</p>
       </main>
     );
   }

@@ -40,6 +40,15 @@ export interface ApiClient {
   conversations: Client<ConversationsPaths>;
   transcriptions: Client<TranscriptionsPaths>;
   analytics: Client<AnalyticsPaths>;
+  /**
+   * E03-S039: the same id every request above sends as `x-client-id` (either
+   * the resolved sessionStorage-backed tab id, or the caller's explicit
+   * `clientId` option). Exposed so a consumer comparing a ChangeEvent's
+   * `originClientId` (E04-S038's SSE contract) against "was this my own
+   * tab's mutation" doesn't need to re-derive the id via a second,
+   * independent sessionStorage read.
+   */
+  clientId: string;
 }
 
 function hasSessionStorage(): boolean {
@@ -102,5 +111,5 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     attachHeaderMiddleware(client as unknown as Client<Record<string, never>>, resolvedClientId);
   }
 
-  return { core, auth, conversations, transcriptions, analytics };
+  return { core, auth, conversations, transcriptions, analytics, clientId: resolvedClientId };
 }

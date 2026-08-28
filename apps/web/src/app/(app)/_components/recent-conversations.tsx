@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { useConversationEvents } from "@/lib/conversation-events-context";
 import { getRecentConversations, type ConversationSummary } from "@/lib/conversations";
 import { formatRelativeTime } from "@/lib/format-time";
 
@@ -22,7 +23,7 @@ type State =
 export default function RecentConversations() {
   const [state, setState] = useState<State>({ status: "loading" });
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     let cancelled = false;
     const correlationId = crypto.randomUUID();
 
@@ -45,6 +46,18 @@ export default function RecentConversations() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => refetch(), [refetch]);
+
+  /** E03-S039 AC2/AC5 — same trigger set as sidebar.tsx's history rail; see its doc comment. */
+  useConversationEvents(
+    (event) => {
+      if (event.type === "resync" || event.type.startsWith("conversation.")) {
+        refetch();
+      }
+    },
+    [refetch],
+  );
 
   if (state.status === "loading") {
     return <LoadingIndicator />;

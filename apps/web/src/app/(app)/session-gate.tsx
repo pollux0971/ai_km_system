@@ -6,6 +6,7 @@ import { createLogger } from "@ai-km/logger";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import type { AuthSession } from "@ai-km/auth-client";
 import { authClient } from "@/lib/auth";
+import { ConversationEventsProvider } from "@/lib/conversation-events-context";
 import { CurrentUserProvider } from "@/lib/session-context";
 import { usePageViewTelemetry } from "@/lib/use-page-view-telemetry";
 
@@ -82,5 +83,12 @@ export default function SessionGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <CurrentUserProvider value={state.session}>{children}</CurrentUserProvider>;
+  return (
+    <CurrentUserProvider value={state.session}>
+      {/* E03-S039: one SSE connection per authenticated tab — mounted here
+          (not per-consumer) so it survives client-side navigation and
+          closes exactly once, on logout/unmount (AC1, Security AC). */}
+      <ConversationEventsProvider>{children}</ConversationEventsProvider>
+    </CurrentUserProvider>
+  );
 }

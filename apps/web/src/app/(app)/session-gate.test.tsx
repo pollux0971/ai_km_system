@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import SessionGate from "./session-gate";
 import { authClient } from "@/lib/auth";
+import { useConversationConnectionStatus } from "@/lib/conversation-events-context";
 import { useCurrentUser } from "@/lib/session-context";
 
 const { mockReplace, mockRouter, mockPathname } = vi.hoisted(() => {
@@ -113,5 +114,27 @@ describe("SessionGate", () => {
 
     await screen.findByText("protected content");
     expect(mockedGetSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("E03-S039: mounts a ConversationEventsProvider around authenticated children (not just CurrentUserProvider)", async () => {
+    mockedGetSession.mockResolvedValue({ ok: true, value: validSession });
+
+    function ProbeConnectionStatus() {
+      const status = useConversationConnectionStatus();
+      return <p>sync status: {status ?? "no-provider"}</p>;
+    }
+
+    render(
+      <SessionGate>
+        <ProbeConnectionStatus />
+      </SessionGate>,
+    );
+
+    // A real value (not "no-provider") proves a ConversationEventsProvider
+    // is actually mounted here — jsdom has no EventSource, so the provider
+    // falls back to an inert-but-present connection (see
+    // conversation-events.ts's createInertEventSource), which still reads
+    // as "connecting", not null.
+    expect(await screen.findByText("sync status: connecting")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, act } from "@testing-library/react";
 import ConversationList from "./conversation-list";
+import { ConversationEventsProvider, type ConversationEventSourceLike } from "@/lib/conversation-events-context";
+import type { ConnectionStatus, ConversationEvent } from "@/lib/conversation-events";
 import { listConversations, type ConversationSummary } from "@/lib/conversations";
 
 vi.mock("@/lib/conversations", () => ({
@@ -338,5 +340,89 @@ describe("ConversationList archived view (E03-S026)", () => {
 
     expect(await screen.findByText("查無符合「找不到」的對話。")).toBeInTheDocument();
     expect(screen.queryByText("尚無已封存的對話。")).not.toBeInTheDocument();
+  });
+});
+
+describe("ConversationList: cross-window sync (E03-S039, AC2/AC5)", () => {
+  function makeFakeSource(): ConversationEventSourceLike & { emit(event: ConversationEvent): void } {
+    const changeHandlers = new Set<(event: ConversationEvent) => void>();
+    return {
+      subscribe(handler) {
+        changeHandlers.add(handler);
+        return () => changeHandlers.delete(handler);
+      },
+      onStatusChange: (_handler: (status: ConnectionStatus) => void) => () => {},
+      status: () => "open",
+      close: vi.fn(),
+      emit(event) {
+        for (const handler of changeHandlers) handler(event);
+      },
+    };
+  }
+
+  it("refetches (without flashing the loading state) on a conversation.created event, and the new item appears", async () => {
+    const source = makeFakeSource();
+    mockedListConversations.mockResolvedValue(singlePage([SAMPLE_ITEM]));
+
+    render(
+      <ConversationEventsProvider source={source}>
+        <ConversationList />
+      </ConversationEventsProvider>,
+    );
+    await screen.findByText("測試對話");
+    const callsBeforeEvent = mockedListConversations.mock.calls.length;
+
+    const newItem: ConversationSummary = { ...SAMPLE_ITEM, id: "c2", title: "另一視窗建立的對話" };
+    mockedListConversations.mockResolvedValueOnce(singlePage([newItem, SAMPLE_ITEM]));
+
+    act(() => {
+      source.emit({ id: 1, type: "conversation.created", conversationId: "c2", occurredAt: new Date().toISOString() });
+    });
+
+    // Still showing the OLD item while the refetch is in flight (UX
+    // Acceptance: 重抓期間不閃空狀態，保留舊資料直到新資料到達) — the
+    // loading spinner must never reappear over an already-rendered list.
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    expect(await screen.findByText("另一視窗建立的對話")).toBeInTheDocument();
+    expect(mockedListConversations.mock.calls.length).toBeGreaterThan(callsBeforeEvent);
+  });
+
+  it("refetches on a resync frame", async () => {
+    const source = makeFakeSource();
+    mockedListConversations.mockResolvedValue(singlePage([SAMPLE_ITEM]));
+
+    render(
+      <ConversationEventsProvider source={source}>
+        <ConversationList />
+      </ConversationEventsProvider>,
+    );
+    await screen.findByText("測試對話");
+    const callsBeforeEvent = mockedListConversations.mock.calls.length;
+
+    act(() => {
+      source.emit({ type: "resync", reason: "EVENT_LOG_TRUNCATED" });
+    });
+
+    await waitFor(() => expect(mockedListConversations.mock.calls.length).toBeGreaterThan(callsBeforeEvent));
+  });
+
+  it("does not refetch on a message.* event", async () => {
+    const source = makeFakeSource();
+    mockedListConversations.mockResolvedValue(singlePage([SAMPLE_ITEM]));
+
+    render(
+      <ConversationEventsProvider source={source}>
+        <ConversationList />
+      </ConversationEventsProvider>,
+    );
+    await screen.findByText("測試對話");
+    const callsBeforeEvent = mockedListConversations.mock.calls.length;
+
+    act(() => {
+      source.emit({ id: 1, type: "message.created", conversationId: "c1", messageId: "m1", occurredAt: new Date().toISOString() });
+    });
+
+    expect(mockedListConversations.mock.calls.length).toBe(callsBeforeEvent);
   });
 });

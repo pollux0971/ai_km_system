@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, act } from "@testing-library/react";
 import ConversationDetail from "./conversation-detail";
+import { ConversationEventsProvider, type ConversationEventSourceLike } from "@/lib/conversation-events-context";
+import type { ConnectionStatus, ConversationEvent } from "@/lib/conversation-events";
 import { deleteConversation, getConversation, setConversationMode } from "@/lib/conversations";
 import { deleteMessagesForConversation, listMessages } from "@/lib/messages";
 import { CurrentUserProvider } from "@/lib/session-context";
@@ -232,5 +234,113 @@ describe("ConversationDetail (E03-S002/S003/S004/S005/S006)", () => {
     renderDetailAs("does-not-exist");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("找不到您要的內容。");
+  });
+});
+
+describe("ConversationDetail: cross-window sync (E03-S039, AC4/AC5)", () => {
+  function makeFakeSource(): ConversationEventSourceLike & { emit(event: ConversationEvent): void } {
+    const changeHandlers = new Set<(event: ConversationEvent) => void>();
+    return {
+      subscribe(handler) {
+        changeHandlers.add(handler);
+        return () => changeHandlers.delete(handler);
+      },
+      onStatusChange: (_handler: (status: ConnectionStatus) => void) => () => {},
+      status: () => "open",
+      close: vi.fn(),
+      emit(event) {
+        for (const handler of changeHandlers) handler(event);
+      },
+    };
+  }
+
+  const SAMPLE_CONVERSATION = {
+    id: "c1",
+    title: "測試對話",
+    lastMessageAt: "2026-08-12T09:15:00.000Z",
+    lastMessagePreview: "測試預覽",
+    mode: "normal" as const,
+    knowledgeScopes: [],
+    model: "standard" as const,
+  };
+
+  function renderDetailWithEvents(id: string, source: ReturnType<typeof makeFakeSource>) {
+    const session = { userId: "u1", roles: ["general_user"], expiresAt: "2099-01-01T00:00:00.000Z" };
+    return render(
+      <CurrentUserProvider value={session}>
+        <ConversationEventsProvider source={source}>
+          <ConversationDetail id={id} />
+        </ConversationEventsProvider>
+      </CurrentUserProvider>,
+    );
+  }
+
+  it("AC4: shows a notice and navigates to /conversations when THIS conversation is deleted elsewhere", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockedGetConversation.mockResolvedValue({ ok: true, value: SAMPLE_CONVERSATION });
+      const source = makeFakeSource();
+
+      renderDetailWithEvents("c1", source);
+      await waitFor(() => expect(mockedGetConversation).toHaveBeenCalled());
+
+      act(() => {
+        source.emit({ id: 1, type: "conversation.deleted", conversationId: "c1", occurredAt: new Date().toISOString() });
+      });
+
+      expect(await screen.findByText("此對話已在其他視窗刪除，即將返回對話列表…")).toBeInTheDocument();
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(mockReplace).toHaveBeenCalledWith("/conversations");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores a conversation.deleted event for a DIFFERENT conversation id", async () => {
+    mockedGetConversation.mockResolvedValue({ ok: true, value: SAMPLE_CONVERSATION });
+    const source = makeFakeSource();
+
+    renderDetailWithEvents("c1", source);
+    await waitFor(() => expect(mockedGetConversation).toHaveBeenCalled());
+
+    act(() => {
+      source.emit({ id: 1, type: "conversation.deleted", conversationId: "some-other-conversation", occurredAt: new Date().toISOString() });
+    });
+
+    expect(screen.queryByText("此對話已在其他視窗刪除，即將返回對話列表…")).not.toBeInTheDocument();
+  });
+
+  it("AC1/AC5: refetches on a conversation.updated event for THIS conversation", async () => {
+    mockedGetConversation.mockResolvedValue({ ok: true, value: SAMPLE_CONVERSATION });
+    const source = makeFakeSource();
+
+    renderDetailWithEvents("c1", source);
+    await waitFor(() => expect(mockedGetConversation).toHaveBeenCalled());
+    const callsBeforeEvent = mockedGetConversation.mock.calls.length;
+
+    act(() => {
+      source.emit({ id: 1, type: "conversation.updated", conversationId: "c1", occurredAt: new Date().toISOString() });
+    });
+
+    await waitFor(() => expect(mockedGetConversation.mock.calls.length).toBeGreaterThan(callsBeforeEvent));
+  });
+
+  it("AC5: refetches unconditionally on a resync frame", async () => {
+    mockedGetConversation.mockResolvedValue({ ok: true, value: SAMPLE_CONVERSATION });
+    const source = makeFakeSource();
+
+    renderDetailWithEvents("c1", source);
+    await waitFor(() => expect(mockedGetConversation).toHaveBeenCalled());
+    const callsBeforeEvent = mockedGetConversation.mock.calls.length;
+
+    act(() => {
+      source.emit({ type: "resync", reason: "UNKNOWN_LAST_EVENT_ID" });
+    });
+
+    await waitFor(() => expect(mockedGetConversation.mock.calls.length).toBeGreaterThan(callsBeforeEvent));
   });
 });

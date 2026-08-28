@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
+import { useConversationEvents } from "@/lib/conversation-events-context";
 import { listConversations, type ConversationSummary } from "@/lib/conversations";
 import { NoConversationsIllustration } from "@/components/illustrations/empty-state-illustrations";
 
@@ -86,37 +87,58 @@ export default function ConversationList() {
   const [viewingArchived, setViewingArchived] = useState(false);
   const [state, setState] = useState<State>({ status: "loading" });
 
-  useEffect(() => {
-    let cancelled = false;
-    const correlationId = crypto.randomUUID();
+  const refetch = useCallback(
+    (showLoading: boolean) => {
+      let cancelled = false;
+      const correlationId = crypto.randomUUID();
 
-    setState({ status: "loading" });
-    logger.info("loading conversation list", { correlationId, page, query, viewingArchived });
+      if (showLoading) setState({ status: "loading" });
+      logger.info("loading conversation list", { correlationId, page, query, viewingArchived });
 
-    listConversations(page, query, viewingArchived).then((result) => {
-      if (cancelled) return;
+      listConversations(page, query, viewingArchived).then((result) => {
+        if (cancelled) return;
 
-      if (!result.ok) {
-        logger.error("failed to load conversation list", { correlationId, page, query, viewingArchived, code: result.error.code });
-        setState({ status: "error" });
-        return;
-      }
+        if (!result.ok) {
+          logger.error("failed to load conversation list", { correlationId, page, query, viewingArchived, code: result.error.code });
+          setState({ status: "error" });
+          return;
+        }
 
-      logger.info("conversation list loaded", {
-        correlationId,
-        page,
-        query,
-        viewingArchived,
-        count: result.value.items.length,
-        totalCount: result.value.totalCount,
+        logger.info("conversation list loaded", {
+          correlationId,
+          page,
+          query,
+          viewingArchived,
+          count: result.value.items.length,
+          totalCount: result.value.totalCount,
+        });
+        setState({ status: "loaded", items: result.value.items, page: result.value.page, totalPages: result.value.totalPages });
       });
-      setState({ status: "loaded", items: result.value.items, page: result.value.page, totalPages: result.value.totalPages });
-    });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [page, query, viewingArchived]);
+      return () => {
+        cancelled = true;
+      };
+    },
+    [page, query, viewingArchived],
+  );
+
+  useEffect(() => refetch(true), [refetch]);
+
+  /**
+   * E03-S039 AC2/AC5: same trigger set as sidebar.tsx's history rail —
+   * see that component's doc comment for why no `originClientId` filter
+   * is needed here. `showLoading: false` — a background refetch behind an
+   * already-rendered list must not flash back to the loading spinner
+   * (UX Acceptance: "重抓期間不閃空狀態（保留舊資料直到新資料到達）").
+   */
+  useConversationEvents(
+    (event) => {
+      if (event.type === "resync" || event.type.startsWith("conversation.")) {
+        refetch(false);
+      }
+    },
+    [refetch],
+  );
 
   function handleQueryChange(value: string) {
     setQuery(value);

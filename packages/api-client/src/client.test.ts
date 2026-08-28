@@ -102,6 +102,24 @@ describe("createApiClient", () => {
     expect(client.transcriptions).toBeTruthy();
   });
 
+  describe("clientId (E03-S039: exposed so a consumer can compare against a ChangeEvent's originClientId)", () => {
+    it("exposes the resolved sessionStorage-backed clientId that was actually sent on the wire", async () => {
+      const seen: Request[] = [];
+      const client = createApiClient({ baseUrl: "https://api.example.test", fetch: fakeFetch(seen) });
+
+      await client.conversations.GET("/conversations", {});
+
+      expect(client.clientId).toBe(seen[0]!.headers.get("x-client-id"));
+    });
+
+    it("exposes the explicit clientId option when one was provided, without touching sessionStorage", () => {
+      const client = createApiClient({ baseUrl: "https://api.example.test", fetch: fakeFetch([]), clientId: "fixed-client-id" });
+
+      expect(client.clientId).toBe("fixed-client-id");
+      expect(sessionStorage.getItem("ai-km:client-id")).toBeNull();
+    });
+  });
+
   describe("x-requested-with (E04-S048 CSRF defence, AC6)", () => {
     it("sends x-requested-with on every request, on every spec's client", async () => {
       const seen: Request[] = [];

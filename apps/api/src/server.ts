@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import Fastify, { LogController, type FastifyInstance, type FastifyPluginAsync } from "fastify";
 import ajvModule from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
+import type { Database } from "better-sqlite3";
 
 // See the note in contracts.ts — CJS packages with ESM-shaped typings.
 const Ajv2020 = ajvModule.default;
@@ -27,10 +28,48 @@ import { registerCorrelation, readCorrelationId } from "./correlation.js";
 import { registerAuth } from "./auth-decorator.js";
 import { loadContracts, resolveContractsDir, type ContractRegistry } from "./contracts.js";
 import { databasePlugin } from "./db/plugin.js";
-import { conversationPlugin } from "@ai-km/service-conversation";
-import { identityPlugin } from "@ai-km/service-identity";
+import { conversationPlugin, conversationSandboxSeeders, messageSandboxSeeders, toOwnerKey } from "@ai-km/service-conversation";
+import { identityPlugin, registerSandboxSeeder } from "@ai-km/service-identity";
 import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
 import "./types.js";
+
+/**
+ * E04-S052: bridges `services/identity`'s sandbox-seeder registry to the
+ * conversation domain's own seeders. Composition-root wiring, not a
+ * `services/conversation` → `services/identity` dependency (CLAUDE.md 鐵律 3
+ * boundary: cross-domain interaction only through a declared interface —
+ * here, `registerSandboxSeeder`'s already-declared `(ownerKey) => void`
+ * shape).
+ *
+ * `registerSandboxSeeder` pushes into a bare module-level array with no way
+ * to unregister (by design — see its doc comment, it is meant to be called
+ * once per real domain at plugin-load time). `buildServer()` is called many
+ * times per process in this repo's own test suite, though, so registering a
+ * NEW closure on every call — each one permanently bound to that call's
+ * `app.db` — would leave every earlier test's (by then closed) database
+ * connection in the list, and `runSandboxSeeders` runs every registered
+ * seeder unconditionally. The module-level `sandboxDb` cell below is
+ * reassigned on every `buildServer()` call but the registration itself
+ * happens at most ONCE per process (`sandboxSeederRegistered` guard) — the
+ * one registered closure always reads whichever db is CURRENT at the moment
+ * a login actually seeds, rather than closing over a specific instance.
+ * Safe under this test suite's actual concurrency model (vitest isolates
+ * module state per test FILE, and within a file, tests build one server at a
+ * time — never two live `buildServer()` instances needing to seed at once).
+ */
+let sandboxDb: Database | undefined;
+let sandboxSeederRegistered = false;
+
+function ensureSandboxSeederRegistered(): void {
+  if (sandboxSeederRegistered) return;
+  sandboxSeederRegistered = true;
+  registerSandboxSeeder((ownerKey) => {
+    if (!sandboxDb) return;
+    const owner = toOwnerKey(ownerKey);
+    for (const seeder of conversationSandboxSeeders) seeder.seed(sandboxDb!, owner);
+    for (const seeder of messageSandboxSeeders) seeder.seed(sandboxDb!, owner);
+  });
+}
 
 export const API_PREFIX = "/v1";
 
@@ -149,6 +188,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     autoMigrate: config.autoMigrate,
     ...(options.migrationsDir ? { migrationsDir: options.migrationsDir } : {}),
   });
+
+  // E04-S052: `sandboxDb` must point at THIS build's db before any request
+  // (in particular a sandbox login) can arrive — reassigned on every
+  // `buildServer()` call, registered with `services/identity`'s registry at
+  // most once per process. See the module-level comment above.
+  sandboxDb = app.db;
+  ensureSandboxSeederRegistered();
 
   // E02-S032 — session-cookie login/logout/session + the real requireSession.
   //

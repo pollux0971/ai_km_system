@@ -275,6 +275,19 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4000/v1/health
 `200` 才跑。`000`/refused → **回報總指揮,不要自行重啟別人的 process,也不要
 把測試結果當成自己的回歸或 flaky。**
 
+**總指揮維護該 process 時一律先拿 `.e2e.lock`**(2026-08-28 立):對它的任何
+重啟都會讓正在跑的 E2E 從中途失去後端,產生大規模、看起來像回歸的紅燈。當天
+W1 一輪 32.8 分鐘的全量測試就是這樣被毀掉的(224 紅,連 `login.spec.ts`、
+`smoke.spec.ts` 這種完全不碰對話的測試都失敗)。持鎖維護等於昭告「共用資源
+正在被動」,lane 看到鎖被佔就不會開跑。
+
+**已知失效模式二:依賴不同步。** 共用 API 跑的是總指揮 checkout 的程式碼,但
+七條 lane 各自在自己的 worktree `pnpm install`。當某個 merge 進來的 story 新增
+了 workspace 依賴(例:E04-S044 為 `services/conversation` 加 `fastify-plugin`),
+總指揮的 checkout 不會自動補上,`tsx watch` 一重啟就 `ERR_MODULE_NOT_FOUND`。
+注意:普通 `pnpm install` 會回報 "Already up to date" 卻仍缺連結,**要用
+`pnpm install --force`**。
+
 **2026-08-28 事故**:該 process 於當日 06:29 以 **snap node** 啟動;snap node
 之後壞掉,於是 `tsx watch` 每次因 main 更新要重啟子行程時,spawn 的都是跑不起來
 的 snap node。它變成「**父行程活著、零子行程、不監聽**」的殭屍——`ps` 看起來完全

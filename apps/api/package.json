@@ -21,6 +21,7 @@
     "@apidevtools/json-schema-ref-parser": "^11.7.2",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.1",
     "@fastify/multipart": "^9.0.3",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",

@@ -21,6 +21,7 @@ const Ajv2020 = ajvModule.default;
 const addFormats = addFormatsModule.default;
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { registerErrorHandling, ApiHttpError, ERROR_CODES } from "./errors.js";
@@ -174,6 +175,33 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   registerRequestValidation(app);
   registerCorrelation(app);
   registerErrorHandling(app);
+
+  // E01-S029 AC5 — "equivalent headers" for a JSON API means only the two
+  // that still matter for a response that is never rendered as a page:
+  // X-Content-Type-Options (stop a browser from MIME-sniffing an error body
+  // into something executable) and X-Frame-Options (defence in depth against
+  // being framed). Every other helmet default is explicitly turned off
+  // rather than left to helmet's own defaults, so this registration adds
+  // exactly the two headers the spec asks for — not a browser CSP (this is
+  // JSON, never rendered) and not HSTS (that policy belongs to web/admin,
+  // whose next.config.ts already gates it on `x-forwarded-proto: https`;
+  // duplicating it here with no such gate would send it over the internal
+  // plain-http deployment too).
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    hsts: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+    originAgentCluster: false,
+    referrerPolicy: false,
+    xDnsPrefetchControl: false,
+    xDownloadOptions: false,
+    xPermittedCrossDomainPolicies: false,
+    xXssProtection: false,
+    frameguard: { action: "deny" },
+  });
+
   await app.register(cookie);
   await app.register(multipart);
 

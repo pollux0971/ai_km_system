@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { headers } from "next/headers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -60,7 +61,17 @@ const materialSymbolsOutlined = localFont({
  * into a (public) zone (login) and an (app) zone (authenticated shell) —
  * see apps/web/src/app/(public) and apps/web/src/app/(app).
  */
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // E01-S029: merely reading a dynamic API (headers()) here is what makes
+  // Next.js apply the per-request CSP nonce (apps/web/src/middleware.ts) to
+  // its own internally-generated inline scripts (the RSC streaming
+  // bootstrap) and opts this route tree out of static prerendering — both
+  // required for the nonce-based CSP to actually work. Confirmed empirically:
+  // without this, a statically-optimized route like /login served its inline
+  // bootstrap script with no nonce at all (`"nonce":"$undefined"` in the RSC
+  // payload), which strict `script-src` then blocked outright. See
+  // docs/stories/E01-S029.md for the full investigation.
+  await headers();
   return (
     <html lang="zh-Hant" className={`${notoSansTC.variable} ${roboto.variable} ${materialSymbolsOutlined.variable}`}>
       <body>{children}</body>

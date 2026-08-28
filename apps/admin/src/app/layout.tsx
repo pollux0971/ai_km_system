@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import "./globals.css";
 import AdminShell from "./_components/admin-shell";
 
@@ -20,7 +21,12 @@ export const metadata = {
  * layout added in E01-S005. The shell is pure chrome and carries no
  * authorization.
  */
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // E01-S029: see apps/web/src/app/layout.tsx's doc comment — reading
+  // headers() here is required for Next.js to apply the per-request CSP
+  // nonce (middleware.ts) to its own inline RSC bootstrap script and to opt
+  // this route tree out of static prerendering.
+  await headers();
   return (
     <html lang="zh-Hant">
       <body>

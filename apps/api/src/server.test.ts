@@ -365,3 +365,32 @@ describe("bootstrap order (E04-S049 AC1/AC2)", () => {
     expect(sawSchema).toBeDefined();
   });
 });
+
+describe("Security headers (E01-S029 AC5)", () => {
+  it("sets X-Content-Type-Options: nosniff on every response", async () => {
+    const res = await (await build()).inject({ method: "GET", url: "/v1/health" });
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+  });
+
+  it("sets X-Frame-Options: DENY, matching the value web/admin send", async () => {
+    const res = await (await build()).inject({ method: "GET", url: "/v1/health" });
+    expect(res.headers["x-frame-options"]).toBe("DENY");
+  });
+
+  it("does not send a browser Content-Security-Policy — a JSON API response is never rendered as a page", async () => {
+    const res = await (await build()).inject({ method: "GET", url: "/v1/health" });
+    expect(res.headers["content-security-policy"]).toBeUndefined();
+  });
+
+  it("does not send Strict-Transport-Security — that policy belongs to the browser-facing apps, not this JSON API", async () => {
+    const res = await (await build()).inject({ method: "GET", url: "/v1/health" });
+    expect(res.headers["strict-transport-security"]).toBeUndefined();
+  });
+
+  it("still applies to an error response, not only the happy path", async () => {
+    const res = await (await build()).inject({ method: "GET", url: "/v1/__nonexistent__" });
+    expect(res.statusCode).toBe(404);
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["x-frame-options"]).toBe("DENY");
+  });
+});

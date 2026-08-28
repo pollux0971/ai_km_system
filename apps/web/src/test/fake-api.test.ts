@@ -76,3 +76,106 @@ describe("fake-api contract self-validation (E03-S036 Contract Test Obligation)"
     expect(((await result.json()) as { code: string }).code).toBe("NOT_FOUND");
   });
 });
+
+describe("fake-api message endpoints contract self-validation (E03-S037 Contract Test Obligation)", () => {
+  beforeEach(() => {
+    resetFakeApi();
+    seedSampleConversations();
+  });
+
+  async function createConversationAndMessage(): Promise<{ conversationId: string; messageId: string }> {
+    const created = await fakeFetch(req("/conversations", { method: "POST" }));
+    const { id: conversationId } = (await created.json()) as { id: string };
+    const message = await fakeFetch(
+      req(`/conversations/${conversationId}/messages`, jsonInit("POST", { role: "assistant", content: "答案內容 [1]", attachmentNames: [] })),
+    );
+    const { id: messageId } = (await message.json()) as { id: string };
+    return { conversationId, messageId };
+  }
+
+  it("serves list/create/revise/feedback/reason/comment/citation-feedback responses that all pass Ajv validation", async () => {
+    const { conversationId, messageId } = await createConversationAndMessage();
+
+    const list = await fakeFetch(req(`/conversations/${conversationId}/messages`));
+    expect(list.status).toBe(200);
+
+    const revised = await fakeFetch(
+      req(`/conversations/${conversationId}/messages/${messageId}/revisions`, jsonInit("POST", { content: "修訂後內容 [1]" })),
+    );
+    expect(revised.status).toBe(200);
+
+    const feedback = await fakeFetch(
+      req(`/conversations/${conversationId}/messages/${messageId}/feedback`, jsonInit("PUT", { verdict: "NG" })),
+    );
+    expect(feedback.status).toBe(200);
+
+    const reason = await fakeFetch(
+      req(`/conversations/${conversationId}/messages/${messageId}/feedback/reason`, jsonInit("PUT", { reason: "INCORRECT" })),
+    );
+    expect(reason.status).toBe(200);
+
+    const comment = await fakeFetch(
+      req(`/conversations/${conversationId}/messages/${messageId}/feedback/comment`, jsonInit("PUT", { comment: "留言內容" })),
+    );
+    expect(comment.status).toBe(200);
+
+    const citation = await fakeFetch(
+      req(`/conversations/${conversationId}/messages/${messageId}/citations/1/feedback`, jsonInit("PUT", { verdict: "OK" })),
+    );
+    expect(citation.status).toBe(200);
+  });
+
+  it("rejects a CreateMessageRequest missing the required 'role' field — proves drift/malformed input is caught", async () => {
+    const created = await fakeFetch(req("/conversations", { method: "POST" }));
+    const { id: conversationId } = (await created.json()) as { id: string };
+
+    await expect(
+      fakeFetch(req(`/conversations/${conversationId}/messages`, jsonInit("POST", { content: "缺少 role" }))),
+    ).rejects.toThrow(/failed contract validation/);
+  });
+
+  it("createMessage updates the parent conversation's lastMessagePreview/lastMessageAt in the same call (contract-documented side effect)", async () => {
+    const created = await fakeFetch(req("/conversations", { method: "POST" }));
+    const { id: conversationId } = (await created.json()) as { id: string };
+
+    await fakeFetch(req(`/conversations/${conversationId}/messages`, jsonInit("POST", { role: "user", content: "保固期多久？" })));
+
+    const reloaded = await fakeFetch(req(`/conversations/${conversationId}`));
+    const conversation = (await reloaded.json()) as { lastMessagePreview: string };
+    expect(conversation.lastMessagePreview).toBe("保固期多久？");
+  });
+
+  it("rejects revising a user message with 400 VALIDATION_ERROR (only assistant messages may be revised)", async () => {
+    const created = await fakeFetch(req("/conversations", { method: "POST" }));
+    const { id: conversationId } = (await created.json()) as { id: string };
+    const message = await fakeFetch(req(`/conversations/${conversationId}/messages`, jsonInit("POST", { role: "user", content: "使用者訊息" })));
+    const { id: messageId } = (await message.json()) as { id: string };
+
+    const result = await fakeFetch(req(`/conversations/${conversationId}/messages/${messageId}/revisions`, jsonInit("POST", { content: "修訂" })));
+
+    expect(result.status).toBe(400);
+    expect(((await result.json()) as { code: string }).code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects setMessageFeedbackReason when the message's current feedback isn't NG", async () => {
+    const { conversationId, messageId } = await createConversationAndMessage();
+
+    const result = await fakeFetch(
+      req(`/conversations/${conversationId}/messages/${messageId}/feedback/reason`, jsonInit("PUT", { reason: "INCORRECT" })),
+    );
+
+    expect(result.status).toBe(400);
+    expect(((await result.json()) as { code: string }).code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects a citation feedback for a citationId that doesn't appear in the message's content", async () => {
+    const { conversationId, messageId } = await createConversationAndMessage();
+
+    const result = await fakeFetch(
+      req(`/conversations/${conversationId}/messages/${messageId}/citations/99/feedback`, jsonInit("PUT", { verdict: "OK" })),
+    );
+
+    expect(result.status).toBe(400);
+    expect(((await result.json()) as { code: string }).code).toBe("VALIDATION_ERROR");
+  });
+});

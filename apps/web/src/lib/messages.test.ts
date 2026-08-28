@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { failNextRequest, failNextRequestWithNetworkError, getFakeApiRequestCount } from "@/test/fake-api";
 import { createConversation, getConversation } from "./conversations";
 import {
   deleteMessagesForConversation,
@@ -12,6 +13,17 @@ import {
   submitFeedbackComment,
   submitFeedbackReason,
 } from "./messages";
+
+/**
+ * E03-S037: `sendMessage`/`receiveAssistantReply` now hit the server directly with
+ * `conversationId` as a real path parameter (`format: uuid`), unlike `reviseMessage`/
+ * `submit*` which resolve `messageId` against a local cache and never touch the network
+ * for an unresolved id. A non-UUID sentinel like the old `"does-not-exist"` now fails
+ * with 400 VALIDATION_ERROR before the server's own not-found check runs — see
+ * docs/stories/E03-S037.md for the full accounting. This constant replaces it wherever
+ * that distinction actually matters.
+ */
+const NONEXISTENT_CONVERSATION_ID = "00000000-0000-4000-8000-000000000000";
 
 describe("listMessages (E03-S009)", () => {
   it("resolves with an empty list for a conversation with no messages", async () => {
@@ -82,7 +94,7 @@ describe("sendMessage (E03-S009)", () => {
   });
 
   it("fails closed with NOT_FOUND for an id that doesn't exist, rather than silently no-op-ing", async () => {
-    const result = await sendMessage("does-not-exist", "你好", []);
+    const result = await sendMessage(NONEXISTENT_CONVERSATION_ID, "你好", []);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -161,7 +173,7 @@ describe("receiveAssistantReply (E03-S010)", () => {
   });
 
   it("fails closed with NOT_FOUND for an id that doesn't exist", async () => {
-    const result = await receiveAssistantReply("does-not-exist", "這是模擬回覆內容。");
+    const result = await receiveAssistantReply(NONEXISTENT_CONVERSATION_ID, "這是模擬回覆內容。");
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -366,7 +378,7 @@ describe("reviseMessage (E03-S020)", () => {
     }
   });
 
-  it("updates the conversation's lastMessagePreview to reflect the revised content", async () => {
+  it("does NOT update the conversation's lastMessagePreview — unlike createMessage, contracts/openapi/conversations.yaml's createMessageRevision only documents emitting message.updated, no conversation-side effect", async () => {
     const conversation = await createConversation();
     expect(conversation.ok).toBe(true);
     if (!conversation.ok) return;
@@ -380,13 +392,13 @@ describe("reviseMessage (E03-S020)", () => {
     const reloaded = await getConversation(conversation.value.id);
     expect(reloaded.ok).toBe(true);
     if (reloaded.ok) {
-      expect(reloaded.value?.lastMessagePreview).toBe("新的回覆");
+      expect(reloaded.value?.lastMessagePreview).toBe("舊的回覆");
     }
   });
 });
 
 describe("deleteMessagesForConversation (E03-S025)", () => {
-  it("removes all messages belonging to the given conversation", async () => {
+  it("is a deprecated no-op — the server now cascade-deletes a conversation's messages itself (contracts/openapi/conversations.yaml: DELETE /conversations/{id} 'Deletes the conversation together with its messages in one transaction'), so this no longer removes anything on its own", async () => {
     const conversation = await createConversation();
     expect(conversation.ok).toBe(true);
     if (!conversation.ok) return;
@@ -400,7 +412,7 @@ describe("deleteMessagesForConversation (E03-S025)", () => {
     const list = await listMessages(conversation.value.id);
     expect(list.ok).toBe(true);
     if (list.ok) {
-      expect(list.value).toEqual([]);
+      expect(list.value).toHaveLength(2);
     }
   });
 
@@ -742,6 +754,24 @@ describe("submitFeedbackReason (E13-S003)", () => {
     if (list.ok) {
       expect(list.value.find((m) => m.id === reply.value.id)?.feedbackReason).toBeUndefined();
     }
+  });
+
+  it("E03-S037 AC4: rejects an OK-feedback message without sending any request at all (client-side guard, proven by the fake API's request count)", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+
+    const reply = await receiveAssistantReply(conversation.value.id, "這是模擬回覆內容。");
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    await submitAnswerFeedback(reply.value.id, "OK");
+
+    const requestCountBefore = getFakeApiRequestCount();
+    const result = await submitFeedbackReason(reply.value.id, "INCORRECT");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION_ERROR");
+    expect(getFakeApiRequestCount()).toBe(requestCountBefore);
   });
 
   it("is idempotent — submitting the same reason twice does not create a duplicate record or change the outcome", async () => {
@@ -1381,5 +1411,31 @@ describe("feedback submission state composition (E13-S006)", () => {
       expect(untouched?.feedbackComment).toBeUndefined();
       expect(untouched?.citationFeedback).toBeUndefined();
     }
+  });
+});
+
+describe("error mapping (E03-S037 AC5) — existing !result.ok error rendering is unchanged, same generic handling E13-S006 already proved", () => {
+  it("maps a 403 from the server to ok:false PERMISSION_DENIED on sendMessage", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+    failNextRequest("PERMISSION_DENIED");
+
+    const result = await sendMessage(conversation.value.id, "你好", []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("PERMISSION_DENIED");
+  });
+
+  it("maps a network failure on listMessages to ok:false SERVICE_UNAVAILABLE", async () => {
+    const conversation = await createConversation();
+    expect(conversation.ok).toBe(true);
+    if (!conversation.ok) return;
+    failNextRequestWithNetworkError();
+
+    const result = await listMessages(conversation.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SERVICE_UNAVAILABLE");
   });
 });

@@ -259,21 +259,3 @@ export async function archiveConversation(id: string): Promise<Result<Conversati
 export async function unarchiveConversation(id: string): Promise<Result<ConversationSummary, ApiError>> {
   return updateConversation(id, { archived: false });
 }
-
-/**
- * E03-S036: deprecated no-op. Previously updated `lastMessageAt`/`lastMessagePreview`
- * locally when `lib/messages.ts` sent a message; the server now does this itself the
- * moment a message is created (contracts/openapi/conversations.yaml: `POST
- * /conversations/{conversationId}/messages` updates the parent conversation), so
- * calling this no longer does anything. Kept as a callable no-op (not deleted) because
- * `lib/messages.ts` still calls it and this story's Development Boundaries forbid
- * touching that file — E03-S037 owns removing both the call site and this function.
- * @deprecated Server-side since E03-S036. Removed by E03-S037.
- */
-export async function touchConversationLastMessage(
-  _id: string,
-  _lastMessagePreview: string,
-  _lastMessageAt: string,
-): Promise<Result<ConversationSummary, ApiError>> {
-  return { ok: false, error: { code: "NOT_IMPLEMENTED", message: "touchConversationLastMessage is a deprecated no-op (E03-S036); the server updates this automatically." } };
-}

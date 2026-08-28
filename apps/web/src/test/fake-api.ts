@@ -90,6 +90,12 @@ const validators = {
   ConversationListPage: compile("ConversationListPage"),
   CreateConversationRequest: compile("CreateConversationRequest"),
   UpdateConversationRequest: compile("UpdateConversationRequest"),
+  Message: compile("Message"),
+  CreateMessageRequest: compile("CreateMessageRequest"),
+  CreateRevisionRequest: compile("CreateRevisionRequest"),
+  SetFeedbackRequest: compile("SetFeedbackRequest"),
+  SetFeedbackReasonRequest: compile("SetFeedbackReasonRequest"),
+  SetFeedbackCommentRequest: compile("SetFeedbackCommentRequest"),
   ValidationErrorBody: compile("ValidationErrorBody"),
   UnauthenticatedErrorBody: compile("UnauthenticatedErrorBody"),
   PermissionDeniedErrorBody: compile("PermissionDeniedErrorBody"),
@@ -122,7 +128,23 @@ interface FakeConversation {
   updatedAt: string;
 }
 
+interface FakeMessage {
+  id: string;
+  conversationId: string;
+  role: "user" | "assistant";
+  content: string;
+  attachmentNames: string[];
+  createdAt: string;
+  revisions?: string[];
+  state?: string;
+  feedback?: "OK" | "NG";
+  feedbackReason?: string;
+  feedbackComment?: string;
+  citationFeedback?: Record<string, "OK" | "NG">;
+}
+
 let store: FakeConversation[] = [];
+let messageStore: FakeMessage[] = [];
 let failNext: { code: string; status: number } | null = null;
 
 const STATUS_FOR_CODE: Record<string, number> = {
@@ -143,10 +165,19 @@ const ERROR_VALIDATOR_FOR_CODE: Partial<Record<string, keyof typeof validators>>
   INTERNAL_ERROR: "InternalErrorBody",
 };
 
+let requestCount = 0;
+
+/** Test hook: how many requests `fakeFetch` has handled since the last reset — for proving a client-side guard truly skipped the network call (AC4). */
+export function getFakeApiRequestCount(): number {
+  return requestCount;
+}
+
 /** Test hook: clears the store and any pending forced failure. Call in `beforeEach`. */
 export function resetFakeApi(): void {
   store = [];
+  messageStore = [];
   failNext = null;
+  requestCount = 0;
 }
 
 /** Test hook: the same 3 conversations `SAMPLE_CONVERSATIONS` used to seed, now as full `Conversation` records. */
@@ -207,6 +238,18 @@ export function failNextRequestWithNetworkError(): void {
 // ---- HTTP plumbing ----------------------------------------------------------------------
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requireValidIds(conversationIdRaw: string, messageIdRaw: string): Response | null {
+  const conversationId = decodeURIComponent(conversationIdRaw);
+  const messageId = decodeURIComponent(messageIdRaw);
+  if (!UUID_RE.test(conversationId)) {
+    return errorResponse(400, "VALIDATION_ERROR", "conversationId must be a UUID.");
+  }
+  if (!UUID_RE.test(messageId)) {
+    return errorResponse(400, "VALIDATION_ERROR", "messageId must be a UUID.");
+  }
+  return null;
+}
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -313,7 +356,182 @@ function handleDelete(id: string): Response {
   return new Response(null, { status: 204 });
 }
 
+// ---- Message route handlers (E03-S037) -----------------------------------------------
+
+const FAKE_CITATION_ID_PATTERN = /\[(\d+)\]/g;
+
+function citationIdsIn(content: string): Set<string> {
+  const ids = new Set<string>();
+  for (const match of content.matchAll(FAKE_CITATION_ID_PATTERN)) {
+    const id = match[1];
+    if (id !== undefined) ids.add(id);
+  }
+  return ids;
+}
+
+function messageResponse(status: number, record: FakeMessage): Response {
+  assertValid("Message", record);
+  return jsonResponse(status, record);
+}
+
+function findConversationOr404(conversationId: string): FakeConversation | Response {
+  const record = store.find((item) => item.id === conversationId);
+  return record ?? errorResponse(404, "NOT_FOUND", "找不到這筆對話。");
+}
+
+function findMessageOr404(conversationId: string, messageId: string): FakeMessage | Response {
+  const record = messageStore.find((item) => item.id === messageId && item.conversationId === conversationId);
+  return record ?? errorResponse(404, "NOT_FOUND", "找不到這則訊息。");
+}
+
+function handleListMessages(conversationId: string): Response {
+  const conversation = findConversationOr404(conversationId);
+  if (conversation instanceof Response) return conversation;
+
+  const items = messageStore
+    .filter((item) => item.conversationId === conversationId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  for (const item of items) assertValid("Message", item);
+  return jsonResponse(200, items);
+}
+
+async function handleCreateMessage(conversationId: string, request: Request): Promise<Response> {
+  const conversation = findConversationOr404(conversationId);
+  if (conversation instanceof Response) return conversation;
+
+  const body = await readJsonBody(request);
+  assertValid("CreateMessageRequest", body);
+  const { role, content, attachmentNames = [], state } = body as {
+    role: "user" | "assistant";
+    content: string;
+    attachmentNames?: string[];
+    state?: string;
+  };
+  if (content.length === 0 && attachmentNames.length === 0) {
+    return errorResponse(400, "VALIDATION_ERROR", "訊息內容不得為空。");
+  }
+
+  const now = new Date().toISOString();
+  const message: FakeMessage = {
+    id: crypto.randomUUID(),
+    conversationId,
+    role,
+    content,
+    attachmentNames,
+    createdAt: now,
+    ...(state !== undefined ? { state } : {}),
+  };
+  messageStore = [...messageStore, message];
+
+  // Contract: createMessage updates the parent conversation's lastMessageAt/preview in
+  // the same transaction (same rule apps/web already applied client-side pre-S037).
+  const preview = content.length > 0 ? content : `已傳送 ${attachmentNames.length} 個附件`;
+  store = store.map((item) =>
+    item.id === conversationId ? { ...item, lastMessageAt: now, lastMessagePreview: preview, updatedAt: now } : item,
+  );
+
+  return messageResponse(201, message);
+}
+
+async function handleCreateRevision(conversationId: string, messageId: string, request: Request): Promise<Response> {
+  const found = findMessageOr404(conversationId, messageId);
+  if (found instanceof Response) return found;
+  if (found.role !== "assistant") {
+    return errorResponse(400, "VALIDATION_ERROR", "只能修訂 AI 回答。");
+  }
+
+  const body = await readJsonBody(request);
+  assertValid("CreateRevisionRequest", body);
+  const { content, state } = body as { content: string; state?: string };
+
+  const updated: FakeMessage = {
+    ...found,
+    content,
+    revisions: [...(found.revisions ?? []), found.content],
+    ...(state !== undefined ? { state } : {}),
+  };
+  messageStore = messageStore.map((item) => (item.id === messageId ? updated : item));
+  return messageResponse(200, updated);
+}
+
+async function handleSetFeedback(conversationId: string, messageId: string, request: Request): Promise<Response> {
+  const found = findMessageOr404(conversationId, messageId);
+  if (found instanceof Response) return found;
+
+  const body = await readJsonBody(request);
+  assertValid("SetFeedbackRequest", body);
+  const { verdict } = body as { verdict: "OK" | "NG" };
+
+  const updated: FakeMessage = { ...found, feedback: verdict };
+  messageStore = messageStore.map((item) => (item.id === messageId ? updated : item));
+  return messageResponse(200, updated);
+}
+
+async function handleSetFeedbackReason(conversationId: string, messageId: string, request: Request): Promise<Response> {
+  const found = findMessageOr404(conversationId, messageId);
+  if (found instanceof Response) return found;
+  if (found.feedback !== "NG") {
+    return errorResponse(400, "VALIDATION_ERROR", "只能為「沒有幫助」的回饋選擇原因。");
+  }
+
+  const body = await readJsonBody(request);
+  assertValid("SetFeedbackReasonRequest", body);
+  const { reason } = body as { reason: string };
+
+  const updated: FakeMessage = { ...found, feedbackReason: reason };
+  messageStore = messageStore.map((item) => (item.id === messageId ? updated : item));
+  return messageResponse(200, updated);
+}
+
+async function handleSetFeedbackComment(conversationId: string, messageId: string, request: Request): Promise<Response> {
+  const found = findMessageOr404(conversationId, messageId);
+  if (found instanceof Response) return found;
+  if (found.feedback == null) {
+    return errorResponse(400, "VALIDATION_ERROR", "請先提供「有幫助」或「沒有幫助」的回饋。");
+  }
+
+  const body = await readJsonBody(request);
+  assertValid("SetFeedbackCommentRequest", body);
+  const { comment } = body as { comment: string };
+  const trimmed = comment.trim();
+  if (trimmed.length === 0) {
+    return errorResponse(400, "VALIDATION_ERROR", "留言不得為空白。");
+  }
+  if (trimmed.length > 500) {
+    return errorResponse(400, "VALIDATION_ERROR", "留言長度不得超過 500 字。");
+  }
+
+  const updated: FakeMessage = { ...found, feedbackComment: trimmed };
+  messageStore = messageStore.map((item) => (item.id === messageId ? updated : item));
+  return messageResponse(200, updated);
+}
+
+async function handleSetCitationFeedback(
+  conversationId: string,
+  messageId: string,
+  citationId: string,
+  request: Request,
+): Promise<Response> {
+  const found = findMessageOr404(conversationId, messageId);
+  if (found instanceof Response) return found;
+  if (!citationIdsIn(found.content).has(citationId)) {
+    return errorResponse(400, "VALIDATION_ERROR", "這則訊息沒有這個引用來源。");
+  }
+
+  const body = await readJsonBody(request);
+  assertValid("SetFeedbackRequest", body);
+  const { verdict } = body as { verdict: "OK" | "NG" };
+
+  const updated: FakeMessage = {
+    ...found,
+    citationFeedback: { ...(found.citationFeedback ?? {}), [citationId]: verdict },
+  };
+  messageStore = messageStore.map((item) => (item.id === messageId ? updated : item));
+  return messageResponse(200, updated);
+}
+
 export async function fakeFetch(request: Request): Promise<Response> {
+  requestCount += 1;
   if (failNext) {
     const { code, status } = failNext;
     failNext = null;
@@ -329,6 +547,61 @@ export async function fakeFetch(request: Request): Promise<Response> {
   if (pathname === "/api/v1/conversations") {
     if (method === "GET") return handleList(url);
     if (method === "POST") return handleCreate(request);
+  }
+
+  const citationMatch = pathname.match(
+    /^\/api\/v1\/conversations\/([^/]+)\/messages\/([^/]+)\/citations\/([^/]+)\/feedback$/,
+  );
+  if (citationMatch) {
+    const [, conversationId = "", messageId = "", citationId = ""] = citationMatch;
+    const invalid = requireValidIds(conversationId, messageId);
+    if (invalid) return invalid;
+    if (!/^[0-9]+$/.test(decodeURIComponent(citationId))) {
+      return errorResponse(400, "VALIDATION_ERROR", "citationId must match ^[0-9]+$.");
+    }
+    if (method === "PUT") return handleSetCitationFeedback(conversationId, messageId, decodeURIComponent(citationId), request);
+  }
+
+  const feedbackReasonMatch = pathname.match(/^\/api\/v1\/conversations\/([^/]+)\/messages\/([^/]+)\/feedback\/reason$/);
+  if (feedbackReasonMatch) {
+    const [, conversationId = "", messageId = ""] = feedbackReasonMatch;
+    const invalid = requireValidIds(conversationId, messageId);
+    if (invalid) return invalid;
+    if (method === "PUT") return handleSetFeedbackReason(conversationId, messageId, request);
+  }
+
+  const feedbackCommentMatch = pathname.match(/^\/api\/v1\/conversations\/([^/]+)\/messages\/([^/]+)\/feedback\/comment$/);
+  if (feedbackCommentMatch) {
+    const [, conversationId = "", messageId = ""] = feedbackCommentMatch;
+    const invalid = requireValidIds(conversationId, messageId);
+    if (invalid) return invalid;
+    if (method === "PUT") return handleSetFeedbackComment(conversationId, messageId, request);
+  }
+
+  const feedbackMatch = pathname.match(/^\/api\/v1\/conversations\/([^/]+)\/messages\/([^/]+)\/feedback$/);
+  if (feedbackMatch) {
+    const [, conversationId = "", messageId = ""] = feedbackMatch;
+    const invalid = requireValidIds(conversationId, messageId);
+    if (invalid) return invalid;
+    if (method === "PUT") return handleSetFeedback(conversationId, messageId, request);
+  }
+
+  const revisionMatch = pathname.match(/^\/api\/v1\/conversations\/([^/]+)\/messages\/([^/]+)\/revisions$/);
+  if (revisionMatch) {
+    const [, conversationId = "", messageId = ""] = revisionMatch;
+    const invalid = requireValidIds(conversationId, messageId);
+    if (invalid) return invalid;
+    if (method === "POST") return handleCreateRevision(conversationId, messageId, request);
+  }
+
+  const messagesMatch = pathname.match(/^\/api\/v1\/conversations\/([^/]+)\/messages$/);
+  if (messagesMatch) {
+    const conversationId = decodeURIComponent(messagesMatch[1] ?? "");
+    if (!UUID_RE.test(conversationId)) {
+      return errorResponse(400, "VALIDATION_ERROR", "conversationId must be a UUID.");
+    }
+    if (method === "GET") return handleListMessages(conversationId);
+    if (method === "POST") return handleCreateMessage(conversationId, request);
   }
 
   const singleMatch = pathname.match(/^\/api\/v1\/conversations\/([^/]+)$/);

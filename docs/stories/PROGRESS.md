@@ -25,7 +25,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 30 | 23 | 0 | 0 | 0 | 7 |
+| E01 Application Shell & User Workspace | 31 | 23 | 0 | 0 | 0 | 8 |
 | E03 AI Conversation Experience | 46 | 37 | 0 | 4 | 0 | 5 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
@@ -35,11 +35,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 15 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **226** | 203 | 0 | 8 | 1 | 14 |
+| **合計** | **227** | 203 | 0 | 8 | 1 | 15 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
-## E01 Application Shell & User Workspace(30)
+## E01 Application Shell & User Workspace(31)
 
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
@@ -73,6 +73,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S028 | approved | `story/E01-S028-onprem-https-deploy` | [E01-S028.md](E01-S028.md) | 內網 HTTPS 部署與一鍵啟動（Caddy、compose、dev-all 腳本、runbook）；HARD 依賴：E04-S039；wave D1；語音功能在 http 內網不可用之根治。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)） 規格：[E01-S028.spec.md](specs/E01-S028.spec.md)。由 ai-km-e4 從 W6 lane 改派給 W2(2026-08-28)。獨立審核 APPROVE(真實 docker compose 部署驗證、Playwright 截圖、gate 全綠,已 merge 回 main)。 |
 | E01-S029 | todo | — | — | 安全性 HTTP headers（CSP/HSTS/X-Frame-Options/Referrer-Policy/Permissions-Policy）；HARD 依賴：E04-S039；wave D1。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E01-S029.spec.md](specs/E01-S029.spec.md) |
 | E01-S030 | todo | — | — | Playwright `reuseExistingServer` CI 安全模式（避免舊 process 造成假綠燈）；HARD 依賴：E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（第二輪技術債稽核批次，見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md) 第 2 節） 規格：[E01-S030.spec.md](specs/E01-S030.spec.md) |
+| E01-S031 | todo | — | — | **修正 12 支既有 E2E 的過時假設(解除 4 個 story 的 AC)**:10 支把「硬導覽會登出」(舊 mock 的記憶體 session)當成切換使用者的手段,而 E03-S035 的真實 cookie session **正確地**撐過硬導覽;2 支 `knowledge-selector` 因真實網路延遲打破 `.check()` 的驗證視窗。**根因是新系統做對了、舊測試前提過時**,非產品缺陷。穩定性已由 W7(Round 4,`--repeat-each=3`,12 支全部 0/3)與 W6(CSP Report-Only vs 強制生效兩次對照,失敗集合相同)獨立確認。使用者對 AC 詮釋未即時回覆,總指揮依授權採「修正測試」而非「長期接受失敗」——理由:E2E 永遠不綠會讓未來真正的回歸淹沒在雜訊裡。**由 W1 執行**(它是 E03-S035 的作者) 規格:[E01-S031.spec.md](specs/E01-S031.spec.md) |
 
 ## E03 AI Conversation Experience(46)
 

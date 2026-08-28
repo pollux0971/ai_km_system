@@ -32,10 +32,10 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 26 | 0 | 0 | 0 | 0 |
 | E13 Feedback & Analytics | 21 | 20 | 0 | 1 | 0 | 0 |
-| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S056) | 17 | 15 | 0 | 1 | 0 | 1 |
+| E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S056) | 18 | 15 | 0 | 1 | 0 | 2 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **230** | 218 | 0 | 8 | 1 | 3 |
+| **合計** | **231** | 218 | 0 | 8 | 1 | 4 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -311,6 +311,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S054 | ~~誤判,已撤回~~ | — | — | **⚠️ 本 story 由總指揮 2026-08-29 立案後當日撤回——不是真實缺陷。** 立案理由是「`grep x-requested-with packages/auth-client/src/` 零命中 + curl 不帶 header 打 `/v1/auth/login` 回 403」,由此推論「登入路徑沒送 CSRF header」。**推論錯誤**:`createHttpAuthClient(api)` 把 `apiClient` 當參數收進來,所有呼叫都走 `api.auth.POST(...)`(`packages/auth-client/src/http.ts:51-54`),而 `api-client` 已由 E04-S048 注入該 header——零命中是因為**委派**,不是因為沒送;curl 的 403 是**繞過應用程式直接打 API**,那正是 CSRF 防護該有的行為,不是缺陷。**W7 的反證才是對的**:三輪完整 log、813×3 個測試實例,`CSRF_HEADER_MISSING`/`403` 零真實命中,真實 UI 登入穩定成功。教訓:確認症狀後必須讀實際程式碼路徑再下根因,不可由 grep 零命中直接推論。規格檔 `specs/E04-S054.spec.md` 保留供追溯。 |
 | E04-S055 | approved | `story/E04-S055-time-bomb-fix` | [E04-S055.md](E04-S055.md) | **時間炸彈,main 目前為紅**:`require-session.test.ts` 寫死 `NOW = 2026-08-28T05:00:00Z` 當 `last_seen_at`,但 `buildRealRequireSession` 用真實 wall-clock 算 `idleMs`,而 `SESSION_IDLE_LIMIT_MS` 是 12 小時,且測試未用假時鐘 → 跨日後所有種下的 session 一律判定閒置過期,8/184 必然失敗。昨天綠、今天紅,與負載無關,W4 與總指揮各自獨立重現。turbo 因此中止整條 pipeline,擋住所有 lane。**AC2 要求證明對日期不敏感(推進時間仍全綠),只證明「今天過了」不算**。由 **W2** 執行 規格:[E04-S055.spec.md](specs/E04-S055.spec.md)。**已修正**:`NOW`/`FAR_FUTURE` 改相對 `Date.now()` 計算,identity 184/184 全綠,+30 天/+365 天驗證皆通過(含非空洞性反向驗證),`repository.test.ts`/`plugin.test.ts` 確認不受影響,gate 全綠。獨立審核 APPROVE,已 merge 回 main(f7eb6c6)。 |
 | E04-S056 | in-progress | `story/E04-S056-health-degraded-dev` | — | **總指揮 2026-08-29 立案**:`/v1/health` 在 dev/test **永久**回 `degraded`,`api-sandbox.spec.ts:143` 的 `status: "ok"` 斷言因此自 `ca7ef86`(E04-S047)起**每條 lane 的每一次全量 E2E 都固定紅**。根因是四個各自正確的環節接縫斷裂:`config.ts:165` 預設 `asrProvider=whisper-server` → `checkAsr` 連不上 8178 回 `down` → `overallStatus` 任一 down 即 `degraded` → 而該斷言由 E03-S035 寫下時 health 尚無 ASR subsystem。dev/test 從不跑 whisper sidecar(`ss -ltn` 實測 8178 沒在聽)。**不得為了變綠而放寬 `overallStatus` 語意或把 production 預設改成 `fake`(fail-open)**;AC2 強制反向驗證(先貼修正前紅的輸出),AC3 要求證明 ASR 真掛時仍回 `degraded`。由 W6 於 E01-S025 全量 E2E 回報症狀、總指揮查根因。由 **W3** 執行 規格:[E04-S056.spec.md](specs/E04-S056.spec.md)。 |
+| E04-S057 | todo | — | — | **總指揮 2026-08-29 立案**:repo 根目錄的 `pnpm test` 會經 turbo 的 `test` pipeline 連帶跑 `@ai-km/e2e:test`(= 完整 `playwright test`,`tests/e2e/package.json:9`),**完全不知道 `.e2e.lock` 存在**;再加上 `resolveReuseExistingServer()` 本機恆為 `true`,這個無鎖的 Playwright 會直接沿用持鎖者已起好的 :3000/:3001 dev server。**2026-08-29 已實際造成一次證據污染**:W1 持鎖跑 E01-S022 的補救重跑時,W4 在不知情下於根目錄跑 `pnpm test`,W4 誠實揭露未保留 webServer log、無法排除真的接上了 W1 的 server;W1 該次跑到 133/271 出現 6 個逾時後判定污染並中止。**沒有人違規——`pnpm test` 是最自然的指令,沒有任何東西警告它會碰 E2E。**AC3 是最容易做壞的一條(持鎖者自己必須能跑),AC5 強制反向驗證,AC6 不得靠「把 E2E 移出 pipeline」了事。由 **W4** 執行(缺陷揭露者) 規格:[E04-S057.spec.md](specs/E04-S057.spec.md)。 |
 
 ## E02 Identity, RBAC & Authorization(僅追蹤使用者增補,4)
 

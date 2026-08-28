@@ -243,6 +243,24 @@ W4 在 flock 等待中途砍掉 wrapper script,結果**孤兒化了底下的 `pl
 4. W4 這次結局是幸運的:子行程在他介入前就已經跑完(17/17 通過)並自行退出,
    鎖乾淨釋放,沒留下卡死狀態。**但這是運氣,不是流程正確。**
 
+### ⚠️ 2026-08-29 W1 實測修正:殺 flock 那組**不夠**
+
+W1 中止 E01-S022 的重跑時發現:**Playwright 起的 webServer(`next dev`
+for :3000/:3001)在它自己的 process group,跟 flock 那組不同**。
+`kill -TERM -<flock_pgid>` **不會連帶殺到它們**——鎖放掉了,port 還被佔著。
+
+所以中止流程是三步,不是兩步:
+
+```bash
+kill -TERM -<flock_pgid>                                   # 1. flock 那組
+fuser -v /data/python/AI_KM-worktrees/.e2e.lock            # 2. 確認鎖放了
+ss -ltnp | grep -E ':(3000|3001|4100)\b'                   # 3. 確認 port 也空了
+#    還有殘留 → 對每個殘留的 pgid 再殺一次
+```
+
+**驗收標準是「port 空了」,不是「鎖放了」。** W1 補殺了 `681651`/`686813`
+兩組才真的把 :3000 空出來,下一個排隊的 lane 才接得上。
+
 ## 5-theta. 既有 E2E 斷言窄化的裁示紀錄(2026-08-29 補登)
 
 **本節是事後補登。** E13-S021 的獨立審核者(`ai-km-fa`)在 ROADMAP_TEMP.md

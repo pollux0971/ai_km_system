@@ -263,6 +263,26 @@ hang 且不丟例外。** 純字串 FormData 完全正常。補 `Blob.prototype.
 沒有這個問題**,所以 `fake-api.ts` 的 multipart handler 仍應完整寫好,留給
 E03-S038 / E03-S044 的真實 E2E 使用。
 
+## 5-deca. 🔴 `.e2e.lock` 只保證 port 互斥,**不保證 CPU 獨佔**
+
+2026-08-29 W7 在 E01-S027 的量測中證實:即使單一 lane 把自己的
+`playwright.config.ts` 調到最好,只要同時有其他重負載,flaky 就會復發,而且
+**失敗集合每次都不同**(v3 那輪有 ~15 支「前兩輪從未失敗過」的 spec 中箭,
+含 `login.spec.ts` 本身),清一色 `page.goto` 30 秒逾時。
+
+**兩個不同來源的競爭**:
+1. **本專案其他 lane** 的 build / typecheck / 全量 unit——鎖管不到。
+   → **規則**:持有 `.e2e.lock` 期間 = **整台機器保留給 E2E**。其他 lane 請
+   暫停 build、`pnpm test`、全量 typecheck 等 CPU 重活;唯讀工作(讀 spec、
+   寫 EVIDENCE、規劃)不受限。
+2. **完全不同的專案**——2026-08-29 實測發現 `/data/python/na-wt/story-63-*`
+   (nightmare-assault 專案的平行 worktree)同時在跑多個 `pytest` 套件,
+   單一 process 就吃掉 60–72% CPU,load average 一度達 **27(8 核機器)**。
+   **這完全不在本專案的控制範圍內**,任何 flock 設計都管不到。
+
+**因此:任何 flaky / 效能相關的 AC,量測時必須記錄當下的 load average**,並且
+只在機器安靜時取得的數字才算數。在 3x 超載下量到的失敗集合是雜訊,不是證據。
+
 ## 5-nona. 🔴 跑 E2E 前必須「暖機」——Next dev 是按需編譯
 
 **症狀**:全量跑的**最前面**連續數個 spec 全部卡在同一步(通常是

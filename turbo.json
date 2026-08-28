@@ -11,8 +11,12 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
+    "check": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build", "check"]
     },
     "dev": {
       "cache": false,

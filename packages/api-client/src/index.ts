@@ -1,10 +1,8 @@
-/**
- * Wiring point for the typed API client generated from contracts/openapi.
- *
- * Nothing is generated yet — run `pnpm --filter @ai-km/api-client generate`
- * once a real spec exists under contracts/openapi/*.yaml (starting with the
- * E02/E04/E12 seams Team A needs first). The output lands in
- * ./src/generated and should be re-exported from here, never hand-written.
- */
+export { createApiClient } from "./client";
+export type { ApiClient, ApiClientOptions } from "./client";
+export { toResult } from "./result";
 
-export type ApiClientPlaceholder = never;
+export type { paths as CorePaths, components as CoreComponents } from "./generated/core";
+export type { paths as AuthPaths, components as AuthComponents } from "./generated/auth";
+export type { paths as ConversationsPaths, components as ConversationsComponents } from "./generated/conversations";
+export type { paths as TranscriptionsPaths, components as TranscriptionsComponents } from "./generated/transcriptions";

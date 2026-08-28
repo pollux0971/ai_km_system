@@ -22,13 +22,20 @@ import type { Role } from "@ai-km/permissions";
  * own NAV_ITEMS already grants for /maintenance and /erp.
  *
  * Routes with no literal textual match in any admin-flavored role's own
- * description (/roles, /permissions, /departments, /groups, /usage)
- * deliberately default to `super_administrator` ONLY — the Security AC's
- * own "Deny Wins" requirement means an ambiguous mapping must resolve
- * to the MOST restrictive role, not a guessed broader one. Defining the
- * RBAC structure itself (/roles, /permissions) or cross-department
- * oversight (/departments, /groups) being super_administrator-only is
- * the conservative reading, not a claim about eventual real policy.
+ * description (/roles, /permissions, /departments, /groups, /usage,
+ * /latency) deliberately default to `super_administrator` ONLY — the
+ * Security AC's own "Deny Wins" requirement means an ambiguous mapping
+ * must resolve to the MOST restrictive role, not a guessed broader one.
+ * Defining the RBAC structure itself (/roles, /permissions) or
+ * cross-department oversight (/departments, /groups) being
+ * super_administrator-only is the conservative reading, not a claim
+ * about eventual real policy. `/latency` (E13-S013) is grouped with
+ * `/usage` for the same reason: both are E13 cross-app metrics
+ * dashboards with no textual match in any admin role's own
+ * `ROLE_DESCRIPTIONS` — added by E11-S026 (this file previously never
+ * listed it at all, a pre-existing gap invisible until this story
+ * actually wired `AdminRouteGuard` into a real layout; see
+ * docs/stories/E11-S026.md).
  *
  * `general_user`/`department_manager`/`maintenance_engineer`/
  * `sales_purchasing` never appear in this table at all — none of their
@@ -66,6 +73,7 @@ export const ADMIN_ROUTES: AdminRouteAccess[] = [
   { href: "/settings", roles: ["it_administrator", "super_administrator"] },
   { href: "/usage", roles: ["super_administrator"] },
   { href: "/health", roles: ["it_administrator", "super_administrator"] },
+  { href: "/latency", roles: ["super_administrator"] },
 ];
 
 export function rolesRequiredForAdminRoute(pathname: string): Role[] | undefined {

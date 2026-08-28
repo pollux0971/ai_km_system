@@ -26,6 +26,10 @@ describe("rolesRequiredForAdminRoute (E11-S023)", () => {
     expect(rolesRequiredForAdminRoute("/audit")).toEqual(["auditor", "super_administrator"]);
   });
 
+  it("requires super_administrator only for /latency (E11-S026: was missing from the table entirely, a pre-existing gap this story surfaced)", () => {
+    expect(rolesRequiredForAdminRoute("/latency")).toEqual(["super_administrator"]);
+  });
+
   it("returns undefined for a route not in the table — fail-closed default, not silently open", () => {
     expect(rolesRequiredForAdminRoute("/this-route-does-not-exist")).toBeUndefined();
   });

@@ -37,6 +37,21 @@ export { ConversationDomainError } from "./domain-error.js";
 export {
   seedSampleConversations,
   conversationSandboxSeeders,
+  type SampleConversationSeed,
   type SandboxSeeder,
 } from "./seed/sample-conversations.js";
+export { seedSampleMessages, messageSandboxSeeders } from "./seed/sample-messages.js";
 export { AI_KM_SEED_NAMESPACE, uuidV5 } from "./seed/uuid-v5.js";
+export {
+  createMessage,
+  createRevision,
+  getMessage,
+  listMessages,
+  touchConversationSummary,
+  type AnswerFeedbackVerdict,
+  type AnswerState,
+  type CreateMessageInput,
+  type FeedbackReason,
+  type MessageRole,
+  type MessageRow,
+} from "./repository/messages.repository.js";

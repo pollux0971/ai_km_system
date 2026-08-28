@@ -21,7 +21,7 @@ import type { Database } from "better-sqlite3";
 import { toOwnerKey, type OwnerKey } from "../repository/owner-scope.js";
 import { AI_KM_SEED_NAMESPACE, uuidV5 } from "./uuid-v5.js";
 
-interface SampleConversationSeed {
+export interface SampleConversationSeed {
   readonly slot: string;
   readonly title: string;
   readonly lastMessageAt: string;
@@ -31,8 +31,14 @@ interface SampleConversationSeed {
   readonly model: "standard" | "advanced-local" | "cloud";
 }
 
-/** Verbatim copy of apps/web's SAMPLE_CONVERSATIONS — see file header. */
-const SAMPLES: readonly SampleConversationSeed[] = [
+/**
+ * Verbatim copy of apps/web's SAMPLE_CONVERSATIONS — see file header.
+ * Exported (not just used internally) so `sample-messages.ts` (E04-S042)
+ * can derive the SAME per-owner conversation ids via the same
+ * `uuidV5(AI_KM_SEED_NAMESPACE, ownerKey:slot)` recipe, without a second
+ * copy of this data drifting from this one.
+ */
+export const SAMPLE_CONVERSATION_SEEDS: readonly SampleConversationSeed[] = [
   {
     slot: "sample-1",
     title: "產品保固政策詢問",
@@ -75,7 +81,7 @@ export function seedSampleConversations(db: Database, ownerKey: OwnerKey): void 
      VALUES (@id, @owner_key, @title, @mode, @knowledge_scopes, @model, 0, @last_message_at, @last_message_preview, @created_at, @updated_at)`,
   );
 
-  for (const sample of SAMPLES) {
+  for (const sample of SAMPLE_CONVERSATION_SEEDS) {
     insert.run({
       id: uuidV5(AI_KM_SEED_NAMESPACE, `${owner}:${sample.slot}`),
       owner_key: owner,

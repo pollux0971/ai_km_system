@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { tmpdir } from "node:os";
+import { cpus, tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig } from "@playwright/test";
 import { ensureFakeMicrophoneWav } from "./helpers/fake-microphone";
@@ -63,11 +63,44 @@ export default defineConfig({
   // spec runs — see global-setup.ts's own doc comment (E01-S027 root-cause
   // finding: Next.js dev-mode on-demand compilation, not "flaky tests").
   globalSetup: "./global-setup.ts",
+  fullyParallel: true,
+  // E01-S027: measured via `--repeat-each=3` on the full suite across
+  // multiple rounds (docs/stories/E01-S027.md's EVIDENCE has the full
+  // breakdown) — Round 0 (unmodified config, baseline): 813 test instances,
+  // only 2 flaky failures, both `page.waitForURL` timeouts under full-suite
+  // load, not a webServer-readiness or cold-compile symptom (those are
+  // already handled by globalSetup above). That signature matches CPU
+  // saturation, not insufficient timeouts.
+  //
+  // Round 1 tried this `cpus/2` (4 on this 8-core box) — barely changed
+  // actual concurrency (close to Playwright's own implicit local default),
+  // so the same 2 tests stayed flaky. Round 2 tried a firm `cpus/4` cap (2
+  // workers) — this DID eliminate both flaky failures (0/3 across a full
+  // repeat-each=3 run), confirming the CPU-saturation diagnosis, but cost
+  // 29.0m vs the 19.5m baseline (1.49x) — that measurement itself may be
+  // contention-inflated (see below), so this ratio needs a quiet-machine
+  // re-check before being treated as a real time/stability tradeoff.
+  //
+  // Settled fix: keep `workers` at the faster `cpus/2` (Round 1's time
+  // profile), and instead give only the 2 affected tests themselves a
+  // wider timeout budget via `test.slow()` (see knowledge-ui-e2e.spec.ts
+  // and admin-analytics-e2e.spec.ts) — a per-test fix for a per-test
+  // symptom, without taxing the other 811 instances' runtime. Round 3
+  // (this combination) measured 55 failed under a confirmed external load
+  // spike (`uptime` load average 25+ on this 8-core box) from a completely
+  // different project's own parallel worktrees (`na-wt/*`, unrelated to
+  // this fleet) — outside `.e2e.lock`'s port-only scope and outside this
+  // repo's control. Per ai-km-e4's ruling (2026-08-29): AC1's "N→0" must
+  // be measured under quiet-machine conditions with load average recorded
+  // in EVIDENCE, not loosened — a clean re-run once machine load is normal
+  // is still pending (see docs/stories/E01-S027.md's EVIDENCE).
+  workers: process.env.CI ? 2 : Math.max(1, Math.floor(cpus().length / 2)),
   webServer: [
     {
       command: "pnpm --filter @ai-km/web dev",
       url: "http://localhost:3000",
       reuseExistingServer: true,
+      timeout: 120000,
       env: {
         API_INTERNAL_URL: API_BASE_URL,
       },
@@ -76,6 +109,7 @@ export default defineConfig({
       command: "pnpm --filter @ai-km/admin dev -p 3001",
       url: "http://localhost:3001",
       reuseExistingServer: true,
+      timeout: 120000,
       env: {
         API_INTERNAL_URL: API_BASE_URL,
       },

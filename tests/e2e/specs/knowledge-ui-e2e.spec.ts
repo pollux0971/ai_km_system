@@ -62,6 +62,13 @@ async function backToDetail(page: import("@playwright/test").Page) {
 test("E05-S031: creating a KB and configuring every setting, adding documents via three sources, and several document actions all stay consistent together, surviving a reload", async ({
   page,
 }) => {
+  // E01-S027: measured flaky under full-suite CPU contention — a
+  // `page.waitForURL` timeout on this test's own line 248, not a logic
+  // bug (docs/stories/E01-S027.md's EVIDENCE has the repeat-each=3
+  // breakdown). `test.slow()` triples this test's own timeout budget so
+  // it survives contention without slowing the whole suite via a lower
+  // global `workers` count.
+  test.slow();
   await openKnowledgeList(page);
 
   // 1. Create, then open the just-created KB's own detail page — no

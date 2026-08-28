@@ -84,11 +84,88 @@ can call `navigator.mediaDevices.getUserMedia({audio:true})` and get a real,
 live audio track without a browser permission prompt ever appearing — see
 `specs/api-sandbox.spec.ts`'s dedicated test.
 
-## Flaky tests / resource contention
+## Flaky 分類與處理（E01-S027）
 
-Running this suite alongside other heavy local processes (other worktrees'
-own dev servers, builds, etc.) can produce `page.goto`/`page.waitForURL`
-timeouts unrelated to any code change — see `docs/stories/E03-S038.md`'s
-EVIDENCE and the project root's `ROADMAP_TEMP.md` §5-ter for the specific
-spec names and how to tell a real regression from this known pattern.
-E01-S027 is the dedicated follow-up story for the underlying root causes.
+一次 `pnpm exec playwright test --repeat-each=3` 全量（813 test instances）
+的失敗可分三類，處理方式各不相同 — 看到紅燈先判斷屬於哪一類，不要照樣重跑
+了事：
+
+### 1. webServer 未就緒 / dev server 首次編譯逾時（已解決）
+
+**症狀**：webServer 啟動後第一批打到的 spec 逾時，之後的 spec 正常。
+**根因**：Next.js dev-mode 是 on-demand 編譯，`webServer.url` 回 200 只代表
+process 活著，不代表該路由已編譯完成；第一個真正打進 `/login` 等路由的
+request 要素等編譯，可能超過 `expect.timeout`。
+**解法（已落地）**：`globalSetup.ts` 在 webServer 就緒後、任何 spec 開始前，
+先各打一次 `/login`（web + admin）把 on-demand 編譯的成本移到 setup 階段，
+兩者都用一次 90s 的截止時間。落地後 `admin-e2e.spec.ts`/
+`admin-analytics-e2e.spec.ts`（過去已知最容易撞這個症狀的兩支）在多輪全量
+中穩定通過。
+
+### 2. 既有 spec 依賴已過時的 mock 行為（已 root-cause，非本 story 範圍）
+
+**症狀**：固定 12 支 spec、每輪必定 3/3 皆敗（不隨 worker 數 / timeout 調整
+變化）。
+**根因**：這 12 支測試的斷言明文假設舊版 client-side mock `AuthClient`
+（session 只存在 `sessionStorage`，硬重整即遺失）；E03-S035 換成真實
+session cookie 後，行為變成硬重整仍保留登入狀態 —— 新行為才是對的，是舊測試
+前提過時，不是回歸。逐支列表與每支的 doc-comment 引用見
+`docs/stories/E03-S038.md`（AC1 小節）；是否要為這 12 支開一個「更新舊測試
+前提」的新 story，待使用者/coordinator 裁示，不在 E01-S027 允許修改清單內
+（本 story 禁止修改 spec 斷言）。
+
+### 3. CPU 飽和逾時（本 story 主要處理對象）
+
+**症狀**：`page.waitForURL` 或 `page.goto` 逾時，不固定發生在哪支 spec，
+且逾時前該操作本身邏輯正確（單獨重跑會過）。
+**根因量測**（`docs/stories/E01-S027.md` EVIDENCE 有完整 3 輪原始數據）：
+- **Round 1**（`workers: process.env.CI ? 2 : cpus/2` = 本機 4）：39 failed
+  / 18.7m。扣掉上述 12 支結構性失敗（36 個 instance），剩 `knowledge-ui-e2e.
+  spec.ts:62:5`（`page.waitForURL` 逾時）與 `smoke.spec.ts:50:5`
+  （見下方「延伸發現」）。
+- **Round 2**（`workers: cpus/4` = 本機 2）：36 failed / 29.0m —— 剩餘 flaky
+  全部消失（0/3），證實 CPU 飽和診斷正確，但單輪時間變成 1.49 倍，超出
+  AC4 的 ≤1.3 倍上限（此量測本身是否受競爭污染，待安靜環境複測，見下）。
+- **Round 3**（`workers` 改回 cpus/2，改對 `knowledge-ui-e2e.spec.ts:62:5`
+  與 `admin-analytics-e2e.spec.ts:44:5` 兩支個別加 `test.slow()`）：跑出
+  55 failed / 26.1m，遠差於 Round 1；但失敗模式完全不同 —— 分散在十幾支
+  「前兩輪從未失敗過」的 spec（含 `login.spec.ts` 自己），全部是單純
+  `page.goto: Test timeout of 30000ms exceeded`。跑完當下 `uptime` 顯示
+  load average 25+（機器僅 8 核）。**歸因（經 ai-km-e4 用 process cwd 核實
+  修正）**：主要 CPU 消耗並非本 fleet 其他 lane，而是**另一個完全不相關的
+  專案**（`na-wt/*`，nightmare-assault）同時平行跑多個 worktree 各自的
+  pytest 套件 —— `.e2e.lock` 只互斥本 repo 的 3000/3001/4100 三個 port，
+  不互斥 CPU，也管不到其他專案的行程。
+
+**落地設定**：`workers: process.env.CI ? 2 : Math.max(1, cpus/2)`（維持
+Round 1 的時間量級），對已知受害的 2 支測試個別加 `test.slow()`（三倍
+timeout 預算，只影響這 2 支，不拖慢其餘 811 個 instance）。
+
+**量測條件裁示（ai-km-e4，2026-08-29）**：AC1「N→0」與 AC4「≤1.3x」都必須
+在機器安靜（無其他專案／lane 的重負載行程）的條件下量測，並在 EVIDENCE
+記錄當時的 `uptime` load average —— 這不是放寬標準，是定義量測條件：flaky
+的性質是「測試本身不穩定」，在 3x 超載下量到的是「CPU 飢餓造成的逾時」，
+是另一個變數，任何 CI 也都在專用 runner 上量。已寫入
+`ROADMAP_TEMP.md`（commit b9cc02c）兩條新規則：(1) 持有 `.e2e.lock` 期間，
+本 fleet 其他 lane 暫停 build/`pnpm test`/全量 typecheck；(2)
+任何 flaky/效能相關 AC 的量測都要記錄 load average，只有安靜時的數字算數。
+**Round 4（安靜環境乾淨確認，2026-08-29）**：取鎖時 load average 24.11 →
+釋鎖前 12.49（8 核機器，1-min 仍有殘留波動，5-min/15-min 已恢復正常）。
+settled 設定下，本 story 鎖定的 2 支測試（`knowledge-ui-e2e.spec.ts:62:5`、
+`admin-analytics-e2e.spec.ts:44:5`）**全部 0/3**，時間 24.2m（1.24x
+baseline，在 AC4 的 ≤1.3x 內）。殘留 4 個失敗（`smoke.spec.ts:50:5` ×2 已知
+locator bug、`knowledge-ui-e2e.spec.ts:267:5` ×1 與
+`maintenance-history.spec.ts:68:5` ×1，後兩者精準落在同一個 `repeat2`，對應
+取鎖初期尚未完全降溫的窗口）詳見 `docs/stories/E01-S027.md`「AC1 最終
+解讀」。
+
+### 延伸發現：`smoke.spec.ts:50:5` 的潛在 locator bug（未修，非本 story 範圍）
+
+Round 1 於 3 輪中的 2 輪出現 strict-mode violation：
+`getByText("AI KM", { exact: true })` 同時命中 `.app-header-brand` 與
+Next.js 自動注入的 route announcer（`#__next-route-announcer__`，其
+`aria-live` 內容恰好也是 "AI KM"）。這不是逾時、也不是 CPU 競爭症狀，是
+`smoke.spec.ts:67` 這個 locator 本身不夠精確、在 route announcer 恰好還
+留著上一頁文字時才會撞到的既有 race。修正需要改動 spec 斷言（例如把
+locator 限定在 header 內），屬於「禁止修改 spec 斷言」的本 story 範圍外
+——記錄於此，留給日後處理 `smoke.spec.ts` 的 story 參考。

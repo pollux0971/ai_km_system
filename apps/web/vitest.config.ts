@@ -12,6 +12,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // E01-S022: next/font/local only works inside Next's own build pipeline — see
+      // src/test/next-font-local-mock.ts for why this needs a test-only stand-in.
+      "next/font/local": path.resolve(__dirname, "./src/test/next-font-local-mock.ts"),
     },
   },
 });

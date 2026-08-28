@@ -22,3 +22,4 @@ export * from "./loading";
 export * from "./error-message";
 export * from "./empty-state";
 export * from "./crash-fallback";
+export * from "./icon";

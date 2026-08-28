@@ -25,7 +25,7 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 32 | 24 | 0 | 0 | 0 | 8 |
+| E01 Application Shell & User Workspace | 32 | 24 | 0 | 2 | 0 | 6 |
 | E03 AI Conversation Experience | 46 | 38 | 0 | 4 | 0 | 4 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S055) | 16 | 15 | 0 | 0 | 0 | 1 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **228** | 205 | 0 | 8 | 1 | 14 |
+| **合計** | **228** | 205 | 0 | 10 | 1 | 12 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -64,7 +64,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S019 | approved | story/E01-S019-frontend-telemetry-hooks | [E01-S019.md](E01-S019.md) | 獨立審核 APPROVE(fresh gate 全綠,無 lockfile drift,scope 未逾界) |
 | E01-S020 | approved | story/E01-S020-e01-e2e-smoke-flow | [E01-S020.md](E01-S020.md) | 獨立審核 APPROVE(fresh gate 連兩輪全綠,無 flaky,scope 未逾界)——**E01 epic 全數 20/20 approved** |
 | E01-S021 | in-progress | story/E01-S021-m3-design-tokens | [E01-S021.md](E01-S021.md) | 實作完成、typecheck/lint/unit/build 全綠;E2E 專屬跑 259/271(繞開 E01-S032 的 turbo build race),12 個失敗皆為與本 story 無關的既有結構性問題,零與 M3 token 相關。**AC4 標記待 E01-S031(修正過時 spec)merge 後、且 E01-S032(turbo web:build/e2e:test 併發競爭修正)解決後,重跑完整 `pnpm test` 補證**;種子色 `#1e56a0` 已由使用者 2026-08-28 確認,非 ASSUMPTION。HARD 依賴:無;wave 0;`globals.css` 第一修改者。規格:[E01-S021.spec.md](specs/E01-S021.spec.md) |
-| E01-S022 | todo | — | — | 自託管字型（Noto Sans TC + Roboto）與 Material Symbols Outlined、`<Icon>`；HARD 依賴：無；wave 0；字型檔需使用者於本機自官方來源下載。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S022.spec.md](specs/E01-S022.spec.md) |
+| E01-S022 | in-progress | story/E01-S022-self-hosted-fonts-icons | [E01-S022.md](E01-S022.md) | 自託管字型(Noto Sans TC + Roboto)與 Material Symbols Outlined、`<Icon>`;AC1–3、5、6 綠(build/CDN 檢查、typecheck/lint、unit、Chrome CDP 字型驗證皆完成);AC4 的 264(現 271)E2E 最新實測 255/271,16 個失敗逐一分類:A 類 13 個是 E03-S035 真實 session 持久化帶來的正確行為變化(舊 spec 假設重整會登出已過時)、B 類 2 個已知 flaky、C 類 1 個新發現(route-announcer selector 碰撞)。三類皆與本 story 無關。**AC4 標記待 E01-S031 merge 後重跑補證**。使用者 2026-08-28 指示新增(語音輸入／持久化／跨視窗同步／M3 批次,導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)) 規格:[E01-S022.spec.md](specs/E01-S022.spec.md) |
 | E01-S023 | todo | — | — | App shell M3 化（navigation rail/drawer、top app bar、FAB、M3 list/menu）；HARD 依賴：E01-S021、E01-S022；wave 1；與 E03-S039 同動 sidebar/header，不可同時。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S023.spec.md](specs/E01-S023.spec.md) |
 | E01-S024 | todo | — | — | 首頁 M3 tiles（快速入口 card tiles、最近對話 list tiles）；HARD 依賴：E01-S021、E01-S022；wave 1；與 E03-S039 同動 recent-conversations，不可同時。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S024.spec.md](specs/E01-S024.spec.md) |
 | E01-S025 | todo | — | — | 其餘頁面 M3 一致性（knowledge/maintenance/ERP/profile/login）；HARD 依賴：E01-S021、E01-S022、E01-S023、E01-S024；wave 6；P2 可延後；`globals.css` 最後修改者。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E01-S025.spec.md](specs/E01-S025.spec.md) |

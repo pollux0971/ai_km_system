@@ -106,11 +106,18 @@
 
 /* ---------- M3 tokens: type scale ---------- */
 /* Values match packages/design-tokens/src/m3.ts `typescale` — cross-checked by test. */
-/* Font stack is the pre-existing system fallback; E01-S022 swaps in self-hosted Noto Sans TC + Roboto. */
+/*
+ * E01-S022 (ADR 0006): self-hosted Roboto + Noto Sans TC via next/font/local
+ * (see apps/web/src/app/layout.tsx) — Roboto first (Latin), Noto Sans TC as
+ * the Chinese fallback, then the system stack for anything neither covers.
+ * This is the single font-family root every --md-sys-typescale-*-font
+ * variable below derives from, so every M3 type scale (not just body text)
+ * picks up the self-hosted fonts.
+ */
 
 :root {
   --md-sys-typescale-font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+    var(--font-roboto), var(--font-noto-sans-tc), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   --md-sys-typescale-display-large-font: var(--md-sys-typescale-font-family);
   --md-sys-typescale-display-large-size: 57px;
@@ -219,6 +226,15 @@ body {
 
 body {
   font-family: var(--md-sys-typescale-body-large-font);
+  /*
+   * E01-S022 (ADR 0006): explicit, not incidental — Noto Sans TC's own
+   * variable-axis default is 100/Thin, so anything that inherits this rule
+   * without a more specific weight (headings/buttons already set their own)
+   * must not fall back to the font's own default, or Chinese text renders
+   * nearly invisible. See the --md-sys-typescale-font-family definition
+   * above for the actual self-hosted font stack this resolves to.
+   */
+  font-weight: 400;
   font-size: 15px;
   line-height: 1.65;
   background: var(--bg);

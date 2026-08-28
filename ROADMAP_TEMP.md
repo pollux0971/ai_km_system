@@ -313,12 +313,21 @@ apps/api:掛在 `/data/python/AI_KM/apps/api`(總指揮 checkout,內容 = main)�
 `/data/python/AI_KM-worktrees/.api-version`,跑 E2E 前比對:
 
 ```bash
-test "$(cat /data/python/AI_KM-worktrees/.api-version 2>/dev/null)" = "$(git rev-parse main)" \
-  && echo "API 版本相符" || echo "API 落後 — 回報總指揮重啟後再跑"
+API_VER=$(cat /data/python/AI_KM-worktrees/.api-version 2>/dev/null)
+if [ "$API_VER" != "$(git rev-parse main)" ]; then
+  BACKEND_DIFF=$(git diff --name-only "$API_VER" main -- apps/api services db contracts | head -1)
+  if [ -n "$BACKEND_DIFF" ]; then
+    echo "API 落後,且差異涉及後端 — 回報總指揮重啟後再跑"; exit 1
+  fi
+  echo "API 落後,但差異僅文件/前端 — 可繼續"
+fi
 ```
 
-不相符時**不要跑**,回報總指揮。若你的 story 完全不碰 `apps/api`/`services/*`,
-落後幾個 commit 通常無妨,但要自己判斷並在 EVIDENCE 說明。
+**不要死板比對 SHA**(W6 於 2026-08-28 指出並改良):總指揮會頻繁 commit
+`ROADMAP_TEMP.md` 與 `docs/`,若嚴格要求 SHA 相等,每次文件 commit 都會誤擋所有
+lane。正確判準是「`.api-version` 到 `main` 之間的差異**有沒有碰到後端**」
+(`apps/api`、`services`、`db`、`contracts`)——沒碰到就可以繼續,並在 EVIDENCE
+記錄這個判斷。
 
 跑任何 E2E 前先確認:
 

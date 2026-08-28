@@ -448,6 +448,27 @@ W1 一輪 32.8 分鐘的全量測試就是這樣被毀掉的(224 紅,連 `login.
 **E01-S027 的原始素材**:上述三支 spec 的逾時就是 W7 後續 E01-S027
 (E2E 穩定性強化、零 retries)要根治的對象。
 
+## 5-zeta. 🎯 單一收斂點:E01-S031
+
+**四個 story 的 AC 全部卡在同一批 12 支既有 E2E**,而它們已由 **E01-S031**
+(W1)統一處理:
+
+| Story | 卡住的 AC | 實測數字 |
+|---|---|---|
+| E03-S038(W7) | AC1 既有 264 零修改全綠 | 259/271 |
+| E01-S022(W1) | AC4 同上 | 255/271 |
+| E01-S021(W4) | AC4 同上 | 259/271 |
+| E01-S029(W6) | AC4 同上 | 266/279 |
+
+**三條 lane 獨立跑出完全相同的 12 支失敗**(W7 Round 4 逐支 `pass=0 fail=3`、
+W4 259/271、W6 以 CSP Report-Only vs 強制生效兩次對照失敗集合相同)。
+W1 的 255/271 多出的 3 支是 2 支已具名 flaky + 1 支 route-announcer selector
+碰撞,已另行記錄。
+
+**處理順序**:E01-S031 merge → 四個 story 各自重跑一次 → 轉 approved。
+在那之前它們的碼可以先 merge、狀態維持 `in-progress`,EVIDENCE 明確指向
+E01-S031(**不要寫「追蹤中」這種日後無法追溯的字眼**)。
+
 ## 5-bis. 待回補清單(不得因已 merge 就當完成)
 
 有數個 story 的 `Definition of Done` / `Evidence Required Before Done` 要求

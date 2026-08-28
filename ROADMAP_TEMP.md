@@ -530,14 +530,17 @@ PROGRESS.md 狀態不得標 `approved`,必須留在 `in-progress` 並在備註�
 
 | Story | 缺的證據 | 解鎖條件 | 狀態 |
 |---|---|---|---|
-| E03-S035 | AC5(L5)跨分頁 session 存活 E2E | **E03-S038**(W7) | 碼已 merge(349ec67),`in-progress` |
-| E03-S036 | AC6(L3)對真實 API 的最小 smoke | ~~E04-S041~~ ✅ **已於 6291c26 merge,無阻塞** | 開發中,可直接取證 |
-| E03-S037 | AC8(L3)對真實 API 的 smoke | **E04-S043**(W3,進行中) | 碼已 merge(7f79991),`in-progress` |
-| E03-S039 | AC7 | **E04-S044**(W3)+ **E03-S038**(W7) | 未開工;另因與 E01-S023/S024 檔案交集,須等 W4 先 merge |
-| E03-S041 | L3 真實 ASR 輸出 | **E12-S031** L3 → **E12-S030** → **使用者錄音** | 未開工 |
-| E03-S041 | 真實瀏覽器手動 demo + L3 真實 ASR(spec 綁在同一句)、AC10(L5) | **E12-S030** → **使用者錄音**;L5 需 **E03-S038** | 碼已 merge(b6f0844),`in-progress` |
-| E12-S031 | AC8 L3:對 E12-S030 真實 fixture 關鍵詞命中率 ≥80%,**1650 與 4070 各一次** | **E12-S030** → **使用者錄音**;**4070 使用者已確認目前沒有** → 該輪記 `BLOCKED_DEPENDENCY` | 碼已 merge(60dff4f),`in-progress` |
-| E12-S030 | AC6:1650 與 4070 **兩台皆需通過**才 Done;4070 若不可用記為 `BLOCKED_DEPENDENCY` 並附 1650 證據 | **使用者錄音**;**4070 使用者 2026-08-28 已確認目前沒有**,不得改成單機驗收 | 未開工 |
+| ~~E03-S035~~ | AC5(L5)跨分頁 session 存活 E2E | ~~E03-S038~~ | ✅ **已回補,approved** |
+| ~~E03-S036~~ | AC6(L3)對真實 API 的最小 smoke | ~~E04-S041~~ | ✅ **已回補,approved** |
+| ~~E03-S037~~ | AC8(L3)對真實 API 的 smoke | ~~E04-S043~~ | ✅ **已回補,approved** |
+| ~~E13-S020~~ | 5 支延後的 E2E | ~~種子資料~~ | ✅ **2026-08-29 補跑 8/8,approved** |
+| E03-S039 | AC7 | ~~E04-S044 + E03-S038~~ 皆已 approved | 🟡 W4 開發中,無外部阻塞 |
+| **E03-S041** | L3 真實 ASR 輸出;真實瀏覽器手動 demo;AC10(L5) | 🔴 **使用者錄音** | 碼已 merge(b6f0844),`in-progress` |
+| **E12-S030** | AC6:1650 與 4070 **兩台皆需通過**;4070 不可用時記 `BLOCKED_DEPENDENCY` 並附 1650 證據 | 🔴 **使用者錄音**;4070 使用者 2026-08-28 已確認沒有,**不得改成單機驗收** | `in-progress` |
+| **E12-S031** | AC8 L3:對 E12-S030 真實 fixture 關鍵詞命中率 ≥80%,1650 與 4070 各一次 | 🔴 **使用者錄音**;4070 記 `BLOCKED_DEPENDENCY` | 碼已 merge(60dff4f),`in-progress` |
+
+> **2026-08-29 更新**:前四列已全部回補完成。**清單上只剩錄音鏈那三條**
+> ——加上 HARD 依賴它們的 E03-S043、E03-S044,共 5 個 story。
 
 **掃描方法**(不要只 grep「不得標 Done」字面,會漏):對每個 spec 取
 `## Evidence Required Before Done` 與 `## Definition of Done` 兩節,找其中出現的

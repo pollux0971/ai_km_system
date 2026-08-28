@@ -17,3 +17,5 @@ allowBuilds:
   # arbitrary code" shape as esbuild above. Added by E04-S040 (apps/api's
   # SQLite persistence, ADR 0003 §2).
   better-sqlite3: true
+patchedDependencies:
+  '@material/material-color-utilities@0.4.0': patches/@material__material-color-utilities@0.4.0.patch

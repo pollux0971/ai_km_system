@@ -15,6 +15,7 @@
     "@ai-km/types": "workspace:*",
     "@ai-km/api-client": "workspace:*",
     "@ai-km/auth-client": "workspace:*",
+    "@ai-km/design-tokens": "workspace:*",
     "@ai-km/logger": "workspace:*",
     "@ai-km/permissions": "workspace:*",
     "@ai-km/validation": "workspace:*",

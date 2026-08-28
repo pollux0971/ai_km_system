@@ -5,12 +5,25 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./m3-theme.css": "./src/m3-theme.css"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src --ext .ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "lint": "eslint src scripts --ext .ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "generate": "tsx scripts/generate-m3-theme.ts",
+    "check": "tsx scripts/generate-m3-theme.ts --check"
   },
   "devDependencies": {
-    "typescript": "^5.7.0"
+    "@material/material-color-utilities": "^0.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
   }
 }

@@ -1,5 +1,6 @@
 /*
- * Enterprise UI foundation (ux/enterprise-polish).
+ * Enterprise UI foundation (ux/enterprise-polish), rebuilt on Material 3
+ * design tokens (E01-S021, ADR 0006).
  *
  * Design decisions:
  * - All colors flow through CSS custom properties so light/dark theming
@@ -12,80 +13,194 @@
  *   1500+ unit tests are structurally unaffected).
  * - Layout classes (.app-*, .sidebar-*, .chat-*) are consumed by the few
  *   shell/chat components that were edited to add classNames only.
+ * - `--md-sys-color-*` (light + dark) come from `m3-theme.css`, generated
+ *   by packages/design-tokens/scripts/generate-m3-theme.ts from a single
+ *   seed color — see docs/design/m3-tokens.md. The legacy `--primary`,
+ *   `--bg`, `--surface`... variables below are now aliases (`var(...)`)
+ *   onto M3 roles, not literal colors, so this file has no dark-mode
+ *   override block for them: a `var()` alias re-resolves automatically
+ *   when `--md-sys-color-*` flips under `prefers-color-scheme: dark`.
  */
 
-/* ---------- design tokens ---------- */
+@import "@ai-km/design-tokens/m3-theme.css";
+
+/* ---------- design tokens: legacy variables mapped onto M3 roles ---------- */
 
 :root {
   color-scheme: light;
 
-  --bg: #f4f6f9;
-  --surface: #ffffff;
-  --surface-2: #f0f3f7;
-  --text: #1c2735;
-  --text-muted: #5c6b7e;
-  --border: #d9e0e8;
-  --border-strong: #b9c4d1;
+  --bg: var(--md-sys-color-surface);
+  --surface: var(--md-sys-color-surface-container-lowest);
+  --surface-2: var(--md-sys-color-surface-container);
+  --text: var(--md-sys-color-on-surface);
+  --text-muted: var(--md-sys-color-on-surface-variant);
+  --border: var(--md-sys-color-outline-variant);
+  --border-strong: var(--md-sys-color-outline);
 
-  --primary: #1e56a0;
-  --primary-hover: #174a8d;
-  --primary-active: #123e77;
-  --primary-soft: #e8f0fa;
-  --on-primary: #ffffff;
+  --primary: var(--md-sys-color-primary);
+  /* Hover/pressed = primary + on-primary state-layer overlay (--md-sys-state-*-opacity). */
+  --primary-hover: color-mix(in srgb, var(--md-sys-color-primary) 92%, var(--md-sys-color-on-primary) 8%);
+  --primary-active: color-mix(in srgb, var(--md-sys-color-primary) 90%, var(--md-sys-color-on-primary) 10%);
+  --primary-soft: var(--md-sys-color-primary-container);
+  --on-primary: var(--md-sys-color-on-primary);
 
-  --danger: #c62828;
-  --danger-soft: #fdecea;
-  --success: #2e7d32;
+  --danger: var(--md-sys-color-error);
+  --danger-soft: var(--md-sys-color-error-container);
+  /* M3 baseline has no semantic "success" role; tertiary is the reused accent — see m3-tokens.md. */
+  --success: var(--md-sys-color-tertiary);
 
-  --sidebar-bg: #16233a;
-  --sidebar-text: #c7d2e2;
-  --sidebar-text-strong: #f2f6fb;
-  --sidebar-hover: rgba(255, 255, 255, 0.07);
-  --sidebar-active: rgba(255, 255, 255, 0.14);
-  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-bg: var(--md-sys-color-surface-container-high);
+  --sidebar-text: var(--md-sys-color-on-surface-variant);
+  --sidebar-text-strong: var(--md-sys-color-on-surface);
+  --sidebar-hover: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+  --sidebar-active: var(--md-sys-color-secondary-container);
+  --sidebar-active-text: var(--md-sys-color-on-secondary-container);
+  --sidebar-border: var(--md-sys-color-outline-variant);
 
-  --ring: rgba(30, 86, 160, 0.45);
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.1);
+  --ring: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
+  --shadow-sm: var(--md-sys-elevation-level1);
+  --shadow-md: var(--md-sys-elevation-level3);
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-sm: var(--md-sys-shape-corner-small);
+  --radius-md: var(--md-sys-shape-corner-medium);
+  --radius-lg: var(--md-sys-shape-corner-large);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-
-    --bg: #0f1420;
-    --surface: #1a2231;
-    --surface-2: #223047;
-    --text: #e6ebf2;
-    --text-muted: #97a5b8;
-    --border: #2d3a52;
-    --border-strong: #40506e;
-
-    --primary: #7fb0ea;
-    --primary-hover: #97c0f0;
-    --primary-active: #6ea2e2;
-    --primary-soft: #1d2c44;
-    --on-primary: #0f1420;
-
-    --danger: #ef7a72;
-    --danger-soft: #3a2020;
-    --success: #7fc784;
-
-    --sidebar-bg: #131a29;
-    --sidebar-text: #aab7c9;
-    --sidebar-text-strong: #eef3f9;
-    --sidebar-hover: rgba(255, 255, 255, 0.06);
-    --sidebar-active: rgba(255, 255, 255, 0.12);
-    --sidebar-border: rgba(255, 255, 255, 0.08);
-
-    --ring: rgba(127, 176, 234, 0.5);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
   }
+}
+
+/* ---------- M3 tokens: shape, elevation, state layer, motion ---------- */
+
+:root {
+  --md-sys-shape-corner-none: 0px;
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 9999px;
+
+  --md-sys-elevation-level0: none;
+  --md-sys-elevation-level1: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level2: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 2px 6px 2px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level3: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level4: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 6px 10px 4px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level5: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 8px 12px 6px rgba(0, 0, 0, 0.15);
+
+  /* Values match packages/design-tokens/src/m3.ts `stateLayer` — cross-checked by test. */
+  --md-sys-state-hover-opacity: 0.08;
+  --md-sys-state-focus-opacity: 0.1;
+  --md-sys-state-pressed-opacity: 0.1;
+  --md-sys-state-dragged-opacity: 0.16;
+
+  /* Values match packages/design-tokens/src/m3.ts `motion` — cross-checked by test. */
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --md-sys-motion-duration-short: 150ms;
+  --md-sys-motion-duration-medium: 300ms;
+  --md-sys-motion-duration-long: 500ms;
+}
+
+/* ---------- M3 tokens: type scale ---------- */
+/* Values match packages/design-tokens/src/m3.ts `typescale` — cross-checked by test. */
+/* Font stack is the pre-existing system fallback; E01-S022 swaps in self-hosted Noto Sans TC + Roboto. */
+
+:root {
+  --md-sys-typescale-font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+
+  --md-sys-typescale-display-large-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-display-large-size: 57px;
+  --md-sys-typescale-display-large-line-height: 64px;
+  --md-sys-typescale-display-large-weight: 400;
+  --md-sys-typescale-display-large-tracking: -0.25px;
+
+  --md-sys-typescale-display-medium-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-display-medium-size: 45px;
+  --md-sys-typescale-display-medium-line-height: 52px;
+  --md-sys-typescale-display-medium-weight: 400;
+  --md-sys-typescale-display-medium-tracking: 0px;
+
+  --md-sys-typescale-display-small-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-display-small-size: 36px;
+  --md-sys-typescale-display-small-line-height: 44px;
+  --md-sys-typescale-display-small-weight: 400;
+  --md-sys-typescale-display-small-tracking: 0px;
+
+  --md-sys-typescale-headline-large-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-headline-large-size: 32px;
+  --md-sys-typescale-headline-large-line-height: 40px;
+  --md-sys-typescale-headline-large-weight: 400;
+  --md-sys-typescale-headline-large-tracking: 0px;
+
+  --md-sys-typescale-headline-medium-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-headline-medium-size: 28px;
+  --md-sys-typescale-headline-medium-line-height: 36px;
+  --md-sys-typescale-headline-medium-weight: 400;
+  --md-sys-typescale-headline-medium-tracking: 0px;
+
+  --md-sys-typescale-headline-small-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-headline-small-size: 24px;
+  --md-sys-typescale-headline-small-line-height: 32px;
+  --md-sys-typescale-headline-small-weight: 400;
+  --md-sys-typescale-headline-small-tracking: 0px;
+
+  --md-sys-typescale-title-large-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-title-large-size: 22px;
+  --md-sys-typescale-title-large-line-height: 28px;
+  --md-sys-typescale-title-large-weight: 400;
+  --md-sys-typescale-title-large-tracking: 0px;
+
+  --md-sys-typescale-title-medium-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-title-medium-size: 16px;
+  --md-sys-typescale-title-medium-line-height: 24px;
+  --md-sys-typescale-title-medium-weight: 500;
+  --md-sys-typescale-title-medium-tracking: 0.15px;
+
+  --md-sys-typescale-title-small-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-title-small-size: 14px;
+  --md-sys-typescale-title-small-line-height: 20px;
+  --md-sys-typescale-title-small-weight: 500;
+  --md-sys-typescale-title-small-tracking: 0.1px;
+
+  --md-sys-typescale-body-large-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-body-large-size: 16px;
+  --md-sys-typescale-body-large-line-height: 24px;
+  --md-sys-typescale-body-large-weight: 400;
+  --md-sys-typescale-body-large-tracking: 0.5px;
+
+  --md-sys-typescale-body-medium-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-body-medium-size: 14px;
+  --md-sys-typescale-body-medium-line-height: 20px;
+  --md-sys-typescale-body-medium-weight: 400;
+  --md-sys-typescale-body-medium-tracking: 0.25px;
+
+  --md-sys-typescale-body-small-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-body-small-size: 12px;
+  --md-sys-typescale-body-small-line-height: 16px;
+  --md-sys-typescale-body-small-weight: 400;
+  --md-sys-typescale-body-small-tracking: 0.4px;
+
+  --md-sys-typescale-label-large-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-label-large-size: 14px;
+  --md-sys-typescale-label-large-line-height: 20px;
+  --md-sys-typescale-label-large-weight: 500;
+  --md-sys-typescale-label-large-tracking: 0.1px;
+
+  --md-sys-typescale-label-medium-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-label-medium-size: 12px;
+  --md-sys-typescale-label-medium-line-height: 16px;
+  --md-sys-typescale-label-medium-weight: 500;
+  --md-sys-typescale-label-medium-tracking: 0.5px;
+
+  --md-sys-typescale-label-small-font: var(--md-sys-typescale-font-family);
+  --md-sys-typescale-label-small-size: 11px;
+  --md-sys-typescale-label-small-line-height: 16px;
+  --md-sys-typescale-label-small-weight: 500;
+  --md-sys-typescale-label-small-tracking: 0.5px;
 }
 
 /* ---------- reset & base ---------- */
@@ -103,13 +218,7 @@ body {
 }
 
 body {
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Noto Sans TC",
-    sans-serif;
+  font-family: var(--md-sys-typescale-body-large-font);
   font-size: 15px;
   line-height: 1.65;
   background: var(--bg);
@@ -379,7 +488,7 @@ th {
   display: block;
   text-align: center;
   background: var(--primary);
-  color: #ffffff;
+  color: var(--on-primary);
   font-weight: 600;
   font-size: 0.92rem;
   border-radius: var(--radius-sm);
@@ -415,7 +524,7 @@ th {
 
 .app-sidebar nav a[aria-current="page"] {
   background: var(--sidebar-active);
-  color: var(--sidebar-text-strong);
+  color: var(--sidebar-active-text);
   font-weight: 600;
 }
 
@@ -469,7 +578,7 @@ th {
 
 .sidebar-history a[aria-current="page"] {
   background: var(--sidebar-active);
-  color: var(--sidebar-text-strong);
+  color: var(--sidebar-active-text);
   font-weight: 600;
 }
 

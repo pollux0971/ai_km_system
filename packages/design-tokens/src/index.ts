@@ -16,3 +16,9 @@ export const spacing = {
   lg: "24px",
   xl: "32px",
 } as const;
+
+export { m3, typescale, shape, elevation, stateLayer, motion } from "./m3";
+export type { TypescaleStyle, TypescaleKey } from "./m3";
+export { M3_COLOR_ROLES, M3_CONTRAST_PAIRS, cssVarForRole } from "./m3-roles";
+export type { M3ColorRole } from "./m3-roles";
+export { contrastRatio, relativeLuminance, hexToRgb } from "./contrast";

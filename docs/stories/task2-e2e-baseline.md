@@ -73,10 +73,13 @@ process is not them. ...
 `playwright.config.ts` 目前定義的全部 project、無任何 `--project`/`--grep`
 過濾。這是目前 main 這個 commit 下 `tests/e2e/specs/*.spec.ts` 的完整既有
 集合（不含本次不存在的任何新增/skip）。與同一天稍早 `ai-km-f9` 的
-256/256、`ai-km-2c` 的 328/330 對不上，判斷純粹是不同 commit 下的測試
-總數自然成長（E03-S039/E01-S031/E01-S033 等多個 story 陸續新增測試），
-不是 project 選擇不同——本次是唯一一次在同一個 commit 上連續兩輪、且
-明確記錄涵蓋範圍的量測。
+256/256、`ai-km-2c` 的 328/330 對不上：**分母差異已由 `ai-km-aa` 獨立審核
+E03-S039 時查證**——`ai-km-f9` 的 256/256 是 `--project=web` 單一
+project（該 story 不碰 apps/admin，範圍選擇合理，非稀釋分母）；跟
+`ai-km-2c`/本次的三 project 合計（web+setup+admin）本來就不是同一個
+分母，不需要用「測試總數自然成長」解釋。本次仍是目前唯一一次在同一個
+commit 上連續兩輪、且明確記錄三 project 全涵蓋範圍的量測，可作為最終
+基準線引用。
 
 ### Round 2 的 1 個新失敗
 

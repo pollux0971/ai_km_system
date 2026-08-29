@@ -23,12 +23,22 @@ function resolveApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
 }
 
-interface ConversationEventsContextValue {
+interface SubscribeContextValue {
   subscribe(handler: (event: ConversationEvent) => void): () => void;
-  status: ConnectionStatus;
 }
 
-const ConversationEventsContext = createContext<ConversationEventsContextValue | null>(null);
+/**
+ * Split into two contexts deliberately. `subscribe`'s identity is stable
+ * for the whole component lifetime (recreated only if `activeSource`
+ * itself changes, which happens once — see the provider below), so
+ * `useConversationEvents` never needs to tear down and resubscribe on
+ * every connection-status flicker. `status` changes far more often
+ * (connecting → open, and on any reconnect) and re-renders only whoever
+ * actually reads it (`useConversationConnectionStatus`, i.e. the
+ * header's indicator) — not every `useConversationEvents` consumer.
+ */
+const SubscribeContext = createContext<SubscribeContextValue | null>(null);
+const StatusContext = createContext<ConnectionStatus | null>(null);
 
 /**
  * E03-S039. Mounted once, inside `(app)/session-gate.tsx`'s authenticated
@@ -37,34 +47,49 @@ const ConversationEventsContext = createContext<ConversationEventsContextValue |
  * it via the cleanup below, satisfying the Security AC that a logged-out
  * tab must stop receiving events.
  *
- * `source` is an escape hatch for tests only (an injected
- * `ConversationEventSourceLike`, see conversation-events-context.test.tsx)
- * — production code never passes it, so `createConversationEventSource`
- * runs against a real `EventSource`. Lazy `useState` initializer: created
- * exactly once per mount regardless of re-renders, never recreated even if
- * a later render passes a different `source` (irrelevant in production,
- * where the prop is never passed at all).
+ * The real `EventSource` is created inside a `useEffect`, NOT a lazy
+ * `useState` initializer. An earlier version of this file used
+ * `useState(() => source ?? createConversationEventSource(...))` on the
+ * (reasonable-looking) theory that a lazy initializer runs "exactly once
+ * per mount." That is true for the STATE React keeps, but React 18
+ * StrictMode's development-only double-invocation of lazy initializers
+ * has NO cleanup guarantee between the two calls — unlike effects, which
+ * are specifically double-invoked as mount → cleanup → mount. Since
+ * `createConversationEventSource` has a real side effect (opening a
+ * network connection), the lazy-initializer version silently opened TWO
+ * independent `EventSource` connections per page in dev mode, kept only
+ * one as React state, and leaked the other forever, live, never
+ * subscribed to — found via `.e2e.owner`-style deliberate reproduction:
+ * an event-arrival log showed `handlerCount: 0` for one connection while
+ * the (correctly subscribed) other connection received the exact same
+ * event moments apart. `useEffect` gets StrictMode's cleanup-in-between
+ * guarantee for free, which is exactly what side-effecting setup needs.
  */
 export function ConversationEventsProvider({ children, source }: { children: ReactNode; source?: ConversationEventSourceLike }) {
-  const [activeSource] = useState<ConversationEventSourceLike>(
-    () => source ?? createConversationEventSource({ url: `${resolveApiBaseUrl()}/conversations/events` }),
-  );
-  const [status, setStatus] = useState<ConnectionStatus>(() => activeSource.status());
+  const [activeSource, setActiveSource] = useState<ConversationEventSourceLike | null>(null);
+  const [status, setStatus] = useState<ConnectionStatus | null>(null);
 
   useEffect(() => {
-    const unsubscribe = activeSource.onStatusChange(setStatus);
+    const instance = source ?? createConversationEventSource({ url: `${resolveApiBaseUrl()}/conversations/events` });
+    setActiveSource(instance);
+    setStatus(instance.status());
+    const unsubscribeStatus = instance.onStatusChange(setStatus);
     return () => {
-      unsubscribe();
-      activeSource.close();
+      unsubscribeStatus();
+      instance.close();
     };
-  }, [activeSource]);
+  }, [source]);
 
-  const value = useMemo<ConversationEventsContextValue>(
-    () => ({ subscribe: (handler: (event: ConversationEvent) => void) => activeSource.subscribe(handler), status }),
-    [activeSource, status],
+  const subscribeValue = useMemo<SubscribeContextValue | null>(
+    () => (activeSource ? { subscribe: (handler: (event: ConversationEvent) => void) => activeSource.subscribe(handler) } : null),
+    [activeSource],
   );
 
-  return <ConversationEventsContext.Provider value={value}>{children}</ConversationEventsContext.Provider>;
+  return (
+    <SubscribeContext.Provider value={subscribeValue}>
+      <StatusContext.Provider value={status}>{children}</StatusContext.Provider>
+    </SubscribeContext.Provider>
+  );
 }
 
 /**
@@ -77,20 +102,27 @@ export function ConversationEventsProvider({ children, source }: { children: Rea
  * component alone) this is a silent no-op, not a throw — every one of the
  * 5 consumer components already has its own pre-existing tests that don't
  * wrap in this provider, and those must keep passing unmodified.
+ *
+ * `context` is included in the effect's own dependency list ALONGSIDE the
+ * caller's `deps` (not just `deps` alone) — the provider's `subscribe`
+ * context starts `null` and only becomes non-null once its own effect has
+ * run (see `ConversationEventsProvider` above), so a consumer mounted in
+ * the same tick must react to that context becoming available even when
+ * its own `deps` never change after mount; omitting `context` here would
+ * mean the very first (null-context) run permanently skips subscribing.
  */
 export function useConversationEvents(handler: (event: ConversationEvent) => void, deps: DependencyList): void {
-  const context = useContext(ConversationEventsContext);
+  const context = useContext(SubscribeContext);
   useEffect(() => {
     if (!context) return undefined;
     return context.subscribe(handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `deps` is the caller's own dependency list, exactly like useEffect's second argument.
-  }, deps);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `deps` is the caller's own dependency list, exactly like useEffect's second argument; `context` is added deliberately, see doc comment above.
+  }, [context, ...deps]);
 }
 
-/** Reactive connection status for the header's sync indicator. `null` outside any provider. */
+/** Reactive connection status for the header's sync indicator. `null` outside any provider (or before the provider's own effect has run). */
 export function useConversationConnectionStatus(): ConnectionStatus | null {
-  const context = useContext(ConversationEventsContext);
-  return context ? context.status : null;
+  return useContext(StatusContext);
 }
 
 /** True when `event.originClientId` names this tab's own client id — AC3's "own-tab event, skip refetch" check. */

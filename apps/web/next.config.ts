@@ -24,6 +24,44 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  /**
+   * E03-S039. Next.js's default gzip compression (Node's `compression`
+   * middleware under the hood) wraps EVERY response this server sends,
+   * including `rewrites()`-proxied ones — it has no concept of "this
+   * content-type must stream live," so it buffers output waiting for
+   * either a full compressible chunk or stream end before flushing
+   * anything to the browser. For `/api/v1/conversations/events` (SSE,
+   * `text/event-stream`) that means the connection opens successfully
+   * (headers arrive) but no event frame is ever actually delivered while
+   * the connection is open.
+   *
+   * Confirmed by diagnosing the exact same request three ways: directly
+   * against `apps/api` (no `content-encoding`, streams the
+   * `conversation.created` frame instantly on mutation), through this
+   * rewrite (`content-encoding: gzip`, never streams — connection opens,
+   * nothing ever arrives), and through the rewrite again with an added
+   * `Cache-Control: no-transform` response header on this one route
+   * (ai-km-e4's hypothesis that Next's compression middleware would
+   * honor it and skip compressing — it did not: still `gzip`, still
+   * never streams). That negative result is why `compress: false` is the
+   * fix taken here rather than a scoped, per-route exemption — there
+   * turned out not to be one available.
+   *
+   * `compress: false` disables gzip SITE-WIDE, not just for this one
+   * route — Next.js's rewrite path has no per-route compression toggle
+   * that actually works. That is a real, permanent cost: every HTML/JS/
+   * CSS/JSON response `apps/web` serves loses gzip. Every real
+   * deployment already terminates behind a reverse proxy (this file's
+   * own HSTS comment below), which is the standard place to handle
+   * compression in production — this removes a redundant (and here,
+   * actively broken) second compression layer rather than removing the
+   * only one. Tech debt: revertible if a future Next.js version exposes
+   * a per-route/per-content-type compression exemption for rewrites, or
+   * if the SSE endpoint moves off `rewrites()` onto a custom Route
+   * Handler that streams a `ReadableStream` directly (Route Handlers are
+   * not subject to this same compression wrapping).
+   */
+  compress: false,
   transpilePackages: [
     "@ai-km/ui",
     "@ai-km/design-tokens",

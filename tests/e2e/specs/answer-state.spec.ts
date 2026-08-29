@@ -75,7 +75,20 @@ test("E03-S021: NO_EVIDENCE trigger replaces the reply with fallback content and
   // E03-S30 corrected this fallback sentence to match SOURCE_BASELINE.md's
   // own quoted («»-marked) display text for this state (line 1251) —
   // see lib/answer-state.ts's own doc comment for the full story.
-  await expect(page.getByText("找不到足夠企業資料支持此答案", { exact: false })).toBeVisible();
+  //
+  // E03-S039 FIX (self-review, narrow test-selector correction -- see
+  // this story's EVIDENCE): scoped to <main>, matching line 74 right
+  // above it. Before this story, the sidebar's history-item preview
+  // only ever showed a STALE snapshot (it refetched on navigation only),
+  // so this substring could never appear there while still on this same
+  // page. Now that the sidebar refetches live on `conversation.updated`
+  // (this story's own AC2/AC5), a reply whose content matches this exact
+  // substring shows up in BOTH the thread AND the sidebar's now-current
+  // preview at the same time, making the previously-safe unscoped
+  // getByText ambiguous (Playwright's strict mode: 2 elements). This is
+  // the identical, already-established hazard this file's own line 74
+  // was already written to avoid -- not a new one invented here.
+  await expect(page.getByRole("main").getByText("找不到足夠企業資料支持此答案", { exact: false })).toBeVisible();
   // The normal fixed mock reply text must NOT appear — content was
   // replaced outright, not appended alongside it.
   await expect(page.getByText("模擬回覆）這是前端展示用的固定文字", { exact: false })).toHaveCount(0);

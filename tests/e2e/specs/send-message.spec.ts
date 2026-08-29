@@ -62,12 +62,29 @@ test("E03-S009: sending a message updates the conversation list's preview", asyn
 
   await page.getByLabel("訊息").fill("這則會成為新的預覽文字");
   await page.getByRole("button", { name: "送出" }).click();
-  await expect(page.getByText("這則會成為新的預覽文字")).toBeVisible();
+  // E03-S047: scoped to the message thread itself (`<ul aria-label="對話
+  // 串">`, message-thread.tsx) — this assertion is about the message
+  // landing in the thread, not about the sidebar's "歷史對話" nav, which
+  // persists across every (app) page and starts showing the same text in
+  // its own preview line the moment the parent conversation's
+  // lastMessagePreview updates (sidebar.tsx:119). An unscoped getByText
+  // here raced the sidebar exactly like the unscoped one below did.
+  await expect(page.getByRole("list", { name: "對話串" }).getByText("這則會成為新的預覽文字")).toBeVisible();
 
   await sidebarNav(page).getByRole("link", { name: "對話" }).click();
   await page.waitForURL((url) => url.pathname === "/conversations");
 
-  await expect(page.getByText("這則會成為新的預覽文字")).toBeVisible();
+  // E03-S047: scoped to <main> — same disambiguation openConversation()
+  // above already relies on (line 26) to tell the page's own conversation
+  // list apart from the sidebar's "歷史對話" nav, which is outside <main>
+  // and, on this exact page, shows this exact conversation's preview too.
+  // This is the assertion the test is actually named for: the *list's*
+  // preview (conversation-list.tsx's own `<span>{item.lastMessagePreview}</span>`),
+  // not the sidebar's. Unscoped, this used to be a race — it passed only
+  // when the sidebar's own preview hadn't updated yet (1 match instead of
+  // 2), which is backwards from what the test claims to verify; see
+  // docs/stories/E03-S047.md.
+  await expect(page.getByRole("main").getByText("這則會成為新的預覽文字")).toBeVisible();
 });
 
 test("E03-S009: an attachment-only message (no text) can be sent", async ({ page }) => {

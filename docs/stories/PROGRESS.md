@@ -26,7 +26,7 @@ mock 也做不了才標 `blocked-team-b`。
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
 | E01 Application Shell & User Workspace | 33 | 32 | 0 | 1 | 0 | 0 |
-| E03 AI Conversation Experience | 47 | 41 | 3 | 1 | 0 | 2 |
+| E03 AI Conversation Experience | 47 | 42 | 2 | 1 | 0 | 2 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(僅追蹤使用者增補 E04-S037～S056) | 18 | 16 | 0 | 0 | 0 | 2 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(僅追蹤使用者增補 E12-S029～S031) | 3 | 1 | 0 | 2 | 0 | 0 |
-| **合計** | **232** | 220 | 3 | 4 | 1 | 4 |
+| **合計** | **232** | 221 | 2 | 4 | 1 | 4 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -127,7 +127,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E03-S044 | todo | — | — | 語音＋持久化＋跨視窗同步 E2E（真實 api、fake ASR、假麥克風；真實 ASR 為 L3 手動證據）；HARD 依賴：E03-S038、E03-S039、E03-S041、E03-S043、E04-S044、E12-S031；wave 7；本批最後一個。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E03-S044.spec.md](specs/E03-S044.spec.md) |
 | E03-S045 | approved | `story/E03-S045-simulation-trigger-flag` | [E03-S045.md](E03-S045.md) | 模擬觸發字串 feature flag 閘門（production 預設關閉，E2E 開啟，既有測試零修改）；HARD 依賴：E03-S041、E03-S038；wave D2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)）。`mock_triggers` flag 閘門 4 個檔案的 8 個觸發；開發過程中發現並修正既有 `isFeatureEnabled()` bug（動態 `process.env[key]` 存取在瀏覽器裡從未被 Next.js 靜態內嵌，`sso`/`voice_input` 兩個既有 flag 的 env override 同樣受影響，只是預設值掩蓋了症狀）。E2E 3 輪誠實記錄：v1 發現 bug、v2（load 41 超載）確認修正生效但雜訊多、v3（乾淨環境）308/314 通過，29 個觸發相關測試零失敗，剩餘 6 個失敗為既有 CPU 競爭訊號與本 story 無關。規格：[E03-S045.spec.md](specs/E03-S045.spec.md) |
 | E03-S046 | approved | `story/E03-S046-conversations-page-size` | [E03-S046.md](E03-S046.md) | `CONVERSATIONS_PAGE_SIZE` 設定化（production 20，E2E env 2）；HARD 依賴：E03-S036、E03-S038；wave D2；P2。使用者 2026-08-28 指示新增（技術債／空殼修復批次，稽核見 [docs/architecture/tech-debt-audit-2026-08-28.md](../architecture/tech-debt-audit-2026-08-28.md)）。`readPageSize()` 設定化 + 8 個單元測試；單輪全量 264/277 通過，13 個失敗全對應既有已知問題（12 結構性 + 1 個間歇性 locator bug），零新增回歸；AC3 用獨立 scratch port 的真實後端＋前端＋Playwright headless Chromium 驗證 production 預設值 20（24 筆對話、第 1 頁精準 20 筆，截圖存證）。規格：[E03-S046.spec.md](specs/E03-S046.spec.md) |
-| E03-S047 | done | story/E03-S047-send-message-preview-test-fix | [E03-S047.md](E03-S047.md) | `send-message.spec.ts` 的「sending a message updates the conversation list's preview」兩個未 scope 的 `getByText` 各自改為明確 scope:第 1 個(送出後)scope 到訊息串本身(`page.getByRole("list", { name: "對話串" })`),第 2 個(導覽到 `/conversations` 後)scope 到 `<main>`(對話列表自己的預覽,沿用本檔案既有的 sidebar/main 消歧義先例)。AC2 修正前後各一次安靜機器 `--repeat-each=3`:修正前 12 實例 2 失敗(引用 E01-S022 已記錄的實測)、修正後兩輪皆 12/12 全過。AC3 兩個斷言各自獨立做非空洞性驗證(暫時換成不存在字串確認會紅,已改回)。未觸碰任何 production 程式碼(`sidebar.tsx:119` 渲染預覽是 E03-S009 的正確行為)。解除 `E01-S022` 的 AC4 阻塞。規格:[E03-S047.spec.md](specs/E03-S047.spec.md)。 **2026-08-29 審核稽核降級**:本 story 自己的規格 DoD **明文要求**「`/story-review` 通過後 merge 回 main」,實際只做了 Phase 5 SELF-REVIEW。**成因是總指揮的協調失誤**——已告知 `ai-km-a4` 要審,卻沒告知作者要等。`ai-km-a4` 審核中。 |
+| E03-S047 | approved | story/E03-S047-send-message-preview-test-fix | [E03-S047.md](E03-S047.md) | `send-message.spec.ts` 的「sending a message updates the conversation list's preview」兩個未 scope 的 `getByText` 各自改為明確 scope:第 1 個(送出後)scope 到訊息串本身(`page.getByRole("list", { name: "對話串" })`),第 2 個(導覽到 `/conversations` 後)scope 到 `<main>`(對話列表自己的預覽,沿用本檔案既有的 sidebar/main 消歧義先例)。AC2 修正前後各一次安靜機器 `--repeat-each=3`:修正前 12 實例 2 失敗(引用 E01-S022 已記錄的實測)、修正後兩輪皆 12/12 全過。AC3 兩個斷言各自獨立做非空洞性驗證(暫時換成不存在字串確認會紅,已改回)。未觸碰任何 production 程式碼(`sidebar.tsx:119` 渲染預覽是 E03-S009 的正確行為)。解除 `E01-S022` 的 AC4 阻塞。規格:[E03-S047.spec.md](specs/E03-S047.spec.md)。 **2026-08-29 審核稽核降級**:本 story 自己的規格 DoD **明文要求**「`/story-review` 通過後 merge 回 main」,實際只做了 Phase 5 SELF-REVIEW。**成因是總指揮的協調失誤**——已告知 `ai-km-a4` 要審,卻沒告知作者要等。`ai-km-a4` 審核中。 **2026-08-29 補做獨立審核 APPROVE + 1 MINOR**(`ai-km-a4`,非作者)。逐源碼確認(未採信 EVIDENCE 宣稱):`<ul aria-label="對話串">` 是 `apps/web/src` 全域唯一出現,斷言 1 的 scope 無歧義;`/conversations` 的 `<main>` 只含頁首與 `ConversationList`,sidebar 在 `app-shell.tsx` 是 `<main>` 的兄弟節點,且 `role-guard.tsx` 只在**拒絕**路徑包自己的 `<main>`(`demo-user` 有權限時是純 passthrough),**無巢狀 `<main>` 讓斷言 2 變歧義的風險**——意圖確實保留。AC2 的「修正前」引用經 diff 核對:E01-S022 引用的 base commit 與本修正的實際 parent 之間,**沒有任何可能影響這個競速的檔案有變動**,引用成立。AC3 確為兩個各自獨立的非空洞性驗證(locator/錯誤訊息各異),非一個推廣到兩個。**MINOR(不改判定)**:審核者自行重跑 4 輪,Run A 為 11/12——但失敗簽章**不同**(`element(s) not found`/0 命中,而非原缺陷的 `strict mode violation`/2 命中);Run B/C 12/12,Run D 單獨跑該測試 `--repeat-each=10` 為 10/10 且 webServer log 的 `ECONNRESET` 雜訊完全消失。判定:**目標缺陷已徹底修好(該斷言 46 個實例零重現)**,殘留為 `fullyParallel` 下同檔測試併發的既有競爭(同 E01-S027 已記錄的 CPU 競爭類別),非部分修復。**EVIDENCE 的「12/12 兩次」宣稱應加一行誠實修正**(見備註)。 |
 
 ## E05 Knowledge Management Experience(31)
 

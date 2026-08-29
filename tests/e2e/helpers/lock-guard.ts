@@ -85,6 +85,22 @@ export interface LockGuardOptions {
  * `AI_KM_E2E_LOCK_TOKEN` to everything it spawns) sidesteps that trap
  * entirely — the holder always exits early here, before ever reaching a
  * probe that would otherwise misreport its own hold as someone else's.
+ *
+ * **Deliberately NOT exempted: `playwright test --list`.** It's read-only
+ * and binds no port, so blocking it while someone else holds the lock costs
+ * a diagnostic and buys nothing — a real argument existed for special-casing
+ * it. Decided against, on purpose, for three reasons: (1) at
+ * `playwright.config.ts` module-eval time there is no reliable, official
+ * signal for "this is list mode" short of parsing `process.argv`, which is
+ * fragile against future Playwright flag changes and would silently stop
+ * working; (2) a list of "harmless flag" exemptions is exactly the kind of
+ * special-case pile this story exists to prevent — see the `.e2e.owner`
+ * history above; (3) the workaround cost of not exempting it is small
+ * (check `.e2e.owner`, ask the holder, or wait). If this is ever
+ * revisited, the right discriminator is "does this invocation start a
+ * webServer / bind a port," not a flag whitelist — and only once that can
+ * be determined reliably, not via argv-sniffing. See
+ * docs/stories/E04-S057.md, "刻意決定不做的事" for the full writeup.
  */
 export function assertNotBlockingLockHolder(options: LockGuardOptions = {}): void {
   const ownerFilePath = options.ownerFilePath ?? process.env.AI_KM_E2E_OWNER_FILE ?? DEFAULT_OWNER_FILE_PATH;

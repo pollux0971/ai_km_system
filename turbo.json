@@ -21,6 +21,11 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "@ai-km/e2e#test": {
+      "dependsOn": ["^build", "build", "check"],
+      "cache": false,
+      "passThroughEnv": ["AI_KM_E2E_LOCK_TOKEN", "AI_KM_E2E_OWNER_FILE", "AI_KM_E2E_LOCK_FILE"]
     }
   }
 }

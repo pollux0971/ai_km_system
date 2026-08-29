@@ -67,13 +67,36 @@ wraps, and removes both files on exit (success, failure, or interrupt).
 time — before `defineConfig()` is even built — so **every** entry point is
 covered by one check. Behavior:
 
-| `.e2e.owner` | Result |
+| Condition | Result |
 |---|---|
-| Absent or empty | Proceeds normally — no lock in use, nothing to check |
-| Names a PID that's no longer running | Proceeds, with a `stale claim` warning — a crash left this behind, not a live hold |
-| Names a live PID, `AI_KM_E2E_LOCK_TOKEN` matches its `.e2e.owner.token` | Proceeds — this process IS the lock holder (running via `e2e-locked.sh`) |
-| Names a live PID, no matching token | **Throws**, naming the current holder |
-| Line doesn't match the expected `... pid=<n> ...` format | **Throws** — unparseable is treated as uncertain, not as proof of staleness |
+| `AI_KM_E2E_LOCK_TOKEN` matches `.e2e.owner.token` | Proceeds — this process IS the lock holder (running via `e2e-locked.sh`) |
+| No matching token, and `flock -n` on `.e2e.lock` succeeds | Proceeds — the real mutex confirms nobody else holds it |
+| No matching token, and `flock -n` on `.e2e.lock` fails | **Throws**, naming the current holder if `.e2e.owner` has a readable label, otherwise a generic message |
+
+**The authority is `flock` itself, not `.e2e.owner`.** An earlier version
+of this guard decided block/proceed from the owner file's own presence
+and its recorded PID's liveness. Found wrong live on 2026-08-29
+(`ai-km-83`): they saw `.e2e.owner` absent and concluded the lock was
+free, but the lock was genuinely held — the wrapper writes that file
+*after* acquiring the lock, so there's a window (and any acquisition path
+that skips writing it produces the same state) where the file is absent
+but the lock is not. `.e2e.owner` is unreliable in both directions —
+absent-but-held (the race above) and present-but-stale (a crashed run's
+leftover claim, which resolves itself for free once contention is
+checked directly: a dead process cannot still hold a `flock`, since the
+OS releases it when the process's file descriptor closes on exit). The
+file is now used only to name a holder in the thrown error — never to
+decide whether to throw.
+
+The token check runs *first*, before any `flock` probe, and deliberately
+never calls `flock` itself to answer "am I the holder" — a fresh
+`flock -n` attempt opens its own independent file description, and
+Linux's flock() exclusivity is per-open-file-description, not
+per-process: even a child of the process that legitimately holds the
+lock (via the wrapper's own long-lived fd) would see a brand-new probe as
+"contended." Checking identity via the per-acquisition token first avoids
+that trap — the real holder always exits early, before ever reaching a
+probe that would otherwise misreport its own hold as someone else's.
 
 If you're aborting a locked run early, kill the wrapper's **process
 group** (`kill -TERM -<pgid>`), not just its own PID — Playwright's

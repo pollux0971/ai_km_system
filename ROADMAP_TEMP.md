@@ -772,38 +772,38 @@ E04-S044+E03-S038;E03-S041/E12-S031/E12-S030 這條鏈全部壓在**使用者的
 
 ## 6. 剩餘工作看板
 
-> **2026-08-29 07:20 現況**:230 story(含總指揮新立的 E04-S056)中
-> **218 approved / 1 done / 5 in-progress / 5 todo / 1 blocked-team-b**。
+> **2026-08-29 10:4x 現況:232 story 中 224 approved。**
+> **所有不需要使用者的工作已全部完成。**
 
-| Story | 狀態 | 誰 | 卡什麼 |
-|---|---|---|---|
-| E13-S020 | in-progress | W7 | 補跑 5 支 E2E,進行中 |
-| E03-S039 | in-progress | W4 | 開發中 |
-| E01-S025 | in-progress | W6 | rebase 後重跑 12 個逾時 |
-| E13-S021 | done | W3 → 待獨立審核 | subagent 越權事件,W3 自請他人覆核 |
-| E04-S056 | todo | W3 | 剛指派 |
-| **E03-S041** | in-progress | W5 | 🔴 **使用者錄音** |
-| **E12-S030** | in-progress | W5 | 🔴 **使用者錄音** |
-| **E12-S031** | in-progress | W5 | 🔴 **使用者錄音** |
-| **E03-S043** | todo | — | 🔴 HARD 依賴 E03-S039(在跑)**+ E03-S041(錄音)** |
-| **E03-S044** | todo | — | 🔴 HARD 依賴 E03-S041 / E03-S043 / E12-S031,**三個都在錄音鏈上** |
-| ~~E04-S037~~ | todo | — | Team B 範圍,Team A 不做 |
-| ~~E05-S024~~ | blocked-team-b | — | 等 Team B |
+### 剩下 8 個,沒有一個是 Team A 現在能推進的
 
-### 🔴 錄音檔卡住的是 5 個 story,不是 3 個
+| Story | 狀態 | 卡什麼 |
+|---|---|---|
+| **E12-S030** | in-progress | 🔴 **使用者錄音**(中英夾雜技術詞彙 fixture) |
+| **E12-S031** | in-progress | 🔴 同上(AC8 L3 關鍵詞命中率) |
+| **E03-S041** | in-progress | 🔴 同上(L3 真實 ASR + 手動 demo) |
+| **E01-S029** | in-progress | 🔴 AC3 需語音 E2E 交叉驗證 → 依賴 E03-S041 |
+| **E03-S043** | todo | 🔴 HARD 依賴 E03-S041 |
+| **E03-S044** | todo | 🔴 HARD 依賴 E03-S041/S043/E12-S031(本批最後一個) |
+| ~~E04-S037~~ | todo | Team B 範圍,Team A 不做 |
+| ~~E05-S024~~ | blocked-team-b | 等 Team B 的 E06-S030 |
 
-早先只算了直接需要 fixture 的三個。把 HARD 依賴鏈算進去:
+**6 個 story 壓在同一個檔案上**:`tools/asr-readiness/fixtures/sample-zh-en.wav`。
+
+### 權威基準線(`docs/stories/task2-e2e-baseline.md`)
 
 ```
-使用者錄音
-  ├── E12-S030(ASR 環境就緒)
-  ├── E12-S031(transcription 端點)──┐
-  ├── E03-S041(語音輸入 UI)────────┼──> E03-S043(對話頁 M3 化)
-  │                                 │        └──> E03-S044(語音 E2E,本批最後一個)
-  └────────────────────────────────┘
+乾淨 main e79dc90,單次取鎖,連續兩輪:
+Round 1   331/331     load 6.09 → 17.87 → 9.47
+Round 2   330/331     load 9.47 → 16.08 → 10.06
+分母 331 = web + setup + admin 三個 project,無 filter
 ```
 
-**Team A 剩下的 9 個 story 裡,5 個壓在這一個檔案上。** 另外 4 個
-(E13-S020、E03-S039、E01-S025、E04-S056)都已有人在跑 —— 也就是說
-**它們跑完之後,如果錄音還沒到,整批就完全停住,沒有任何可推進的工作**。
+Round 2 唯一失敗為 `send-message.spec.ts:60`,經 `ai-km-a4` 36 實例
+(跨 E03-S039 SSE 修正前後)刻畫為既有 `fullyParallel` 併發 flaky,
+因果與該修正無關;E03-S047 已記錄。
 
+### 本日新立並完成的修正 story
+
+E04-S056(health/`reuseExistingServer` env 哨兵)、E04-S057(鎖守衛)、
+E03-S047(顛倒的預覽測試)。三個都是「各自驗證正確、接縫沒被驗證」的實例。

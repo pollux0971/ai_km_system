@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { MOCK_VALID_PASSWORD } from "@ai-km/auth-client";
 
 /**
  * E03-S038. A new helper — existing specs keep their own inline `login()`
@@ -12,19 +13,20 @@ import type { Page } from "@playwright/test";
  * All seeded demo accounts (`services/identity/src/repository.ts`) share
  * the same password, so `password` defaults to it — callers only need to
  * override it for a genuinely different scenario (e.g. proving a wrong
- * password is rejected).
+ * password is rejected). `MOCK_VALID_PASSWORD` is the same published value
+ * (`services/identity/src/config.ts`'s comment confirms the real seeded
+ * accounts intentionally match the mock's published demo password); reusing
+ * it here instead of a second hardcoded copy avoids the two drifting apart.
  */
 export interface DemoAccount {
   username: string;
   password?: string;
 }
 
-const DEFAULT_DEMO_PASSWORD = "demo-pass-123";
-
 export async function loginAs(page: Page, account: DemoAccount): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("帳號").fill(account.username);
-  await page.getByLabel("密碼").fill(account.password ?? DEFAULT_DEMO_PASSWORD);
+  await page.getByLabel("密碼").fill(account.password ?? MOCK_VALID_PASSWORD);
   await page.getByRole("button", { name: "登入", exact: true }).click();
   await page.waitForURL((url) => url.pathname === "/");
 }

@@ -32,11 +32,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 26 | 0 | 0 | 0 | 0 |
 | E13 Feedback & Analytics | 21 | 21 | 0 | 0 | 0 | 0 |
-| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S064 + 啟用 S009/S016) | 27 | 18 | 2 | 0 | 1 | 6 |
+| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S065 + 啟用 S009/S016) | 28 | 18 | 2 | 0 | 1 | 7 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
-| E12 Model & Prompt Platform(使用者增補 E12-S029～S033) | 5 | 1 | 0 | 2 | 0 | 2 |
+| E12 Model & Prompt Platform(使用者增補 E12-S029～S034) | 6 | 1 | 0 | 2 | 0 | 3 |
 | E06 Knowledge Ingestion & Indexing(僅追蹤 Wave 1 索引側) | 5 | 1 | 1 | 0 | 0 | 3 |
-| **合計** | **248** | 226 | 3 | 4 | 2 | 13 |
+| **合計** | **250** | 226 | 3 | 4 | 2 | 15 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -323,6 +323,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S062 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。`services/retrieval` 的 in-process `retrieve()` API 與 plugin decorate。**設計約束（使用者 2026-09-02）：`retrieve()` 必須收 `RetrievalScope`（branded type）作為輸入，不得在 retrieval 內部推導 scope，不建任何過渡對應表。** HARD：E04-S058、S060、S061。AC 引用 **ADR 0007**。規格＝測試：walking-skeleton 的 AC1/AC2/AC3/AC3b/AC5 改寫到服務層。反向驗證：拿掉 `assertNoScopeLeak` → AC5 紅。 |
 | E04-S063 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。`services/generation` 的 in-process `answer()`：組 context → 呼叫 `app.modelGateway.generate()` → 驗證引用。HARD：E04-S059、E04-S062、g1–g4（已完成）。AC 引用 **ADR 0007**。規格＝測試：新寫服務層測試（context 組裝、引用回填、空 context 走 422 語意）。反向驗證：讓 `answer()` 略過 gateway 的引用檢查直接回傳 provider 結果 → 捏造引用測試紅。 |
 | E04-S064 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。退場 `services/rag-skeleton`：刪除 package、workspace 條目與 lockfile importer。HARD：Wave 1 其餘全部。規格＝測試：全 repo gate 全綠。反向驗證：刪除後 `grep -r rag-skeleton`（排除 node_modules）必須零命中——留下任何殘留引用即視為未完成。 |
+| E04-S065 | todo | — | — | Wave 1 衍生項。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。把 `pnpm contract-gate`(`contracts/openapi/__checks__/run-gate.mjs`)接進 CI,並把 compat check 的型別閉包縮回三位數以下——讓它只 import type-only 入口,而不是整個 service 的公開 barrel。**由來**:E04-S060 合併時發現這個 gate 的錯誤數取決於某個 barrel 匯出什麼(97 檔/6 錯 → 287 檔/0 錯,來源逐位元相同),6 個既有 `TS2591` 是被**遮蔽**而非修好;詳見 ROADMAP 5-xi 兩次補記。技術顧問原本裁示把這件事加進 E03-S034,但**該 story 已 approved,不得追加範圍**,故另立本項。HARD:無。規格＝測試:`pnpm contract-gate` 在 CI 上跑得到且 exit code 正確;閉包檔數 < 100。反向驗證:破壞任一 `*-compat.ts` 的斷言 → `pnpm contract-gate` exit 1 並指名該檔(已在 2026-09-02 驗證過此行為)。 |
 
 ## E02 Identity, RBAC & Authorization(僅追蹤使用者增補,4)
 
@@ -354,6 +355,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E12-S031 | in-progress | story/E12-S031-transcription-endpoint | [E12-S031.md](E12-S031.md) | **碼已 merge(60dff4f),但依 spec 不得標 approved**——`Evidence Required Before Done` 要求「L3 真實輸出(**兩台**)」且 DoD 要求「AC 全綠」,而 AC8(對 E12-S030 真實 fixture 的辨識,關鍵詞命中率 ≥80%,1650 與 4070 各一次)尚未取證:E12-S030 仍 todo,且使用者 2026-08-28 已確認**目前沒有 4070**(該輪記 `BLOCKED_DEPENDENCY`)。總指揮 2026-08-28 由 approved 更正為 in-progress。原註記保留於後:獨立審核 APPROVE(重新獨立跑 typecheck/lint/test 皆綠——model-gateway 65/65、apps/api 91/91;範圍/邊界核對通過;發現並修正 1 個 MINOR——outer Content-Type 檢查缺測試;2 項誠實記錄的非阻擋落差:conversationId 無對應 contract reason 值改安靜捨棄、AC8 L3 真實 sidecar 需 E12-S030 尚未 approved 故未驗證)。Transcription 端點（TranscriptionProvider 抽象、whisper-server adapter、fake provider、WAV 驗證、OpenCC 繁體化）；HARD 依賴：E12-S029、E04-S039；wave 1；L3 需 E12-S030。使用者 2026-08-28 指示新增（語音輸入／持久化／跨視窗同步／M3 批次，導讀與排程見 [docs/architecture/voice-persistence-sync-m3.md](../architecture/voice-persistence-sync-m3.md)） 規格：[E12-S031.spec.md](specs/E12-S031.spec.md) |
 | E12-S032 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級（搬移，g5）**。deterministic embedding provider 從 `services/rag-skeleton` 移入 `services/model-gateway`，取代 2026-09-02 g1 留下的 placeholder fake。HARD：無。規格＝測試：`deterministic.provider.test.ts` 7 條整批搬（確定性／單位長度／詞彙重疊排序／CJK bigram／維度斷言）。反向驗證：拿掉 `normalise()` → 單位長度斷言紅。 |
 | E12-S033 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級（搬移＋去重，g5）**。canned generation provider 移入 model-gateway；`assertCitationsGrounded` 兩份實作合一。HARD：無。規格＝測試：`gateway.test.ts` AC-G6／AC-G9 + walking-skeleton AC4。反向驗證：`assertCitationsGrounded` 改為永遠通過 → AC-G9 紅。 |
+| E12-S034 | todo | — | — | Wave 1 衍生項。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。`services/model-gateway` 的 tsconfig 開啟 `exactOptionalPropertyTypes`、修正 `routes/transcriptions.ts` 因此浮現的既有違規、並把 E12-S032 的 deep import 改回 package barrel。**由來**:E12-S032 開發時發現 barrel import 會讓 rag-skeleton(其 tsconfig 有開該旗標)typecheck 紅,開發者依 brief 未順手修而改用 deep import 繞開——正確處置,但那是繞開一個真缺陷,故另立本項。技術顧問 2026-09-02 裁示:**若修正行數超過違規本身的行數,就不屬本波,延至 Wave 2**。HARD:E12-S032。規格＝測試:model-gateway 既有 100 條測試在開啟旗標後仍全綠,且 rag-skeleton 改回 barrel import 後 typecheck 綠。反向驗證:把違規改回去 → model-gateway typecheck 紅。 |
 
 ## E06 Knowledge Ingestion & Indexing(僅追蹤 Wave 1 索引側,5)
 

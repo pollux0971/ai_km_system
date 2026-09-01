@@ -122,11 +122,35 @@ pnpm --filter @ai-km/api-client exec openapi-typescript \
 # 2. the gate itself
 ./node_modules/.bin/tsc -p contracts/openapi/__checks__/tsconfig.json --noEmit
 
+# 2b. THE GATE, as a command with an exit code (preferred — use this)
+pnpm contract-gate
+
 # 3. spec lint (0 errors required)
 pnpm --package=@redocly/cli@1.25.11 dlx redocly lint \
   contracts/openapi/conversations.yaml contracts/openapi/auth.yaml \
   contracts/openapi/embedding.yaml contracts/openapi/generation.yaml
 ```
+
+## Use `pnpm contract-gate`, not a hand-typed error count
+
+`run-gate.mjs` runs step 2 and applies the only rule that means anything here:
+**fail if and only if an error lands in a `*-compat.ts` file.** It exits 1 in
+that case, 0 otherwise, and prints the size of the type closure on every run.
+
+The rule used to be "tsc must report exactly 6 errors", re-typed by each
+reviewer. It broke the first time it was load-bearing: E04-S060 repointed an
+import in an unrelated package at a barrel that also exports a Fastify plugin,
+Fastify pulled in ajv, ajv pulled in `@types/node`, `process` became
+resolvable, and the six pre-existing `TS2591` errors vanished — with identical
+sources on both sides, verified by md5. The count measures the size of the type
+closure, not contract drift. A gate whose pass condition is another module's
+export list is not a gate.
+
+The closure size is printed because it is now known to move: 97 files before
+E04-S060, 287 after. Watching that number is how the next person catches the
+same thing recurring. Shrinking it back — compat checks importing type-only
+entry points rather than whole service barrels — and wiring this command into
+CI are **E04-S065**.
 
 `generated/` is committed so a reviewer can run step 2 without step 1, and so
 that a contract change that breaks compatibility shows up as a reviewable

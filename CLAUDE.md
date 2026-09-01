@@ -49,13 +49,20 @@
    程式碼或 story。Domain ownership 仍屬 Team B;之後若要將骨架拆分併入既有的
    `services/retrieval`、`ingestion`、`knowledge`、`generation` stub,需 domain
    owner review。)
-   (例外:使用者 2026-09-02 追加授權——**僅限 g1–g4 的 Model Gateway 接線**:
-   在 `services/model-gateway/` 新增 embedding／generation 的 provider 抽象與
-   `POST /v1/embeddings`、`POST /v1/generate` 兩條薄包裝路由;在 `apps/api/`
-   做條件註冊、contracts 載入與必要的 package.json 變更。**此授權只涵蓋這一批
-   工作,不是全面開放 `services/model-gateway/` 或 `apps/api/`**;其他 Team B
-   story 一律不動。Domain ownership 仍屬 Team B。條件註冊比照既有
-   `conversationPlugin`／`feedbackPlugin` 樣式。)
+   (例外:使用者 2026-09-02 追加授權——**僅限 g1–g5 的 Model Gateway 接線**。
+   使用者原話:「授權:g1-g5 範圍內,可修改 `services/model-gateway/`(新增
+   embedding/generation provider 抽象、兩條路由)與 `apps/api/`(條件註冊、
+   contracts 載入、必要的 package.json 變更)。範圍僅限本輪 g1-g5 描述的工作,
+   不含其他 Team B story。Domain ownership 仍屬 Team B」。
+   g1–g4(provider 抽象、兩條薄包裝路由、config、contracts 載入)已於同日完成;
+   **g5(把 deterministic／canned provider 從 `services/rag-skeleton` 搬進
+   model-gateway)依使用者裁示登記為 E12-S032／E12-S033**,同屬本授權範圍。
+   **此授權只涵蓋這一批工作,不是全面開放 `services/model-gateway/` 或
+   `apps/api/`**;其他 Team B story 一律不動。條件註冊比照既有
+   `conversationPlugin`／`feedbackPlugin` 樣式。
+   ※ 本段 2026-09-02 更正:初次登記誤寫為「僅限 g1–g4」,漏掉使用者原話裡的
+   g5。由 E12-S032 的獨立審核者發現本檔的 Team A 例外清單只列 E12-S029～S031、
+   未涵蓋 S032 而提出。更正方向是讓紀錄符合使用者實際授權的文字,不是擴權。)
 7. **證據落檔**:story 沒有 `docs/stories/EXX-SYYY.md` 就不是 DONE。
 
 ## Team A 範圍

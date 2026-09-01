@@ -54,6 +54,13 @@ authorized a narrow slice of Team B territory — embedding/generation provider
 abstractions plus `POST /v1/embeddings` and `POST /v1/generate` thin-wrapper
 routes in `services/model-gateway/`, and the conditional registration,
 contract loading and package.json changes in `apps/api/` that those need.
+The grant covers steps **g1 through g5**; g5 — relocating the deterministic and
+canned providers out of `services/rag-skeleton` into the gateway — is tracked
+as E12-S032 / E12-S033. (Corrected 2026-09-02: first written as "g1–g4",
+dropping g5 from the user's own wording. Caught by E12-S032's independent
+reviewer, who noticed CLAUDE.md rule 6's Team A exception list names
+E12-S029–S031 but not S032. The correction aligns the record with what was
+actually granted; it does not widen it.)
 Baseline §5 rule 28 requires model calls to go through the Model Gateway;
 `apps/api` is a single process (ADR 0003 §1), so the in-process function is the
 primary path and the HTTP routes delegate to it rather than reimplementing it.

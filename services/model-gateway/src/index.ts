@@ -29,8 +29,9 @@ export {
   ModelGatewayPayloadTooLargeError,
   GenerationNoContextError,
 } from "./gateway.js";
-export { FakeEmbeddingProvider, EmbeddingUnavailableError } from "./embedding/provider.js";
+export { EmbeddingUnavailableError } from "./embedding/provider.js";
 export type { EmbeddingProvider, EmbedInput, EmbedResult } from "./embedding/provider.js";
+export { createDeterministicEmbeddingProvider } from "./embedding/deterministic.provider.js";
 export {
   FakeGenerationProvider,
   GenerationUnavailableError,

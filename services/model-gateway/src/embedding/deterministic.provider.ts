@@ -1,6 +1,14 @@
 /**
  * DeterministicEmbeddingProvider — ceiling PF1.
  *
+ * Relocated here from `services/rag-skeleton/src/embedding/deterministic.
+ * provider.ts` (E12-S032 — the move `./provider.ts`'s old `FakeEmbeddingProvider`
+ * docstring said belonged to "a story of its own"). The hashing/normalisation
+ * arithmetic below is UNCHANGED; only the outer shape changed, to return this
+ * package's `EmbedResult` (`vectors: number[][]`) from `embed(input:
+ * EmbedInput)` instead of the skeleton's `embed(texts): Promise<Float32Array[]>`.
+ * `services/rag-skeleton` now imports the provider from here instead.
+ *
  * WHAT IT IS: feature hashing (the "hashing trick"). Text is tokenised, each
  * token is hashed into a bucket, buckets are counted, the vector is
  * L2-normalised. This is a real, standard vectorisation technique — not a
@@ -26,12 +34,7 @@
  * skeleton test.
  */
 
-import {
-  assertDimensions,
-  normalise,
-  type Embedding,
-  type EmbeddingProvider,
-} from "./provider.js";
+import type { EmbedInput, EmbedResult, EmbeddingProvider } from "./provider.js";
 
 const DEFAULT_DIMENSIONS = 256;
 
@@ -82,6 +85,22 @@ export function fnv1a(input: string): number {
   return hash >>> 0;
 }
 
+/**
+ * L2-normalise. Copied unchanged from the skeleton's `embedding/provider.ts`
+ * (this package does not depend on that one — see `../fidelity.ts`'s header
+ * for why the dependency would point the wrong way — so the four lines of
+ * arithmetic move with the provider that is the only thing that used them).
+ */
+function normalise(vector: Float32Array): Float32Array {
+  let magnitude = 0;
+  for (let i = 0; i < vector.length; i += 1) magnitude += vector[i]! * vector[i]!;
+  magnitude = Math.sqrt(magnitude);
+  if (magnitude === 0) return vector;
+  const out = new Float32Array(vector.length);
+  for (let i = 0; i < vector.length; i += 1) out[i] = vector[i]! / magnitude;
+  return out;
+}
+
 export interface DeterministicProviderOptions {
   readonly dimensions?: number;
 }
@@ -94,13 +113,16 @@ export function createDeterministicEmbeddingProvider(
     throw new Error("dimensions 必須是正整數。");
   }
 
+  const model = "embedding:deterministic";
+
   const provider: EmbeddingProvider = {
-    componentId: "embedding:deterministic",
+    name: "fake",
+    model,
     fidelityCeiling: "PF1",
     dimensions,
 
-    async embed(texts: readonly string[]): Promise<readonly Embedding[]> {
-      const vectors = texts.map((text) => {
+    async embed(input: EmbedInput): Promise<EmbedResult> {
+      const vectors = input.texts.map((text) => {
         const buckets = new Float32Array(dimensions);
         for (const token of tokenise(text ?? "")) {
           const h = fnv1a(token);
@@ -116,7 +138,12 @@ export function createDeterministicEmbeddingProvider(
         }
         return normalise(buckets);
       });
-      return assertDimensions(provider, vectors);
+      // `Array.from` at this boundary is contractual, not cosmetic:
+      // `JSON.stringify(new Float32Array(...))` serialises to `{"0":…}`, an
+      // object, not an array, which deserialises to a zero-length vector that
+      // scores 0 against everything and reads as "no matching documents" —
+      // see `contracts/openapi/__checks__/embedding-compat.ts`.
+      return { vectors: vectors.map((v) => Array.from(v)), model, dimensions };
     },
   };
 

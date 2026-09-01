@@ -16,7 +16,7 @@
  */
 
 import { createServer, type Server } from "node:http";
-import { createDeterministicEmbeddingProvider } from "../src/embedding/deterministic.provider.js";
+import { createDeterministicEmbeddingProvider } from "../src/embedding/model-gateway-deterministic.provider.js";
 import type { components } from "../../../contracts/openapi/__checks__/generated/embedding.js";
 
 /**

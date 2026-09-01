@@ -2,7 +2,7 @@ export * from "./evidence-tier.js";
 export * from "./authorization/scope.js";
 export * from "./chunking/chunk.js";
 export * from "./embedding/provider.js";
-export * from "./embedding/deterministic.provider.js";
+export * from "./embedding/model-gateway-deterministic.provider.js";
 export * from "./generation/provider.js";
 export * from "./vector/store.js";
 export * from "./vector/sqlite-vec.store.js";

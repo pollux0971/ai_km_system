@@ -806,6 +806,25 @@ story——修法要動 `__checks__/tsconfig.json`(這個 gate 共用的設定),
 2026-09-02 `services/rag-skeleton` 授權範圍,且該由擁有 codegen pipeline +
 drift gate 接線的 **E03-S034** 一併處理。
 
+**2026-09-02 補記——這個 gate 現在真的看得到東西(反向驗證紅/綠)**:
+
+紅之前有人會問「一個本來就紅 6 個的 gate,還能不能偵測到新問題」。實測如下,
+指令都是 `./node_modules/.bin/tsc -p contracts/openapi/__checks__/tsconfig.json --noEmit`:
+
+```
+基準              6 errors, EXIT=2   四個 *-compat.ts 本身零錯誤
+破壞後            7 errors, EXIT=2
+  把 embedding-compat.ts 的 unavailableCodeExact 由 "EMBEDDING_UNAVAILABLE"
+  改成 "ASR_UNAVAILABLE":
+  contracts/openapi/__checks__/embedding-compat.ts(155,14):
+    error TS2322: Type 'true' is not assignable to type 'never'.
+還原後            6 errors,四個 *-compat.ts 回到零錯誤
+```
+
+所以那 6 個既有錯誤**沒有掩蓋新錯誤**,gate 對新增的 compat 斷言仍然有效。
+這不改變上面的結論(gate 沒接 CI、沒人在跑),只是把「它壞掉了嗎」這個問題
+關掉,免得日後有人以為紅著就等於失能而直接刪掉它。
+
 **修的時候要注意**:別只是加 `"types": ["node"]` 就當修好——那只是讓錯誤消失。
 真正要決定的是「這個 gate 該不該把前端模組拉進來編譯」。`auth-compat.ts` 只引
 `packages/auth-client`(純型別,不碰 `process`)就沒事;會出事的是

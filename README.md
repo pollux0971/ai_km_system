@@ -38,6 +38,30 @@ stays with Team B; contract changes still need domain-owner review. Read
 `docs/architecture/voice-persistence-sync-m3.md` and
 `docs/architecture/tech-debt-audit-2026-08-28.md` first.
 
+**2026-09-02 assignment:** the user authorized creating
+`services/rag-skeleton/` — a RAG walking skeleton in five layers (chunking,
+embedding provider, vector store, authorization scope, generation provider),
+corresponding to E04 RAG & Conversation Intelligence and E06 Knowledge
+Ingestion & Indexing — plus two new contracts,
+`contracts/openapi/embedding.yaml` and `contracts/openapi/generation.yaml`.
+These are all new files; no existing Team B code or story was modified.
+Domain ownership stays with Team B; folding the skeleton back into the
+existing `services/retrieval`, `ingestion`, `knowledge` and `generation`
+stubs later needs domain-owner review.
+
+**2026-09-02 addendum (Model Gateway wiring only):** the user additionally
+authorized a narrow slice of Team B territory — embedding/generation provider
+abstractions plus `POST /v1/embeddings` and `POST /v1/generate` thin-wrapper
+routes in `services/model-gateway/`, and the conditional registration,
+contract loading and package.json changes in `apps/api/` that those need.
+Baseline §5 rule 28 requires model calls to go through the Model Gateway;
+`apps/api` is a single process (ADR 0003 §1), so the in-process function is the
+primary path and the HTTP routes delegate to it rather than reimplementing it.
+**This covers that wiring only — it is not blanket access to
+`services/model-gateway/` or `apps/api/`**, and no other Team B story is in
+scope. Domain ownership stays with Team B. Conditional registration follows the
+existing `conversationPlugin` / `feedbackPlugin` pattern.
+
 ## Layout
 
 ```

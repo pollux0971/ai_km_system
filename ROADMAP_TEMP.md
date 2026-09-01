@@ -770,6 +770,101 @@ PROGRESS.md 狀態不得標 `approved`,必須留在 `in-progress` 並在備註�
 E04-S044+E03-S038;E03-S041/E12-S031/E12-S030 這條鏈全部壓在**使用者的真實
 中英夾雜錄音**上,是本批唯一無法由 AI 自行解除的阻塞。
 
+## 5-xi. 🔴 契約防漂移 gate 目前是紅的(2026-09-02 做骨架時發現)
+
+`contracts/openapi/__checks__/README.md` 把
+`tsc -p contracts/openapi/__checks__/tsconfig.json --noEmit` 稱為「the gate
+itself」。**它現在 exit 2。**
+
+```
+$ ./node_modules/.bin/tsc -p contracts/openapi/__checks__/tsconfig.json --noEmit
+6 × error TS2591: Cannot find name 'process'.
+   apps/web/src/lib/api.ts(5,37)
+   apps/web/src/lib/conversations.ts(90,15)
+   apps/web/src/lib/feature-flags.ts(62,14) (64,14) (66,14)
+   apps/admin/src/lib/api.ts(5,37)
+EXIT=2
+```
+
+**成因**:`__checks__/tsconfig.json` 設 `"types": []`,而 `conversations-compat.ts`
+為了對真實前端型別(而非手抄鏡像)做比對,會遞移拉進 `apps/web/src/lib/*`,
+那些模組讀 `process.env`。兩個決定各自都對——「比對真實型別」和「不引入 node
+型別」——**接縫沒被驗證**,和 E04-S049→S053、E04-S056/S057/E03-S047 是同一個
+病灶的第三批實例。
+
+**與 2026-09-02 新增的兩份契約無關**,已隔離證明:把 `embedding-compat.ts`、
+`generation-compat.ts` 與其 `generated/*.d.ts` 全部移走重跑,仍然是同樣的 6 個
+錯誤;加回來也仍然是 6 個。四個 `*-compat.ts` 檔案本身零錯誤。
+
+**為什麼沒人發現**:README 自己寫著「Not yet wired into CI」——E04-S038 的開發
+邊界只允許 `contracts/**`,所以這個 gate 從來沒有進 `turbo.json` 或根
+`package.json` 的 scripts。**沒有被執行的 gate 不是 gate**;它紅了多久沒有紀錄
+可查。
+
+**處置(2026-09-02,使用者裁示)**:**本次不修**,只登記為已知問題。不新立
+story——修法要動 `__checks__/tsconfig.json`(這個 gate 共用的設定),超出
+2026-09-02 `services/rag-skeleton` 授權範圍,且該由擁有 codegen pipeline +
+drift gate 接線的 **E03-S034** 一併處理。
+
+**修的時候要注意**:別只是加 `"types": ["node"]` 就當修好——那只是讓錯誤消失。
+真正要決定的是「這個 gate 該不該把前端模組拉進來編譯」。`auth-compat.ts` 只引
+`packages/auth-client`(純型別,不碰 `process`)就沒事;會出事的是
+`conversations-compat.ts` 引 `apps/web/src/lib/*`。2026-09-02 新增的兩份 compat
+比照 `auth-compat.ts`,只引 `services/rag-skeleton/src/*`,所以不會再擴大這個問題。
+**同時要把這個 gate 接進 CI**,否則修完之後它一樣會靜靜地再紅一次。
+
+## 5-omicron. 🔴 `SOURCE_BASELINE.md` 被截斷,§26–§45 全部不存在(2026-09-02 規劃 RAG story 時發現)
+
+`AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` 是規格庫的最上游文件。它的目錄
+列出 45 節,**檔案本身停在第 25 節中途**:
+
+```
+$ tail -c 60 SOURCE_BASELINE.md
+E12-S09 Model Selection
+                              ← 檔案在此結束,最後一行是殘缺字串
+E12-S10 Manual R
+```
+
+**缺失的 20 節**(只存在於目錄,無內文):
+
+| 節 | 標題 | 為什麼會擋到事 |
+|---|---|---|
+| 26 | E13 Feedback & Analytics | — |
+| 27 | E14 Audit, Security & Observability | — |
+| 28 | Story 標準 | Definition of Ready 的上游 |
+| 29–33 | Development / Git-PR / API Contract / Database / Feature Flag Policy | `policies/` 底下有獨立檔可替代 |
+| 34 | Testing Policy | 同上,`policies/TESTING_POLICY.md` 存在 |
+| **35** | **RAG Evaluation Policy** | **E04-S029～S034 六條評估 story 的驗收門檻在這裡,沒有它無法定義「過」** |
+| 36–38 | Definition of Ready / Done / AI DoD | epic 檔內有逐 story 的 DoD 可替代 |
+| 39 | Sprint Roadmap | — |
+| 40 | Release Maturity | — |
+| 41 | Architecture Decision Records | `docs/adr/` 已有實際 ADR |
+| 42 | Risk Register | — |
+| **43** | **MVP 驗收指標** | **無法判斷 M1 是否達成** |
+| 44 | GA 目標 | — |
+| 45 | BMAD Handoff | — |
+
+**實際影響範圍很窄**:大多數缺失章節在 `policies/`、`docs/adr/`、epic 檔裡都有
+可替代的來源。真正沒有替代品的是 **§35 RAG Evaluation Policy** 與 **§43 MVP
+驗收指標**。
+
+§35 的缺席具體卡住這六條:`E04-S029 Evaluation dataset schema`(部分有救——
+baseline §17 給了 JSON 格式)、`E04-S030 Retrieval evaluation runner`、
+`E04-S031 Citation evaluation runner`、`E04-S032 Authorization leak evaluation`
+(這條有救——baseline §17 明寫 **Leak Rate = 0**)、`E04-S033 forbidden-source
+hard gate`、`E04-S034 no-evidence regression suite`。其中 S030/S031/S033/S034
+需要「recall 多少算過、citation 正確率多少算過、abstention 該在什麼條件觸發」
+這類數字,**規格庫裡沒有任何地方寫過**。
+
+**處置(2026-09-02,使用者裁示)**:本次**不補**,只登記。不新立 story。
+`AI_KM_BMAD_High_Granularity/` 是唯讀規格庫(CLAUDE.md 鐵律 #6),補寫它是產品
+決策不是實作決策。
+
+**要用到的時候怎麼辦**:依 `ATOMIC_STORY_BOUNDARIES.md` 的 AI Agent Rule
+(「不知道產品行為 → BLOCKED/ASSUMPTION」),上述四條門檻未定的 story 一律標
+**需使用者裁示**,不得由開發者自行挑一個數字當門檻——挑了就是把產品決策偷渡成
+實作細節,而且會在第一次評估跑出來時變成既成事實。
+
 ## 6. 剩餘工作看板
 
 > **2026-08-29 10:4x 現況:232 story 中 224 approved。**

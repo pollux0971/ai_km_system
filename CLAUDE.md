@@ -41,6 +41,21 @@
    E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021——可在**該 story 允許修改清單內**修改 `apps/api`、`services/*`、
    `db/*`、`infra/*`;導讀見 `docs/architecture/voice-persistence-sync-m3.md`
    與 `docs/architecture/tech-debt-audit-2026-08-28.md`。)
+   (例外:使用者 2026-09-02 明示授權建立 `services/rag-skeleton/`(RAG walking
+   skeleton:chunking、embedding provider、vector store、authorization scope、
+   generation provider 五層,對應 E04 RAG & Conversation Intelligence 與
+   E06 Knowledge Ingestion & Indexing),另新增 `contracts/openapi/embedding.yaml`、
+   `contracts/openapi/generation.yaml`。此為全新檔案,未修改任何既有 Team B
+   程式碼或 story。Domain ownership 仍屬 Team B;之後若要將骨架拆分併入既有的
+   `services/retrieval`、`ingestion`、`knowledge`、`generation` stub,需 domain
+   owner review。)
+   (例外:使用者 2026-09-02 追加授權——**僅限 g1–g4 的 Model Gateway 接線**:
+   在 `services/model-gateway/` 新增 embedding／generation 的 provider 抽象與
+   `POST /v1/embeddings`、`POST /v1/generate` 兩條薄包裝路由;在 `apps/api/`
+   做條件註冊、contracts 載入與必要的 package.json 變更。**此授權只涵蓋這一批
+   工作,不是全面開放 `services/model-gateway/` 或 `apps/api/`**;其他 Team B
+   story 一律不動。Domain ownership 仍屬 Team B。條件註冊比照既有
+   `conversationPlugin`／`feedbackPlugin` 樣式。)
 7. **證據落檔**:story 沒有 `docs/stories/EXX-SYYY.md` 就不是 DONE。
 
 ## Team A 範圍

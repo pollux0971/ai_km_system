@@ -1,0 +1,205 @@
+openapi: 3.1.0
+info:
+  title: AI KM Embedding Provider Contract
+  version: 1.0.0
+  description: >
+    The seam between retrieval logic and a text-embedding model.
+
+
+    This contract exists so the model can be substituted by tier without the
+    retrieval pipeline knowing. Three implementations are expected to satisfy
+    it: an in-process deterministic provider (provider fidelity ceiling PF1), an
+    HTTP client against a contract-validated fake server (PF2), and a real
+    model (PF3). See `src/evidence-tier.ts` for what each level may and may not
+    be cited as evidence for, and for why PF is a separate axis from the
+    L0-L6 test layers in `policies/TESTING_POLICY.md`.
+
+
+    **The fake is not a mock.** A mock asserts nothing and pretends to be the
+    thing. Every implementation here computes real vectors with real
+    arithmetic and passes the same contract checks; they differ in whether
+    those vectors carry semantics. The deterministic provider uses feature
+    hashing and captures LEXICAL overlap only — it must never be used as
+    evidence for an AC about semantic recall, synonyms, or cross-lingual
+    retrieval.
+
+
+    **Determinism is contractual, not incidental.** Stored embeddings and
+    freshly computed query embeddings must come from the same function or
+    retrieval silently degrades with no failing test. Any change to the
+    embedding function is a re-index event and must be treated as a migration.
+
+
+    **Normalisation is contractual.** Vectors are returned L2-normalised so
+    consumers may use dot product as cosine similarity. A provider returning
+    unnormalised vectors will produce plausible but wrong rankings.
+
+
+    **The HTTP route below is a thin wrapper, not the primary path.** Callers
+    inside the `apps/api` process (`services/retrieval`, `services/ingestion`)
+    invoke the Model Gateway's exported function directly — baseline §5 rule 28
+    requires the call to go THROUGH the gateway, not over a socket, and
+    `apps/api` is a single process (ADR 0003 §1), so an HTTP hop here would be
+    a loopback call to itself. `POST /v1/embeddings` exists for out-of-process
+    consumers and delegates to that same function; it is deliberately NOT a
+    second implementation. Two code paths behind one contract is how they
+    drift.
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+  contact:
+    name: E12 domain owner (Team B) — Model Gateway
+
+servers:
+  - url: /v1
+    description: Same-origin path prefix, matching ADR 0003 §6.
+
+security:
+  - sessionCookie: []
+
+paths:
+  /embeddings:
+    post:
+      operationId: createEmbeddings
+      summary: Embed a batch of texts.
+      description: >
+        Batching is in the contract because it is the difference between one
+        round trip and N against a real model. The order of `data` MUST match
+        the order of `input`; consumers index into it positionally.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmbeddingRequest"
+      responses:
+        "200":
+          description: Vectors, in input order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/EmbeddingUnavailable"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      $ref: "./auth.yaml#/components/securitySchemes/sessionCookie"
+
+  schemas:
+    EmbeddingRequest:
+      type: object
+      required: [input]
+      additionalProperties: false
+      properties:
+        input:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items:
+            type: string
+            maxLength: 8192
+        model:
+          type: string
+          description: >
+            Optional pin. Omitting it means "provider default", which is
+            acceptable at PF1/PF2 but MUST be explicit for any PF3 evidence — an
+            evaluation result that does not name its model is not reproducible.
+
+    EmbeddingResponse:
+      type: object
+      required: [model, dimensions, data]
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+        dimensions:
+          type: integer
+          minimum: 1
+        data:
+          type: array
+          items:
+            type: object
+            required: [index, embedding]
+            additionalProperties: false
+            properties:
+              index:
+                type: integer
+                minimum: 0
+              embedding:
+                type: array
+                minItems: 1
+                items:
+                  type: number
+
+    ValidationErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR]
+          required: [code]
+      examples:
+        - code: VALIDATION_ERROR
+          message: input 必須是至少一個字串的陣列。
+
+    PayloadTooLargeBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [PAYLOAD_TOO_LARGE]
+          required: [code]
+      examples:
+        - code: PAYLOAD_TOO_LARGE
+          message: 一次最多只能嵌入 256 段文字。
+
+    EmbeddingUnavailableBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [EMBEDDING_UNAVAILABLE]
+          required: [code]
+      examples:
+        - code: EMBEDDING_UNAVAILABLE
+          message: 嵌入模型目前無法使用。
+
+  responses:
+    ValidationError:
+      description: >
+        Malformed request. `VALIDATION_ERROR` is the platform-wide code from
+        ADR 0003 §4, not an endpoint-specific one — the shape of a bad request
+        is the same everywhere and consumers already branch on it.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorBody"
+    PayloadTooLarge:
+      description: Batch larger than the provider accepts (`input` maxItems).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PayloadTooLargeBody"
+    EmbeddingUnavailable:
+      description: >
+        Model unavailable. Callers MUST surface this rather than falling back
+        to an empty result — an empty embedding silently retrieves nothing and
+        is indistinguishable from "no matching documents". Distinct from the
+        platform-generic `SERVICE_UNAVAILABLE` so a caller can tell "the
+        embedding model is down" from "the API is down".
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EmbeddingUnavailableBody"

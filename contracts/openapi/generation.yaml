@@ -1,0 +1,229 @@
+openapi: 3.1.0
+info:
+  title: AI KM Generation Provider Contract
+  version: 1.0.0
+  description: >
+    The seam between the retrieval pipeline and an answer-generating model.
+
+
+    **Citations are structural, not prose.** The response carries citations as
+    data, not as text the UI has to parse out of the answer. A model that
+    writes "根據文件 A" in prose gives the client nothing to link, nothing to
+    highlight and nothing to permission-check. Structured citations also make
+    the grounding check below mechanical.
+
+
+    **Every citation must be grounded.** A citation naming a chunk that was
+    not supplied in `context` is a fabricated source, and the client rejects
+    the whole response rather than dropping the bad citation — a model that
+    fabricates one source has demonstrated it will fabricate others, and a
+    silently-filtered response looks correct.
+
+
+    **Deny-Wins reaches this layer too.** `context` has already been scope
+    filtered before it arrives (鐵律 #2). This contract does not re-filter,
+    but it does forbid the provider from introducing sources of its own, which
+    is the only way unauthorised content could re-enter at this stage.
+
+
+    Implementations by provider fidelity: a canned provider (ceiling PF1) that
+    echoes the supplied context as citations, an HTTP client against a
+    contract-validated fake (PF2), and a real model (PF3). Only PF3 may be
+    cited as evidence for answer quality, hallucination rate or citation
+    accuracy.
+
+
+    **The HTTP route below is a thin wrapper, not the primary path.** Callers
+    inside the `apps/api` process (`services/generation`) invoke the Model
+    Gateway's exported function directly — baseline §5 rule 28 requires the
+    call to go THROUGH the gateway, not over a socket, and `apps/api` is a
+    single process (ADR 0003 §1), so an HTTP hop here would be a loopback call
+    to itself. `POST /v1/generate` exists for out-of-process consumers and
+    delegates to that same function; it is deliberately NOT a second
+    implementation. Two code paths behind one contract is how they drift.
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+  contact:
+    name: E12 domain owner (Team B) — Model Gateway
+
+servers:
+  - url: /v1
+    description: Same-origin path prefix, matching ADR 0003 §6.
+
+security:
+  - sessionCookie: []
+
+paths:
+  /generate:
+    post:
+      operationId: generateAnswer
+      summary: Generate a grounded answer from retrieved context.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerationRequest"
+      responses:
+        "200":
+          description: An answer with structured citations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "422":
+          $ref: "#/components/responses/GenerationNoContext"
+        "503":
+          $ref: "#/components/responses/GenerationUnavailable"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      $ref: "./auth.yaml#/components/securitySchemes/sessionCookie"
+
+  schemas:
+    GenerationRequest:
+      type: object
+      required: [question, context]
+      additionalProperties: false
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        context:
+          type: array
+          minItems: 0
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/ContextChunk"
+        model:
+          type: string
+
+    ContextChunk:
+      type: object
+      required: [chunkId, documentId, text, startOffset, endOffset]
+      additionalProperties: false
+      properties:
+        chunkId:
+          type: string
+        documentId:
+          type: string
+        text:
+          type: string
+        startOffset:
+          type: integer
+          minimum: 0
+        endOffset:
+          type: integer
+          minimum: 0
+        score:
+          type: number
+
+    GenerationResponse:
+      type: object
+      required: [answer, citations]
+      additionalProperties: false
+      properties:
+        answer:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Citation"
+        model:
+          type: string
+
+    Citation:
+      type: object
+      required: [chunkId, documentId, startOffset, endOffset]
+      additionalProperties: false
+      description: >
+        chunkId MUST appear in the request's `context`. Offsets are character
+        offsets into the ORIGINAL document, carried unchanged from chunking,
+        so the UI can highlight the exact span.
+      properties:
+        chunkId:
+          type: string
+        documentId:
+          type: string
+        startOffset:
+          type: integer
+          minimum: 0
+        endOffset:
+          type: integer
+          minimum: 0
+
+    ValidationErrorBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR]
+          required: [code]
+      examples:
+        - code: VALIDATION_ERROR
+          message: question 不得為空。
+
+    GenerationNoContextBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [GENERATION_NO_CONTEXT]
+          required: [code]
+      examples:
+        - code: GENERATION_NO_CONTEXT
+          message: 沒有可引用的來源,無法作答。
+
+    GenerationUnavailableBody:
+      allOf:
+        - $ref: "./core.yaml#/components/schemas/Error"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [GENERATION_UNAVAILABLE]
+          required: [code]
+      examples:
+        - code: GENERATION_UNAVAILABLE
+          message: 生成模型目前無法使用。
+
+  responses:
+    ValidationError:
+      description: >
+        Malformed request. `VALIDATION_ERROR` is the platform-wide code from
+        ADR 0003 §4, not an endpoint-specific one.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorBody"
+    GenerationNoContext:
+      description: >
+        Context was empty or unusable. The provider MUST NOT answer from
+        parametric knowledge when retrieval returned nothing — an uncited
+        answer in a knowledge-management product is indistinguishable from a
+        hallucination to the person reading it. This is a distinct code rather
+        than an empty 200 precisely so a caller cannot mistake abstention for a
+        successful answer with no sources.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/GenerationNoContextBody"
+    GenerationUnavailable:
+      description: >
+        Model unavailable. Distinct from the platform-generic
+        `SERVICE_UNAVAILABLE` so a caller can tell "the generation model is
+        down" from "the API is down". Fails closed: never silently rerouted to
+        an unapproved provider (baseline §5 rule 29).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/GenerationUnavailableBody"

@@ -33,3 +33,29 @@ export function hostRequireSession(app: FastifyInstance): preHandlerHookHandler 
 export function requestAuth(request: FastifyRequest): ModelGatewayAuthContext | undefined {
   return (request as unknown as { auth?: ModelGatewayAuthContext }).auth;
 }
+
+/**
+ * The contract names `apps/api` has loaded, read defensively.
+ *
+ * Used to decide whether to register the embedding/generation routes at all.
+ * `apps/api` decorates `app.contracts` before any domain plugin; a host that
+ * does not (this package's own route tests, which mount handlers directly)
+ * gets an empty list and therefore no routes — a 404, never a 500 at boot.
+ *
+ * This is the E04-S049 → E04-S050 lesson applied ahead of the incident rather
+ * than after it: a route that binds contract schemas at registration time must
+ * not be registered when its spec was never loaded. `conversationPlugin` and
+ * `feedbackPlugin` take the same guard in `apps/api/src/server.ts`; it lives
+ * inside this plugin instead because `POST /v1/transcriptions` must keep
+ * registering unconditionally — it hand-writes its schemas and has shipped
+ * that way since E12-S031.
+ */
+export function hostSpecNames(app: FastifyInstance): readonly string[] {
+  const contracts = (app as unknown as { contracts?: { specNames?: () => string[] } }).contracts;
+  if (!contracts || typeof contracts.specNames !== "function") return [];
+  try {
+    return contracts.specNames();
+  } catch {
+    return [];
+  }
+}

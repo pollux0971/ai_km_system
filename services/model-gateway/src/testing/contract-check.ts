@@ -55,20 +55,33 @@ function registerUnknownFormats(ajv: AjvInstance, schema: unknown): void {
   walk(schema);
 }
 
-let cached: ContractCheckRegistry | undefined;
+const cache = new Map<string, ContractCheckRegistry>();
 
-/** Loads (once) the repo's real, frozen `contracts/openapi/transcriptions.yaml`. */
-export async function loadTranscriptionsContract(): Promise<ContractCheckRegistry> {
-  if (cached) return cached;
-  const dir = resolveContractsDir();
-  const file = path.join(dir, "transcriptions.yaml");
+/**
+ * Loads (once per name) one of the repo's real, frozen
+ * `contracts/openapi/<name>.yaml` files.
+ *
+ * Generalised from `loadTranscriptionsContract` when the embedding/generation
+ * routes landed (2026-09-02 g1-g4) — the loading logic was never
+ * transcription-specific, only its hardcoded filename was.
+ */
+export async function loadContract(name: string): Promise<ContractCheckRegistry> {
+  const hit = cache.get(name);
+  if (hit) return hit;
+  const file = path.join(resolveContractsDir(), `${name}.yaml`);
   const raw = yaml.load(await readFile(file, "utf8"));
   const document = (await $RefParser.dereference(file, raw as object, {})) as Record<string, unknown>;
   const ajv = new Ajv2020({ strict: true, allErrors: true, allowUnionTypes: true });
   addFormats(ajv);
   registerUnknownFormats(ajv, document);
-  cached = { document, ajv };
-  return cached;
+  const registry: ContractCheckRegistry = { document, ajv };
+  cache.set(name, registry);
+  return registry;
+}
+
+/** Kept so existing transcription tests read unchanged. */
+export async function loadTranscriptionsContract(): Promise<ContractCheckRegistry> {
+  return loadContract("transcriptions");
 }
 
 /** Throws with a readable diff unless `body` matches the contract's schema for this operation/status. */

@@ -14,11 +14,21 @@
 
 export type NodeEnv = "development" | "test" | "production";
 export type AsrProvider = "whisper-server" | "fake";
+/**
+ * Only `fake` exists today. A real adapter needs the upstream API of a chosen
+ * runtime, which is E04-S037 (`todo`) — see `embedding/provider.ts`.
+ */
+export type EmbeddingProviderChoice = "fake";
+export type GenerationProviderChoice = "fake";
 
 export interface ModelGatewayOptions {
   readonly nodeEnv: NodeEnv;
   readonly asrProvider: AsrProvider;
   readonly asrServerUrl: string;
+  /** Defaults to `fake`; refused in production by `assertProviderUsable`. */
+  readonly embeddingProvider?: EmbeddingProviderChoice;
+  readonly generationProvider?: GenerationProviderChoice;
+  readonly embeddingDimensions?: number;
 }
 
 export interface ModelGatewayConfig {
@@ -26,6 +36,9 @@ export interface ModelGatewayConfig {
   readonly asrProvider: AsrProvider;
   readonly asrServerUrl: string;
   readonly fakeText: string;
+  readonly embeddingProvider: EmbeddingProviderChoice;
+  readonly generationProvider: GenerationProviderChoice;
+  readonly embeddingDimensions: number;
 }
 
 export class ModelGatewayConfigError extends Error {
@@ -33,6 +46,8 @@ export class ModelGatewayConfigError extends Error {
 }
 
 const DEFAULT_FAKE_TEXT = "（測試）這是語音辨識的假結果 fake result";
+/** Matches the skeleton's deterministic provider so g5 is a drop-in swap. */
+const DEFAULT_EMBEDDING_DIMENSIONS = 256;
 
 /**
  * `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, and
@@ -91,5 +106,33 @@ export function resolveModelGatewayConfig(
     asrProvider: options.asrProvider,
     asrServerUrl: options.asrServerUrl,
     fakeText,
+    embeddingProvider: options.embeddingProvider ?? "fake",
+    generationProvider: options.generationProvider ?? "fake",
+    embeddingDimensions: options.embeddingDimensions ?? DEFAULT_EMBEDDING_DIMENSIONS,
   });
+}
+
+/**
+ * Same fail-closed rule as the ASR guard above, but applied WHEN THE FEATURE IS
+ * REGISTERED rather than at config resolution.
+ *
+ * The ASR guard can refuse at boot because ASR is always registered. These two
+ * are registered only when their contract is loaded, and refusing to boot the
+ * whole API because an unrelated, unloaded feature has no real provider would
+ * be a worse failure than the one it prevents. So the check runs at the point
+ * of registration: if the embedding routes are being mounted in production and
+ * the only available provider is the placeholder fake, startup stops there.
+ */
+export function assertProviderUsable(
+  nodeEnv: NodeEnv,
+  feature: "embedding" | "generation",
+  provider: string,
+): void {
+  if (nodeEnv === "production" && provider === "fake") {
+    throw new ModelGatewayConfigError(
+      `${feature} provider = "fake" 不得在 NODE_ENV=production 下啟用` +
+        `(placeholder fake 只能用於 unit/E2E)。已拒絕啟動。` +
+        `真實 provider 需要 E04-S037 決定的模型執行環境。`,
+    );
+  }
 }

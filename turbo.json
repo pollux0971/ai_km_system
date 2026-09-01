@@ -22,6 +22,10 @@
       "cache": false,
       "persistent": true
     },
+    "@ai-km/rag-skeleton#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "@ai-km/e2e#test": {
       "dependsOn": ["^build", "build", "check"],
       "cache": false,

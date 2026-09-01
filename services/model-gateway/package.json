@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "fastify": "^5.2.1",
+    "fastify-plugin": "^5.0.1",
     "opencc-js": "^1.0.5"
   },
   "devDependencies": {

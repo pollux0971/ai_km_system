@@ -1,5 +1,17 @@
 export * from "./evidence-tier.js";
-export * from "./authorization/scope.js";
+// Both modules have left this package. Scope moved to services/retrieval
+// (E04-S060) and chunking to services/ingestion (E06-S022); these re-exports
+// keep @ai-km/rag-skeleton's public surface unchanged for the remainder of its
+// life. The whole package is deleted at E04-S064, and these go with it.
+export {
+  toRetrievalScope,
+  buildScopePredicate,
+  buildScopeSql,
+  assertNoScopeLeak,
+  RetrievalScopeError,
+  ScopeLeakError,
+} from "@ai-km/service-retrieval";
+export type { RetrievalScope, ScopedRecord } from "@ai-km/service-retrieval";
 export { chunkDocument, ChunkingError } from "@ai-km/service-ingestion";
 export type { Chunk, ChunkOptions } from "@ai-km/service-ingestion";
 export * from "./embedding/provider.js";

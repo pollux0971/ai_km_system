@@ -16,7 +16,7 @@ import { RagPipeline } from "../src/pipeline.js";
 import { createDeterministicEmbeddingProvider } from "../src/embedding/deterministic.provider.js";
 import { createCannedGenerationProvider } from "../src/generation/provider.js";
 import { createInMemoryVectorStore } from "../src/vector/store.js";
-import { toRetrievalScope, ScopeLeakError } from "../src/authorization/scope.js";
+import { toRetrievalScope, ScopeLeakError } from "@ai-km/service-retrieval";
 import { ProviderFidelityError } from "../src/evidence-tier.js";
 
 const MAINTENANCE_DOC = {

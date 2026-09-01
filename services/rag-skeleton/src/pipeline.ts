@@ -16,7 +16,7 @@ import type { EmbeddingProvider } from "./embedding/provider.js";
 import type { GenerationProvider, GenerationResult } from "./generation/provider.js";
 import { assertCitationsGrounded } from "./generation/provider.js";
 import type { VectorRecord, VectorStore, RetrievalHit } from "./vector/store.js";
-import { assertNoScopeLeak, type RetrievalScope } from "./authorization/scope.js";
+import { assertNoScopeLeak, type RetrievalScope } from "@ai-km/service-retrieval";
 import {
   effectiveFidelity,
   requireProviderFidelity,

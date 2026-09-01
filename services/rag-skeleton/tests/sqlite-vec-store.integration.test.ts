@@ -27,7 +27,7 @@ import {
   type SqliteDatabase,
 } from "../src/vector/sqlite-vec.store.js";
 import { createInMemoryVectorStore } from "../src/vector/store.js";
-import { toRetrievalScope } from "../src/authorization/scope.js";
+import { toRetrievalScope } from "@ai-km/service-retrieval";
 import { requireProviderFidelity } from "../src/evidence-tier.js";
 import type { VectorRecord } from "../src/vector/store.js";
 

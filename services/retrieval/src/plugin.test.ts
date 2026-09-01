@@ -9,6 +9,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { retrievalPlugin } from "./plugin.js";
 import { RetrievalNotImplementedError, type RetrievalService } from "./service.js";
+import { toRetrievalScope } from "./authorization/scope.js";
+
+const scope = toRetrievalScope({ principalId: "u-1", allowedScopeKeys: ["dept:maintenance"] });
 
 let app: FastifyInstance | undefined;
 afterEach(async () => {
@@ -36,12 +39,12 @@ describe("retrievalPlugin (E04-S058 scaffold)", () => {
 
   it("AC-RS2 空殼呼叫必須拋錯,不得回傳空陣列", async () => {
     app = await build();
-    await expect(seam(app)!.retrieve()).rejects.toBeInstanceOf(RetrievalNotImplementedError);
+    await expect(seam(app)!.retrieve(scope)).rejects.toBeInstanceOf(RetrievalNotImplementedError);
   });
 
   it("AC-RS3 錯誤訊息要指出由哪些 story 補上實作,而不是只說「未實作」", async () => {
     app = await build();
-    await expect(seam(app)!.retrieve()).rejects.toThrow(/E04-S060.*E04-S061.*E04-S062/s);
+    await expect(seam(app)!.retrieve(scope)).rejects.toThrow(/E04-S060.*E04-S061.*E04-S062/s);
   });
 
   it("AC-RS4 可注入替代實作——E04-S062 之後就是從這裡接進來", async () => {

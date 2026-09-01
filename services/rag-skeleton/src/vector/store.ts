@@ -21,7 +21,7 @@ import {
   buildScopePredicate,
   type RetrievalScope,
   type ScopedRecord,
-} from "../authorization/scope.js";
+} from "@ai-km/service-retrieval";
 
 export interface VectorRecord extends ScopedRecord {
   readonly chunkId: string;

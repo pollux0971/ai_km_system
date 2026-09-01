@@ -73,7 +73,7 @@
 
 import type { FidelityRatedComponent } from "../evidence-tier.js";
 import type { Embedding } from "../embedding/provider.js";
-import { assertNoScopeLeak, type RetrievalScope } from "../authorization/scope.js";
+import { assertNoScopeLeak, type RetrievalScope } from "@ai-km/service-retrieval";
 import {
   VectorStoreError,
   type RetrievalHit,

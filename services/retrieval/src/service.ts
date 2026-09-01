@@ -25,16 +25,7 @@
  * a runtime surprise. E04-S060 moves that constructor into this package.
  */
 
-/**
- * Placeholder for the branded `RetrievalScope` that E04-S060 relocates from
- * `services/rag-skeleton/src/authorization/scope.ts`.
- *
- * Deliberately NOT re-declared with a structural shape here: a second
- * definition of the scope type is a second authorization model, and the two
- * would drift. Until E04-S060 lands, this alias makes the dependency visible
- * and unusable rather than convenient.
- */
-export type RetrievalScopePlaceholder = never;
+import type { RetrievalScope } from "./authorization/scope.js";
 
 export class RetrievalNotImplementedError extends Error {
   override readonly name = "RetrievalNotImplementedError";
@@ -52,13 +43,14 @@ export interface RetrievalService {
    * let a caller be written against a service that does not exist, and the
    * failure would surface as "no matching documents" in the product.
    */
-  retrieve(): Promise<never>;
+  retrieve(scope: RetrievalScope): Promise<never>;
 }
 
 export function createRetrievalScaffold(): RetrievalService {
   return {
     componentId: "retrieval:scaffold",
-    async retrieve(): Promise<never> {
+    async retrieve(scope: RetrievalScope): Promise<never> {
+      void scope; // scaffold only — E04-S062 wires the scope through to the store.
       throw new RetrievalNotImplementedError(
         "services/retrieval 尚未實作。這是 E04-S058 建立的空殼," +
           "實作分別由 E04-S060(authorization scope)、E04-S061(vector store)、" +

@@ -11,7 +11,7 @@
  * instead of inferring it from which files happened to be imported.
  */
 
-import { chunkDocument, type ChunkOptions } from "./chunking/chunk.js";
+import { chunkDocument, type ChunkOptions } from "@ai-km/service-ingestion";
 import type { EmbeddingProvider } from "./embedding/provider.js";
 import type { GenerationProvider, GenerationResult } from "./generation/provider.js";
 import { assertCitationsGrounded } from "./generation/provider.js";

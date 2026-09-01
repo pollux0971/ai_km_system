@@ -6,52 +6,85 @@
  * that file for the actual hashing/normalisation implementation and its own
  * unit tests; none of that logic is duplicated here).
  *
- * This file does no hashing. It only translates between the two packages'
- * differing `EmbeddingProvider` shapes:
+ * ROUTES THROUGH `createModelGateway().embed()`, NOT THE PROVIDER DIRECTLY
+ * (E12-S032 follow-up). ADR 0007 §1 names the in-process
+ * `createModelGateway().embed()` call the PRIMARY path — every caller,
+ * in-process or over HTTP, is meant to funnel through it, because that is the
+ * one seam every provider answer is checked at (input validation, the
+ * batch-count check, and — since this follow-up — the vector-dimension
+ * check). Calling `provider.embed()` directly here would have made this
+ * adapter a second, unchecked path around that gate: the exact "wrapper vs.
+ * second implementation" drift `routes/model-gateway-routes.ts`'s own AC-R1
+ * exists to catch, just on the in-process side instead of HTTP.
+ *
+ * This file does no hashing and no gate logic of its own. It only translates
+ * between the two packages' differing `EmbeddingProvider` shapes:
  *   - this package:    embed(texts: readonly string[]): Promise<readonly Embedding[]>
  *                       (`Embedding` = `Float32Array`), rated via `componentId`.
- *   - model-gateway:   embed(input: EmbedInput): Promise<EmbedResult>
- *                       (`vectors: number[][]`), rated via `name`/`model`.
+ *   - model-gateway:   ModelGateway.embed(request: EmbedRequest, correlationId):
+ *                       Promise<EmbedResponse>, where
+ *                       `EmbedResponse.data: {index, embedding: number[]}[]`.
  *
- * `EmbedInput.timeoutMs`/`correlationId` exist for providers that make a real
- * network call; the deterministic provider computes in-process and ignores
- * both, so fixed placeholder values are supplied here rather than threaded
- * through this adapter's own (texts-only) API.
+ * `createModelGateway` requires a `generation` dependency even though this
+ * adapter only ever calls `.embed()`; `UNUSED_GENERATION_PROVIDER` below
+ * exists solely to satisfy that shape and throws if it is ever actually
+ * invoked, rather than silently returning a fake answer.
  */
-// Deep import rather than the package barrel (`@ai-km/service-model-gateway`)
-// deliberately: that barrel re-exports `modelGatewayPlugin`, which pulls in
-// the ASR route module transitively. This package's own tsconfig turns on
-// `exactOptionalPropertyTypes`, which surfaces a pre-existing type error in
-// that unrelated ASR code once it is part of the same compilation unit — see
-// this story's EVIDENCE file. Importing only the embedding module avoids
-// dragging in code this adapter has nothing to do with.
+// Deep imports rather than the package barrel (`@ai-km/service-model-gateway`)
+// deliberately: that barrel's index.ts re-exports `modelGatewayPlugin`, which
+// pulls in the ASR route module transitively, and this package's tsconfig
+// turns on `exactOptionalPropertyTypes` (model-gateway's own tsconfig does
+// not), surfacing a pre-existing, unrelated type error in that ASR code once
+// it is part of the same compilation unit (tracked separately as E12-S034;
+// see this story's EVIDENCE file). `gateway.ts` itself only imports the
+// embedding/generation provider modules — never the ASR route — so importing
+// it (and them) directly avoids dragging in code this adapter has nothing to
+// do with.
+import { createModelGateway } from "@ai-km/service-model-gateway/src/gateway.js";
 import { createDeterministicEmbeddingProvider as createModelGatewayDeterministicProvider } from "@ai-km/service-model-gateway/src/embedding/deterministic.provider.js";
+import type { GenerationProvider } from "@ai-km/service-model-gateway/src/generation/provider.js";
 import type { Embedding, EmbeddingProvider } from "./provider.js";
 
 export interface DeterministicProviderOptions {
   readonly dimensions?: number;
 }
 
-const PLACEHOLDER_TIMEOUT_MS = 30000;
 const PLACEHOLDER_CORRELATION_ID = "rag-skeleton:deterministic";
+
+/**
+ * Never invoked in practice — this adapter only ever calls `gateway.embed()`.
+ * Throwing (rather than quietly stubbing an answer) turns a future wiring
+ * mistake that reaches `.generate()` on this gateway into a loud failure
+ * instead of a silently wrong one.
+ */
+const UNUSED_GENERATION_PROVIDER: GenerationProvider = {
+  name: "fake",
+  model: "rag-skeleton-adapter-embedding-only",
+  fidelityCeiling: "PF0",
+  async generate(): Promise<never> {
+    throw new Error(
+      "此 adapter 只用於 embedding,generate() 不應被呼叫——這是接線錯誤。",
+    );
+  },
+};
 
 export function createDeterministicEmbeddingProvider(
   options: DeterministicProviderOptions = {},
 ): EmbeddingProvider {
-  const inner = createModelGatewayDeterministicProvider(options);
+  const embedding = createModelGatewayDeterministicProvider(options);
+  const gateway = createModelGateway({ embedding, generation: UNUSED_GENERATION_PROVIDER });
 
   return {
     componentId: "embedding:deterministic",
-    fidelityCeiling: inner.fidelityCeiling,
-    dimensions: inner.dimensions,
+    fidelityCeiling: embedding.fidelityCeiling,
+    dimensions: embedding.dimensions,
 
     async embed(texts: readonly string[]): Promise<readonly Embedding[]> {
-      const result = await inner.embed({
-        texts,
-        timeoutMs: PLACEHOLDER_TIMEOUT_MS,
-        correlationId: PLACEHOLDER_CORRELATION_ID,
-      });
-      return result.vectors.map((v) => Float32Array.from(v));
+      const response = await gateway.embed({ input: texts }, PLACEHOLDER_CORRELATION_ID);
+      // `EmbedResponse.data` is in input order (the contract guarantees it,
+      // and `createModelGateway` builds it that way) — see
+      // `contracts/openapi/embedding.yaml`.
+      return response.data.map((d) => Float32Array.from(d.embedding));
     },
   };
 }

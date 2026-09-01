@@ -72,6 +72,28 @@ describe("ModelGateway.embed (L1, PF1)", () => {
     ).rejects.toBeInstanceOf(EmbeddingUnavailableError);
   });
 
+  it("AC-G4b provider 宣告的 dimensions 與實際向量長度不符時拒絕,不回傳靜默錯誤的相似度", async () => {
+    const wrongDimensions = {
+      name: "fake" as const,
+      model: "wrong-dimensions",
+      dimensions: 4,
+      fidelityCeiling: "PF1" as const,
+      async embed(input: { texts: readonly string[] }) {
+        // Declares dimensions: 4 (matches deps.embedding.dimensions) but every
+        // vector it actually returns is length 3 — the shape a misconfigured
+        // real provider (E04-S037) could produce without ever throwing.
+        return {
+          vectors: input.texts.map(() => [1, 0, 0]),
+          model: "wrong-dimensions",
+          dimensions: 4,
+        };
+      },
+    };
+    await expect(
+      gateway({ embedding: wrongDimensions }).embed({ input: ["a"] }, CID),
+    ).rejects.toBeInstanceOf(EmbeddingUnavailableError);
+  });
+
   it("AC-G5 provider 失敗一律映射為 EmbeddingUnavailableError,不外洩內部例外", async () => {
     const broken = {
       name: "fake" as const,

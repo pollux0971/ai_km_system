@@ -608,6 +608,18 @@ importers:
 
   services/rag-skeleton:
     dependencies:
+      '@ai-km/service-generation':
+        specifier: workspace:*
+        version: link:../generation
+      '@ai-km/service-ingestion':
+        specifier: workspace:*
+        version: link:../ingestion
+      '@ai-km/service-model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@ai-km/service-retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
       better-sqlite3:
         specifier: ^11.8.1
         version: 11.10.0

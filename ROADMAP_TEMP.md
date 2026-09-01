@@ -825,6 +825,36 @@ drift gate 接線的 **E03-S034** 一併處理。
 這不改變上面的結論(gate 沒接 CI、沒人在跑),只是把「它壞掉了嗎」這個問題
 關掉,免得日後有人以為紅著就等於失能而直接刪掉它。
 
+**2026-09-02 第二次補記——那 6 個錯誤現在「不見了」,但不是被修好,是被遮蔽**:
+
+E04-S060 把 `services/rag-skeleton` 的 scope import 改指 `@ai-km/service-retrieval`。
+那個 package 的 barrel 同時匯出 Fastify plugin,於是 compat check 的型別閉包
+被撐開,連帶把 node 的 global 型別拉進來,`process` 因此找得到:
+
+```
+合併前的 main    97 個檔案進入編譯,6 errors
+E04-S060 分支   287 個檔案進入編譯,0 errors
+兩邊來源逐位元相同(tsconfig、conversations-compat.ts、apps/web/src/lib/api.ts
+的 md5 完全一致),差別只在型別閉包大小
+```
+
+**這不是修好。** 那 6 個 `TS2591` 仍然是同一個問題——`__checks__/tsconfig.json`
+設 `"types": []` 卻遞移拉進讀 `process.env` 的前端模組——只是現在有另一條
+路徑把 node 型別餵進來,所以看不到了。
+
+**兩個後果,都要記住**:
+1. **下一個來修 5-xi 的人會發現「沒東西可修」**,如果不知道這段就會以為這條
+   紀錄是憑空的。這是寫下這段的主要理由。
+2. **這個 gate 的基準線現在取決於 barrel 匯出什麼,不取決於原始碼。** 只要有人
+   在 `services/retrieval/src/index.ts` 增減匯出,錯誤數就可能跳回 6 或跳到別的
+   數字,而那與契約是否漂移完全無關。**「錯誤數必須剛好是 N」這種驗收方式對這
+   個 gate 已經不可靠**,審核清單要改成「沒有任何錯誤出現在 `*-compat.ts`」。
+
+順帶:編譯檔數從 97 變 287,gate 也變慢了,而 `__checks__/README.md` 說這些檔案
+「never ship, never execute」——把 Fastify 與 ajv 拉進一個純型別檢查的閉包本身
+就是範圍外溢。真正的修法(E03-S034 接手時)應該連這件事一起處理:讓 compat check
+只依賴它真正需要的型別入口,而不是整個服務的公開 barrel。
+
 **修的時候要注意**:別只是加 `"types": ["node"]` 就當修好——那只是讓錯誤消失。
 真正要決定的是「這個 gate 該不該把前端模組拉進來編譯」。`auth-compat.ts` 只引
 `packages/auth-client`(純型別,不碰 `process`)就沒事;會出事的是

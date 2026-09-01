@@ -32,11 +32,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 26 | 0 | 0 | 0 | 0 |
 | E13 Feedback & Analytics | 21 | 21 | 0 | 0 | 0 | 0 |
-| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S064 + 啟用 S009/S016) | 27 | 17 | 2 | 0 | 1 | 7 |
+| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S064 + 啟用 S009/S016) | 27 | 18 | 2 | 0 | 1 | 6 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(使用者增補 E12-S029～S033) | 5 | 1 | 0 | 2 | 0 | 2 |
 | E06 Knowledge Ingestion & Indexing(僅追蹤 Wave 1 索引側) | 5 | 1 | 1 | 0 | 0 | 3 |
-| **合計** | **248** | 225 | 3 | 4 | 2 | 14 |
+| **合計** | **248** | 226 | 3 | 4 | 2 | 13 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -318,7 +318,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S016 | todo | — | — | **啟用原模板 story，以此處定義為準**（epic 檔該 story 內文為共用樣板，無 story 專屬規格）。 **輕量級**。Basic reranking，**MMR 為預設實作、可調整**（使用者 2026-09-02）。輕量理由：只在已完成 scope 過濾的結果集內重排，不改變可見性，輸出確定性可直接斷言。HARD：E04-S062。規格＝測試：確定性排序斷言＋「多樣性優於純相似度」案例。反向驗證：MMR 退化成純相似度排序 → 多樣性案例紅。lambda 值待裁示（(d5)）。 |
 | E04-S058 | done | `main` | `41ec78a` | **41ec78a · 4 tests 綠 · 反向驗證 AC-RS1「app.retrieval 對 SIBLING 可見」（拿掉 fp() → 紅，還原 → 綠，紅綠兩段在該 commit body）。** Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。建立 `services/retrieval` package 與 Fastify plugin 空殼。HARD：無。規格＝測試：新寫 `plugin.test.ts`——走真實 `register()→ready()`、從**父實例**斷言 decoration 可見；契約未載入 → 404。AC 直接引用 **ADR 0007 §4/§5**。反向驗證：拿掉 `fp()` → 父實例 decoration 斷言紅。 |
 | E04-S059 | done | `main` | `623ef38` | **623ef38 · 4 tests 綠 · 反向驗證 AC-GS1「app.generation 對 SIBLING 可見」（拿掉 fp() → 紅，還原 → 綠，紅綠兩段在該 commit body）。** Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。建立 `services/generation` package 與 plugin 空殼。HARD：無。規格＝測試、反向驗證同 E04-S058。AC 引用 **ADR 0007 §4/§5**。 |
-| E04-S060 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級（搬移）**。`authorization/scope.ts` 移入 `services/retrieval`。輕量理由：邏輯**逐字不變**、8 條測試整批搬、原反向驗證仍成立；**diff 顯示任何邏輯變動即升重量級**。HARD：E04-S058。規格＝測試：`scope.test.ts` 8 條。反向驗證：`buildScopePredicate` 改為永遠放行 → 6 條紅（含 `ScopeLeakError`）。 |
+| E04-S060 | approved | `story/E04-S060-move-authorization-scope` | `5bead02` → merge `5bd2a04` | **獨立審核 APPROVE（新 session、自行重跑反向驗證且跨 package 延伸）。scope.ts/scope.test.ts 為 R100 rename、0 行邏輯變動；8 條測試整批搬，service-retrieval 12、rag-skeleton 38（併入 chunking 搬移後為 32）。反向驗證：`buildScopePredicate` 永遠放行 → service-retrieval 3 條紅（直接打函式）**且** rag-skeleton 3 條紅（管線層真的丟出 `ScopeLeakError`，`vector/store.ts:110`）——證實兩層縱深防禦在搬移後都還接著。⚠️ 合併時發現 contract gate 的 6 個既有錯誤被**遮蔽**（型別閉包由 97 檔撐到 287 檔），非本 story 的缺陷但已記入 ROADMAP 5-xi。** Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級（搬移）**。`authorization/scope.ts` 移入 `services/retrieval`。輕量理由：邏輯**逐字不變**、8 條測試整批搬、原反向驗證仍成立；**diff 顯示任何邏輯變動即升重量級**。HARD：E04-S058。規格＝測試：`scope.test.ts` 8 條。反向驗證：`buildScopePredicate` 改為永遠放行 → 6 條紅（含 `ScopeLeakError`）。 |
 | E04-S061 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級（搬移）**。vector store（in-memory + sqlite-vec partition-key 真 pre-filter）移入 `services/retrieval`。輕量理由同 E04-S060。HARD：E04-S058、E04-S060。規格＝測試：`sqlite-vec-store.integration.test.ts` 11 條（含反退化 AC-V6）。反向驗證：query 改回 JOIN 後濾 → AC-V6 紅。 |
 | E04-S062 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。`services/retrieval` 的 in-process `retrieve()` API 與 plugin decorate。**設計約束（使用者 2026-09-02）：`retrieve()` 必須收 `RetrievalScope`（branded type）作為輸入，不得在 retrieval 內部推導 scope，不建任何過渡對應表。** HARD：E04-S058、S060、S061。AC 引用 **ADR 0007**。規格＝測試：walking-skeleton 的 AC1/AC2/AC3/AC3b/AC5 改寫到服務層。反向驗證：拿掉 `assertNoScopeLeak` → AC5 紅。 |
 | E04-S063 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。`services/generation` 的 in-process `answer()`：組 context → 呼叫 `app.modelGateway.generate()` → 驗證引用。HARD：E04-S059、E04-S062、g1–g4（已完成）。AC 引用 **ADR 0007**。規格＝測試：新寫服務層測試（context 組裝、引用回填、空 context 走 422 語意）。反向驗證：讓 `answer()` 略過 gateway 的引用檢查直接回傳 provider 結果 → 捏造引用測試紅。 |

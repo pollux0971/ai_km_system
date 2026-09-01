@@ -35,8 +35,8 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S064 + 啟用 S009/S016) | 27 | 17 | 2 | 0 | 1 | 7 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(使用者增補 E12-S029～S033) | 5 | 1 | 0 | 2 | 0 | 2 |
-| E06 Knowledge Ingestion & Indexing(僅追蹤 Wave 1 索引側) | 5 | 0 | 1 | 0 | 0 | 4 |
-| **合計** | **248** | 224 | 3 | 4 | 2 | 15 |
+| E06 Knowledge Ingestion & Indexing(僅追蹤 Wave 1 索引側) | 5 | 1 | 1 | 0 | 0 | 3 |
+| **合計** | **248** | 225 | 3 | 4 | 2 | 14 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -367,7 +367,7 @@ mock 也做不了才標 `blocked-team-b`。
 | Story | 狀態 | Branch | Evidence | 備註 |
 |---|---|---|---|---|
 | E06-S008 | todo | — | — | **啟用原模板 story，以此處定義為準**（epic 檔該 story 內文為共用樣板，無 story 專屬規格）。 **輕量級**。最小 PDF 文字抽取,**保留字元偏移量**。HARD:E06-S041。**選型:`pdfjs-dist` 釘死 6.3.289(無 caret,比照 sqlite-vec),Node 走 `legacy/build/pdf.mjs`,排除 optional 的 `@napi-rs/canvas`(裝後以 `pnpm why` 確認,若被拉則用 overrides 排除並驗證無它仍可抽取)。依技術顧問 ai-km-c5 建議;使用者授權顧問裁決(2026-09-02,經協調者 ai-km-c6 轉述,非使用者直接對顧問表述)。排除 `unpdf`(內嵌 pdfjs ~6.1.200 且 join 規則歸它,而 join 出來的原文正是要落庫的東西——隱藏版本耦合)、`pdf2json`(CJK CID／非內嵌字型支援弱)、`mupdf`(AGPL)、`pdf-parse`(native + 丟失 text item 邊界)。**使用者 2026-09-02 約束:抽出的原文(或其雜湊)必須與文件一起落庫,偏移量不得只依賴日後重抽。** 規格＝測試:真實 PDF fixture,斷言 `原文.slice(startOffset, endOffset) === chunk.text`;同一份 PDF 重複抽取結果逐位元相同。反向驗證:偏移量 +1 → slice 相等斷言紅。 |
-| E06-S022 | todo | — | — | **啟用原模板 story，以此處定義為準**（epic 檔該 story 內文為共用樣板，無 story 專屬規格）。 **輕量級(搬移)**。chunking 從 `services/rag-skeleton` 移入 `services/ingestion`。輕量理由:邏輯逐字不變、6 條測試整批搬;diff 顯示任何邏輯變動即升重量級。HARD:E06-S041。規格＝測試:`chunk.test.ts` 6 條(偏移量可切回原文／chunkId 穩定／overlap 守衛／空白文件／documentId 空值／hardCut 標記)。反向驗證:`endOffset` 改為 chunk 長度而非原文位移 → 偏移量測試紅。 |
+| E06-S022 | approved | `story/E06-S022-move-chunking` | `76dac95` → merge `3e37bc3` | **獨立審核 APPROVE（新 session、無開發脈絡、自行重跑反向驗證）。搬移為 R100 rename、0 行邏輯變動；6 條測試整批搬，service-ingestion 10、rag-skeleton 40；反向驗證 `PF0 偏移量必須能從原文精確切出 chunk 內容`（`endOffset` 改成 chunk 長度 → 紅，還原 → 綠）；contract gate 仍剛好 6 個既有錯誤且不在 `*-compat.ts`；舊路徑 grep 零引用。** **啟用原模板 story，以此處定義為準**（epic 檔該 story 內文為共用樣板，無 story 專屬規格）。 **輕量級(搬移)**。chunking 從 `services/rag-skeleton` 移入 `services/ingestion`。輕量理由:邏輯逐字不變、6 條測試整批搬;diff 顯示任何邏輯變動即升重量級。HARD:E06-S041。規格＝測試:`chunk.test.ts` 6 條(偏移量可切回原文／chunkId 穩定／overlap 守衛／空白文件／documentId 空值／hardCut 標記)。反向驗證:`endOffset` 改為 chunk 長度而非原文位移 → 偏移量測試紅。 |
 | E06-S026 | todo | — | [spec](specs/E06-S026.spec.md) | **啟用原模板 story，以此處定義為準**（epic 檔該 story 內文為共用樣板，無 story 專屬規格）。 **🔴 重量級——走完整狀態機,需 spec 檔與獨立 review**。embedding 模型／版本 metadata 落庫,且查詢向量與索引向量版本不符時**拒絕檢索**而非靜默降級。**重量級理由:失敗模式是「靜默給出錯誤結果」的原型**——換 provider 後庫裡的向量與查詢當下算的向量來自不同函式,排序全錯、零錯誤、零日誌、輸出看起來完全合理,沒有任何測試能在事後分辨「排序爛」與「模型換了」。骨架註解已寫明這是 re-index event,但 store 現在沒有任何欄位記錄它。**使用者 2026-09-02 裁示:優先序提升到早於原編號位置。** HARD:E04-S061、E06-S042。 |
 | E06-S041 | done | `main` | `b526b94` | **b526b94 · 4 tests 綠 · 反向驗證 AC-IS1「app.ingestion 對 SIBLING 可見」（拿掉 fp() → 紅，還原 → 綠，紅綠兩段在該 commit body）。** Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。建立 `services/ingestion` package 與 Fastify plugin 空殼。**使用者 2026-09-02 裁示納入 Wave 1,範圍限索引側四項。** HARD:無。規格＝測試:走真實 `register()→ready()`、從父實例斷言 decoration 可見;契約未載入 → 404。AC 引用 **ADR 0007 §4/§5**。反向驗證:拿掉 `fp()` → 父實例 decoration 斷言紅。 |
 | E06-S042 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。索引管線 `parse → chunk → embed(經 model-gateway in-process) → store`。**W1-00 結果檢查(一份真實 PDF 端到端跑通、引用偏移量指回原文)就在這一項通過。** HARD:E06-S041、E06-S022、E06-S008、E04-S061、g1–g4(已完成)。規格＝測試:真實 PDF 走完管線後,引用的 `slice` 逐字等於原文對應段落。反向驗證:跳過 embed 直接存零向量 → W1-00 引用比對紅。 |

@@ -449,41 +449,23 @@ build && pnpm --filter @ai-km/api start` 操作,會在**任何環境**(不只
 Docker)得到一模一樣的 crash——這個路徑目前對任何呼叫者都是壞的,不是
 E01-S028 這個 story 造成的,也不是只有 Docker 部署會碰到。
 
-## ⚠️ 進行中的已知風險:`@ai-km/service-retrieval` 的 turbo 快取目前不可信(2026-09-02)
+## ✅ 已解除:`@ai-km/service-retrieval` 的 turbo 快取不可信(2026-09-02,已於同日解除)
 
-**這不是待批示事項,是一條在 E04-S066 完成前必須遵守的操作規則。放在這裡是因為
-它必須被一個「改到那兩個檔案的人」看見,而原本它只存在於 `store.ts` 的原始碼註解裡——
-那不是任何未來 PR 的審查者會讀到的地方。**
+E04-S061 期間,`services/retrieval` 以跨 package 相對 import 借用
+`services/rag-skeleton` 的兩個 leaf 模組,導致 turbo 對該 package 產生**可重現的
+假綠燈**:相依檔案真的壞掉時,`pnpm turbo run typecheck --filter=@ai-km/service-retrieval`
+仍回報 `cache hit` 且 hash 不變(turbo 的 task hash 不含 package root 以外的檔案)。
 
-E04-S061 把向量庫搬進 `services/retrieval`,但它仍需要
-`services/rag-skeleton/src/evidence-tier.ts` 的 `FidelityRatedComponent` 與
-`services/rag-skeleton/src/embedding/provider.ts` 的 `dot`／`Embedding`。宣告
-workspace 相依會造成套件循環(rag-skeleton 已相依 service-retrieval),所以目前
-用的是跨 package 的相對 import。
+當時的臨時規則是「改到那兩個檔案必須加 `--force` 才能信任綠燈」。
 
-**後果已實測,不是理論**:E04-S061 的獨立審核者把 `evidence-tier.ts` 的
-`componentId` 改名(真實破壞,直接跑 `tsc -p services/retrieval/tsconfig.json`
-會噴 4 個錯,其中 2 個就在向量庫檔案裡),然後:
+**E04-S066 已把兩個 leaf 模組搬進 `services/retrieval`,接縫消失,此規則失效。**
+驗證方式是那條曾經說謊的指令本身:改名 `componentId` 後,不加 `--force` 的
+`turbo run typecheck --filter=@ai-km/service-retrieval` 由 `cache hit 2e7e2a5b338bd5b1`
+變成 `cache miss 03622d9b15ec75d5` 並回報 4 個真實 TS 錯誤,還原後 hash 回到原值。
+hash 會隨相依變動,就是 task graph 真的看見那條邊。
 
-```
-pnpm turbo run typecheck --filter=@ai-km/service-retrieval
-  → cache hit, replaying logs 783471fb2573635c    ← 破壞前後 hash 完全相同
-```
-
-turbo 的 task hash 不包含 package root 以外的檔案。
-
-**在 E04-S066 完成之前,任何人修改這兩個檔案:**
-- `services/rag-skeleton/src/evidence-tier.ts`
-- `services/rag-skeleton/src/embedding/provider.ts`
-
-**都不得信任 `pnpm turbo run typecheck` 的綠燈**,必須額外跑:
-```
-pnpm turbo run typecheck --filter=@ai-km/service-retrieval --force
-```
-
-這條規則在 **E04-S066** 把那兩個 leaf 模組搬進 `services/retrieval` 之後失效。
-兩者都是葉節點(`evidence-tier.ts` 零 import;`embedding/provider.ts` 只 type-only
-依賴前者),所以搬移不會新增任何對外邊,循環與接縫一次消失。
+保留這段而非刪除,是因為「這條規則存在過、以及它為什麼可以拿掉」本身是資訊——
+下次有人想用跨 package 相對 import 抄捷徑時,這裡有一份實測後果。
 
 ## 已批示
 

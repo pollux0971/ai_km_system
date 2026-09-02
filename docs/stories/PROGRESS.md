@@ -32,11 +32,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 26 | 0 | 0 | 0 | 0 |
 | E13 Feedback & Analytics | 21 | 21 | 0 | 0 | 0 | 0 |
-| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S066 + 啟用 S009/S016/S022) | 30 | 19 | 2 | 0 | 1 | 8 |
+| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S066 + 啟用 S009/S016/S022) | 30 | 20 | 2 | 0 | 1 | 7 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(使用者增補 E12-S029～S034) | 6 | 3 | 0 | 2 | 0 | 1 |
 | E06 Knowledge Ingestion & Indexing(僅追蹤 Wave 1 索引側) | 5 | 2 | 1 | 0 | 0 | 2 |
-| **合計** | **252** | 230 | 3 | 4 | 2 | 13 |
+| **合計** | **252** | 231 | 3 | 4 | 2 | 12 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -325,7 +325,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E04-S063 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。`services/generation` 的 in-process `answer()`：組 context → 呼叫 `app.modelGateway.generate()` → 驗證引用。HARD：E04-S059、E04-S062、g1–g4（已完成）。AC 引用 **ADR 0007**。規格＝測試：新寫服務層測試（context 組裝、引用回填、空 context 走 422 語意）。反向驗證：讓 `answer()` 略過 gateway 的引用檢查直接回傳 provider 結果 → 捏造引用測試紅。 |
 | E04-S064 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。退場 `services/rag-skeleton`：刪除 package、workspace 條目與 lockfile importer。HARD：Wave 1 其餘全部。規格＝測試：全 repo gate 全綠。反向驗證：刪除後 `grep -r rag-skeleton`（排除 node_modules）必須零命中——留下任何殘留引用即視為未完成。 |
 | E04-S065 | todo | — | — | Wave 1 衍生項。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。把 `pnpm contract-gate`(`contracts/openapi/__checks__/run-gate.mjs`)接進 CI,並把 compat check 的型別閉包縮回三位數以下——讓它只 import type-only 入口,而不是整個 service 的公開 barrel。**由來**:E04-S060 合併時發現這個 gate 的錯誤數取決於某個 barrel 匯出什麼(97 檔/6 錯 → 287 檔/0 錯,來源逐位元相同),6 個既有 `TS2591` 是被**遮蔽**而非修好;詳見 ROADMAP 5-xi 兩次補記。技術顧問原本裁示把這件事加進 E03-S034,但**該 story 已 approved,不得追加範圍**,故另立本項。HARD:無。規格＝測試:`pnpm contract-gate` 在 CI 上跑得到且 exit code 正確;閉包檔數 < 100。反向驗證:破壞任一 `*-compat.ts` 的斷言 → `pnpm contract-gate` exit 1 並指名該檔(已在 2026-09-02 驗證過此行為)。 |
-| E04-S066 | todo | — | — | Wave 1 衍生項。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。把 `services/rag-skeleton/src/evidence-tier.ts` 與 `src/embedding/provider.ts` 兩個 leaf 模組搬進 `services/retrieval`,關掉 E04-S061 留下的跨 package 相對 import 接縫。**由來**:E04-S061 的獨立審核者**實測**證明該接縫會讓 `pnpm turbo run typecheck --filter=@ai-km/service-retrieval` 在相依檔案真的壞掉時仍回報 `cache hit` 且 hash 不變(turbo 的 task hash 不含 package root 以外的檔案)——亦即在實作「授權在 KNN 內部生效」的那個 package 上有一個可重現的假綠燈。審核者同時指出這是**最省的解**:兩者都是葉節點(`evidence-tier.ts` 零 import、`embedding/provider.ts` 只 type-only 依賴前者),搬移**不新增任何對外邊**,循環與接縫一次消失。**排在 E04-S062 之前**(不延到 E04-S064),因為留著它等於本波剩餘每一次 gate 在最關鍵的 package 上都不可信。HARD:E04-S061。規格＝測試:搬移後 `services/retrieval` 不再有任何跨 package 相對 import;既有 22 條測試不變全綠。反向驗證:把 `evidence-tier.ts` 的 `componentId` 改名 → `pnpm turbo run typecheck --filter=@ai-km/service-retrieval`(**不加 --force**)必須紅——這正是現在會假綠的那條指令。 |
+| E04-S066 | approved | `story/E04-S066-relocate-leaf-modules` | `9648e77` → merge `80de9f3` | **獨立審核 APPROVE WITH FOLLOW-UP(兩行過期註解已於合併時一併修掉)。** 兩個 leaf 模組皆 R100,審核者自行讀檔驗證葉節點性質(`evidence-tier.ts` 零 import、`embedding/provider.ts` 只 type-only 依賴前者),故搬移不新增任何對外邊。`services/retrieval` 內跨 package 相對 import **零命中**,未引入循環。**決定性反向驗證**:改名 `componentId` 後,不加 `--force` 的 `turbo run typecheck --filter=@ai-km/service-retrieval` 由 `cache hit 2e7e2a5b338bd5b1` → `cache miss 03622d9b15ec75d5`(4 個真實 TS 錯誤跨 4 檔),還原後 hash 回到原值——**hash 會動就是 task graph 真的看見那條邊**。PENDING_DECISIONS 的臨時規則隨此 story 失效。 Wave 1 衍生項。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。把 `services/rag-skeleton/src/evidence-tier.ts` 與 `src/embedding/provider.ts` 兩個 leaf 模組搬進 `services/retrieval`,關掉 E04-S061 留下的跨 package 相對 import 接縫。**由來**:E04-S061 的獨立審核者**實測**證明該接縫會讓 `pnpm turbo run typecheck --filter=@ai-km/service-retrieval` 在相依檔案真的壞掉時仍回報 `cache hit` 且 hash 不變(turbo 的 task hash 不含 package root 以外的檔案)——亦即在實作「授權在 KNN 內部生效」的那個 package 上有一個可重現的假綠燈。審核者同時指出這是**最省的解**:兩者都是葉節點(`evidence-tier.ts` 零 import、`embedding/provider.ts` 只 type-only 依賴前者),搬移**不新增任何對外邊**,循環與接縫一次消失。**排在 E04-S062 之前**(不延到 E04-S064),因為留著它等於本波剩餘每一次 gate 在最關鍵的 package 上都不可信。HARD:E04-S061。規格＝測試:搬移後 `services/retrieval` 不再有任何跨 package 相對 import;既有 22 條測試不變全綠。反向驗證:把 `evidence-tier.ts` 的 `componentId` 改名 → `pnpm turbo run typecheck --filter=@ai-km/service-retrieval`(**不加 --force**)必須紅——這正是現在會假綠的那條指令。 |
 
 ## E02 Identity, RBAC & Authorization(僅追蹤使用者增補,4)
 

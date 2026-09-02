@@ -238,6 +238,10 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
    Team B 佔位資料夾(`apps/api`、`apps/worker-*`、`services/*`、`db/*`)。
    (例外:使用者 2026-08-28 明示授權並指派 Team A 的增補 story——
    E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021——限該 story 允許修改清單內的路徑,含 `infra/*`。)
+   (例外:使用者 2026-09-02 核可的 **Wave 1**——E04-S009/S016/S022、
+   E04-S058～S067、E06-S008/S022/S026/S041/S042/S043、E12-S032～S033——可在該
+   story 允許修改清單內修改 `services/retrieval|generation|ingestion|rag-skeleton`。
+   見 README.md 的 2026-09-02 Wave 1 段落。)
 5. **失敗誠實回報**:紅就是紅。任何 gate 未跑或未過,不得宣稱 DONE。
 6. **進度唯一真相**:`docs/stories/PROGRESS.md` 是進度追蹤的唯一來源。
    每次狀態轉換立即更新並隨 commit 提交;不得只更新 tracker 而未實際完成

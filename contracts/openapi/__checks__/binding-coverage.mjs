@@ -104,6 +104,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { findL2RegisteredSchemas } from "./l2-registrations.mjs";
+import { findTranscribedSchemas } from "./transcribed-schemas.mjs";
 
 /** Schema names declared directly under a contract's `components: schemas:`. */
 export function extractYamlSchemaNames(yamlText) {
@@ -137,6 +139,68 @@ export function extractYamlSchemaNames(yamlText) {
     }
   }
   return names;
+}
+
+/**
+ * For BOUND-VIA-PARENT detection: returns a Map from a schema name to the
+ * Set of OTHER schema names in the SAME yaml file that `$ref` it directly
+ * (e.g. `FeedbackItem.verdict: $ref: "#/components/schemas/FeedbackVerdict"`
+ * makes `parentsOf.get("FeedbackVerdict")` include `"FeedbackItem"`).
+ *
+ * Same method and same limitation as `extractYamlSchemaNames`: a structural
+ * scan of this repo's consistent 2-space-indent formatting, tracking which
+ * `schemas:` child block each line falls inside, not a YAML parser. Only
+ * local (`#/components/schemas/...`) refs are recognised — a schema that
+ * only appears nested inside another CONTRACT's schema (there are no
+ * cross-file schema `$ref`s among these seven yaml files today) would not
+ * be found.
+ */
+export function extractSchemaParentRefs(yamlText, knownSchemaNames) {
+  const known = new Set(knownSchemaNames);
+  const lines = yamlText.split("\n");
+  const parentsOf = new Map();
+  let inComponents = false;
+  let inSchemas = false;
+  let currentSchema = null;
+  const refRe = /#\/components\/schemas\/([A-Za-z_][A-Za-z0-9_]*)/;
+  for (const line of lines) {
+    if (/^components:\s*$/.test(line)) {
+      inComponents = true;
+      inSchemas = false;
+      currentSchema = null;
+      continue;
+    }
+    if (inComponents && /^\S/.test(line)) {
+      inComponents = false;
+      inSchemas = false;
+      currentSchema = null;
+    }
+    if (!inComponents) continue;
+    if (/^ {2}schemas:\s*$/.test(line)) {
+      inSchemas = true;
+      currentSchema = null;
+      continue;
+    }
+    if (inSchemas && /^ {2}\S/.test(line)) {
+      inSchemas = false;
+      currentSchema = null;
+    }
+    if (!inSchemas) continue;
+    const nameMatch = line.match(/^ {4}([A-Za-z_][A-Za-z0-9_]*):/);
+    if (nameMatch) {
+      currentSchema = nameMatch[1];
+      continue;
+    }
+    if (!currentSchema) continue;
+    const refMatch = line.match(refRe);
+    if (!refMatch) continue;
+    const target = refMatch[1];
+    if (!known.has(target) || target === currentSchema) continue;
+    const set = parentsOf.get(target) ?? new Set();
+    set.add(currentSchema);
+    parentsOf.set(target, set);
+  }
+  return parentsOf;
 }
 
 /**
@@ -286,13 +350,48 @@ export function findBoundSchemas(compatFilePath, knownSchemaNames) {
 }
 
 /**
- * Runs the full binding-coverage analysis over every `contracts/openapi/*.yaml`
- * against its `<name>-compat.ts` in `contracts/openapi/__checks__/`.
+ * Runs the full binding-coverage analysis over every `contracts/openapi/*.yaml`.
  *
- * Returns an array of { yaml, compatFile, schemas, bound, unbound }.
- * `compatFile` is `null` when no `<name>-compat.ts` exists at all — in that
- * case every schema in the contract is unbound, with no compat file to blame
- * it on individually.
+ * FOUR STATES PER SCHEMA (2026-09-02 correction — see run-gate.mjs's header
+ * and this story's report for the full rationale):
+ *
+ *   - BOUND-L0   — a `*-compat.ts` ties it to an implementation type at
+ *                  typecheck time (`findBoundSchemas` above).
+ *   - BOUND-L2   — some route registers it into Fastify's runtime validator
+ *                  via a literal `getSchema("<spec>", "<Schema>")` call —
+ *                  see `l2-registrations.mjs`. This is a RUNTIME gate, not a
+ *                  weaker substitute for L0; "no L0 binding" is not "no
+ *                  gate at all".
+ *   - TRANSCRIBED — a route hand-writes an object literal copied from the
+ *                  contract instead of fetching it — see
+ *                  `transcribed-schemas.mjs`. Fastify still validates real
+ *                  traffic against it, but nothing compares the copy back
+ *                  to the contract, so it is reported separately from both
+ *                  BOUND states, not folded into either.
+ *   - UNBOUND    — none of the above.
+ *
+ * PLUS a fifth, informational-only state, BOUND-VIA-PARENT: a schema that is
+ * itself never checked on its own, but is `$ref`'d as a field of another
+ * schema whose L0 check DOES exercise that field (e.g. `FeedbackVerdict` is
+ * only ever reached as `Schemas["FeedbackItem"]["verdict"]`, never on its
+ * own, but `FeedbackItem`'s own L0 check does assert that exact field). This
+ * is real coverage, but a strictly weaker claim than checking the schema on
+ * its own name, so it is printed and NEVER put in the allowlist — it isn't
+ * UNBOUND, and pretending it's a full BOUND would hide that the check only
+ * ever looks at it through a parent's eyes. Restricted to L0 parents only
+ * (see `extractSchemaParentRefs`'s caller below) — an L2/TRANSCRIBED
+ * parent's runtime validation would technically also cover a nested `$ref`
+ * field, but that inference is not made here; documented limitation, not an
+ * oversight.
+ *
+ * Returns an array of:
+ *   { yaml, compatFile, schemas, classification, contractLevelGap }
+ * `classification` is a Map from schema name to `{ state, evidence? }`.
+ * `contractLevelGap` is true when the WHOLE contract has zero mechanism of
+ * any kind — no compat file AND no schema in it reached BOUND-L2 or
+ * TRANSCRIBED either — which is a categorically different severity from one
+ * unbound schema inside an otherwise-covered contract (see run-gate.mjs's
+ * two-section report).
  */
 export function analyzeBindingCoverage(repoRoot, checksDir) {
   const openapiDir = path.join(repoRoot, "contracts/openapi");
@@ -301,21 +400,61 @@ export function analyzeBindingCoverage(repoRoot, checksDir) {
     .filter((f) => f.endsWith(".yaml"))
     .sort();
 
+  const schemasByYaml = {};
+  const parentRefsByYaml = {};
+  for (const yamlFile of yamlFiles) {
+    const text = fs.readFileSync(path.join(openapiDir, yamlFile), "utf8");
+    schemasByYaml[yamlFile] = extractYamlSchemaNames(text);
+    parentRefsByYaml[yamlFile] = extractSchemaParentRefs(text, schemasByYaml[yamlFile]);
+  }
+
+  // Repo-wide scans, run once and filtered per yaml below.
+  const l2Hits = findL2RegisteredSchemas(repoRoot, schemasByYaml);
+  const transcribedHits = findTranscribedSchemas(repoRoot, schemasByYaml);
+
   const results = [];
   for (const yamlFile of yamlFiles) {
-    const yamlPath = path.join(openapiDir, yamlFile);
-    const schemas = extractYamlSchemaNames(fs.readFileSync(yamlPath, "utf8"));
+    const schemas = schemasByYaml[yamlFile];
     const base = yamlFile.replace(/\.yaml$/, "");
     const compatFile = path.join(checksDir, `${base}-compat.ts`);
     const hasCompatFile = fs.existsSync(compatFile);
-    const bound = hasCompatFile ? findBoundSchemas(compatFile, schemas) : new Set();
-    const unbound = schemas.filter((s) => !bound.has(s));
+    const l0Bound = hasCompatFile ? findBoundSchemas(compatFile, schemas) : new Set();
+
+    const classification = new Map();
+    for (const s of schemas) {
+      const key = `${yamlFile}::${s}`;
+      if (l0Bound.has(s)) {
+        classification.set(s, { state: "BOUND-L0" });
+      } else if (l2Hits.has(key)) {
+        classification.set(s, { state: "BOUND-L2", evidence: l2Hits.get(key) });
+      } else if (transcribedHits.has(key)) {
+        classification.set(s, { state: "TRANSCRIBED", evidence: transcribedHits.get(key) });
+      } else {
+        classification.set(s, { state: "UNBOUND" });
+      }
+    }
+
+    // Second pass: an UNBOUND schema reached only as an L0-bound parent's
+    // own `$ref`'d field becomes BOUND-VIA-PARENT instead.
+    const parentRefs = parentRefsByYaml[yamlFile];
+    for (const s of schemas) {
+      const entry = classification.get(s);
+      if (entry.state !== "UNBOUND") continue;
+      const parents = parentRefs.get(s);
+      if (!parents) continue;
+      const boundParent = [...parents].find((p) => classification.get(p)?.state === "BOUND-L0");
+      if (boundParent) classification.set(s, { state: "BOUND-VIA-PARENT", parent: boundParent });
+    }
+
+    const contractLevelGap =
+      !hasCompatFile && [...classification.values()].every((c) => c.state === "UNBOUND");
+
     results.push({
       yaml: yamlFile,
       compatFile: hasCompatFile ? path.relative(repoRoot, compatFile) : null,
       schemas,
-      bound: schemas.filter((s) => bound.has(s)),
-      unbound,
+      classification,
+      contractLevelGap,
     });
   }
   return results;

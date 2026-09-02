@@ -29,10 +29,17 @@
  *      docs/stories/PROGRESS.md's E04-S065 row), so a ceiling would have
  *      gone red on a *good* change. The closure size is still printed on
  *      every run — a readable signal, not a gate.
- *   3. Fail if any contract schema is UNBOUND (no `*-compat.ts` assertion
- *      ties it to a real implementation type) and not listed in
- *      ./unbound-schema-allowlist.mjs — see ./binding-coverage.mjs for how
- *      "bound" is determined and what that method misses.
+ *   3. Fail if any contract schema is UNBOUND — none of BOUND-L0 (a
+ *      `*-compat.ts` typecheck-time binding), BOUND-L2 (a route registers it
+ *      into Fastify's runtime validator via a literal
+ *      `getSchema("<spec>", "<Schema>")`), or TRANSCRIBED (a route
+ *      hand-writes a schema literal copied from the contract) apply — and
+ *      it is not covered by a class in ./unbound-schema-allowlist.mjs. See
+ *      ./binding-coverage.mjs for how each state is determined and what
+ *      each method misses; "no BOUND-L0" is NOT "no gate" — L2 is a runtime
+ *      gate, arguably stronger than a compile-time one, and conflating the
+ *      two was corrected here on 2026-09-02 (see docs/stories/PROGRESS.md's
+ *      E04-S065 row).
  *
  * Errors anywhere else in the closure (outside `*-compat.ts`) are noise from
  * the closure's size and are reported, not judged — same as before.
@@ -108,33 +115,99 @@ if (closureViolations.length > 0) {
   console.log(`PASS: all ${closureFiles.length} closure files sit under an allowed root.`);
 }
 
-/* ── Check 3: binding coverage ───────────────────────────────────────────── */
+/* ── Check 3: binding coverage (four states + BOUND-VIA-PARENT) ─────────── */
 
 const coverage = analyzeBindingCoverage(repoRoot, here);
-const allowlistIndex = new Set(UNBOUND_SCHEMA_ALLOWLIST.map((e) => `${e.yaml}::${e.schema}`));
+
+const stateCounts = { "BOUND-L0": 0, "BOUND-L2": 0, TRANSCRIBED: 0, "BOUND-VIA-PARENT": 0, UNBOUND: 0 };
+const contractLevelGaps = []; // { yaml, schemas }
+const schemaLevelGapsByYaml = []; // { yaml, schemas: [{schema, matchedClass}] }
 const unescalated = [];
 
-console.log("\nbinding coverage (BOUND = tied to a real implementation type in a *-compat.ts; see binding-coverage.mjs):");
+console.log(
+  "\nbinding coverage (BOUND-L0/L2/TRANSCRIBED/BOUND-VIA-PARENT/UNBOUND; see binding-coverage.mjs):",
+);
 for (const r of coverage) {
-  console.log(`  ${r.yaml}${r.compatFile ? "" : "  (no compat file — every schema is UNBOUND)"}`);
-  for (const s of r.bound) console.log(`    BOUND    ${s}`);
-  for (const s of r.unbound) {
-    const key = `${r.yaml}::${s}`;
-    const allowed = allowlistIndex.has(key);
-    console.log(`    UNBOUND  ${s}${allowed ? "  (allowlisted)" : ""}`);
-    if (!allowed) unescalated.push(key);
+  console.log(`  ${r.yaml}${r.contractLevelGap ? "  (CONTRACT-LEVEL GAP — no compat file, no L2, no TRANSCRIBED)" : ""}`);
+  const schemaGaps = [];
+  for (const s of r.schemas) {
+    const c = r.classification.get(s);
+    stateCounts[c.state] += 1;
+    const suffix = c.state === "BOUND-VIA-PARENT" ? ` (via ${c.parent})` : "";
+    console.log(`    ${c.state.padEnd(16)} ${s}${suffix}`);
+    if (c.state === "UNBOUND") {
+      const key = `${r.yaml}::${s}`;
+      const entry = UNBOUND_SCHEMA_ALLOWLIST.find((e) => e.match(r.yaml, s));
+      if (entry) {
+        schemaGaps.push({ schema: s, class: entry.class });
+      } else {
+        unescalated.push(key);
+      }
+    }
+  }
+  if (r.contractLevelGap) {
+    contractLevelGaps.push({ yaml: r.yaml, schemas: r.schemas });
+  } else if (schemaGaps.length > 0) {
+    schemaLevelGapsByYaml.push({ yaml: r.yaml, schemas: schemaGaps });
   }
 }
+
+console.log(
+  `\nstate counts: BOUND-L0=${stateCounts["BOUND-L0"]}  BOUND-L2=${stateCounts["BOUND-L2"]}  ` +
+    `TRANSCRIBED=${stateCounts.TRANSCRIBED}  BOUND-VIA-PARENT=${stateCounts["BOUND-VIA-PARENT"]}  ` +
+    `UNBOUND=${stateCounts.UNBOUND}`,
+);
+if (stateCounts.TRANSCRIBED > 0) {
+  console.log(
+    "  TRANSCRIBED is printed, not allowlist-eligible, and not counted as bound: unlock condition is " +
+      '"reclassified to MATCH or DIVERGES once the L2-EQ check lands" (a follow-up story, not yet numbered, ' +
+      "that compares each registered/transcribed route schema against its yaml at runtime-registration time).",
+  );
+}
+
+// ── Two-section gap report: contract-level ("no gate exists for this whole
+// contract") is a different severity from schema-level ("this one schema in
+// an otherwise-gated contract has no gate"). ──────────────────────────────
+
+console.log("\n── Contract-level gaps (no compat file, no BOUND-L2, no TRANSCRIBED for the WHOLE contract) ──");
+if (contractLevelGaps.length === 0) {
+  console.log("  none");
+} else {
+  for (const g of contractLevelGaps) {
+    const entry = UNBOUND_SCHEMA_ALLOWLIST.find((e) => e.match(g.yaml, g.schemas[0]));
+    console.log(`  ${g.yaml}  (${g.schemas.length} schemas, class: ${entry ? entry.class : "UNESCALATED"})`);
+  }
+}
+
+console.log("\n── Schema-level gaps (this schema, inside an otherwise-gated contract, has no gate) ──");
+if (schemaLevelGapsByYaml.length === 0) {
+  console.log("  none");
+} else {
+  for (const g of schemaLevelGapsByYaml) {
+    console.log(`  ${g.yaml}`);
+    const byClass = new Map();
+    for (const { schema, class: cls } of g.schemas) {
+      const list = byClass.get(cls) ?? [];
+      list.push(schema);
+      byClass.set(cls, list);
+    }
+    for (const [cls, schemas] of byClass) {
+      console.log(`    [${cls}] ${schemas.join(", ")}`);
+    }
+  }
+}
+
+console.log(`\nallowlist entries: ${UNBOUND_SCHEMA_ALLOWLIST.length} classes`);
 
 if (unescalated.length > 0) {
   failed = true;
   console.error(
-    `\nFAIL: ${unescalated.length} UNBOUND schema(s) are not in ` +
+    `\nFAIL: ${unescalated.length} UNBOUND schema(s) are not covered by any class in ` +
       `unbound-schema-allowlist.mjs:\n`,
   );
   for (const key of unescalated) console.error(`  ${key}`);
 } else {
-  console.log("\nPASS: every UNBOUND schema is in unbound-schema-allowlist.mjs.");
+  console.log("\nPASS: every UNBOUND schema is covered by a class in unbound-schema-allowlist.mjs.");
 }
 
 /* ── Verdict ─────────────────────────────────────────────────────────────── */

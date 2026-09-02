@@ -145,13 +145,22 @@ them failing fails the whole gate:
    point nobody has thought of, while still letting legitimate closure growth
    (e.g. `@types/node`, pulled in because `services/conversation` genuinely
    needs `better-sqlite3`'s types) through without complaint.
-3. **Every UNBOUND contract schema is in `unbound-schema-allowlist.mjs`.**
-   `binding-coverage.mjs` enumerates every schema each `contracts/openapi/
-   *.yaml` declares and determines, from the `*-compat.ts` file's actual
-   TypeScript AST (not a regex over import names), whether it is tied to a
-   real implementation type. A schema that's UNBOUND and not listed there
-   fails the gate. See "Known: binding coverage" below — this is currently
-   red.
+3. **Every UNBOUND contract schema is covered by a class in
+   `unbound-schema-allowlist.mjs`.** `binding-coverage.mjs` enumerates every
+   schema each `contracts/openapi/*.yaml` declares and classifies each into
+   one of four states — **BOUND-L0** (a `*-compat.ts` ties it to an
+   implementation type at typecheck time), **BOUND-L2** (a route registers
+   it into Fastify's own runtime validator via a literal
+   `getSchema("<spec>", "<Schema>")` — see `l2-registrations.mjs`),
+   **TRANSCRIBED** (a route hand-writes a schema literal copied from the
+   contract instead of fetching it — see `transcribed-schemas.mjs`), or
+   **UNBOUND** (none of the above) — plus a fifth, informational-only state,
+   **BOUND-VIA-PARENT** (never checked on its own, but `$ref`'d as a field of
+   a schema whose own BOUND-L0 check exercises that exact field). Only
+   UNBOUND schemas need an allowlist entry; BOUND-L2 and TRANSCRIBED are
+   real, distinct gates, not consolation prizes for missing BOUND-L0 — see
+   "2026-09-02 correction: L0 is not the only gate" below for why that
+   distinction was added and what it changed.
 
 It exits 1 if any rule fails, 0 otherwise, and prints the size of the type
 closure and the full BOUND/UNBOUND listing on every run.
@@ -234,3 +243,61 @@ in `docs/stories/PROGRESS.md`'s E04-S065 row and the story's own report — not
 silently allowlisted. `pnpm contract-gate` is RED on this account until each
 one is either bound, or reviewed and allowlisted with a real reason and
 escalation reference by whoever owns that judgment call.
+
+## 2026-09-02 correction: L0 is not the only gate
+
+The section above was this gate's FIRST measurement, and it over-reported:
+counting "no BOUND-L0" as "no gate at all" repeats the exact conflation this
+whole story exists to remove. Two corrections, both measured against the
+real repo, not argued:
+
+1. **BOUND-L2 exists.** Some routes register a yaml schema directly into
+   Fastify via `app.contracts.getSchema("<spec>", "<Schema>")`, which
+   validates every real request against it at runtime — a stronger gate than
+   an L0 type comparison, not a weaker one. Exactly **4 real schemas** are
+   registered this way (excluding `apps/api/src/contracts.test.ts`'s own
+   `"sample"`/`"nope"` mechanism fixtures, which are filtered out for free
+   because neither is a real contract file name): `analytics.yaml`'s
+   `UsageEventInput`, and `conversations.yaml`'s `Conversation`,
+   `CreateMessageRequest`, and `NotFoundErrorBody`.
+2. **TRANSCRIBED exists — a fourth state, not a synonym for UNBOUND.**
+   Several routes in `services/conversation` and `services/feedback`
+   hand-write their schema as an object literal copied from the yaml instead
+   of calling `getSchema`. Ten such constants exist across those two
+   services' route files; six of them (all named `*_BODY_SCHEMA`) derive a
+   real contract schema name and are classified TRANSCRIBED —
+   `conversations.yaml`'s `CreateConversationRequest`,
+   `UpdateConversationRequest`, `CreateRevisionRequest`, `SetFeedbackRequest`,
+   `SetFeedbackReasonRequest`, `SetFeedbackCommentRequest`. The other four
+   (`*_QUERYSTRING_SCHEMA`) describe inline `parameters:` with no
+   `components.schemas` entry to transcribe FROM at all, and are correctly
+   left unmatched — see `transcribed-schemas.mjs`'s header for why deriving
+   a name from those four would produce a real false positive
+   (`USAGE_METRICS_QUERYSTRING_SCHEMA` -> `UsageMetrics`, which collides with
+   `analytics.yaml`'s actual, unrelated `UsageMetrics` schema). A transcribed
+   schema is a real, live-validated copy of the contract with nothing
+   comparing the two — not equivalent to a real binding, but not equivalent
+   to no gate at all either, which is why it is its own state rather than
+   folded into BOUND or UNBOUND. TRANSCRIBED is printed on every run and is
+   never allowlist-eligible; its unlock condition is the same for all six:
+   **"reclassified to MATCH or DIVERGES once the L2-EQ check lands"** — a
+   follow-up story (not yet numbered) that will compare each registered or
+   transcribed route schema against its yaml at runtime-registration time,
+   closing the one thing this story's L2/TRANSCRIBED detection deliberately
+   does not do.
+
+After both corrections, the count moved from 62 UNBOUND (61 plus the seeded
+`ChangeEvent`) to **52** — a real but modest drop, not the headline of this
+correction. `pnpm contract-gate` is GREEN as of this correction:
+`unbound-schema-allowlist.mjs` now has **6 classes** (not 52 individual
+entries) covering every one of those 52, each with a reason, an escalation
+reference, and a concrete unlock condition — see that file for the full
+list. The report is also now split into two sections, printed by
+`run-gate.mjs` on every run: **contract-level gaps** (`core.yaml` and
+`transcriptions.yaml` have no compat file, no BOUND-L2, and no TRANSCRIBED
+for ANY of their schemas — a categorically bigger gap than one schema inside
+an otherwise-covered contract) and **schema-level gaps** (grouped by class,
+inside contracts that ARE otherwise gated). "This contract has no gate" and
+"this one schema in a gated contract is unbound" are different severities
+and are never merged into one list.
+

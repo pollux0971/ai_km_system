@@ -97,7 +97,11 @@ describe("retrieve() → answer() composition (E04-S064 relocation of rag-skelet
         },
       ]);
 
-      const retrieval = createRetrievalService({ store, embedding });
+      // enforceEmbeddingVersion: false — E06-S026 made this field required (not
+      // optional/defaulted) on RetrievalServiceOptions; this fixture predates that
+      // concept and carries no embedding identity metadata, so `false` is the
+      // honest value, not a silently-inherited default.
+      const retrieval = createRetrievalService({ store, embedding, enforceEmbeddingVersion: false });
       const generation = createGenerationService();
       const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"] });
 

@@ -129,29 +129,36 @@ export interface RetrievalServiceOptions {
    * incompatible model. See `vector/store.ts`'s `EmbeddingIdentity` doc
    * comment for the full mechanism.
    *
-   * Defaults to `false` — deliberately NOT because the protection should be
-   * off in a real deployment, but because every existing caller of
-   * `createRetrievalService()` in this package's ALREADY-MERGED test suite
-   * (`service.test.ts`, `plugin.test.ts`,
-   * `rerank/retrieve-with-reranking.test.ts`) builds `VectorRecord`s
-   * directly and predates this concept entirely — none of them set
-   * `embeddingModel`/`embeddingDimensions`. Defaulting this to `true` would
-   * make every one of those pre-existing, unrelated tests start throwing
-   * `EmbeddingVersionMismatchError` instead of returning the results they
-   * assert on, and `.claude/rules/STORY_WORKFLOW.md` forbids modifying their
-   * frozen fixtures/assertions to work around that.
+   * REQUIRED — NOT optional, and there is no default (2026-09-02, technical
+   * advisor review round 2). An earlier version of this field was optional
+   * with `?? false`, on the reasoning that every pre-existing test predates
+   * this concept and would break if the check were on by default. That
+   * reasoning was correct and still holds — see the false/true call sites
+   * below — but "optional with a silent off-default" has exactly the failure
+   * shape this whole story exists to close: a future caller that simply
+   * forgets this field gets protection turned off with no signal at all,
+   * the same "nobody notices" mechanism as the embedding-version bug itself.
+   * Making it required moves that failure from "silent at runtime" to "a
+   * typecheck error", and it covers callers that do not exist yet (a future
+   * worker, a new composition root) the same way a runtime default never
+   * could.
    *
-   * `plugin.ts`'s own default composition root — the actual thing a future
-   * real caller (`apps/api`) would reach — turns this ON explicitly (see its
-   * comment): as of 2026-09-02 `services/retrieval`'s plugin is not
-   * registered into `apps/api` at all (confirmed by grep, same precondition
-   * E06-S043 recorded for its own guard), so today's exposure from this
-   * default being `false` here is zero either way. Flipping this default to
-   * `true` unconditionally — and fixing the three pre-existing test files'
-   * fixtures to carry real identity — is a legitimate follow-up, deliberately
-   * left out of this story's Change Budget; see EVIDENCE.
+   * Every existing call site in this package's ALREADY-MERGED test suite
+   * (`service.test.ts`, `plugin.test.ts`,
+   * `rerank/retrieve-with-reranking.test.ts`) and in
+   * `services/generation/src/rag-composition.test.ts` now passes `false`
+   * explicitly — an honest statement that those fixtures predate this
+   * concept and carry no identity metadata, not a silently-inherited
+   * default. `plugin.ts`'s own default composition root — the actual thing a
+   * future real caller (`apps/api`) would reach — passes `true` explicitly.
+   * As of 2026-09-02 `services/retrieval`'s plugin is not registered into
+   * `apps/api` at all (verified by grep — see EVIDENCE), so today's exposure
+   * from any of this is zero either way; fixing the pre-existing test
+   * fixtures to carry real identity so `true` can become the only value ever
+   * written is a legitimate follow-up, deliberately left out of this story's
+   * Change Budget.
    */
-  readonly enforceEmbeddingVersion?: boolean;
+  readonly enforceEmbeddingVersion: boolean;
 }
 
 const DEFAULT_TOP_K = 4;
@@ -227,10 +234,10 @@ export function createModelGatewayEmbeddingProvider(
  * persistent store or a differently-configured provider without this file
  * knowing about either concern.
  */
-export function createRetrievalService(options: RetrievalServiceOptions = {}): RetrievalService {
+export function createRetrievalService(options: RetrievalServiceOptions): RetrievalService {
   const store = options.store ?? createInMemoryVectorStore();
   const embedding = options.embedding ?? createModelGatewayEmbeddingProvider();
-  const enforceEmbeddingVersion = options.enforceEmbeddingVersion ?? false;
+  const enforceEmbeddingVersion = options.enforceEmbeddingVersion;
 
   return {
     componentId: "retrieval:service",

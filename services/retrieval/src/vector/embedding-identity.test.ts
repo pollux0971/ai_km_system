@@ -310,12 +310,18 @@ describe("RetrievalService — enforceEmbeddingVersion opt-in (the composition-r
       EmbeddingVersionMismatchError,
     );
 
-    // With enforcement OFF (the default — see `RetrievalServiceOptions`'s
-    // doc comment), the SAME drifted provider silently ranks instead —
-    // this is the exact gap this story closes, pinned here so a future
-    // regression that makes the default silently swallow the mismatch (e.g.
-    // by wiring `enforceEmbeddingVersion` backwards) cannot pass unnoticed.
-    const driftedNoEnforce = createRetrievalService({ store, embedding: fakeEmbeddingProvider(IDENTITY_B, [1, 0]) });
+    // With enforcement explicitly OFF (`enforceEmbeddingVersion: false` —
+    // REQUIRED, not optional, since 2026-09-02 review round 2; see
+    // `RetrievalServiceOptions`'s doc comment for why there is no default),
+    // the SAME drifted provider silently ranks instead — this is the exact
+    // gap this story closes, pinned here so a future regression that makes
+    // this flag silently swallow the mismatch (e.g. by wiring
+    // `enforceEmbeddingVersion` backwards) cannot pass unnoticed.
+    const driftedNoEnforce = createRetrievalService({
+      store,
+      embedding: fakeEmbeddingProvider(IDENTITY_B, [1, 0]),
+      enforceEmbeddingVersion: false,
+    });
     const unsafeHits = await driftedNoEnforce.retrieve("軸承過熱", SCOPE, 5);
     expect(unsafeHits.length).toBeGreaterThan(0);
   });

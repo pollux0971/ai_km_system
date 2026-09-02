@@ -69,6 +69,27 @@ primary path and the HTTP routes delegate to it rather than reimplementing it.
 scope. Domain ownership stays with Team B. Conditional registration follows the
 existing `conversationPlugin` / `feedbackPlugin` pattern.
 
+**2026-09-02 assignment (Wave 1 — dissolving the skeleton into real services):**
+the user approved a Wave 1 work breakdown that converts `services/rag-skeleton/`
+into the real `services/retrieval`, `services/generation` and `services/ingestion`
+(index side only), and authorized Team A to implement it. The grant covers
+E04-S009/S016/S022 and E04-S058～S067, E06-S008/S022/S026/S041/S042/S043, and
+E12-S032～S033, each within that story's own allowed-modify list. Domain
+ownership of E04/E06/E12 stays with Team B.
+
+(Recorded 2026-09-02, after the fact. The Wave 1 plan the user approved names
+these three services explicitly, but neither this file nor CLAUDE.md rule 6
+listed them, so `services/retrieval`, `services/generation` and
+`services/ingestion` were being modified under a grant that existed in the
+conversation and not in the record. This entry closes the gap between the record
+and what was actually granted; it does not widen the grant. Same class of error
+as the "g1–g4" slip corrected above — and found the same way, by an independent
+reviewer reading the exception list rather than the conversation.)
+
+🚩 **Not yet wired into `apps/api`.** None of the three plugins is registered in
+the composition root, and E06-S043 (re-ingest scope guard) is a hard precondition
+before any of them may be. See `docs/stories/PROGRESS.md`.
+
 ## Layout
 
 ```

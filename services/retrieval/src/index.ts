@@ -49,3 +49,14 @@ export type {
   SqliteDatabase,
   SqliteVecStoreOptions,
 } from "./vector/sqlite-vec.store.js";
+export {
+  rerankMmr,
+  candidatePoolSize,
+  DEFAULT_MMR_LAMBDA,
+  DEFAULT_CANDIDATE_POOL_MULTIPLIER,
+  MIN_CANDIDATE_POOL_OVERFETCH,
+  RerankError,
+} from "./rerank/mmr.js";
+export type { RerankOptions } from "./rerank/mmr.js";
+export { retrieveWithReranking } from "./rerank/retrieve-with-reranking.js";
+export type { RetrieveWithRerankingOptions } from "./rerank/retrieve-with-reranking.js";

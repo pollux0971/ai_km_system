@@ -12,6 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-km/service-model-gateway": "workspace:*",
+    "@ai-km/service-retrieval": "workspace:*",
     "fastify": "^5.2.1",
     "fastify-plugin": "^5.0.1"
   },

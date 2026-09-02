@@ -122,6 +122,46 @@ describe("walking skeleton — 端到端管線", () => {
     expect(result.citations).toHaveLength(0);
   });
 
+  it("AC3b-guard (PF1) 空 context 的早期返回是真正短路——generation provider 完全不會被呼叫", async () => {
+    // 追加測試(E12-S033 審核 follow-up):AC3b 只釘住 retrieved/citations 長度,
+    // 沒有任何斷言蓋到 (a) ask() 回傳的 answer 文字,(b) 「空 context 不進
+    // generation」這個保證本身——沒有這條,未來有人拿掉 pipeline.ts 裡
+    // `retrieved.length === 0` 的 early return 時,不會有任何測試變紅。
+    // 用一個「被呼叫就 throw」的 provider 直接注入,證明早期返回真的短路了,
+    // 而不是恰好某個 provider 對空 context 回了空答案。
+    let generateCallCount = 0;
+    const mustNotBeCalledProvider = {
+      componentId: "generation:must-not-be-called",
+      fidelityCeiling: "PF1" as const,
+      async generate(): Promise<never> {
+        generateCallCount += 1;
+        throw new Error(
+          "generation provider 不應該在空 context 時被呼叫——" +
+            "這代表 RagPipeline.ask() 的早期返回被移除或繞過了。",
+        );
+      },
+    };
+
+    const pipeline = new RagPipeline({
+      embedding: createDeterministicEmbeddingProvider({ dimensions: 256 }),
+      store: createInMemoryVectorStore(),
+      chunking: { targetSize: 60, overlap: 10 },
+      generation: mustNotBeCalledProvider,
+    });
+    await pipeline.ingest([MAINTENANCE_DOC, FINANCE_DOC]);
+
+    const noAccess = toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [] });
+    const result = await pipeline.ask("軸承過熱", noAccess, 5);
+
+    // 短路本身:generation provider 一次都沒被呼叫。
+    expect(generateCallCount).toBe(0);
+
+    expect(result.retrieved).toHaveLength(0);
+    expect(result.citations).toHaveLength(0);
+    // 釘住這條路徑目前實際產生的使用者可見文字,防止它無聲漂移。
+    expect(result.answer).toBe("沒有可引用的來源,無法回答:軸承過熱");
+  });
+
   it("AC4 (PF1) 引用必為 context 子集——捏造來源會被擋下", async () => {
     const pipeline = new RagPipeline({
       embedding: createDeterministicEmbeddingProvider({ dimensions: 256 }),

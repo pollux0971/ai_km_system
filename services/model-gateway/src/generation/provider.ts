@@ -3,6 +3,12 @@
  *
  * Same shape and same reasoning as `../embedding/provider.ts`; see that file
  * for why no real provider ships yet (E04-S037 has not chosen a runtime).
+ *
+ * What DID move here (E12-S033): the canned provider — deterministic,
+ * context-derived citations, ceiling PF1 — relocated verbatim from
+ * `services/rag-skeleton/src/generation/provider.ts`, replacing the
+ * `FakeGenerationProvider` placeholder that used to live in this file. See
+ * `./canned.provider.ts`.
  */
 import type { ProviderFidelity } from "../fidelity.js";
 
@@ -60,8 +66,16 @@ export class GenerationUnavailableError extends Error {
  * source has shown it will fabricate others, and a silently-filtered response
  * looks correct.
  *
- * `services/rag-skeleton/src/generation/provider.ts` has the same rule, tested.
- * g5 consolidates the two into one implementation.
+ * THE ONE IMPLEMENTATION (E12-S033): `services/rag-skeleton/src/generation/
+ * provider.ts` used to carry a second, separately-maintained copy of this
+ * exact rule. That copy is gone; `services/rag-skeleton/src/pipeline.ts` now
+ * imports and calls this function directly, and its own generation provider
+ * routes through `createModelGateway().generate()` (see `../gateway.ts`),
+ * which also calls this function. A citation-grounding check with two
+ * implementations is two answers to "is this source fabricated", and they
+ * would drift — see this story's EVIDENCE for why the pipeline's call and the
+ * gateway's call are BOTH kept (defence in depth for a caller that bypasses
+ * the gateway) rather than one being deleted as redundant.
  */
 export class FabricatedCitationError extends Error {
   override readonly name = "FabricatedCitationError";
@@ -81,30 +95,4 @@ export function assertCitationsGrounded(
     );
   }
   return citations;
-}
-
-/**
- * Placeholder fake. **Wiring only.** Echoes the supplied context back as
- * citations, so it is trivially grounded and proves nothing about answer
- * quality. The tested canned provider in
- * `services/rag-skeleton/src/generation/provider.ts` moves here under **g5**.
- */
-export class FakeGenerationProvider implements GenerationProvider {
-  readonly name = "fake" as const;
-  readonly model = "fake-placeholder";
-  readonly fidelityCeiling: ProviderFidelity = "PF1";
-
-  async generate(input: GenerateInput): Promise<GenerateResult> {
-    const citations: Citation[] = input.context.map((c) => ({
-      chunkId: c.chunkId,
-      documentId: c.documentId,
-      startOffset: c.startOffset,
-      endOffset: c.endOffset,
-    }));
-    return {
-      answer: `[fake] 依據 ${citations.length} 段來源回答:${input.question}`,
-      citations,
-      model: this.model,
-    };
-  }
 }

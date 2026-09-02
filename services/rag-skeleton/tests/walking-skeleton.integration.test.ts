@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import { RagPipeline } from "../src/pipeline.js";
 import { createDeterministicEmbeddingProvider } from "../src/embedding/model-gateway-deterministic.provider.js";
-import { createCannedGenerationProvider } from "../src/generation/provider.js";
+import { createCannedGenerationProvider } from "../src/generation/model-gateway-canned.provider.js";
 import { createInMemoryVectorStore } from "../src/vector/store.js";
 import { toRetrievalScope, ScopeLeakError } from "@ai-km/service-retrieval";
 import { ProviderFidelityError } from "../src/evidence-tier.js";

@@ -2,9 +2,10 @@
  * Model Gateway — in-process API (policy L1 unit, PF1).
  *
  * These assertions are about the gateway's own rules: validation, limits,
- * fail-closed states and the untrusted-provider check. The providers are the
- * placeholder fakes, so nothing here speaks to vector or answer quality — a
- * PF3 claim would need a real model, which E04-S037 has not chosen yet.
+ * fail-closed states and the untrusted-provider check. Generation is still the
+ * placeholder fake; embedding is the real (ceiling PF1) deterministic hasher
+ * (E12-S032) — either way nothing here speaks to vector or answer QUALITY —
+ * a PF3 claim would need a real model, which E04-S037 has not chosen yet.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -13,7 +14,8 @@ import {
   ModelGatewayPayloadTooLargeError,
   ModelGatewayValidationError,
 } from "./gateway.js";
-import { EmbeddingUnavailableError, FakeEmbeddingProvider } from "./embedding/provider.js";
+import { EmbeddingUnavailableError } from "./embedding/provider.js";
+import { createDeterministicEmbeddingProvider } from "./embedding/deterministic.provider.js";
 import {
   FabricatedCitationError,
   FakeGenerationProvider,
@@ -28,7 +30,7 @@ const CONTEXT = [
 
 function gateway(overrides: Partial<Parameters<typeof createModelGateway>[0]> = {}) {
   return createModelGateway({
-    embedding: new FakeEmbeddingProvider(16),
+    embedding: createDeterministicEmbeddingProvider({ dimensions: 16 }),
     generation: new FakeGenerationProvider(),
     ...overrides,
   });
@@ -67,6 +69,28 @@ describe("ModelGateway.embed (L1, PF1)", () => {
     };
     await expect(
       gateway({ embedding: misaligned }).embed({ input: ["a", "b"] }, CID),
+    ).rejects.toBeInstanceOf(EmbeddingUnavailableError);
+  });
+
+  it("AC-G4b provider 宣告的 dimensions 與實際向量長度不符時拒絕,不回傳靜默錯誤的相似度", async () => {
+    const wrongDimensions = {
+      name: "fake" as const,
+      model: "wrong-dimensions",
+      dimensions: 4,
+      fidelityCeiling: "PF1" as const,
+      async embed(input: { texts: readonly string[] }) {
+        // Declares dimensions: 4 (matches deps.embedding.dimensions) but every
+        // vector it actually returns is length 3 — the shape a misconfigured
+        // real provider (E04-S037) could produce without ever throwing.
+        return {
+          vectors: input.texts.map(() => [1, 0, 0]),
+          model: "wrong-dimensions",
+          dimensions: 4,
+        };
+      },
+    };
+    await expect(
+      gateway({ embedding: wrongDimensions }).embed({ input: ["a"] }, CID),
     ).rejects.toBeInstanceOf(EmbeddingUnavailableError);
   });
 

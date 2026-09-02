@@ -158,6 +158,26 @@ export function createModelGateway(deps: ModelGatewayDeps): ModelGateway {
         );
       }
 
+      // AC-G4b — every vector's length, and the batch's declared `dimensions`,
+      // must equal what the provider itself declares (`deps.embedding.dimensions`).
+      // This is the ONE place every provider funnels through (in-process AND
+      // HTTP), which is why the check lives here and not in any one provider:
+      // a provider that answers with the wrong-length vectors does not fail
+      // loudly — the in-memory/vector store just computes a similarity score
+      // against misaligned dimensions and returns a plausible-looking but
+      // WRONG ranking. That is silent corruption, not a format error, so it
+      // is EmbeddingUnavailableError (503), not a 200 with bad data.
+      if (
+        result.dimensions !== deps.embedding.dimensions ||
+        result.vectors.some((vector) => vector.length !== result.dimensions)
+      ) {
+        throw new EmbeddingUnavailableError(
+          `嵌入向量維度不一致(provider 宣告 ${deps.embedding.dimensions},` +
+            `本次回應宣告 ${result.dimensions}),拒絕回傳——維度不一致會讓相似度計算` +
+            `靜默算出錯誤的排序,而不是明顯的格式錯誤。`,
+        );
+      }
+
       return {
         model: result.model,
         dimensions: result.dimensions,

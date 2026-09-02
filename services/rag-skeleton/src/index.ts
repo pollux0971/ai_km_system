@@ -15,7 +15,7 @@ export type { RetrievalScope, ScopedRecord } from "@ai-km/service-retrieval";
 export { chunkDocument, ChunkingError } from "@ai-km/service-ingestion";
 export type { Chunk, ChunkOptions } from "@ai-km/service-ingestion";
 export * from "./embedding/provider.js";
-export * from "./embedding/deterministic.provider.js";
+export * from "./embedding/model-gateway-deterministic.provider.js";
 export * from "./generation/provider.js";
 export * from "./vector/store.js";
 export * from "./vector/sqlite-vec.store.js";

@@ -16,7 +16,7 @@ import {
   type TranscriptionProvider,
 } from "./asr/provider.js";
 import { registerTranscriptionRoutes, type TelemetryLogger } from "./routes/transcriptions.js";
-import { FakeEmbeddingProvider } from "./embedding/provider.js";
+import { createDeterministicEmbeddingProvider } from "./embedding/deterministic.provider.js";
 import { FakeGenerationProvider } from "./generation/provider.js";
 import { createModelGateway, type ModelGateway } from "./gateway.js";
 import {
@@ -44,7 +44,7 @@ const modelGatewayPluginImpl: FastifyPluginAsync<ModelGatewayOptions> = async (a
   // E04-S049's defect was the opposite order: routes registered first, then
   // the decoration they depended on. Same trap, avoided by construction.
   const gateway: ModelGateway = createModelGateway({
-    embedding: new FakeEmbeddingProvider(config.embeddingDimensions),
+    embedding: createDeterministicEmbeddingProvider({ dimensions: config.embeddingDimensions }),
     generation: new FakeGenerationProvider(),
   });
   app.decorate("modelGateway", gateway);

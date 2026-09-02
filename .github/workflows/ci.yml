@@ -57,6 +57,21 @@ jobs:
     # jobs' green should be able to hide, and not something this job's red
     # should get to hide either.
     runs-on: ubuntu-latest
+    env:
+      # E04-S068: tests/e2e/helpers/lock-guard.ts's DEFAULT_LOCK_FILE_PATH
+      # / DEFAULT_OWNER_FILE_PATH are hardcoded dev-machine paths under
+      # /data/python/AI_KM-worktrees/, which do not exist on a GitHub
+      # runner. Point both at a runner-local path instead. This is
+      # configuration only — zero change to the guard's block/proceed
+      # decision logic; that configurability is exactly what it's for.
+      # AI_KM_E2E_LOCK_FILE is the block/proceed authority (must point at
+      # a writable path whose parent dir exists, so flock reports "free"
+      # instead of "unusable"). AI_KM_E2E_OWNER_FILE is read only for the
+      # thrown error's human-readable label, never for the decision, but
+      # is set here too so a CI run never even attempts to read the
+      # nonexistent dev-machine path.
+      AI_KM_E2E_LOCK_FILE: ${{ runner.temp }}/.e2e.lock
+      AI_KM_E2E_OWNER_FILE: ${{ runner.temp }}/.e2e.owner
     steps:
       - uses: actions/checkout@v4
 

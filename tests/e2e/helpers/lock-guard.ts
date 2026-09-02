@@ -7,21 +7,73 @@ const DEFAULT_LOCK_FILE_PATH = "/data/python/AI_KM-worktrees/.e2e.lock";
 export type IsLockFileContended = (lockFilePath: string) => boolean;
 
 /**
+ * E04-S068. `flock -n <path> -c true` has exactly three observed exit
+ * states (measured, not inferred from the man page):
+ *
+ *   - exit 0:  lock file absent OR free -- flock itself CREATES the file
+ *              if it doesn't exist. Not a failure, not contention.
+ *   - exit 1:  genuinely held by another process. This is the ONLY case
+ *              this guard exists to catch.
+ *   - anything else (observed: exit 66 when the lock path's parent
+ *              directory does not exist -- "cannot open lock file ...:
+ *              No such file or directory" -- or `flock` itself missing/
+ *              unspawnable): the check could not run at all. This is NOT
+ *              evidence that anyone holds the lock; it means the lock
+ *              PATH is unusable in this environment (e.g. a hardcoded
+ *              dev-machine path evaluated on a CI runner).
+ *
+ * Only exit 1 means "held". Everything else that isn't exit 0 is a
+ * distinct failure mode -- thrown as `LockPathUnusableError` below --
+ * so the caller can say what's actually wrong instead of misreporting
+ * "someone else holds it" for a lock file that was never reachable.
+ */
+export class LockPathUnusableError extends Error {
+  constructor(lockFilePath: string, cause: unknown) {
+    super(
+      `[E04-S057/E04-S068] Cannot determine whether the shared E2E lock (${lockFilePath}) is held: ` +
+        `the lock path itself is unusable (${describeFlockFailure(cause)}). This is NOT the same as ` +
+        `someone else holding the lock -- flock could not even attempt the check, most likely because ` +
+        `the lock file's parent directory does not exist on this machine, or \`flock\` is not installed. ` +
+        `Refusing to start Playwright anyway: per this guard's fail-closed premise, uncertainty must ` +
+        `never silently resolve to "proceed". Set AI_KM_E2E_LOCK_FILE to a path whose parent directory ` +
+        `exists here (in CI, e.g. a runner-local temp path) and re-run.`,
+      { cause },
+    );
+    this.name = "LockPathUnusableError";
+  }
+}
+
+function describeFlockFailure(cause: unknown): string {
+  const err = cause as { status?: number | null; code?: string; stderr?: Buffer | string } | undefined;
+  const stderr = err?.stderr ? err.stderr.toString().trim() : undefined;
+  if (err?.code === "ENOENT" && err.status == null) {
+    return "the `flock` command could not be spawned (not installed?)" + (stderr ? `: ${stderr}` : "");
+  }
+  if (typeof err?.status === "number") {
+    return `flock exited ${err.status}` + (stderr ? `: ${stderr}` : " (parent directory of the lock path likely does not exist)");
+  }
+  return stderr ?? "unknown flock failure";
+}
+
+/**
  * Non-blocking `flock -n <path> -c true`: acquires the lock, runs a no-op,
  * releases it, exits 0 — succeeds only when NOBODY else currently holds
- * it. `flock` itself exits non-zero when it cannot acquire immediately.
- * `execFileSync` throws on both a non-zero exit AND on `flock` itself
- * being unavailable/broken — both cases collapse to the same answer we
- * want here: "cannot prove this is free, so treat it as contended."
- * That fail-toward-blocking default matches this story's whole premise
- * (uncertainty must never silently resolve to "proceed").
+ * it. Exit 1 means genuinely held (see the table above) and is the only
+ * case that means "contended" here. Any other non-zero outcome means the
+ * check itself couldn't run, which throws `LockPathUnusableError` instead
+ * of collapsing to "contended" -- that would misreport an unusable path
+ * as someone else's hold, which is exactly the bug this story fixes.
  */
 function isLockFileContended(lockFilePath: string): boolean {
   try {
-    execFileSync("flock", ["-n", lockFilePath, "-c", "true"], { stdio: "ignore" });
+    execFileSync("flock", ["-n", lockFilePath, "-c", "true"], { stdio: ["ignore", "ignore", "pipe"] });
     return false;
-  } catch {
-    return true;
+  } catch (err) {
+    const status = (err as { status?: number | null }).status;
+    if (status === 1) {
+      return true;
+    }
+    throw new LockPathUnusableError(lockFilePath, err);
   }
 }
 

@@ -182,7 +182,7 @@ describe("retrieveWithReranking — end-to-end against the real service and stor
     ];
     await store.upsert(records);
 
-    const service: RetrievalService = createRetrievalService({ store, embedding });
+    const service: RetrievalService = createRetrievalService({ store, embedding, enforceEmbeddingVersion: false });
     const maintenanceScope = toRetrievalScope({
       principalId: "u-alice",
       allowedScopeKeys: ["dept:maintenance"],

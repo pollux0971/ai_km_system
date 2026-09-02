@@ -7,6 +7,7 @@ export {
   IngestionScopeError,
   IngestionValidationError,
   IngestionEmptyDocumentError,
+  IngestionEmbeddingIdentityError,
 } from "./service.js";
 export type { IngestionService, IngestionDeps, IngestDocumentInput, IngestDocumentResult } from "./service.js";
 export { chunkDocument, ChunkingError } from "./chunking/chunk.js";

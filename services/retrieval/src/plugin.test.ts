@@ -40,7 +40,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { retrievalPlugin } from "./plugin.js";
 import { createRetrievalService, createModelGatewayEmbeddingProvider, type RetrievalService } from "./service.js";
-import { createInMemoryVectorStore } from "./vector/store.js";
+import { createInMemoryVectorStore, EmbeddingVersionMismatchError } from "./vector/store.js";
 import { toRetrievalScope } from "./authorization/scope.js";
 
 const scope = toRetrievalScope({ principalId: "u-1", allowedScopeKeys: ["dept:maintenance"] });
@@ -95,7 +95,7 @@ describe("retrievalPlugin (E04-S062 — real service, no longer a scaffold)", ()
     // (`createRetrievalService({})`), just with a pre-seeded store instead
     // of an empty one — so this exercises the real default SHAPE, not a
     // hand-rolled stub.
-    const service = createRetrievalService({ store, embedding });
+    const service = createRetrievalService({ store, embedding, enforceEmbeddingVersion: false });
     const instance = Fastify({ logger: false });
     await instance.register(retrievalPlugin, { service });
     await instance.ready();
@@ -130,4 +130,106 @@ describe("retrievalPlugin (E04-S062 — real service, no longer a scaffold)", ()
     app = instance;
     expect(seam(app)?.componentId).toBe("retrieval:injected");
   });
+
+  it(
+    "AC-RS5 (E06-S026) ★ plugin 的零 service 預設路徑真的打開版本比對——" +
+      "透過 options.store(不是 options.service)注入一筆沒有身分欄位的資料," +
+      "走真實 register()/ready() 的 app.retrieval 查詢必須被拒絕,而不是靜默排出結果",
+    async () => {
+      // 刻意不傳 `service` —— 這條路徑要走的正是 `plugin.ts` 自己那行
+      // `createRetrievalService({ enforceEmbeddingVersion: true, ...store })`
+      // 預設建構,只是把它原本內建、外部完全碰不到的空 store 換成這個測試能
+      // 塞資料進去的 store(`options.store` 是為此新增的測試專用管道,見
+      // `RetrievalPluginOptions.store` 的文件註解)。AC-RS3 特意繞過這條預設
+      // 路徑(自己組一個完整 service 再注入);這一條剛好相反,要驗證的正是
+      // 那條路徑本身。
+      const store = createInMemoryVectorStore();
+      const embedding = createModelGatewayEmbeddingProvider();
+      const [vector] = await embedding.embed(["軸承過熱應先停機並記錄運轉時數"]);
+      await store.upsert([
+        {
+          chunkId: "doc-maintenance-001#0",
+          documentId: "doc-maintenance-001",
+          text: "軸承過熱應先停機並記錄運轉時數",
+          startOffset: 0,
+          endOffset: 15,
+          scopeKey: "dept:maintenance",
+          embedding: vector!,
+          // 刻意不設 embeddingModel/embeddingDimensions —— 模擬「這筆資料沒有
+          // 記錄身分」(E06-S026 之前寫入的資料,或跳過 ingestion 直接寫入
+          // store 的資料),這正是 AC5 要拒絕、不得當成相容的那種資料。
+        },
+      ]);
+
+      const instance = Fastify({ logger: false });
+      await instance.register(retrievalPlugin, { store });
+      await instance.ready();
+      app = instance;
+
+      // 如果 `enforceEmbeddingVersion: true` 這個開關被拿掉(或這條路徑
+      // 沒有真的接上它),這裡會 resolve 出真實命中的那筆資料而不是拋錯——
+      // 斷言對著「有沒有被拒絕」,不是「有沒有拿到結果」,失敗訊息會帶著
+      // 實際洩漏出來的資料值(見本 story EVIDENCE 的反向驗證記錄)。
+      await expect(seam(app)!.retrieve("軸承過熱", scope, 3)).rejects.toBeInstanceOf(
+        EmbeddingVersionMismatchError,
+      );
+    },
+  );
+
+  it(
+    "AC-RS6 (E06-S026, 技術顧問 2026-09-02 review round 2) ★ 真正的身分不符" +
+      "(不是缺失,兩邊都有身分,只是不一樣)透過同一條真實 register()/ready() " +
+      "路徑一樣被拒絕,且錯誤訊息帶著兩邊實際的身分字串(值,不是存在性斷言)",
+    async () => {
+      // 與 AC-RS5 的差別:AC-RS5 是「完全沒有身分」(UNKNOWN 分支);這一條
+      // 是「兩邊都宣告了身分,但不是同一個」——維度刻意設成相同
+      // (`embedding.dimensions`,即 plugin 預設 embedding provider 會用的
+      // 256),只有 model 字串不同,正是本 story 動機情境裡「維度相同、
+      // 語意不同」那個維度檢查抓不到的危險案例(見 store.ts 的
+      // `EmbeddingIdentity` 文件註解)。
+      const store = createInMemoryVectorStore();
+      // 與 plugin.ts 預設路徑會建構的 embedding provider 完全同款
+      // (`createModelGatewayEmbeddingProvider()`,零參數),用它算出的
+      // `.dimensions`/`.model` 才能保證「查詢身分」與這裡宣告的「索引身分」
+      // 除了 model 字串以外逐項相同。
+      const embedding = createModelGatewayEmbeddingProvider();
+      const [vector] = await embedding.embed(["軸承過熱應先停機並記錄運轉時數"]);
+      const STALE_MODEL = "embedding:legacy-v1";
+      await store.upsert([
+        {
+          chunkId: "doc-maintenance-002#0",
+          documentId: "doc-maintenance-002",
+          text: "軸承過熱應先停機並記錄運轉時數",
+          startOffset: 0,
+          endOffset: 15,
+          scopeKey: "dept:maintenance",
+          embedding: vector!,
+          // 刻意與 plugin 預設 provider 的 model("embedding:deterministic")
+          // 不同,維度刻意相同——這是「換 provider 但維度剛好一樣」的情境。
+          embeddingModel: STALE_MODEL,
+          embeddingDimensions: embedding.dimensions,
+        },
+      ]);
+
+      const instance = Fastify({ logger: false });
+      await instance.register(retrievalPlugin, { store });
+      await instance.ready();
+      app = instance;
+
+      let thrown: unknown;
+      try {
+        await seam(app)!.retrieve("軸承過熱", scope, 3);
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(EmbeddingVersionMismatchError);
+      const message = (thrown as Error).message;
+      // 值斷言,不是存在性斷言:訊息必須帶著兩邊「真正的身分字串」,不是
+      // 「有沒有拋錯」——這正是本 story 獨立審核第二輪點名要修的落差。
+      expect(message).toContain(STALE_MODEL);
+      expect(message).toContain(embedding.model);
+      expect(embedding.model).toBe("embedding:deterministic");
+    },
+  );
 });

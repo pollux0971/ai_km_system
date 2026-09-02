@@ -19,3 +19,17 @@ allowBuilds:
   better-sqlite3: true
 patchedDependencies:
   '@material/material-color-utilities@0.4.0': patches/@material__material-color-utilities@0.4.0.patch
+overrides:
+  # E06-S008: pdfjs-dist lists @napi-rs/canvas (a ~33MB native binary) as an
+  # optionalDependency for its Node.js canvas-rendering path. services/ingestion
+  # only extracts text (no rendering, no canvas), and Pure JS is a stated
+  # project requirement. `-` is pnpm's documented override value to delete a
+  # dependency from the resolved tree entirely (not merely skip installing
+  # it) — a plain packageExtensions override only ADDS/REPLACES fields and
+  # cannot remove a single key from an existing optionalDependencies map, so
+  # it left @napi-rs/canvas resolved even when pointed at `false`. Baseline
+  # before E06-S008: @napi-rs/canvas appeared zero times in the lockfile;
+  # `pnpm why @napi-rs/canvas` must report zero matches after this. Text
+  # extraction is proven to still work without it by services/ingestion's
+  # pdf-extract tests (they run against this same install).
+  '@napi-rs/canvas': '-'

@@ -133,11 +133,30 @@ pnpm --package=@redocly/cli@1.25.11 dlx redocly lint \
 
 ## Use `pnpm contract-gate`, not a hand-typed error count
 
-`run-gate.mjs` runs step 2 and applies the only rule that means anything here:
-**fail if and only if an error lands in a `*-compat.ts` file.** It exits 1 in
-that case, 0 otherwise, and prints the size of the type closure on every run.
+`run-gate.mjs` runs step 2 and applies three independent rules — any one of
+them failing fails the whole gate:
 
-The rule used to be "tsc must report exactly 6 errors", re-typed by each
+1. **No error in any `*-compat.ts` file.** An error there means a contract
+   and the code it describes have genuinely diverged.
+2. **Every file in the type closure sits under an allowed root** — see
+   `closure-allowlist.mjs`. This is deliberately an allowlist, not "no file
+   under `apps/`": a denylist blocks only the one disease already found
+   (below); an allowlist also blocks `tools/`, `tests/`, and any future entry
+   point nobody has thought of, while still letting legitimate closure growth
+   (e.g. `@types/node`, pulled in because `services/conversation` genuinely
+   needs `better-sqlite3`'s types) through without complaint.
+3. **Every UNBOUND contract schema is in `unbound-schema-allowlist.mjs`.**
+   `binding-coverage.mjs` enumerates every schema each `contracts/openapi/
+   *.yaml` declares and determines, from the `*-compat.ts` file's actual
+   TypeScript AST (not a regex over import names), whether it is tied to a
+   real implementation type. A schema that's UNBOUND and not listed there
+   fails the gate. See "Known: binding coverage" below — this is currently
+   red.
+
+It exits 1 if any rule fails, 0 otherwise, and prints the size of the type
+closure and the full BOUND/UNBOUND listing on every run.
+
+Rule 1 used to be "tsc must report exactly 6 errors", re-typed by each
 reviewer. It broke the first time it was load-bearing: E04-S060 repointed an
 import in an unrelated package at a barrel that also exports a Fastify plugin,
 Fastify pulled in ajv, ajv pulled in `@types/node`, `process` became
@@ -147,37 +166,71 @@ closure, not contract drift. A gate whose pass condition is another module's
 export list is not a gate.
 
 The closure size is printed because it is now known to move: 97 files before
-E04-S060, 287 after. Watching that number is how the next person catches the
-same thing recurring. Shrinking it back — compat checks importing type-only
-entry points rather than whole service barrels — and wiring this command into
-CI are **E04-S065**.
+E04-S060, 202 after E04-S069's repoint (see docs/stories/PROGRESS.md's
+E04-S065 row). Watching that number is how the next person catches the same
+kind of thing recurring; **rule 2 is what actually catches it** — a numeric
+ceiling was considered and rejected because E04-S069 grew the closure while
+fixing a real problem, which a ceiling would have flagged as a regression.
 
 `generated/` is committed so a reviewer can run step 2 without step 1, and so
 that a contract change that breaks compatibility shows up as a reviewable
 diff rather than only as a local failure.
 
-## Not yet wired into CI
+## Wired into CI
 
-E04-S038's development boundary allows `contracts/**` only, so this gate is
-not registered in `turbo.json` / the root `package.json` scripts. **E03-S034**
-(`@ai-km/api-client` codegen pipeline + drift gate) is the story that owns
-that wiring; until it lands, run the commands above by hand.
+**E04-S065** (front half) registered `pnpm contract-gate` as its own
+`contract-gate` job in `.github/workflows/ci.yml`, independent of
+`lint-typecheck-unit` and `e2e`, so a contract/implementation divergence is
+visible on its own rather than buried inside a single `build` job's failure.
 
-## Known: step 2 is currently red on pre-existing files
+## History: step 2 used to be red on pre-existing files (5-xi, now closed by rule 2)
 
-As of 2026-09-02, `tsc -p contracts/openapi/__checks__/tsconfig.json` exits 2
-with **6** `TS2591: Cannot find name 'process'` errors, all in
+Between 2026-09-02's `services/rag-skeleton` skeleton and E04-S064 retiring
+it, `tsc -p contracts/openapi/__checks__/tsconfig.json` intermittently exited
+2 with **6** `TS2591: Cannot find name 'process'` errors, all in
 `apps/web/src/lib/{api,conversations,feature-flags}.ts` and
-`apps/admin/src/lib/api.ts`, reached transitively from
-`conversations-compat.ts`. The cause is this directory's own
-`tsconfig.json`, which sets `"types": []` while the frontend modules it pulls
-in read `process.env`.
+`apps/admin/src/lib/api.ts`, reached transitively from the old
+`conversations-compat.ts` (which then imported those `apps/web` modules
+directly for their real runtime types). See ROADMAP_TEMP.md §5-xi for the
+full history, including the closing evidence that the six errors were
+**masked**, not fixed, by an unrelated barrel export change, then reappeared
+once that export shrank back.
 
-This predates the 2026-09-02 contracts — verified by running the gate with
-`embedding-compat.ts` / `generation-compat.ts` / their generated `.d.ts`
-removed, which produces the same 6 errors. None of the four `*-compat.ts`
-files themselves error. Because the gate is not wired into CI (see above),
-nothing was reporting this.
+**E04-S069 repointed `conversations-compat.ts` at the seam body
+(`services/conversation/src/repository/*.repository.ts`) instead of the
+frontend**, which removed the `apps/web` import chain entirely — the current
+closure (202 files, checked 2026-09-02) contains zero files under `apps/`.
+Rule 2's allowlist (this story, E04-S065 back half) now makes that a checked
+invariant instead of an incidental fact: an `apps/` file re-entering the
+closure fails the gate immediately, printing the offending path.
 
-Left unfixed on purpose: the fix touches this gate's shared `tsconfig.json`,
-which is outside the 2026-09-02 assignment's scope.
+## Known: binding coverage found more UNBOUND schemas than ChangeEvent (2026-09-02, E04-S065 back half)
+
+Running `binding-coverage.mjs` for the first time against every existing
+`*-compat.ts` found **61 UNBOUND schemas beyond the seeded `ChangeEvent`**,
+across every contract that has a compat file, plus two contracts with none:
+
+- `core.yaml` has **no compat file at all** — its `Error`/`Pagination`
+  schemas (the platform-wide envelope, consumed via `$ref` from every other
+  contract) are never bound to anything by name.
+- `transcriptions.yaml` (frozen by E12-S029) has **no compat file at all** —
+  all 12 of its schemas are unbound.
+- Every other contract's request schemas (`LoginRequest`,
+  `CreateConversationRequest`, `GenerationRequest`, ...) and error-envelope
+  `*Body`/`*ErrorBody` schemas are unbound in the same structural way
+  `ChangeEvent` is: referenced only in a self-check (`OwnerFree`,
+  `FlatEnvelope`, a literal `Exact<..., "SOME_CODE">`) that inspects the
+  contract's own shape but never ties it to an implementation type.
+  `embedding-compat.ts`'s `EmbeddingRequest` is the one existing
+  counterexample — bound via `requestSatisfiesGateway: EmbedRequest =
+  requestSample` — which is why these are reported as gaps rather than
+  treated as inherently unbindable-by-design: the pattern is possible, it
+  just was not done for every schema when each compat file was written.
+
+**Left unresolved on purpose, per this story's instructions**: adding a
+one-line reason to `unbound-schema-allowlist.mjs` for each of the 61 without
+real triage would defeat the entire point of this check. They are reported —
+in `docs/stories/PROGRESS.md`'s E04-S065 row and the story's own report — not
+silently allowlisted. `pnpm contract-gate` is RED on this account until each
+one is either bound, or reviewed and allowlisted with a real reason and
+escalation reference by whoever owns that judgment call.

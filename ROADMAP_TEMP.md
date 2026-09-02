@@ -1251,3 +1251,59 @@ payload 會落進同一個三不管地帶。
 `ResyncEvent` 在 coverage 維持 UNBOUND,allowlist 理由改為:
 「SSE 內聯字面,無具名序列化器可綁(三處 `res.write` 各自內聯);解除條件:出現具名
 序列化器時」。**不與 `ChangeEvent` 同案處理**——後者有 `toWirePayload` 可推導,前者沒有。
+
+---
+
+## 5-rho. 🔴 L2-EQ 首次執行的結果:2 條真分歧,以及四件沒人在找的事(2026-09-02,E04-S073)
+
+`tools/contract-equivalence/` 第一次跑完 26 條 route:**MATCH 9、DIVERGES 2、ABSENT 15**。
+
+### 兩條真分歧(待使用者裁示)
+
+| route | 欄位 | 契約 | 實作 |
+|---|---|---|---|
+| `GET /v1/admin/metrics/latency` | `days.default` | **未宣告** | `7` |
+| `GET /v1/admin/feedback` | `page.default` | **未宣告** | `1` |
+| `GET /v1/admin/feedback` | `pageSize.default` | **未宣告** | `20` |
+
+**`default` 刻意不正規化掉**,即使 latency 契約的敘述文字自己寫著「由實作決定」。
+把它正規化掉會讓兩條都消失——**一條會靜默把兩個真的不同的東西畫上等號的規則,
+比一個假紅更糟**。
+
+處置選項:契約補上 `default`,或實作拿掉。**兩者都是契約層決定,需使用者裁示。**
+
+### 四件沒人在找、卻被找到的事(合併前逐一獨立查證)
+
+1. **第 11 個手抄 schema**:`services/identity/src/plugin.ts:65` 的 `LOGIN_REQUEST_SCHEMA`
+   (用於 `:385`)。E04-S065 的偵測器**看不到它**——那個偵測器靠 `*_BODY_SCHEMA` 命名
+   慣例、且只掃 `conversation`／`feedback` 兩個 service。**L2-EQ 讀的是 route 實際註冊
+   了什麼,命名與位置對它無關。** 正規化掉無效的 `format: password` 後 MATCH。
+
+2. **🔴 全 app 沒有任何 route 驗證路徑參數。** `params:` schema **零個**。
+   每一個 `:conversationId`、`:messageId`、`:citationId` 都**未經檢查**就到達 handler。
+   這是 15 條 ABSENT 的主因。
+
+3. **也沒有任何 route 註冊 `response:` schema。** 全 app 零個。因此 response 的 ABSENT
+   **只作資訊性報告、不進判定**——否則每一條都會是 ABSENT,不論它的 request 轉錄是否正確。
+
+4. **`GET /v1/health` 在任何契約裡都不存在。** 全 repo 唯一的 health 路徑是
+   `analytics.yaml` 的 `/admin/health`。**一條未登記的 route。**
+
+### 正規化規則與各自可能藏住什麼
+
+刪 `description`／`title`／`examples`／`x-*`(對驗證零影響);排序 `required`／`enum`
+(兩者皆為集合非序列);`format: "password"` 移除(已在本 repo 的 `node_modules` 查證
+`ajv-formats` 將其定義為恆真)。
+
+**唯一有真實盲點的一條**:querystring 側,契約未寫 `additionalProperties` 而 runtime
+寫 `false` 時不判分歧——因為 OpenAPI 的 `parameters:` 根本沒有這個鍵,不這樣做每一條
+合成出來的 querystring 都會永遠 DIVERGES。**盲點是單向且只會更嚴格**(可能藏住「契約
+其實想放行未列出的查詢參數」;今日無此案例)。**明說,不埋。**
+
+### 未接進 CI(刻意)
+
+該 package **沒有 `test`／`build`／`lint` task**,所以 `turbo run test` 完全不會碰它,
+也**沒有做成 allow-failure job**——一個沒人必須通過的 job 就是 5-pi 躺五天沒人回報的方式。
+它自己的斷言**誠實地留成紅的**,沒有用 `it.fails()` 包起來假裝綠。
+
+手動執行:`pnpm --filter @ai-km/contract-equivalence exec vitest run src/check.live.test.ts`

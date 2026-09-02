@@ -26,6 +26,27 @@ jobs:
       - run: pnpm test
 
       # This workflow covers the L0 gate (build/lint/typecheck/test) only.
-      # Contract, integration, security-negative, and E2E gates are added
-      # per-story as real services/tests land — see
+      # Integration, security-negative, and E2E gates beyond the contract
+      # gate below are added per-story as real services/tests land — see
       # AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md.
+
+  contract-gate:
+    # Deliberately its own job, independent of `build`: `build` is a long
+    # (~1h) serial pipeline that fails today for a pre-existing, unrelated
+    # reason (E02 login proxy target not started in CI). A separate job
+    # keeps that failure from ever being confused with a contract-gate
+    # failure — see contracts/openapi/__checks__/run-gate.mjs for what this
+    # gate actually checks (an error inside a *-compat.ts file).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm contract-gate

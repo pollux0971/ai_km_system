@@ -3,7 +3,7 @@ import { cpus, tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig } from "@playwright/test";
 import { ensureFakeMicrophoneWav } from "./helpers/fake-microphone";
-import { assertNotBlockingLockHolder } from "./helpers/lock-guard";
+import { assertNotBlockingLockHolderOnce } from "./helpers/lock-guard";
 import { assertPortsFreeForCIOnce, resolveReuseExistingServer } from "./helpers/port-check";
 import { wrapCommandWithSentinel } from "./helpers/env-sentinel";
 import { API_BASE_URL, API_PORT, ADMIN_EXPECTED_ENV, WEB_EXPECTED_ENV } from "./helpers/webserver-env";
@@ -54,7 +54,20 @@ import { STORAGE_STATE_PATH } from "./auth-storage-state";
 // held by someone else (see helpers/lock-guard.ts for the full
 // reasoning and the incident this fixes). No-op when nobody holds the
 // lock, and never blocks the lock holder's own run (see e2e-locked.sh).
-assertNotBlockingLockHolder();
+//
+// E01-S036: like the port guard two lines below, this module is
+// re-evaluated once per Playwright WORKER process too, not just once by
+// the process that actually needs the check — `flock -n` acquires and
+// releases immediately, so two sibling workers evaluating this module at
+// overlapping instants can make one misread the other's momentary hold as
+// "someone else holds the shared lock" (observed on CI run
+// `33658608842`, intermittent — the very next run of identical code was
+// green). Calling `assertNotBlockingLockHolderOnce` instead of
+// `assertNotBlockingLockHolder` directly keeps the guard itself unchanged
+// and skips it in worker processes — see that function's own doc comment
+// in helpers/lock-guard.ts for exactly how "am I a worker" is detected and
+// what happens if that detection is ever wrong in each direction.
+assertNotBlockingLockHolderOnce();
 
 // Unique per Playwright invocation (not per test/worker) — every worker
 // process spawned by this run shares the same apps/api server and its one

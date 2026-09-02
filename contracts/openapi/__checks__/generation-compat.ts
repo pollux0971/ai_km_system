@@ -27,8 +27,10 @@
 import type { components } from "./generated/generation.js";
 import type {
   Citation,
+  ContextChunk,
   GenerateResult,
 } from "../../../services/model-gateway/src/generation/provider.js";
+import type { GenerateRequest } from "../../../services/model-gateway/src/gateway.js";
 import type { RetrievalHit } from "../../../services/retrieval/src/vector/store.js";
 
 type Schemas = components["schemas"];
@@ -100,6 +102,55 @@ export const citationsRequired: Exact<
   Schemas["GenerationResponse"]["citations"],
   Schemas["Citation"][]
 > = true;
+
+/**
+ * E04-S080 — `GenerationRequest`/`ContextChunk` bound. Neither had a real
+ * binding before this: both were only ever reached through the SCOPE-FREE
+ * self-checks below (`requestScopeFree`/`contextChunkScopeFree`), which
+ * inspect the CONTRACT's own shape for a forbidden key and prove nothing
+ * about the implementation. Unlike `citationExact`/`modelAssignable` above,
+ * there is no Team-A-visible CLIENT that constructs a `GenerateRequest` and
+ * sends it — `services/generation`'s in-process caller of `gateway.generate
+ * ()` never goes through this contract at all (it is not an HTTP call), and
+ * the HTTP route (`model-gateway-routes.ts`'s `registerGenerationRoutes`)
+ * builds the object by hand from an untyped, cast request body. `GenerateRequest`
+ * is therefore the RECEIVER's declared requirement — the parameter type
+ * `gateway.generate()` itself demands — not a value some producer builds and
+ * we check against the contract, the way `LoginCredentials` is checked
+ * against `auth.yaml`'s `LoginRequest` (`auth-compat.ts`). The property worth
+ * asserting here is the mirror image of that: anything the CONTRACT allows a
+ * caller to send must remain usable as input to `generate()` — i.e. the
+ * gateway's declared requirement must not be stricter than what the contract
+ * guarantees. That is CONTRACT → IMPLEMENTATION, exactly the direction
+ * `embedding-compat.ts`'s sibling check (`inputAcceptsBatch`, plus the
+ * value-level `requestSatisfiesGateway`) already uses for `EmbedRequest` —
+ * the allowlist entry this closes named that file as "the exact situation ...
+ * already solves for a sibling contract", and this is that situation.
+ * The reverse direction (`GenerateRequest` assignable to `Schemas
+ * ["GenerationRequest"]`) is not asserted: nothing in this codebase produces
+ * a bare `GenerateRequest` value that then has to satisfy the contract, so it
+ * would not be testing a real risk.
+ *
+ * No field-by-field split needed, unlike `citationsElementAssignable` above:
+ * that split exists only because a `readonly T[]` is never assignable to a
+ * mutable `T[]` (impl → contract, response direction). Here the direction is
+ * reversed — contract (mutable, generated) → impl (`readonly ContextChunk[]`)
+ * — and a mutable array assigns to a readonly one without friction, so the
+ * whole-object check compiles directly.
+ */
+export const requestAcceptedByGateway: AssignableTo<Schemas["GenerationRequest"], GenerateRequest> = true;
+
+/**
+ * `ContextChunk` bound directly (not only as `GenerationRequest["context"]`'s
+ * element, which `requestAcceptedByGateway` above already exercises
+ * structurally) — the binding-coverage scanner only credits a schema as
+ * BOUND-L0 when it is referenced by name in its own right, not merely as a
+ * nested field of an already-bound parent (see binding-coverage.mjs's own
+ * "BOUND-VIA-PARENT is a strictly weaker claim" note). Same direction and
+ * same reasoning as `requestAcceptedByGateway`: a contract-conformant chunk
+ * must remain usable as one of `generate()`'s `context` entries.
+ */
+export const contextChunkAcceptedByGateway: AssignableTo<Schemas["ContextChunk"], ContextChunk> = true;
 
 /**
  * THE ONE THAT MATTERS AT THIS SEAM — 鐵律 #2.

@@ -110,6 +110,40 @@ describe("retrieveWithReranking — candidate pool (behaviour 5)", () => {
     }
     expect(new Set(result.map((h) => h.chunkId)).size).toBe(result.length); // no duplicates
   });
+
+  it("MMR's diversity-aware pick differs from pure similarity order — reranking actually ran (E04-S074)", async () => {
+    // Three candidates, best-first by score (this is exactly what the store
+    // itself would already hand back, and exactly what
+    // `candidates.slice(0, topK)` would return unchanged):
+    //   a  score 0.90  embedding [1, 0]
+    //   b  score 0.85  embedding [1, 0]   <- near-duplicate of a
+    //   c  score 0.70  embedding [0, 1]   <- orthogonal to a, i.e. diverse
+    //
+    // Pure similarity order (no reranking, i.e. `candidates.slice(0, topK)`
+    // for topK=2) picks the two highest scores verbatim: [a, b].
+    //
+    // MMR at the DEFAULT lambda (0.5) does NOT: after picking `a` first (no
+    // redundancy term yet, so relevance alone wins), the second pick scores
+    //   b: 0.5*0.85 - 0.5*dot(b,a) = 0.425 - 0.5*1   = -0.075
+    //   c: 0.5*0.70 - 0.5*dot(c,a) = 0.35  - 0.5*0   =  0.35
+    // — `c` wins because `b` is fully redundant with the already-selected
+    // `a` (dot == 1, same direction), while `c` is orthogonal to it (dot ==
+    // 0). So a correctly-wired MMR call returns [a, c], not [a, b].
+    //
+    // This is the assertion `candidatePoolSize`/scope/length checks above
+    // cannot catch: deleting the `rerankMmr` call (E04-S074's defect —
+    // `return candidates.slice(0, topK)` instead) still returns 2 results,
+    // still within scope, still a subset of the pool — it just silently
+    // returns [a, b] instead of [a, c]. Only an assertion on WHICH chunks
+    // were selected can tell the two apart.
+    const pool = [hit("a", 0.9, [1, 0]), hit("b", 0.85, [1, 0]), hit("c", 0.7, [0, 1])];
+    const { service } = fakeService(pool);
+
+    const topK = 2;
+    const result = await retrieveWithReranking(service, "問題", scope, topK);
+
+    expect(result.map((h) => h.chunkId)).toEqual(["a", "c"]);
+  });
 });
 
 describe("retrieveWithReranking — end-to-end against the real service and store (never widens the authorized set)", () => {

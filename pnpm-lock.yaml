@@ -549,6 +549,12 @@ importers:
 
   services/ingestion:
     dependencies:
+      '@ai-km/service-model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@ai-km/service-retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
       fastify:
         specifier: ^5.2.1
         version: 5.12.1

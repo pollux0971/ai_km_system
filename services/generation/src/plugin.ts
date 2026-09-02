@@ -1,19 +1,22 @@
 /**
- * `services/generation` domain Fastify plugin (E04-S059, scaffold).
+ * `services/generation` domain Fastify plugin (E04-S059 scaffold, E04-S063
+ * working service).
  * Registers no routes. Puts the in-process seam where siblings can reach it,
  * per **ADR 0007 §1**; wrapped in `fp()` per **ADR 0007 §4**.
  */
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 
-import { createGenerationScaffold, type GenerationService } from "./service.js";
+import { createGenerationService, type GenerationService } from "./service.js";
 
 export interface GenerationPluginOptions {
+  /** Injected by tests/composition roots; defaults to the real service
+   * (canned model-gateway generation provider — see `service.ts`). */
   readonly service?: GenerationService;
 }
 
 const generationPluginImpl: FastifyPluginAsync<GenerationPluginOptions> = async (app, options) => {
-  app.decorate("generation", options.service ?? createGenerationScaffold());
+  app.decorate("generation", options.service ?? createGenerationService({}));
 };
 
 /** See ADR 0007 §4/§5 — without `fp()` the decoration is invisible to siblings. */

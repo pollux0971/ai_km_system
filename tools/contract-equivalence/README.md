@@ -174,3 +174,37 @@ a false red.
   declared the exact same path+method (none do today — see
   `path-match.ts`), the yaml index would let the second silently overwrite
   the first with no ambiguity warning.
+
+## Actual response SHAPE vs contract (E04-S079)
+
+The schema-vs-schema `response:<status>` field above (E04-S073) can only
+ever read ABSENT — there is no runtime `response:` schema anywhere in this
+app to diff a contract schema against. `response-instance-diff.ts` +
+`check-response-shapes.live.test.ts` answer a narrower, different question
+instead: given a REAL 2xx response body a route actually returned (captured
+via `app.inject()` against the real `apps/api` server, real login, no
+mocks), which fields does it carry that the contract does not document
+(potential leak), and which contract-required fields does it omit
+(potential broken consumer)?
+
+Run it manually (same reason as `check.live.test.ts` — this package still
+defines no `"test"` script, so `pnpm turbo run test` never touches it):
+
+```
+pnpm --filter @ai-km/contract-equivalence exec vitest run src/check-response-shapes.live.test.ts
+```
+
+**Result as of E04-S079 (2026-09-03): 21 of 21 exercised routes clean** — no
+extra fields, no missing fields. See `docs/stories/specs/E04-S079.spec.md`
+for the full per-route table, which four routes were not exercised and why,
+and whether an existing test would already catch a regression here (for 20
+of the 21, yes — an existing `expectResponseMatchesContract`/
+`validateAgainstAuthContract` call already runs ajv against the same
+`additionalProperties: false` schema on the same status; `GET
+/v1/admin/health` is the one exception with no such check today).
+
+See `response-instance-diff.ts`'s own module doc for exactly what this
+comparison does and does not check (field presence only, not
+types/formats/enums; one representative 2xx branch per route, not every
+branch a route can produce; no descent into an `additionalProperties`-only
+map).

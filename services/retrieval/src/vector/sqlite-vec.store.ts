@@ -78,6 +78,8 @@ import type { Embedding } from "../embedding/provider.js";
 import { assertNoScopeLeak, type RetrievalScope } from "../authorization/scope.js";
 import {
   VectorStoreError,
+  groupRecordsByDocumentId,
+  checkDocumentScopeConsistency,
   type RetrievalHit,
   type VectorRecord,
   type VectorStore,
@@ -165,6 +167,23 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
   const insertVec = db.prepare(
     `INSERT INTO ${table}_vec (chunk_id, scope_key, embedding) VALUES (?, ?, ?)`,
   );
+  // E06-S043: deleting the META row too (not just the vec0 row) is what makes
+  // a shrinking re-ingest's surplus chunks actually gone rather than an
+  // orphaned meta row `count()` would still tally and a future chunk_id reuse
+  // could resurrect.
+  const deleteMeta = db.prepare(`DELETE FROM ${table}_meta WHERE chunk_id = ?`);
+  // Phase-1 lookups for the E06-S043 scope guard — read-only, so they are safe
+  // to run before any transaction opens. `scope_key` lives ONLY on the vec0
+  // side (see the migration's doc comment above), hence the join.
+  const existingScopeKeysForDoc = db.prepare(
+    `SELECT DISTINCT v.scope_key AS scopeKey
+       FROM ${table}_meta m
+       JOIN ${table}_vec v ON v.chunk_id = m.chunk_id
+      WHERE m.document_id = ?`,
+  );
+  const existingChunkIdsForDoc = db.prepare(
+    `SELECT chunk_id AS chunkId FROM ${table}_meta WHERE document_id = ?`,
+  );
 
   /**
    * ONE authorised scope per execution. `scope_key = ?` is the only operator a
@@ -197,6 +216,10 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
     fidelityCeiling: "PF2",
 
     async upsert(records: readonly VectorRecord[]) {
+      // ── Phase 1: validate EVERYTHING before writing ANYTHING (E06-S043) ──
+      // All of this runs BEFORE `BEGIN` — nothing below has mutated the
+      // database yet, so throwing here writes literally nothing (Functional
+      // AC1/AC2).
       for (const record of records) {
         if (typeof record.scopeKey !== "string" || record.scopeKey.trim() === "") {
           throw new VectorStoreError(
@@ -208,22 +231,63 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
             `chunk ${record.chunkId} 的向量維度 ${record.embedding.length} 與資料表宣告的 ${dimensions} 不符。`,
           );
         }
-        insertMeta.run(
-          record.chunkId,
-          record.documentId,
-          record.text,
-          record.startOffset,
-          record.endOffset,
-        );
-        // vec0 virtual tables do not support UPSERT; delete-then-insert is the
-        // documented pattern for replacing a row. It also moves the chunk to a
-        // new shard when its scope_key changes, which an UPDATE could not.
-        deleteVec.run(record.chunkId);
-        insertVec.run(
-          record.chunkId,
-          record.scopeKey,
-          Buffer.from(record.embedding.buffer.slice(0)),
-        );
+      }
+
+      const byDoc = groupRecordsByDocumentId(records);
+      for (const [documentId, docRecords] of byDoc) {
+        const existingRows = existingScopeKeysForDoc.all(documentId) as Array<{ scopeKey: string }>;
+        const existingScopeKeys = new Set(existingRows.map((r) => r.scopeKey));
+        checkDocumentScopeConsistency(documentId, docRecords, existingScopeKeys);
+      }
+
+      // ── Phase 2: apply atomically. A real transaction — not just "no await
+      // between steps" like the in-memory store can rely on — because this is
+      // real I/O and a later statement CAN fail (a driver error, a corrupt
+      // page, a future check added to this loop). On failure the transaction
+      // rolls back, so old and new chunks are never left mixed (AC4). ──
+      db.exec("BEGIN");
+      try {
+        for (const [documentId, docRecords] of byDoc) {
+          // Same scopeKey ⇒ atomic replacement: delete every existing chunk
+          // of this document NOT present in the new set, so a document that
+          // now produces FEWER chunks does not leave surplus old chunks in
+          // the store pointing citations at passages that no longer exist
+          // (AC3).
+          const keep = new Set(docRecords.map((r) => r.chunkId));
+          const existingIds = existingChunkIdsForDoc.all(documentId) as Array<{ chunkId: string }>;
+          for (const { chunkId } of existingIds) {
+            if (!keep.has(chunkId)) {
+              deleteVec.run(chunkId);
+              deleteMeta.run(chunkId);
+            }
+          }
+
+          for (const record of docRecords) {
+            insertMeta.run(
+              record.chunkId,
+              record.documentId,
+              record.text,
+              record.startOffset,
+              record.endOffset,
+            );
+            // vec0 virtual tables do not support UPSERT; delete-then-insert is
+            // the documented pattern for replacing a row. It also moves the
+            // chunk to a new shard when its scope_key changes, which an
+            // UPDATE could not — irrelevant here since scope conflicts are
+            // already refused above, but the mechanism still applies to a
+            // same-scope re-ingest of an unchanged chunk.
+            deleteVec.run(record.chunkId);
+            insertVec.run(
+              record.chunkId,
+              record.scopeKey,
+              Buffer.from(record.embedding.buffer.slice(0)),
+            );
+          }
+        }
+        db.exec("COMMIT");
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
       }
     },
 

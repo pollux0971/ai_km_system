@@ -32,7 +32,12 @@ export {
   EMBEDDING_FIDELITY,
 } from "./embedding/provider.js";
 export type { Embedding, EmbeddingProvider } from "./embedding/provider.js";
-export { createInMemoryVectorStore, VectorStoreError } from "./vector/store.js";
+export {
+  createInMemoryVectorStore,
+  VectorStoreError,
+  DocumentScopeConflictError,
+  DOCUMENT_SCOPE_CONFLICT_MESSAGE,
+} from "./vector/store.js";
 export type { VectorRecord, RetrievalHit, VectorStore } from "./vector/store.js";
 export {
   createSqliteVecVectorStore,

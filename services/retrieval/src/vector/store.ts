@@ -60,10 +60,11 @@ export interface RetrievalHit {
    *
    * `createInMemoryVectorStore` populates this (the vector is already in
    * memory as part of the `VectorRecord` it scored). `createSqliteVecVector
-   * Store` (PF2) does NOT yet — reading it back out of the `vec0` virtual
-   * table is a real but separate change, left to a follow-up story rather
-   * than folded into this one (see this package's `rerank/mmr.ts` and the
-   * E04-S016 evidence file for why).
+   * Store` (PF2) populates it too (E04-S067) — reading the vec0 blob back out
+   * on the query path, mirroring the `Buffer.from` already done on the insert
+   * side, so MMR at λ<1 works against the persistent store and not only the
+   * in-memory one (see this package's `rerank/mmr.ts` and the E04-S016 /
+   * E04-S067 evidence files for why this was deferred and then closed).
    */
   readonly embedding?: Embedding;
 }

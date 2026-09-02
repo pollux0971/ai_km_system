@@ -200,6 +200,7 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
     `SELECT v.chunk_id      AS chunkId,
             v.scope_key     AS scopeKey,
             v.distance      AS distance,
+            v.embedding     AS embedding,
             m.document_id   AS documentId,
             m.text          AS text,
             m.start_offset  AS startOffset,
@@ -327,6 +328,29 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
           }
           originPartition.set(chunkId, scopeKey);
 
+          // `v.embedding` comes back as a Buffer (Node's better-sqlite3 blob
+          // type), the exact bytes `Buffer.from(record.embedding.buffer...)`
+          // wrote on the insert side. Decode with the mirror-image view:
+          // Float32Array over that same buffer, byteOffset/4 for length so a
+          // sliced/pooled Buffer (Node may hand back a view into a shared
+          // allocation) is not misread past its own bytes.
+          //
+          // Guarded rather than assumed present: if the SELECT above did not
+          // ask for `v.embedding` (e.g. a future edit drops the column),
+          // `r.embedding` is `undefined`, and this must leave `embedding`
+          // unset on the hit rather than throw here — `RetrievalHit.
+          // embedding` is optional precisely so `rerank/mmr.ts`'s
+          // `requireEmbedding` is the thing that fails loudly (`RerankError`)
+          // at λ<1, not an unrelated crash inside the store itself.
+          const embeddingBuffer = r.embedding as Buffer | undefined;
+          const embedding = embeddingBuffer
+            ? new Float32Array(
+                embeddingBuffer.buffer,
+                embeddingBuffer.byteOffset,
+                embeddingBuffer.byteLength / 4,
+              )
+            : undefined;
+
           merged.push({
             chunkId,
             documentId: String(r.documentId),
@@ -337,6 +361,16 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
             // vec0 returns distance; smaller is closer. Convert so callers
             // compare scores the same way as the in-memory store.
             score: -Number(r.distance),
+            // E04-S067 — read back so `rerank/mmr.ts` can run at λ<1 against
+            // this store, not just the in-memory one. See `RetrievalHit.
+            // embedding`'s docstring in store.ts for why this is optional on
+            // the type and why a missing one fails loudly rather than
+            // silently degrading. Spread rather than assigning `undefined`
+            // directly: `RetrievalHit` is compiled under
+            // `exactOptionalPropertyTypes`, which treats an explicit
+            // `embedding: undefined` as a type error distinct from the key
+            // being absent.
+            ...(embedding ? { embedding } : {}),
           });
         }
       }

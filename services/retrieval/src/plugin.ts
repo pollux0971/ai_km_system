@@ -1,5 +1,6 @@
 /**
- * `services/retrieval` domain Fastify plugin (E04-S058, scaffold).
+ * `services/retrieval` domain Fastify plugin (E04-S058 scaffold, E04-S062
+ * working service).
  *
  * Registers no routes yet. Its only job is to put the in-process seam where
  * siblings can reach it, per **ADR 0007 §1** (in-process is the primary path)
@@ -8,15 +9,17 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 
-import { createRetrievalScaffold, type RetrievalService } from "./service.js";
+import { createRetrievalService, type RetrievalService } from "./service.js";
 
 export interface RetrievalPluginOptions {
-  /** Injected by tests; defaults to the scaffold that throws. */
+  /** Injected by tests/composition roots; defaults to the real service
+   * (fresh in-memory store + model-gateway-backed embedding — see
+   * `service.ts`). */
   readonly service?: RetrievalService;
 }
 
 const retrievalPluginImpl: FastifyPluginAsync<RetrievalPluginOptions> = async (app, options) => {
-  const service = options.service ?? createRetrievalScaffold();
+  const service = options.service ?? createRetrievalService({});
   app.decorate("retrieval", service);
 };
 

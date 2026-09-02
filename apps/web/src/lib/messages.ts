@@ -1,4 +1,5 @@
 import { toResult } from "@ai-km/api-client";
+import type { FeedbackReason } from "@ai-km/api-client";
 import type { ApiError, Result } from "@ai-km/types";
 import type { AnswerState } from "./answer-state";
 import { apiClient } from "./api";
@@ -21,15 +22,15 @@ export type AnswerFeedbackVerdict = "OK" | "NG";
 
 export const MAX_FEEDBACK_COMMENT_LENGTH = 500;
 
-export const FEEDBACK_REASONS = ["INCORRECT", "INCOMPLETE", "OFF_TOPIC", "OTHER"] as const;
-export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
-
-export const FEEDBACK_REASON_LABELS: Record<FeedbackReason, string> = {
-  INCORRECT: "答案不正確",
-  INCOMPLETE: "答案不完整",
-  OFF_TOPIC: "答案離題",
-  OTHER: "其他",
-};
+/**
+ * E01-S035: `FEEDBACK_REASONS`/`FEEDBACK_REASON_LABELS`/`FeedbackReason` moved to
+ * `@ai-km/api-client` (`packages/api-client/src/feedback-reason.ts`) so `apps/admin`
+ * can share the same code->label mapping instead of growing its own copy. Re-exported
+ * here unchanged so every existing `@/lib/messages` importer (`message-thread.tsx`,
+ * `feedback-knowledge-candidates.ts`, tests) keeps working with no call-site changes.
+ */
+export { FEEDBACK_REASONS, FEEDBACK_REASON_LABELS } from "@ai-km/api-client";
+export type { FeedbackReason } from "@ai-km/api-client";
 
 export interface Message {
   id: string;

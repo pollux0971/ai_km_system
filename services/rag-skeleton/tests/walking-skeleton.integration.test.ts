@@ -15,8 +15,12 @@ import { describe, expect, it } from "vitest";
 import { RagPipeline } from "../src/pipeline.js";
 import { createDeterministicEmbeddingProvider } from "../src/embedding/model-gateway-deterministic.provider.js";
 import { createCannedGenerationProvider } from "../src/generation/model-gateway-canned.provider.js";
-import { createInMemoryVectorStore, toRetrievalScope, ScopeLeakError } from "@ai-km/service-retrieval";
-import { ProviderFidelityError } from "../src/evidence-tier.js";
+import {
+  createInMemoryVectorStore,
+  toRetrievalScope,
+  ScopeLeakError,
+  ProviderFidelityError,
+} from "@ai-km/service-retrieval";
 
 const MAINTENANCE_DOC = {
   documentId: "doc-maintenance-001",

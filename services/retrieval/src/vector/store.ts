@@ -14,17 +14,11 @@
  * that the path of least resistance.
  */
 
-// evidence-tier.ts and embedding/provider.ts have NOT moved — they still
-// belong to @ai-km/rag-skeleton (deleted only at E04-S064, per that
-// package's src/index.ts). Depending on the `@ai-km/rag-skeleton` package
-// here would be circular (rag-skeleton already depends on
-// `@ai-km/service-retrieval` for the authorization scope it re-exports), so
-// this reaches across by relative path instead of adding a workspace
-// dependency edge. This is the one deliberately-ugly seam left by relocating
-// the vector store ahead of the modules it still borrows types from; it goes
-// away when evidence-tier.ts/embedding/provider.ts relocate in a later story.
-import type { FidelityRatedComponent } from "../../../rag-skeleton/src/evidence-tier.js";
-import { dot, type Embedding } from "../../../rag-skeleton/src/embedding/provider.js";
+// E04-S066 relocated evidence-tier.ts and embedding/provider.ts into this
+// package (both were leaves — no outbound edges of their own — so the move
+// added no new dependency). These are now ordinary in-package imports.
+import type { FidelityRatedComponent } from "../evidence-tier.js";
+import { dot, type Embedding } from "../embedding/provider.js";
 import {
   assertNoScopeLeak,
   buildScopePredicate,

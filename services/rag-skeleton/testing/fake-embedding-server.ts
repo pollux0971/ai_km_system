@@ -2,7 +2,8 @@
  * A real (not mocked-fetch) HTTP fake of the embedding contract, for
  * exercising the client's actual POST + fetch machinery end to end.
  * NOT integration evidence for a real embedding model — see
- * `contracts/embedding.yaml` and `src/evidence-tier.ts`.
+ * `contracts/openapi/embedding.yaml` and
+ * `services/retrieval/src/evidence-tier.ts`.
  *
  * Deliberately copied in shape from
  * `tools/asr-readiness/src/testing/fake-sidecar.ts`, which already got this

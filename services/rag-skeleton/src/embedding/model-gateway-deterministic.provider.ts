@@ -43,7 +43,7 @@
 import { createModelGateway } from "@ai-km/service-model-gateway/src/gateway.js";
 import { createDeterministicEmbeddingProvider as createModelGatewayDeterministicProvider } from "@ai-km/service-model-gateway/src/embedding/deterministic.provider.js";
 import type { GenerationProvider } from "@ai-km/service-model-gateway/src/generation/provider.js";
-import type { Embedding, EmbeddingProvider } from "./provider.js";
+import type { Embedding, EmbeddingProvider } from "@ai-km/service-retrieval";
 
 export interface DeterministicProviderOptions {
   readonly dimensions?: number;

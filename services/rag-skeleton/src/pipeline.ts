@@ -12,7 +12,6 @@
  */
 
 import { chunkDocument, type ChunkOptions } from "@ai-km/service-ingestion";
-import type { EmbeddingProvider } from "./embedding/provider.js";
 import type { GenerationProvider, GenerationResult } from "./generation/provider.js";
 // The ONE `assertCitationsGrounded` (E12-S033 consolidation) — see
 // `@ai-km/service-model-gateway`'s `generation/provider.ts` for why this
@@ -24,12 +23,13 @@ import type { GenerationProvider, GenerationResult } from "./generation/provider
 import { assertCitationsGrounded } from "@ai-km/service-model-gateway/src/generation/provider.js";
 import type { VectorRecord, VectorStore, RetrievalHit } from "@ai-km/service-retrieval";
 import { assertNoScopeLeak, type RetrievalScope } from "@ai-km/service-retrieval";
+import type { EmbeddingProvider } from "@ai-km/service-retrieval";
 import {
   effectiveFidelity,
   requireProviderFidelity,
   type ProviderFidelity,
   type FidelityRatedComponent,
-} from "./evidence-tier.js";
+} from "@ai-km/service-retrieval";
 
 export interface SourceDocument {
   readonly documentId: string;

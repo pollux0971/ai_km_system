@@ -6,7 +6,7 @@
  * Evidence layer: **policy L0** (static — typecheck only). This file is never
  * executed and never bundled; it proves shape compatibility and nothing else.
  * No provider is involved, so it carries no Provider Fidelity (PF) tag — see
- * `services/rag-skeleton/src/evidence-tier.ts` for why the two axes are named
+ * `services/retrieval/src/evidence-tier.ts` for why the two axes are named
  * apart. Serialisation over a real socket is policy L2/L3 at PF2; vector
  * quality is policy L6 at PF3. Neither is in reach here.
  *

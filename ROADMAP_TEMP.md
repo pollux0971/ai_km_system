@@ -951,3 +951,44 @@ Round 2 唯一失敗為 `send-message.spec.ts:60`,經 `ai-km-a4` 36 實例
 
 E04-S056(health/`reuseExistingServer` env 哨兵)、E04-S057(鎖守衛)、
 E03-S047(顛倒的預覽測試)。三個都是「各自驗證正確、接縫沒被驗證」的實例。
+
+---
+
+## 5-pi. 🔴 CI 自 2026-08-28 起就是紅的,而 `main` 有 238 個 commit 從未推上去(2026-09-02 接 contract-gate 進 CI 時發現)
+
+### 事實(全部由 `gh` 查證,非推論)
+
+- `git rev-list --count origin/main..main` = **238**。`origin/main` 停在
+  `1e837aa feat(E04-S050)`,時間 2026-08-28。**整個 Wave 1 從未進過 CI。**
+- 最近兩次 CI run(`33175022076`、`33174538547`)**都失敗**,各跑約 1 小時。
+  再往前的 run 全綠。
+- 失敗點是 `@ai-km/e2e#test`,錯誤是
+  `[WebServer] Failed to proxy http://127.0.0.1:4000/v1/auth/login Error: connect ECONNREFUSED 127.0.0.1:4000`。
+  亦即 `apps/web` 把 `/v1/auth/login` 代理到 `apps/api`(:4000),而 CI 沒有
+  啟動 `apps/api`。Playwright 報 `41 passed` 之後 task 仍然失敗。
+- 時間上緊接 `E04-S050`(conditional domain-plugin registration)推上去之後。
+  **這是相關性,不是已證明的因果** —— 沒有人跑過二分搜尋,不要把它寫成根因。
+
+### 為什麼這比「CI 紅了」更嚴重
+
+`ci.yml` 只有一個 `build` job,把 lint → typecheck → build → playwright →
+test 串成一條。**任何一步紅,整個 CI 就只有一個紅燈**,分不出是型別壞了還是
+e2e 起不來。所以這五天裡,即使有人瞄一眼,看到的也只是「CI 紅」這個早已
+習慣的狀態 —— 紅燈一旦長期亮著就不再攜帶資訊。
+
+這與 5-xi 是**同一個病的兩面**:5-xi 是「gate 沒接上 CI,所以沒人回報」,
+本條是「gate 接上了 CI,但 CI 紅太久,回報等於沒回報」。E04-S065 把
+contract-gate 做成**獨立 job** 正是為此:它的紅必須與 build 的紅可區分。
+
+### 未決
+
+- 誰負責修 e2e 的 :4000?這是 Wave 0 的迴歸,不在 Wave 1 任何一個 story 的
+  允許修改清單內。**需要指派**,在那之前不得宣稱 repo 的 CI 是可信的。
+- 238 個 commit 的推送本身沒有風險(公開 repo、Actions 免費),但推上去之後
+  `build` job 會繼續紅。**不要因為它紅就以為是新推的東西造成的** —— 它在
+  推之前就紅了,run URL 在上面。
+
+### 已驗證不是問題的部分
+
+repo 是 public(`gh repo view --json isPrivate` → `false`),GitHub Actions
+對公開 repo 免費,故推送與重跑不涉及費用。

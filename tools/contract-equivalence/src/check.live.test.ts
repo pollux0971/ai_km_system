@@ -22,7 +22,7 @@
  *
  *   pnpm --filter @ai-km/contract-equivalence exec vitest run src/check.live.test.ts
  *
- * TWO TESTS, TWO DIFFERENT JOBS:
+ * THREE TESTS, THREE DIFFERENT JOBS:
  *
  *   1. "every registered route matches its contract" — the actual
  *      deliverable. Prints the FULL MATCH/DIVERGES/ABSENT report and then
@@ -49,6 +49,19 @@
  *      `toEqual` mismatch) specifically so the mutated field's name is
  *      guaranteed to appear in the failure text mutate.mjs's
  *      `--expect-message` matches against.
+ *
+ *   3. "no undocumented routes outside the exempt allowlist" (E04-S078) —
+ *      a route the live server registers with NO matching yaml operation
+ *      in any contract now fails this test unless it is named, with a
+ *      reason/escalation/unlock, in
+ *      `undocumented-route-allowlist.ts`'s `UNDOCUMENTED_ROUTE_ALLOWLIST`.
+ *      Before E04-S078 this case was detected (`build-report.ts`) and
+ *      printed (`print-report.ts`) but asserted nowhere — `divergedRoutes`
+ *      only ever looks at `status === "DIVERGES"`. Seeded today with
+ *      exactly one entry, `GET /v1/health`, pending the user's choice
+ *      between adding it to a contract or declaring it permanently
+ *      internal — see that file's module doc. Prints both counts (routes
+ *      with no yaml operation; exempt entries) on every run.
  */
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -58,6 +71,7 @@ import type { CollectedRoute } from "./collect-routes.js";
 import { loadAllContracts, resolveContractsDir } from "./load-contracts.js";
 import { buildReport, type BuildReportResult } from "./build-report.js";
 import { printFullReport, divergedRoutes } from "./print-report.js";
+import { checkUndocumentedRoutes } from "./undocumented-routes.js";
 
 const { collected } = vi.hoisted(() => ({ collected: [] as CollectedRoute[] }));
 
@@ -124,5 +138,26 @@ describe("L2-EQ: runtime schema vs contract (E04-S073)", () => {
       );
     }
     expect(bodyField.status).toBe("MATCH");
+  });
+
+  it("no undocumented routes outside the exempt allowlist (E04-S078)", () => {
+    const { undocumented, violations, exemptCount } = checkUndocumentedRoutes(result);
+    // Required by this story: report BOTH counts on every run, whether the
+    // check passes or fails.
+    console.log(
+      `UNDOCUMENTED-ROUTE CHECK (E04-S078): routes with no yaml operation=${undocumented.length}  exempt entries=${exemptCount}`,
+    );
+    if (violations.length > 0) {
+      throw new Error(
+        `${violations.length} route(s) are registered on the live server with NO matching yaml ` +
+          `operation in any contract, and are not in the exempt allowlist ` +
+          `(tools/contract-equivalence/src/undocumented-route-allowlist.ts): ` +
+          `${violations.map((v) => v.key).join(", ")}. Either (a) this route belongs in a contract ` +
+          `(a contract change — needs the user, CLAUDE.md 鐵律 #1), or (b) it is intentionally ` +
+          `internal and needs an explicit exempt entry (reason/escalation/unlock) after real triage. ` +
+          `Do not add it to the allowlist without triage just to silence this check.`,
+      );
+    }
+    expect(violations).toEqual([]);
   });
 });

@@ -1,0 +1,23 @@
+{
+  "name": "@ai-km/contract-equivalence",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "E04-S073 — L2-EQ: verifies the schema Fastify actually validates requests against EQUALS the frozen OpenAPI contract. Not runtime validation (that is L2) and not a static type comparison (that is L0, contracts/openapi/__checks__). Deliberately NOT wired into any turbo task or contract-gate — see README.md.",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify": "tsx src/check.ts"
+  },
+  "dependencies": {
+    "@apidevtools/json-schema-ref-parser": "^11.7.2",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.0",
+    "fastify": "^5.2.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

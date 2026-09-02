@@ -35,8 +35,13 @@ import type { components } from "./generated/analytics.js";
 import type {
   AdminFeedbackCitationVerdict,
   AdminFeedbackItem,
+  AdminFeedbackPage,
 } from "../../../services/conversation/src/repository/admin-read.repository.js";
-import type { UsageEventName } from "../../../services/feedback/src/repository/usage-events.repository.js";
+import type {
+  LatencyMetrics,
+  UsageEventName,
+  UsageMetrics,
+} from "../../../services/feedback/src/repository/usage-events.repository.js";
 
 type Schemas = components["schemas"];
 
@@ -169,6 +174,67 @@ const implFeedbackItemSample: Omit<AdminFeedbackItem, "citationFeedback"> = {
 };
 export const implFeedbackItemSatisfiesContract: Schemas["FeedbackItem"] = implFeedbackItemSample;
 
+/*
+ * ── FeedbackQueuePage (E04-S080) ──────────────────────────────────────────
+ *
+ * `GET /admin/feedback` (`admin-feedback.ts`) returns
+ * `adminListMessagesWithFeedback`'s result VERBATIM — `AdminFeedbackPage`
+ * — so, as with `FeedbackItem` above, this is a RESPONSE the server
+ * produces: the meaningful direction is IMPLEMENTATION → CONTRACT (whatever
+ * the repository actually returns must satisfy what the contract promises
+ * the admin UI), the same direction `generation-compat.ts`'s
+ * `answerAssignable`/`citationsElementAssignable` use for the same reason.
+ *
+ * The page-metadata fields (`page`/`pageSize`/`totalCount`/`totalPages`) are
+ * plain `number`s on both sides with no array involved, so a direct
+ * `Exact` here would hold — but per this story's rule against reaching for
+ * `Exact` reflexively, `AssignableTo` already proves the property that
+ * matters (the repository always supplies a value the contract's fields can
+ * hold) without also demanding the contract could never legitimately need a
+ * WIDER numeric type than the implementation happens to use today.
+ */
+export const feedbackQueuePagePageAssignable: AssignableTo<
+  AdminFeedbackPage["page"],
+  Schemas["FeedbackQueuePage"]["page"]
+> = true;
+export const feedbackQueuePagePageSizeAssignable: AssignableTo<
+  AdminFeedbackPage["pageSize"],
+  Schemas["FeedbackQueuePage"]["pageSize"]
+> = true;
+export const feedbackQueuePageTotalCountAssignable: AssignableTo<
+  AdminFeedbackPage["totalCount"],
+  Schemas["FeedbackQueuePage"]["totalCount"]
+> = true;
+export const feedbackQueuePageTotalPagesAssignable: AssignableTo<
+  AdminFeedbackPage["totalPages"],
+  Schemas["FeedbackQueuePage"]["totalPages"]
+> = true;
+
+/**
+ * `items`, element by element, EXCLUDING `citationFeedback` — for two
+ * independent reasons this file already establishes elsewhere, stacked on
+ * top of each other here:
+ *
+ * 1. `AdminFeedbackPage["items"]` is `readonly AdminFeedbackItem[]`; a
+ *    `readonly T[]` is never assignable to the generated schema's mutable
+ *    `T[]` regardless of how compatible `T` is (the same technicality
+ *    `citationsElementAssignable`/`citationVerdictAssignable` document), so
+ *    the ELEMENT is checked, not the container.
+ * 2. Even at the element level, `AdminFeedbackItem["citationFeedback"]` is
+ *    itself `readonly AdminFeedbackCitationVerdict[]` — the SAME technicality
+ *    one field deeper — which is why `citationVerdictAssignable` above
+ *    already checks it independently, at ITS OWN element type. Re-including
+ *    `citationFeedback` here would just fail to compile a second time
+ *    without proving anything `citationVerdictAssignable` does not already
+ *    prove, so it is excluded with `Omit`, matching `implFeedbackItemSample`'s
+ *    own `Omit<AdminFeedbackItem, "citationFeedback">` above for the same
+ *    reason.
+ */
+export const feedbackQueuePageItemAssignable: AssignableTo<
+  Omit<AdminFeedbackPage["items"][number], "citationFeedback">,
+  Omit<Schemas["FeedbackQueuePage"]["items"][number], "citationFeedback">
+> = true;
+
 /**
  * Security — `UsageEventInput` must never be able to carry a
  * caller-asserted identity field. Resolves to `never` if `userId` (or any
@@ -213,3 +279,28 @@ const zeroSampleLatencySample: Schemas["LatencyMetrics"] = {
   sampleCount: 0,
 };
 export const zeroSampleLatency: Schemas["LatencyMetrics"] = zeroSampleLatencySample;
+
+/*
+ * ── UsageMetrics / LatencyMetrics (E04-S080) ─────────────────────────────
+ *
+ * `GET /admin/metrics/usage` and `GET /admin/metrics/latency`
+ * (`admin-metrics.ts`) return `computeUsageMetrics`/`computeLatencyMetrics`'s
+ * result VERBATIM (`return computeUsageMetrics(...)`, no reshaping) —
+ * responses the server produces, so, same reasoning as `FeedbackQueuePage`
+ * above and `generation-compat.ts`'s response checks, the meaningful
+ * direction is IMPLEMENTATION → CONTRACT: whatever the repository computes
+ * must satisfy what the contract promises the admin dashboard. Whole-object
+ * checks, not field-by-field — neither type has an array field, so the
+ * `readonly T[]` technicality that forces a split elsewhere never arises
+ * here.
+ *
+ * Not `Exact`: both shapes happen to match field-for-field today, but
+ * nothing about this seam requires the CONTRACT to be incapable of ever
+ * legitimately promising a wider numeric type than the SQL aggregation
+ * currently returns (e.g. `AVG()` already yields `number | null` — a
+ * `bigint` count would still satisfy `AssignableTo` here without this file
+ * needing to change). Reserving `Exact` for cases that genuinely require
+ * two-way equality, such as the enum checks elsewhere in this file.
+ */
+export const usageMetricsAssignable: AssignableTo<UsageMetrics, Schemas["UsageMetrics"]> = true;
+export const latencyMetricsAssignable: AssignableTo<LatencyMetrics, Schemas["LatencyMetrics"]> = true;

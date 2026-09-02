@@ -83,38 +83,55 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
   },
   {
     class: "bindable-not-yet-bound",
-    match: (yaml, schema) =>
-      (yaml === "auth.yaml" && schema === "LoginRequest") ||
-      (yaml === "generation.yaml" && (schema === "GenerationRequest" || schema === "ContextChunk")) ||
-      (yaml === "analytics.yaml" &&
-        ["UsageMetrics", "LatencyMetrics", "UsageEventCreated", "FeedbackQueuePage"].includes(schema)),
+    match: (yaml, schema) => yaml === "auth.yaml" && schema === "LoginRequest",
     reason:
       "NOT a permanent gap, unlike the classes above — a real implementation " +
-      "type already exists for each of these, it is just never referenced by " +
-      "any *-compat.ts: generation.yaml's GenerationRequest/ContextChunk have " +
-      "services/model-gateway/src/gateway.ts's exported GenerateRequest and " +
-      "services/model-gateway/src/generation/provider.ts's exported " +
-      "ContextChunk sitting unused (the exact situation EmbeddingRequest's " +
-      "existing `requestSatisfiesGateway` binding already solves for a sibling " +
-      "contract); analytics.yaml's UsageMetrics/LatencyMetrics have identically" +
-      "-named exports in services/feedback/src/repository/usage-events." +
-      "repository.ts; UsageEventCreated is a trivial `{id: string}` the route " +
-      "already constructs; FeedbackQueuePage's shape is " +
-      "services/conversation/src/repository/admin-read.repository.ts's " +
-      "AdminFeedbackPage (name differs, same pattern conversations-compat.ts " +
-      "already uses for Conversation/ConversationRow). auth.yaml's " +
-      "LoginRequest is one step further back: packages/auth-client/src/" +
-      "index.ts's AuthClient.login only takes an INLINE anonymous " +
-      "`{ username, password }` parameter today — binding it needs that type " +
-      "named and exported first, a Team-A-owned one-line change (auth-client " +
-      "is not a Team B folder), not a cross-team escalation.",
-    escalation: "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
+      "type already exists, it is just never referenced by auth-compat.ts. " +
+      "packages/auth-client/src/index.ts's AuthClient.login only takes an " +
+      "INLINE anonymous `{ username, password }` parameter today — binding it " +
+      "needs that type named and exported first, a Team-A-owned one-line " +
+      "change (auth-client is not a Team B folder), not a cross-team " +
+      "escalation. This class used to also cover generation.yaml's " +
+      "GenerationRequest/ContextChunk and analytics.yaml's UsageMetrics/" +
+      "LatencyMetrics/FeedbackQueuePage — E04-S080 bound all five (each " +
+      "already had a real implementation type sitting unused, the same " +
+      "situation this entry still describes for LoginRequest) and removed " +
+      "them from this match(); LoginRequest is the only one left because it " +
+      "additionally needs a one-line export before it can be bound, which was " +
+      "out of E04-S080's scope. `UsageEventCreated`, the sixth original " +
+      "member, turned out to have NO implementation type at all (see the " +
+      "`response-literal-no-exported-type` class below) and does not belong " +
+      "in this class even after triage.",
+    escalation: "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half); E04-S080 row (2026-09-03) for the narrowing",
     unlock:
-      "someone extends the relevant *-compat.ts with an AssignableTo/Exact " +
-      "check against the already-exported type named above (or, for " +
-      "LoginRequest only, first names and exports that inline parameter type " +
-      "in packages/auth-client, then binds it) — no contract or service " +
-      "change required for any of the five model-gateway/feedback ones.",
+      "someone names and exports that inline `{ username, password }` " +
+      "parameter type in packages/auth-client, then binds it in " +
+      "auth-compat.ts with an AssignableTo/Exact check — no contract or " +
+      "service change required.",
+  },
+  {
+    class: "response-literal-no-exported-type",
+    match: (yaml, schema) => yaml === "analytics.yaml" && schema === "UsageEventCreated",
+    reason:
+      "Triaged out of `bindable-not-yet-bound` (E04-S080), unlike its five " +
+      "former classmates there, which all had a real implementation type " +
+      "sitting unused and got bound. This one genuinely has none: `POST " +
+      "/usage-events` (services/feedback/src/routes/usage-events.ts) builds " +
+      "its 201 response as a bare inline object literal — `return { id }` — " +
+      "where `id = randomUUID()` is plain `string`, never narrowed to the " +
+      "contract's `format: uuid`, and there is no local interface, type " +
+      "alias, or import anywhere in that route file naming this shape. " +
+      "Exporting one would mean adding a type (or a named return type) to " +
+      "services/feedback — a Team B folder outside this story's " +
+      "contracts/openapi/__checks__/-only scope — and per this repo's own " +
+      "rule, inventing/exporting a Team B type solely to make a schema " +
+      "bindable is not a workaround this story is allowed to take.",
+    escalation: "docs/stories/PROGRESS.md E04-S080 row (2026-09-03)",
+    unlock:
+      "a domain owner adds a named, exported response type for POST " +
+      "/usage-events' 201 body in services/feedback and returns it by that " +
+      "name instead of an inline literal — only then does an " +
+      "analytics-compat.ts binding become possible.",
   },
   {
     class: "event-schema-no-provider-type",

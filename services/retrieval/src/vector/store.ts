@@ -44,6 +44,28 @@ export interface RetrievalHit {
   readonly endOffset: number;
   readonly scopeKey: string;
   readonly score: number;
+  /**
+   * The chunk's own vector, when the `VectorStore` that produced this hit can
+   * supply it. OPTIONAL — added for `rerank/mmr.ts` (E04-S016), which needs
+   * document-document similarity for its redundancy term and reuses these
+   * vectors rather than calling an embedding provider a second time.
+   *
+   * Optional (not required) on purpose: a `VectorStore` that only ever
+   * returns pure-relevance results (or a test double, like `service.test.
+   * ts`'s leaky-store fixture and `rag-skeleton`'s equivalent) is still a
+   * fully valid `RetrievalHit` producer. `rerankMmr` at `lambda = 1` does not
+   * need this field at all; at `lambda < 1` it fails loudly (`RerankError`)
+   * rather than silently treating a missing vector as "not redundant" — see
+   * `rerank/mmr.ts`'s `requireEmbedding`.
+   *
+   * `createInMemoryVectorStore` populates this (the vector is already in
+   * memory as part of the `VectorRecord` it scored). `createSqliteVecVector
+   * Store` (PF2) does NOT yet — reading it back out of the `vec0` virtual
+   * table is a real but separate change, left to a follow-up story rather
+   * than folded into this one (see this package's `rerank/mmr.ts` and the
+   * E04-S016 evidence file for why).
+   */
+  readonly embedding?: Embedding;
 }
 
 export interface VectorStore extends FidelityRatedComponent {
@@ -103,6 +125,9 @@ export function createInMemoryVectorStore(): VectorStore {
           endOffset: record.endOffset,
           scopeKey: record.scopeKey,
           score: dot(embedding, record.embedding),
+          // Already held in memory as part of `record` — no extra work to
+          // carry it onto the hit. See `RetrievalHit.embedding`'s docstring.
+          embedding: record.embedding,
         });
       }
 

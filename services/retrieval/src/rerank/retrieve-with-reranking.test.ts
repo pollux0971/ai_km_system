@@ -1,0 +1,178 @@
+/**
+ * `retrieveWithReranking` (E04-S016) — the candidate-pool composition
+ * behaviour: does it actually ask the store for MORE than `topK`, and does
+ * the whole thing degrade sanely when the pool comes back smaller than
+ * `topK`? `mmr.test.ts` covers `rerankMmr` itself in isolation; this file
+ * covers the seam that decides how big a pool `rerankMmr` gets to work with.
+ */
+import { describe, expect, it } from "vitest";
+
+import { retrieveWithReranking } from "./retrieve-with-reranking.js";
+import { candidatePoolSize, DEFAULT_CANDIDATE_POOL_MULTIPLIER } from "./mmr.js";
+import { createRetrievalService, createModelGatewayEmbeddingProvider } from "../service.js";
+import type { RetrievalService } from "../service.js";
+import { createInMemoryVectorStore, type RetrievalHit, type VectorRecord } from "../vector/store.js";
+import { toRetrievalScope } from "../authorization/scope.js";
+
+const vec = (a: readonly number[]): Float32Array => Float32Array.from(a);
+
+function hit(chunkId: string, score: number, embedding: readonly number[]): RetrievalHit {
+  return {
+    chunkId,
+    documentId: `doc-${chunkId}`,
+    text: `text of ${chunkId}`,
+    startOffset: 0,
+    endOffset: 1,
+    scopeKey: "dept:x",
+    score,
+    embedding: vec(embedding),
+  };
+}
+
+const scope = toRetrievalScope({ principalId: "u-test", allowedScopeKeys: ["dept:x"] });
+
+/**
+ * A `RetrievalService` fake that records the `topK` it was asked for and
+ * returns a fixed, caller-controlled candidate set (truncated to that
+ * `topK`, matching the REAL contract's own truncation — see `service.ts`).
+ */
+function fakeService(pool: readonly RetrievalHit[]): {
+  service: RetrievalService;
+  requestedTopKs: number[];
+} {
+  const requestedTopKs: number[] = [];
+  const service: RetrievalService = {
+    componentId: "retrieval:fake-for-test",
+    fidelityCeiling: "PF1",
+    async retrieve(_question, _scope, topK = 4) {
+      requestedTopKs.push(topK);
+      return pool.slice(0, topK);
+    },
+  };
+  return { service, requestedTopKs };
+}
+
+describe("retrieveWithReranking — candidate pool (behaviour 5)", () => {
+  it("asks the store for MORE candidates than the final topK — never exactly topK", async () => {
+    const pool = [
+      hit("a", 0.9, [1, 0]),
+      hit("b", 0.85, [1, 0]),
+      hit("c", 0.7, [0, 1]),
+      hit("d", 0.6, [0, 1]),
+      hit("e", 0.5, [1, 1]),
+    ];
+    const { service, requestedTopKs } = fakeService(pool);
+
+    const topK = 2;
+    await retrieveWithReranking(service, "問題", scope, topK);
+
+    expect(requestedTopKs).toHaveLength(1);
+    expect(requestedTopKs[0]).toBeGreaterThan(topK);
+    expect(requestedTopKs[0]).toBe(candidatePoolSize(topK, DEFAULT_CANDIDATE_POOL_MULTIPLIER));
+  });
+
+  it("a candidate pool SMALLER than topK: returns only what is available, no padding, no throw", async () => {
+    // Only 2 authorised chunks exist at all — the store cannot return more
+    // than that no matter how large a pool retrieveWithReranking asks for.
+    const pool = [hit("only-1", 0.4, [1, 0]), hit("only-2", 0.9, [0, 1])];
+    const { service, requestedTopKs } = fakeService(pool);
+
+    const topK = 5;
+    const result = await retrieveWithReranking(service, "問題", scope, topK);
+
+    // It DID ask for more than topK (the pool arithmetic ran normally)...
+    expect(requestedTopKs[0]).toBeGreaterThan(topK);
+    // ...but the store only had 2, so the result is exactly those 2 —
+    // reranked, not padded to 5, not throwing because fewer came back.
+    expect(result).toHaveLength(2);
+    expect(new Set(result.map((h) => h.chunkId))).toEqual(new Set(["only-1", "only-2"]));
+  });
+
+  it("every result is a reference from the pre-rerank candidate set the store returned — permutation-and-subset, never insertion", async () => {
+    const pool = [
+      hit("a", 0.9, [1, 0]),
+      hit("b", 0.85, [1, 0]),
+      hit("c", 0.7, [0, 1]),
+      hit("d", 0.6, [0.6, 0.8]),
+      hit("e", 0.4, [0, 1]),
+    ];
+    const { service } = fakeService(pool);
+
+    const topK = 3;
+    const preRerankPoolSize = candidatePoolSize(topK);
+    const preRerankSet = pool.slice(0, preRerankPoolSize);
+
+    const result = await retrieveWithReranking(service, "問題", scope, topK, { lambda: 0.4 });
+
+    expect(result.length).toBeLessThanOrEqual(topK);
+    for (const returned of result) {
+      expect(preRerankSet).toContain(returned); // same object, not a copy
+    }
+    expect(new Set(result.map((h) => h.chunkId)).size).toBe(result.length); // no duplicates
+  });
+});
+
+describe("retrieveWithReranking — end-to-end against the real service and store (never widens the authorized set)", () => {
+  it("reranks WITHIN scope only: no result outside allowedScopeKeys, and every result was in the store's own authorised candidate set", async () => {
+    const store = createInMemoryVectorStore();
+    const embedding = createModelGatewayEmbeddingProvider({ dimensions: 32 });
+
+    const maintenanceTexts = [
+      "泵浦異常處理程序。當離心泵出現軸承過熱時,應先停機並記錄運轉時數。",
+      "軸承溫度超過攝氏八十度視為異常。潤滑油每運轉兩千小時更換一次。",
+      "軸承過熱的第二種常見原因是潤滑油老化,需依排程更換,不可延後。",
+      "馬達異音檢查程序:先確認軸承潤滑狀態,再檢查皮帶張力。",
+    ];
+    const financeText = "年度預算編列作業要點。資本支出超過新台幣五百萬元者,須經董事會核准後方可執行。";
+
+    const vectors = await embedding.embed([...maintenanceTexts, financeText]);
+    const records: VectorRecord[] = [
+      ...maintenanceTexts.map((text, i) => ({
+        chunkId: `maint-${i}`,
+        documentId: "doc-maintenance-001",
+        text,
+        startOffset: 0,
+        endOffset: text.length,
+        scopeKey: "dept:maintenance",
+        embedding: vectors[i]!,
+      })),
+      {
+        chunkId: "fin-0",
+        documentId: "doc-finance-001",
+        text: financeText,
+        startOffset: 0,
+        endOffset: financeText.length,
+        scopeKey: "dept:finance",
+        embedding: vectors[maintenanceTexts.length]!,
+      },
+    ];
+    await store.upsert(records);
+
+    const service: RetrievalService = createRetrievalService({ store, embedding });
+    const maintenanceScope = toRetrievalScope({
+      principalId: "u-alice",
+      allowedScopeKeys: ["dept:maintenance"],
+    });
+
+    // Ground truth: what the REAL retrieve() itself considers the authorised
+    // candidate set at the pool size retrieveWithReranking will request.
+    const topK = 2;
+    const poolSize = candidatePoolSize(topK);
+    const authorisedCandidates = await service.retrieve("軸承過熱", maintenanceScope, poolSize);
+    const authorisedIds = new Set(authorisedCandidates.map((h) => h.chunkId));
+
+    const reranked = await retrieveWithReranking(service, "軸承過熱", maintenanceScope, topK, {
+      lambda: 0.5,
+    });
+
+    expect(reranked.length).toBeLessThanOrEqual(topK);
+    expect(reranked.length).toBeGreaterThan(0);
+    for (const hit of reranked) {
+      // Never widens the authorized set: no finance chunk, ever.
+      expect(hit.scopeKey).toBe("dept:maintenance");
+      expect(hit.documentId).not.toBe("doc-finance-001");
+      // Permutation-and-subset against the real store's own authorised output.
+      expect(authorisedIds.has(hit.chunkId)).toBe(true);
+    }
+  });
+});

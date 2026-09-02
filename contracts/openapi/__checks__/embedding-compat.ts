@@ -1,7 +1,24 @@
 /**
- * 2026-09-02 assignment — typecheck-only proof that
- * `contracts/openapi/embedding.yaml` stays compatible with the embedding seam
- * `services/rag-skeleton` already implements.
+ * 2026-09-02 assignment (E04-S069) — typecheck-only proof that
+ * `contracts/openapi/embedding.yaml` stays compatible with the seam that
+ * actually implements `POST /v1/embeddings`.
+ *
+ * REPOINTED (E04-S069, evidence from E04-S064's `generation-compat.ts`
+ * repoint): this file used to import `Embedding`/`EmbeddingProvider` from
+ * `services/retrieval/src/embedding/provider.ts`. That is the CONSUMER of
+ * embeddings — the retrieval pipeline that calls the model — not the seam
+ * that implements the route. `embedding.yaml` describes Model Gateway's
+ * `POST /v1/embeddings`, so this file now binds to
+ * `services/model-gateway/src/gateway.ts`'s `EmbedRequest`/`EmbedResponse`:
+ * `registerEmbeddingRoutes` (`services/model-gateway/src/routes/
+ * model-gateway-routes.ts`) calls `options.gateway.embed(...)` and returns
+ * its result VERBATIM — no reshaping between `EmbedResponse` and the wire.
+ * That is a more direct bind than the gateway's own `EmbeddingProvider`
+ * (`./embedding/provider.ts`), which is one layer further in (the seam
+ * between the gateway and the underlying model, not between the gateway and
+ * the wire) — same reasoning 鐵律 #2 applies elsewhere in this directory:
+ * bind what actually serialises, not an internal type that merely resembles
+ * it.
  *
  * Evidence layer: **policy L0** (static — typecheck only). This file is never
  * executed and never bundled; it proves shape compatibility and nothing else.
@@ -10,45 +27,37 @@
  * apart. Serialisation over a real socket is policy L2/L3 at PF2; vector
  * quality is policy L6 at PF3. Neither is in reach here.
  *
- * NOTE (E04-S066): `Embedding` / `EmbeddingProvider` relocated from
- * `services/rag-skeleton/src/embedding/provider.ts` to
- * `services/retrieval/src/embedding/provider.ts` — both were leaves, so the
- * move added no new dependency edge. This file has no package.json of its
- * own (plain `tsc -p tsconfig.json`, no path mapping for `@ai-km/*`), so it
- * keeps reaching in by relative path rather than a workspace import.
- *
  * See ./README.md for the commands.
  */
 import type { components } from "./generated/embedding.js";
-import type {
-  Embedding,
-  EmbeddingProvider,
-} from "../../../services/retrieval/src/embedding/provider.js";
+import type { EmbedRequest, EmbedResponse } from "../../../services/model-gateway/src/gateway.js";
 
 type Schemas = components["schemas"];
 
 type AssignableTo<A extends B, B> = A extends B ? true : never;
 type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
-/** Asserts a conversion is MANDATORY at this seam, not merely conventional. */
-type NotAssignableTo<A, B> = [A] extends [B] ? never : true;
 
-/** What the contract accepts must cover what `embed()` is willing to send. */
+/**
+ * What a contract-conformant request supplies must be usable everywhere the
+ * gateway's own `embed()` expects its `input` field. `EmbedRequest["input"]`
+ * is `readonly string[]`; a plain (mutable) `string[]` from the generated
+ * schema is assignable to that without friction (mutable → readonly always
+ * is), unlike the reverse.
+ */
 export const inputAcceptsBatch: AssignableTo<
   Schemas["EmbeddingRequest"]["input"],
-  Parameters<EmbeddingProvider["embed"]>[0]
+  EmbedRequest["input"]
 > = true;
 
 /**
- * `dimensions` is REQUIRED in the response, and is the same kind of value the
- * provider declares. A response that omitted it would force the store to
- * infer dimensionality from the first vector it happened to receive — which
- * is exactly how a re-index event turns into silently wrong rankings instead
- * of a loud failure.
+ * `dimensions` is REQUIRED in the response, and is the same kind of value
+ * the gateway actually returns. A response that omitted it would force the
+ * store to infer dimensionality from the first vector it happened to
+ * receive — which is exactly how a re-index event turns into silently wrong
+ * rankings instead of a loud failure.
  */
-export const dimensionsExact: Exact<
-  Schemas["EmbeddingResponse"]["dimensions"],
-  EmbeddingProvider["dimensions"]
-> = true;
+export const dimensionsExact: Exact<Schemas["EmbeddingResponse"]["dimensions"], EmbedResponse["dimensions"]> =
+  true;
 
 /**
  * `index` is REQUIRED on every datum. The contract says `data` is in input
@@ -60,31 +69,58 @@ export const dataIndexExact: Exact<
 > = true;
 
 /**
- * THE ONE THAT MATTERS AT THIS SEAM.
+ * The wire type of each embedding value the gateway returns is a plain
+ * `number`, matching what the contract's `data[].embedding` items promise.
  *
- * In-process the vector is a `Float32Array`; on the wire the contract says
- * `number[]`. These are deliberately NOT interchangeable, and this assertion
- * pins that.
+ * WHY THIS IS NOT `wireVectorIsNotTypedArray` ANYMORE (E04-S069 repoint
+ * finding): the pre-repoint version of this file asserted, at the CONSUMER
+ * seam, that `services/retrieval`'s in-process `Embedding` (`Float32Array`)
+ * was NOT assignable to the wire's `number[]` — guarding against
+ * `JSON.stringify(new Float32Array(...))` silently serialising to
+ * `{"0":1,"1":2}` (an object, not an array), which deserialises to a
+ * zero-length vector that scores 0 against everything and reads as "no
+ * matching documents" rather than as a bug.
  *
- * `JSON.stringify(new Float32Array([1, 2]))` produces `{"0":1,"1":2}` — an
- * object, not an array. It does not throw, it does not warn, and the receiving
- * side gets a zero-length vector that scores 0 against everything, which reads
- * as "no matching documents" rather than as a bug. An explicit
- * `Array.from(vector)` at the boundary is therefore contractual, and this line
- * goes red if someone ever "simplifies" the wire type to accept the typed
- * array directly.
+ * At THIS seam that risk is already closed at the type level, not merely
+ * papered over at the wire: `EmbeddingProvider["embed"]`'s declared return
+ * type (`services/model-gateway/src/embedding/provider.ts`) is
+ * `Promise<EmbedResult>` with `vectors: readonly (readonly number[])[]` —
+ * never `Float32Array` — and `deterministic.provider.ts`'s `embed()` does
+ * the `Array.from` conversion internally before ever constructing that
+ * value (see that file's own comment, which names this file directly).
+ * There is no `Float32Array` anywhere in `EmbedRequest`/`EmbedResponse`/
+ * `EmbedResult`'s type signatures for a type-level assertion to catch
+ * regressing. Writing a `NotAssignableTo<Float32Array, ...>` check here
+ * would be vacuous — it would always pass, including on a hypothetical
+ * future regression, because nothing at this seam's TYPE level could ever
+ * make it fail. A vacuous assertion is worse than none: it reads as
+ * coverage it does not provide. Recorded here instead of asserted.
  */
-export const wireVectorIsNotTypedArray: NotAssignableTo<
-  Embedding,
-  Schemas["EmbeddingResponse"]["data"][number]["embedding"]
+export const embeddingElementAssignable: AssignableTo<
+  EmbedResponse["data"][number]["embedding"][number],
+  Schemas["EmbeddingResponse"]["data"][number]["embedding"][number]
 > = true;
 
-/** And the conversion's output is what the contract actually asked for. */
-declare function toWire(vector: Embedding): number[];
-export const conversionSatisfiesWire: AssignableTo<
-  ReturnType<typeof toWire>,
-  Schemas["EmbeddingResponse"]["data"][number]["embedding"]
-> = true;
+/**
+ * Value-level smoke check: a literal shaped like a contract-conformant
+ * request/response must be usable everywhere the gateway's own
+ * `EmbedRequest`/`EmbedResponse` are expected. Catches required/optional
+ * drift the pure type-level checks above would let through in the
+ * "contract adds a required field" direction.
+ */
+const requestSample: Schemas["EmbeddingRequest"] = {
+  input: ["幫我找上個月的維修紀錄", "maintenance log"],
+};
+export const request: Schemas["EmbeddingRequest"] = requestSample;
+export const requestSatisfiesGateway: EmbedRequest = requestSample;
+
+const responseSample: Schemas["EmbeddingResponse"] = {
+  model: "embedding:deterministic",
+  dimensions: 256,
+  data: [{ index: 0, embedding: [0.1, -0.2] }],
+};
+export const response: Schemas["EmbeddingResponse"] = responseSample;
+export const responseSatisfiesGateway: EmbedResponse = responseSample;
 
 /**
  * Security — credentials travel in the `ai_km_session` cookie declared under
@@ -113,20 +149,6 @@ type ScopeKeys<T> = Extract<
 type ScopeFree<T> = [ScopeKeys<T>] extends [never] ? true : never;
 
 export const requestScopeFree: ScopeFree<Schemas["EmbeddingRequest"]> = true;
-
-/** A well-formed request the deterministic and HTTP providers both produce. */
-const requestSample: Schemas["EmbeddingRequest"] = {
-  input: ["幫我找上個月的維修紀錄", "maintenance log"],
-};
-export const request: Schemas["EmbeddingRequest"] = requestSample;
-
-/** A well-formed response, matching what `testing/fake-embedding-server.ts` writes. */
-const responseSample: Schemas["EmbeddingResponse"] = {
-  model: "fake-deterministic",
-  dimensions: 256,
-  data: [{ index: 0, embedding: [0.1, -0.2] }],
-};
-export const response: Schemas["EmbeddingResponse"] = responseSample;
 
 /**
  * ── ERROR ENVELOPE ──────────────────────────────────────────────────────────

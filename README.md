@@ -49,6 +49,8 @@ Domain ownership stays with Team B; folding the skeleton back into the
 existing `services/retrieval`, `ingestion`, `knowledge` and `generation`
 stubs later needs domain-owner review.
 
+(`services/rag-skeleton/` was retired by E04-S064 on 2026-09-02 and the directory no longer exists. This paragraph is retained as a record of what was authorized; it no longer grants permission to modify any path.)
+
 **2026-09-02 addendum (Model Gateway wiring only):** the user additionally
 authorized a narrow slice of Team B territory — embedding/generation provider
 abstractions plus `POST /v1/embeddings` and `POST /v1/generate` thin-wrapper
@@ -89,6 +91,8 @@ reviewer reading the exception list rather than the conversation.)
 🚩 **Not yet wired into `apps/api`.** None of the three plugins is registered in
 the composition root, and E06-S043 (re-ingest scope guard) is a hard precondition
 before any of them may be. See `docs/stories/PROGRESS.md`.
+
+(`services/rag-skeleton/` was retired by E04-S064 on 2026-09-02 and the directory no longer exists. This paragraph is retained as a record of what was authorized; it no longer grants permission to modify any path.)
 
 ## Layout
 

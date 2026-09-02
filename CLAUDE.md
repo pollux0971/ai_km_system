@@ -46,7 +46,8 @@
    E04-S009/S016 與 E04-S058～S067、E06-S008/S022/S026/S041/S042/S043、
    E12-S032～S033,同樣限**該 story 允許修改清單內**。詳見 README.md 的
    2026-09-02 Wave 1 段落。**此為補記**:使用者核可的 Wave 1 計畫本就明列這三個
-   service,是紀錄漏列,不是擴權。)
+   service,是紀錄漏列,不是擴權。
+   （`services/rag-skeleton/` 已於 2026-09-02 由 E04-S064 退場，目錄不再存在；本段保留為授權紀錄，不再構成對任何路徑的修改許可。）)
    (例外:使用者 2026-09-02 明示授權建立 `services/rag-skeleton/`(RAG walking
    skeleton:chunking、embedding provider、vector store、authorization scope、
    generation provider 五層,對應 E04 RAG & Conversation Intelligence 與
@@ -54,7 +55,8 @@
    `contracts/openapi/generation.yaml`。此為全新檔案,未修改任何既有 Team B
    程式碼或 story。Domain ownership 仍屬 Team B;之後若要將骨架拆分併入既有的
    `services/retrieval`、`ingestion`、`knowledge`、`generation` stub,需 domain
-   owner review。)
+   owner review。
+   （`services/rag-skeleton/` 已於 2026-09-02 由 E04-S064 退場，目錄不再存在；本段保留為授權紀錄，不再構成對任何路徑的修改許可。）)
    (例外:使用者 2026-09-02 追加授權——**僅限 g1–g5 的 Model Gateway 接線**。
    使用者原話:「授權:g1-g5 範圍內,可修改 `services/model-gateway/`(新增
    embedding/generation provider 抽象、兩條路由)與 `apps/api/`(條件註冊、

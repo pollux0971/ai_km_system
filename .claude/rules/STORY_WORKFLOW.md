@@ -286,7 +286,8 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
    (例外:使用者 2026-09-02 核可的 **Wave 1**——E04-S009/S016、
    E04-S058～S067、E06-S008/S022/S026/S041/S042/S043、E12-S032～S033——可在該
    story 允許修改清單內修改 `services/retrieval|generation|ingestion|rag-skeleton`。
-   見 README.md 的 2026-09-02 Wave 1 段落。)
+   見 README.md 的 2026-09-02 Wave 1 段落。
+   （`services/rag-skeleton/` 已於 2026-09-02 由 E04-S064 退場，目錄不再存在；本段保留為授權紀錄，不再構成對任何路徑的修改許可。）)
 5. **失敗誠實回報**:紅就是紅。任何 gate 未跑或未過,不得宣稱 DONE。
 6. **進度唯一真相**:`docs/stories/PROGRESS.md` 是進度追蹤的唯一來源。
    每次狀態轉換立即更新並隨 commit 提交;不得只更新 tracker 而未實際完成

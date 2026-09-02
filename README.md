@@ -73,7 +73,7 @@ existing `conversationPlugin` / `feedbackPlugin` pattern.
 the user approved a Wave 1 work breakdown that converts `services/rag-skeleton/`
 into the real `services/retrieval`, `services/generation` and `services/ingestion`
 (index side only), and authorized Team A to implement it. The grant covers
-E04-S009/S016/S022 and E04-S058～S067, E06-S008/S022/S026/S041/S042/S043, and
+E04-S009/S016 and E04-S058～S067, E06-S008/S022/S026/S041/S042/S043, and
 E12-S032～S033, each within that story's own allowed-modify list. Domain
 ownership of E04/E06/E12 stays with Team B.
 

@@ -43,7 +43,7 @@
    與 `docs/architecture/tech-debt-audit-2026-08-28.md`。)
    (例外:使用者 2026-09-02 核可的 **Wave 1**——把 `services/rag-skeleton/` 化為
    `services/retrieval`、`services/generation`、`services/ingestion`(索引側)——
-   E04-S009/S016/S022 與 E04-S058～S067、E06-S008/S022/S026/S041/S042/S043、
+   E04-S009/S016 與 E04-S058～S067、E06-S008/S022/S026/S041/S042/S043、
    E12-S032～S033,同樣限**該 story 允許修改清單內**。詳見 README.md 的
    2026-09-02 Wave 1 段落。**此為補記**:使用者核可的 Wave 1 計畫本就明列這三個
    service,是紀錄漏列,不是擴權。)
@@ -76,7 +76,7 @@
 只實作 E01/E03/E05/E07/E09/E11/E13 的 story。依賴 Team B(E02/E04/E06/E08/
 E10/E12/E14)時:對 contract 草案 + mock 開發,並在 EVIDENCE 記錄。
 **2026-08-28 起 Team A 另負責使用者增補並指派的 40 個 story**:E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021
-**2026-09-02 起另負責 Wave 1**(E04-S009/S016/S022、E04-S058～S067、
+**2026-09-02 起另負責 Wave 1**(E04-S009/S016、E04-S058～S067、
 E06-S008/S022/S026/S041/S042/S043、E12-S032～S033)
 (含落在 Team B epic 的 E02/E04/E12 story,domain 仍屬 Team B,contract 變更
 需 domain owner review)。E04-S037 維持 Team B。全部走完整狀態機,進度登記於

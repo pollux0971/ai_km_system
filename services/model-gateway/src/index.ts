@@ -33,7 +33,6 @@ export { EmbeddingUnavailableError } from "./embedding/provider.js";
 export type { EmbeddingProvider, EmbedInput, EmbedResult } from "./embedding/provider.js";
 export { createDeterministicEmbeddingProvider } from "./embedding/deterministic.provider.js";
 export {
-  FakeGenerationProvider,
   GenerationUnavailableError,
   FabricatedCitationError,
   assertCitationsGrounded,
@@ -45,6 +44,8 @@ export type {
   ContextChunk,
   Citation,
 } from "./generation/provider.js";
+export { createCannedGenerationProvider } from "./generation/canned.provider.js";
+export type { CannedProviderOptions } from "./generation/canned.provider.js";
 export type { ProviderFidelity } from "./fidelity.js";
 export {
   registerEmbeddingRoutes,

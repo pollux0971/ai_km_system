@@ -14,7 +14,14 @@
 import { chunkDocument, type ChunkOptions } from "@ai-km/service-ingestion";
 import type { EmbeddingProvider } from "./embedding/provider.js";
 import type { GenerationProvider, GenerationResult } from "./generation/provider.js";
-import { assertCitationsGrounded } from "./generation/provider.js";
+// The ONE `assertCitationsGrounded` (E12-S033 consolidation) — see
+// `@ai-km/service-model-gateway`'s `generation/provider.ts` for why this
+// package no longer carries its own copy. Deep import for the same reason
+// `./embedding/model-gateway-deterministic.provider.ts` uses one: the
+// package barrel drags in ASR route code that trips a pre-existing,
+// unrelated `exactOptionalPropertyTypes` error (E12-S034), and `gateway.ts`'s
+// own import graph never touches that code.
+import { assertCitationsGrounded } from "@ai-km/service-model-gateway/src/generation/provider.js";
 import type { VectorRecord, VectorStore, RetrievalHit } from "@ai-km/service-retrieval";
 import { assertNoScopeLeak, type RetrievalScope } from "@ai-km/service-retrieval";
 import {
@@ -104,12 +111,40 @@ export class RagPipeline {
     // future store implementation is a new opportunity to leak.
     assertNoScopeLeak(scope, retrieved);
 
+    if (retrieved.length === 0) {
+      // Deny-Wins (AC3b) and a genuinely empty store both land here with
+      // nothing authorised to answer from. Do NOT call the generation seam
+      // with an empty context: since E12-S033 routes this call through
+      // `createModelGateway().generate()`, an empty context now hits
+      // `GenerationNoContextError` there (the gateway's "never answer from
+      // parametric knowledge" rule for a real inference call) — the right
+      // policy for that seam, but the wrong shape for `ask()`, which AC3b
+      // requires to return gracefully with zero citations rather than throw.
+      // Short-circuiting is not skipping a check: an empty citation list is
+      // trivially grounded (⊆ ∅), so there is nothing for
+      // `assertCitationsGrounded` below to verify in this branch.
+      return {
+        answer: `沒有可引用的來源,無法回答:${question}`,
+        citations: [],
+        retrieved,
+        fidelity: this.fidelity,
+      };
+    }
+
     const request = { question, context: retrieved };
     const result = await this.options.generation.generate(request);
 
-    // The provider is trusted to self-check; the pipeline verifies anyway,
-    // because a third-party or real-model provider may not.
-    assertCitationsGrounded(request, result);
+    // Independent re-check at the pipeline boundary, using the Model
+    // Gateway's single consolidated implementation (E12-S033). Still
+    // meaningful even when `options.generation` routes through
+    // `createModelGateway().generate()` internally (which already grounds):
+    // `options.generation` is an injectable seam, and a caller can plug in a
+    // provider that talks directly to THIS interface without ever going
+    // through the gateway — exactly what the walking-skeleton test's rogue
+    // provider does to prove this line fires. When the provider *is*
+    // gateway-routed, this call is a coherent, idempotent re-check, not two
+    // independent unproven implementations drifting apart.
+    assertCitationsGrounded(retrieved, result.citations);
 
     return { ...result, retrieved, fidelity: this.fidelity };
   }

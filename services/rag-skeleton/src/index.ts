@@ -18,6 +18,7 @@ export type { Chunk, ChunkOptions } from "@ai-km/service-ingestion";
 export * from "./embedding/provider.js";
 export * from "./embedding/model-gateway-deterministic.provider.js";
 export * from "./generation/provider.js";
+export * from "./generation/model-gateway-canned.provider.js";
 export {
   createInMemoryVectorStore,
   VectorStoreError,

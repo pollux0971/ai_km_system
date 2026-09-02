@@ -7,9 +7,9 @@
  * it has to be a measurement, not a comment, or the two paths will drift
  * exactly the way E04-S049…S053's seams did.
  *
- * PF is PF1 throughout: generation is still the placeholder fake; embedding is
- * the real (ceiling PF1) deterministic hasher (E12-S032). Nothing here is
- * evidence about vectors or answers.
+ * PF is PF1 throughout: generation is the canned provider (E12-S033);
+ * embedding is the real (ceiling PF1) deterministic hasher (E12-S032).
+ * Nothing here is evidence about vectors or answers.
  */
 import { describe, expect, it } from "vitest";
 import { buildGatewayTestApp, TEST_USER_HEADER } from "../testing/build-gateway-test-app.js";
@@ -17,7 +17,8 @@ import { expectResponseMatchesContract, loadContract } from "../testing/contract
 import { createModelGateway, type ModelGateway } from "../gateway.js";
 import { EmbeddingUnavailableError } from "../embedding/provider.js";
 import { createDeterministicEmbeddingProvider } from "../embedding/deterministic.provider.js";
-import { FakeGenerationProvider, type GenerationProvider } from "../generation/provider.js";
+import type { GenerationProvider } from "../generation/provider.js";
+import { createCannedGenerationProvider } from "../generation/canned.provider.js";
 
 const USER = { [TEST_USER_HEADER]: "u-test" };
 const CONTEXT = [
@@ -27,7 +28,7 @@ const CONTEXT = [
 function realGateway(overrides: Partial<Parameters<typeof createModelGateway>[0]> = {}): ModelGateway {
   return createModelGateway({
     embedding: createDeterministicEmbeddingProvider({ dimensions: 16 }),
-    generation: new FakeGenerationProvider(),
+    generation: createCannedGenerationProvider(),
     ...overrides,
   });
 }

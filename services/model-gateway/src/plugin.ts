@@ -17,7 +17,7 @@ import {
 } from "./asr/provider.js";
 import { registerTranscriptionRoutes, type TelemetryLogger } from "./routes/transcriptions.js";
 import { createDeterministicEmbeddingProvider } from "./embedding/deterministic.provider.js";
-import { FakeGenerationProvider } from "./generation/provider.js";
+import { createCannedGenerationProvider } from "./generation/canned.provider.js";
 import { createModelGateway, type ModelGateway } from "./gateway.js";
 import {
   registerEmbeddingRoutes,
@@ -45,7 +45,7 @@ const modelGatewayPluginImpl: FastifyPluginAsync<ModelGatewayOptions> = async (a
   // the decoration they depended on. Same trap, avoided by construction.
   const gateway: ModelGateway = createModelGateway({
     embedding: createDeterministicEmbeddingProvider({ dimensions: config.embeddingDimensions }),
-    generation: new FakeGenerationProvider(),
+    generation: createCannedGenerationProvider(),
   });
   app.decorate("modelGateway", gateway);
 

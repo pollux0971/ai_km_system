@@ -133,11 +133,39 @@ pnpm --package=@redocly/cli@1.25.11 dlx redocly lint \
 
 ## Use `pnpm contract-gate`, not a hand-typed error count
 
-`run-gate.mjs` runs step 2 and applies the only rule that means anything here:
-**fail if and only if an error lands in a `*-compat.ts` file.** It exits 1 in
-that case, 0 otherwise, and prints the size of the type closure on every run.
+`run-gate.mjs` runs step 2 and applies three independent rules — any one of
+them failing fails the whole gate:
 
-The rule used to be "tsc must report exactly 6 errors", re-typed by each
+1. **No error in any `*-compat.ts` file.** An error there means a contract
+   and the code it describes have genuinely diverged.
+2. **Every file in the type closure sits under an allowed root** — see
+   `closure-allowlist.mjs`. This is deliberately an allowlist, not "no file
+   under `apps/`": a denylist blocks only the one disease already found
+   (below); an allowlist also blocks `tools/`, `tests/`, and any future entry
+   point nobody has thought of, while still letting legitimate closure growth
+   (e.g. `@types/node`, pulled in because `services/conversation` genuinely
+   needs `better-sqlite3`'s types) through without complaint.
+3. **Every UNBOUND contract schema is covered by a class in
+   `unbound-schema-allowlist.mjs`.** `binding-coverage.mjs` enumerates every
+   schema each `contracts/openapi/*.yaml` declares and classifies each into
+   one of four states — **BOUND-L0** (a `*-compat.ts` ties it to an
+   implementation type at typecheck time), **BOUND-L2** (a route registers
+   it into Fastify's own runtime validator via a literal
+   `getSchema("<spec>", "<Schema>")` — see `l2-registrations.mjs`),
+   **TRANSCRIBED** (a route hand-writes a schema literal copied from the
+   contract instead of fetching it — see `transcribed-schemas.mjs`), or
+   **UNBOUND** (none of the above) — plus a fifth, informational-only state,
+   **BOUND-VIA-PARENT** (never checked on its own, but `$ref`'d as a field of
+   a schema whose own BOUND-L0 check exercises that exact field). Only
+   UNBOUND schemas need an allowlist entry; BOUND-L2 and TRANSCRIBED are
+   real, distinct gates, not consolation prizes for missing BOUND-L0 — see
+   "2026-09-02 correction: L0 is not the only gate" below for why that
+   distinction was added and what it changed.
+
+It exits 1 if any rule fails, 0 otherwise, and prints the size of the type
+closure and the full BOUND/UNBOUND listing on every run.
+
+Rule 1 used to be "tsc must report exactly 6 errors", re-typed by each
 reviewer. It broke the first time it was load-bearing: E04-S060 repointed an
 import in an unrelated package at a barrel that also exports a Fastify plugin,
 Fastify pulled in ajv, ajv pulled in `@types/node`, `process` became
@@ -147,37 +175,129 @@ closure, not contract drift. A gate whose pass condition is another module's
 export list is not a gate.
 
 The closure size is printed because it is now known to move: 97 files before
-E04-S060, 287 after. Watching that number is how the next person catches the
-same thing recurring. Shrinking it back — compat checks importing type-only
-entry points rather than whole service barrels — and wiring this command into
-CI are **E04-S065**.
+E04-S060, 202 after E04-S069's repoint (see docs/stories/PROGRESS.md's
+E04-S065 row). Watching that number is how the next person catches the same
+kind of thing recurring; **rule 2 is what actually catches it** — a numeric
+ceiling was considered and rejected because E04-S069 grew the closure while
+fixing a real problem, which a ceiling would have flagged as a regression.
 
 `generated/` is committed so a reviewer can run step 2 without step 1, and so
 that a contract change that breaks compatibility shows up as a reviewable
 diff rather than only as a local failure.
 
-## Not yet wired into CI
+## Wired into CI
 
-E04-S038's development boundary allows `contracts/**` only, so this gate is
-not registered in `turbo.json` / the root `package.json` scripts. **E03-S034**
-(`@ai-km/api-client` codegen pipeline + drift gate) is the story that owns
-that wiring; until it lands, run the commands above by hand.
+**E04-S065** (front half) registered `pnpm contract-gate` as its own
+`contract-gate` job in `.github/workflows/ci.yml`, independent of
+`lint-typecheck-unit` and `e2e`, so a contract/implementation divergence is
+visible on its own rather than buried inside a single `build` job's failure.
 
-## Known: step 2 is currently red on pre-existing files
+## History: step 2 used to be red on pre-existing files (5-xi, now closed by rule 2)
 
-As of 2026-09-02, `tsc -p contracts/openapi/__checks__/tsconfig.json` exits 2
-with **6** `TS2591: Cannot find name 'process'` errors, all in
+Between 2026-09-02's `services/rag-skeleton` skeleton and E04-S064 retiring
+it, `tsc -p contracts/openapi/__checks__/tsconfig.json` intermittently exited
+2 with **6** `TS2591: Cannot find name 'process'` errors, all in
 `apps/web/src/lib/{api,conversations,feature-flags}.ts` and
-`apps/admin/src/lib/api.ts`, reached transitively from
-`conversations-compat.ts`. The cause is this directory's own
-`tsconfig.json`, which sets `"types": []` while the frontend modules it pulls
-in read `process.env`.
+`apps/admin/src/lib/api.ts`, reached transitively from the old
+`conversations-compat.ts` (which then imported those `apps/web` modules
+directly for their real runtime types). See ROADMAP_TEMP.md §5-xi for the
+full history, including the closing evidence that the six errors were
+**masked**, not fixed, by an unrelated barrel export change, then reappeared
+once that export shrank back.
 
-This predates the 2026-09-02 contracts — verified by running the gate with
-`embedding-compat.ts` / `generation-compat.ts` / their generated `.d.ts`
-removed, which produces the same 6 errors. None of the four `*-compat.ts`
-files themselves error. Because the gate is not wired into CI (see above),
-nothing was reporting this.
+**E04-S069 repointed `conversations-compat.ts` at the seam body
+(`services/conversation/src/repository/*.repository.ts`) instead of the
+frontend**, which removed the `apps/web` import chain entirely — the current
+closure (202 files, checked 2026-09-02) contains zero files under `apps/`.
+Rule 2's allowlist (this story, E04-S065 back half) now makes that a checked
+invariant instead of an incidental fact: an `apps/` file re-entering the
+closure fails the gate immediately, printing the offending path.
 
-Left unfixed on purpose: the fix touches this gate's shared `tsconfig.json`,
-which is outside the 2026-09-02 assignment's scope.
+## Known: binding coverage found more UNBOUND schemas than ChangeEvent (2026-09-02, E04-S065 back half)
+
+Running `binding-coverage.mjs` for the first time against every existing
+`*-compat.ts` found **61 UNBOUND schemas beyond the seeded `ChangeEvent`**,
+across every contract that has a compat file, plus two contracts with none:
+
+- `core.yaml` has **no compat file at all** — its `Error`/`Pagination`
+  schemas (the platform-wide envelope, consumed via `$ref` from every other
+  contract) are never bound to anything by name.
+- `transcriptions.yaml` (frozen by E12-S029) has **no compat file at all** —
+  all 12 of its schemas are unbound.
+- Every other contract's request schemas (`LoginRequest`,
+  `CreateConversationRequest`, `GenerationRequest`, ...) and error-envelope
+  `*Body`/`*ErrorBody` schemas are unbound in the same structural way
+  `ChangeEvent` is: referenced only in a self-check (`OwnerFree`,
+  `FlatEnvelope`, a literal `Exact<..., "SOME_CODE">`) that inspects the
+  contract's own shape but never ties it to an implementation type.
+  `embedding-compat.ts`'s `EmbeddingRequest` is the one existing
+  counterexample — bound via `requestSatisfiesGateway: EmbedRequest =
+  requestSample` — which is why these are reported as gaps rather than
+  treated as inherently unbindable-by-design: the pattern is possible, it
+  just was not done for every schema when each compat file was written.
+
+**Left unresolved on purpose, per this story's instructions**: adding a
+one-line reason to `unbound-schema-allowlist.mjs` for each of the 61 without
+real triage would defeat the entire point of this check. They are reported —
+in `docs/stories/PROGRESS.md`'s E04-S065 row and the story's own report — not
+silently allowlisted. `pnpm contract-gate` is RED on this account until each
+one is either bound, or reviewed and allowlisted with a real reason and
+escalation reference by whoever owns that judgment call.
+
+## 2026-09-02 correction: L0 is not the only gate
+
+The section above was this gate's FIRST measurement, and it over-reported:
+counting "no BOUND-L0" as "no gate at all" repeats the exact conflation this
+whole story exists to remove. Two corrections, both measured against the
+real repo, not argued:
+
+1. **BOUND-L2 exists.** Some routes register a yaml schema directly into
+   Fastify via `app.contracts.getSchema("<spec>", "<Schema>")`, which
+   validates every real request against it at runtime — a stronger gate than
+   an L0 type comparison, not a weaker one. Exactly **4 real schemas** are
+   registered this way (excluding `apps/api/src/contracts.test.ts`'s own
+   `"sample"`/`"nope"` mechanism fixtures, which are filtered out for free
+   because neither is a real contract file name): `analytics.yaml`'s
+   `UsageEventInput`, and `conversations.yaml`'s `Conversation`,
+   `CreateMessageRequest`, and `NotFoundErrorBody`.
+2. **TRANSCRIBED exists — a fourth state, not a synonym for UNBOUND.**
+   Several routes in `services/conversation` and `services/feedback`
+   hand-write their schema as an object literal copied from the yaml instead
+   of calling `getSchema`. Ten such constants exist across those two
+   services' route files; six of them (all named `*_BODY_SCHEMA`) derive a
+   real contract schema name and are classified TRANSCRIBED —
+   `conversations.yaml`'s `CreateConversationRequest`,
+   `UpdateConversationRequest`, `CreateRevisionRequest`, `SetFeedbackRequest`,
+   `SetFeedbackReasonRequest`, `SetFeedbackCommentRequest`. The other four
+   (`*_QUERYSTRING_SCHEMA`) describe inline `parameters:` with no
+   `components.schemas` entry to transcribe FROM at all, and are correctly
+   left unmatched — see `transcribed-schemas.mjs`'s header for why deriving
+   a name from those four would produce a real false positive
+   (`USAGE_METRICS_QUERYSTRING_SCHEMA` -> `UsageMetrics`, which collides with
+   `analytics.yaml`'s actual, unrelated `UsageMetrics` schema). A transcribed
+   schema is a real, live-validated copy of the contract with nothing
+   comparing the two — not equivalent to a real binding, but not equivalent
+   to no gate at all either, which is why it is its own state rather than
+   folded into BOUND or UNBOUND. TRANSCRIBED is printed on every run and is
+   never allowlist-eligible; its unlock condition is the same for all six:
+   **"reclassified to MATCH or DIVERGES once the L2-EQ check lands"** — a
+   follow-up story (not yet numbered) that will compare each registered or
+   transcribed route schema against its yaml at runtime-registration time,
+   closing the one thing this story's L2/TRANSCRIBED detection deliberately
+   does not do.
+
+After both corrections, the count moved from 62 UNBOUND (61 plus the seeded
+`ChangeEvent`) to **52** — a real but modest drop, not the headline of this
+correction. `pnpm contract-gate` is GREEN as of this correction:
+`unbound-schema-allowlist.mjs` now has **6 classes** (not 52 individual
+entries) covering every one of those 52, each with a reason, an escalation
+reference, and a concrete unlock condition — see that file for the full
+list. The report is also now split into two sections, printed by
+`run-gate.mjs` on every run: **contract-level gaps** (`core.yaml` and
+`transcriptions.yaml` have no compat file, no BOUND-L2, and no TRANSCRIBED
+for ANY of their schemas — a categorically bigger gap than one schema inside
+an otherwise-covered contract) and **schema-level gaps** (grouped by class,
+inside contracts that ARE otherwise gated). "This contract has no gate" and
+"this one schema in a gated contract is unbound" are different severities
+and are never merged into one list.
+

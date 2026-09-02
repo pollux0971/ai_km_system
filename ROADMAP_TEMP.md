@@ -992,3 +992,58 @@ contract-gate 做成**獨立 job** 正是為此:它的紅必須與 build 的紅�
 
 repo 是 public(`gh repo view --json isPrivate` → `false`),GitHub Actions
 對公開 repo 免費,故推送與重跑不涉及費用。
+
+### 補記 2026-09-02(推送嘗試後):原本記的紅不是現在的紅,而現在的紅是我們自己造成的
+
+**推 `main` 失敗**:`main` 與 `origin/main` **分岔**,不是落後。
+`git rev-list --left-right --count origin/main...main` = `2 239`。遠端有
+`1e837aa`(E04-S050)、`0a27675`(E04-S041/S043 docs)兩個 commit 不在本地歷史。
+已逐項查證**無任何內容遺失**:`0a27675` 與本地 `c8ebd82` 的 patch-id 完全相同;
+`1e837aa` 的工作在本地是 `657efd6`;遠端有 78 個檔案的路徑在本地不存在,但
+**78 個全部**在本地以新路徑存在(`apps/admin` 的 route group 重構)。
+`git merge-tree` 顯示直接合併只衝突兩檔:`apps/api/src/server.ts`、`PROGRESS.md`。
+收斂方式(force-push / 手解合併 / `merge -s ours`)**屬對外不可逆動作,已交使用者
+裁示,不由 agent 或顧問決定**。`merge -s ours` 已實測:產出的樹 hash 與現行 `main`
+**逐位元相同**,且 `origin/main` 成為祖先,後續為 fast-forward,不改寫已發布歷史。
+
+**但 CI 訊號不必等 `main`**:`story/E04-S065-contract-gate-ci` 這條 branch 帶著
+全部 239 個 commit 推上去了(run `33584351963`)。**這是 Wave 1 第一次在 CI 上
+執行。** 日後回溯時請注意:首次 CI 證據來自 story branch 而非 `main`,當時 `main`
+尚未收斂。
+
+**結果:`contract-gate` job 綠,`build` job 紅 —— 而紅的地方換了。**
+不再是 `ECONNREFUSED 127.0.0.1:4000`。新的失敗是:
+
+```
+Error: [E04-S057] Refusing to start Playwright: the shared E2E lock
+(/data/python/AI_KM-worktrees/.e2e.lock) is currently held, most likely by
+someone else (no readable label), and this process is not them.
+```
+
+**根因(已讀原始碼確認,非推論)**:`tests/e2e/helpers/lock-guard.ts:19`
+
+```ts
+function isLockFileContended(lockFilePath: string): boolean {
+  try { execFileSync("flock", ["-n", lockFilePath, "-c", "true"], ...); return false; }
+  catch { return true; }
+}
+```
+
+`catch` 吞掉**所有**失敗並一律回報「被佔用」,包括 `ENOENT`——路徑根本不存在。
+預設路徑是寫死的 `/data/python/AI_KM-worktrees/.e2e.lock`(同檔第 5 行),在
+GitHub runner 上當然不存在。於是守衛判定「被別人持有」並拒絕啟動 Playwright。
+
+**這個 fail-closed 是刻意的**,同檔註解寫得很清楚:「cannot prove this is free,
+so treat it as contended」「uncertainty must never silently resolve to *proceed*」。
+對本機的多 worktree 車隊而言它是對的。問題在於它把**兩種不同的不確定**混為一談:
+「鎖存在且有人持有」與「這裡根本沒有共用鎖」。CI 上沒有車隊、沒有共用 dev server、
+沒有跨 run 污染的可能——**這個守衛存在的危害在 CI 上不可能發生**,而它卻在那裡
+永久擋住 e2e。
+
+**因此**:
+1. **E04-S057(鎖守衛)讓 e2e 在 CI 上永遠跑不起來。** 它在本機驗證過、也真的
+   修好了本機的問題;沒有人在 CI 上驗證過,因為 `main` 從來沒被推上去。這與本波
+   反覆撞到的是同一個形狀:**在一個環境裡驗證通過,在另一個環境裡的接縫沒被驗證。**
+2. **舊的 :4000 失敗是否已被 E03-S038 修好,目前仍然未知。** 鎖守衛在 Playwright
+   啟動之前就攔下來了,所以 webServer 連試都沒試。**不得宣稱 :4000 已修好。**
+3. `@napi-rs/canvas` 的 warning 是 pdfjs 的選用相依,既有且無害,不是本次失敗原因。

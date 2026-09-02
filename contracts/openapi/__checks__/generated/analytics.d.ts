@@ -231,7 +231,8 @@ export interface components {
         FeedbackItem: {
             id: string;
             verdict: components["schemas"]["FeedbackVerdict"];
-            reason?: string;
+            /** @enum {string} */
+            reason?: "INCORRECT" | "INCOMPLETE" | "OFF_TOPIC" | "OTHER";
             comment?: string;
             citationFeedback?: components["schemas"]["FeedbackCitationVerdict"][];
             /** Format: date-time */
@@ -361,6 +362,10 @@ export interface components {
          */
         AnswerState: "ANSWERED" | "PARTIAL" | "NO_EVIDENCE" | "ERROR" | "PERMISSION_DENIED" | "SOURCE_UNAVAILABLE";
         Error: {
+            /**
+             * @description Stable, machine-readable failure code. Deliberately free-form (not an enum) — each domain spec defines and documents its own codes; turning this into a shared enum would make every new domain code a breaking change here. Platform-wide codes used across every domain (not specific to one spec's own endpoints) are documented here for discoverability:
+             *     `CSRF_HEADER_MISSING` (403) — E04-S048, ADR 0005 addendum. A state-changing (POST/PUT/PATCH/DELETE) request was missing the `x-requested-with` header, or — for `multipart/form-data` requests specifically — had no `Origin`/`Referer` matching the configured allowlist. Returned instead of a domain-specific code so the check can sit in front of every domain uniformly. Never distinguishable from a session-related 401/403 by response shape alone; only the `code` differs.
+             */
             code: string;
             message: string;
             details?: {

@@ -49,8 +49,11 @@ type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
  * WHY FIELD BY FIELD, NOT ONE WHOLE-OBJECT CHECK (repoint finding, same
  * shape as `generation-compat.ts`'s own comment on this): a single
  * `AssignableTo<Schemas["FeedbackItem"], AdminFeedbackItem>` does not
- * compile, for a reason that is a genuine, pre-existing divergence, not a
- * bug introduced by this repoint — see `reasonAssignable` below.
+ * compile, for a reason that was a genuine divergence at the time this file
+ * was repointed (`reason`'s contract/implementation mismatch — see
+ * `reasonExact` below), since resolved by E04-S071. Kept field by field
+ * regardless: `citationFeedback`'s readonly-array technicality
+ * (`citationVerdictAssignable` below) still holds independently.
  */
 
 export const idExact: Exact<Schemas["FeedbackItem"]["id"], AdminFeedbackItem["id"]> = true;
@@ -69,25 +72,28 @@ export const answerExcerptExact: Exact<
 export const commentExact: Exact<Schemas["FeedbackItem"]["comment"], AdminFeedbackItem["comment"]> = true;
 
 /**
- * CONTRACT LOOSE / IMPLEMENTATION STRICT (repoint finding — informational,
- * a domain-owner call, NOT an escalation): `analytics.yaml`'s
- * `FeedbackItem.reason` is an unconstrained `type: string` — apps/admin's
- * old hand-written mirror also typed it as plain `string`, which is why the
- * pre-repoint check here compiled without ever noticing this. The REAL
+ * CONTRACT LOOSE / IMPLEMENTATION STRICT — RESOLVED by E04-S071: this used
+ * to be a one-directional `AssignableTo<AdminFeedbackItem["reason"],
+ * Schemas["FeedbackItem"]["reason"]>`, because `analytics.yaml`'s
+ * `FeedbackItem.reason` was an unconstrained `type: string` while the REAL
  * implementation (`AdminFeedbackItem.reason`, `services/conversation/src/
  * repository/admin-read.repository.ts`) always supplies one of exactly the
  * four `FeedbackReason` literals (`INCORRECT`/`INCOMPLETE`/`OFF_TOPIC`/
  * `OTHER`) — the SAME enum `conversations.yaml` already declares and
- * `conversations-compat.ts` checks. The implementation never violates the
- * contract (every `FeedbackReason` value is a valid `string`), so the
- * assignment below asserts the direction that is actually true. Whether
- * `analytics.yaml`'s `FeedbackItem.reason` should be tightened to
- * `$ref: "./conversations.yaml#/components/schemas/FeedbackReason"` is a
- * follow-up for the domain owner, not this file's job (鐵律 #1 — contracts
- * are frozen, this story does not edit them).
+ * `conversations-compat.ts` checks. That one-directional check could never
+ * go red from this field alone: it stayed true whether the contract's
+ * `reason` was `string` or the tightened enum, so it did not actually prove
+ * the contract matched the implementation, only that the implementation's
+ * values happened to fit inside whatever the contract allowed.
+ *
+ * E04-S071 tightened `analytics.yaml`'s `FeedbackItem.reason` to an inline
+ * `enum: [INCORRECT, INCOMPLETE, OFF_TOPIC, OTHER]` (not a `$ref` to
+ * `conversations.yaml`'s `FeedbackReason` — that would add a cross-file
+ * reference this story's contract diff does not make), so the contract's
+ * `reason` type is now EXACTLY `AdminFeedbackItem["reason"]`. `reasonExact`
+ * below asserts both directions.
  */
-export const reasonAssignable: AssignableTo<AdminFeedbackItem["reason"], Schemas["FeedbackItem"]["reason"]> =
-  true;
+export const reasonExact: Exact<Schemas["FeedbackItem"]["reason"], AdminFeedbackItem["reason"]> = true;
 
 /**
  * `citationFeedback`'s ELEMENT type, not the whole array: `AdminFeedbackItem
@@ -105,15 +111,12 @@ export const citationVerdictAssignable: AssignableTo<
 
 /**
  * Value-level smoke check, schema side: a contract-conformant literal must
- * be constructible from the schema's own required/optional field list.
- * Deliberately NOT cross-assigned to `AdminFeedbackItem` here — that
- * direction is exactly where `reasonAssignable`'s divergence lives (a
- * literal `"INCORRECT"` typed via `Schemas["FeedbackItem"]["reason"]`
- * widens to plain `string`, which is not assignable to `AdminFeedbackItem`
- * ["reason"]'s `FeedbackReason`). Asserting it here would either fail to
- * compile (an honest gate) or require weakening the check to hide that —
- * forbidden by this story's HARD CONSTRAINT #3. The reverse direction,
- * which IS the true one, is proven below instead.
+ * be constructible from the schema's own required/optional field list. Used
+ * to be deliberately NOT cross-assignable to `AdminFeedbackItem` — before
+ * E04-S071, a literal `"INCORRECT"` typed via `Schemas["FeedbackItem"]
+ * ["reason"]` widened to plain `string`, which was not assignable to
+ * `AdminFeedbackItem["reason"]`'s `FeedbackReason` (see `reasonExact`
+ * above). That asymmetry is gone now that `reason` is exact both ways.
  */
 const feedbackItemSample: Schemas["FeedbackItem"] = {
   id: "fb-0001",
@@ -140,10 +143,12 @@ const minimalFeedbackItemSample: Schemas["FeedbackItem"] = {
 export const minimalFeedbackItem: Schemas["FeedbackItem"] = minimalFeedbackItemSample;
 
 /**
- * Value-level smoke check, implementation side (the TRUE direction —
- * see `reasonAssignable`): a literal shaped like what
+ * Value-level smoke check, implementation side: a literal shaped like what
  * `adminListMessagesWithFeedback`/`adminGetMessage` actually construct must
- * be usable everywhere the contract's `FeedbackItem` is expected.
+ * be usable everywhere the contract's `FeedbackItem` is expected. Both this
+ * and `feedbackItemSample` above are now mutually cross-assignable for
+ * `reason` (see `reasonExact`) — this smoke check predates that and is kept
+ * for the fields `reasonExact` does not cover as object-literal shape.
  * `citationFeedback` is left out here on purpose: `AdminFeedbackItem
  * .citationFeedback` is `readonly AdminFeedbackCitationVerdict[]`, and a
  * value of a `readonly T[]`-typed variable is never assignable to a

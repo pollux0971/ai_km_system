@@ -41,7 +41,7 @@ export interface components {
         GenerationResponse: {
             answer: string;
             citations: components["schemas"]["Citation"][];
-            model?: string;
+            model: string;
         };
         /** @description chunkId MUST appear in the request's `context`. Offsets are character offsets into the ORIGINAL document, carried unchanged from chunking, so the UI can highlight the exact span. */
         Citation: {

@@ -415,6 +415,7 @@ components:
           $ref: "#/components/schemas/FeedbackVerdict"
         reason:
           type: string
+          enum: [INCORRECT, INCOMPLETE, OFF_TOPIC, OTHER]
         comment:
           type: string
         citationFeedback:

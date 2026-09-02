@@ -125,7 +125,7 @@ components:
 
     GenerationResponse:
       type: object
-      required: [answer, citations]
+      required: [answer, citations, model]
       additionalProperties: false
       properties:
         answer:

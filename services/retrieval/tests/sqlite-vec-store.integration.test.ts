@@ -379,8 +379,14 @@ describe("sqlite-vec store — E06-S043 re-ingest scope guard (PF2)", () => {
     const before = await store.query(QUERY, financeScope, 10);
     expect(before).toHaveLength(2);
 
-    await expect(
-      store.upsert([
+    // Capture, don't assert yet — same reordering as store.test.ts's AC1/
+    // AC2. `.rejects.toBeInstanceOf(...)` used to sit here directly, which
+    // under reverse verification (guard disabled) failed first with
+    // "promise resolved undefined instead of rejecting" and none of the
+    // query/raw-SQL identity checks below ever ran.
+    let thrown: unknown;
+    try {
+      await store.upsert([
         {
           chunkId: `${docId}#0`,
           documentId: docId,
@@ -390,8 +396,10 @@ describe("sqlite-vec store — E06-S043 re-ingest scope guard (PF2)", () => {
           scopeKey: "dept:maintenance",
           embedding: vec([1, 0]),
         },
-      ]),
-    ).rejects.toBeInstanceOf(DocumentScopeConflictError);
+      ]);
+    } catch (err) {
+      thrown = err;
+    }
 
     // (a) via the store's own query — item-by-item identity, not just count.
     const after = await store.query(QUERY, financeScope, 10);
@@ -414,6 +422,9 @@ describe("sqlite-vec store — E06-S043 re-ingest scope guard (PF2)", () => {
       .all(docId) as Array<{ chunkId: string; text: string }>;
     expect(metaRows).toHaveLength(2);
     expect(metaRows.some((r) => r.text === "被拒的重匯內容")).toBe(false);
+
+    // Then the error contract.
+    expect(thrown).toBeInstanceOf(DocumentScopeConflictError);
   });
 
   it("AC6 sqlite-vec 這一側的錯誤 code 與訊息與 in-memory 一致,且不洩漏目前的 scopeKey", async () => {
@@ -605,14 +616,23 @@ describe("sqlite-vec store — E06-S043 re-ingest scope guard (PF2)", () => {
     const diskAfter = await disk.query(QUERY, financeScope, 10);
     const diskMaintenance = await disk.query(QUERY, maintenanceScope, 10);
 
+    // Data first: `expect(memoryError).toBeInstanceOf(...)` used to sit
+    // ahead of these — under reverse verification (guard disabled)
+    // `memoryError`/`diskError` are `undefined`, so that assertion failed
+    // first and the identity comparisons below never ran, even though this
+    // block already captures the error via try/catch rather than `.rejects`
+    // (the same masking happens with a manual assertion order, not just
+    // vitest's `.rejects` helper).
+    expect(memoryAfter.map((h) => h.chunkId)).toEqual(memoryBefore.map((h) => h.chunkId));
+    expect(diskAfter.map((h) => h.chunkId)).toEqual(diskBefore.map((h) => h.chunkId));
+    expect(memoryMaintenance).toEqual([]);
+    expect(diskMaintenance).toEqual([]);
+
+    // Then the error contract.
     expect(memoryError).toBeInstanceOf(DocumentScopeConflictError);
     expect(diskError).toBeInstanceOf(DocumentScopeConflictError);
     expect((memoryError as DocumentScopeConflictError).code).toBe(
       (diskError as DocumentScopeConflictError).code,
     );
-    expect(memoryAfter.map((h) => h.chunkId)).toEqual(memoryBefore.map((h) => h.chunkId));
-    expect(diskAfter.map((h) => h.chunkId)).toEqual(diskBefore.map((h) => h.chunkId));
-    expect(memoryMaintenance).toEqual([]);
-    expect(diskMaintenance).toEqual([]);
   });
 });

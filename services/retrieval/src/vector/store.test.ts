@@ -67,29 +67,50 @@ describe("createInMemoryVectorStore — E06-S043 re-ingest scope guard", () => {
     const before = await store.query(QUERY, FINANCE_SCOPE, 10);
     expect(before).toHaveLength(2);
 
-    await expect(
-      store.upsert([chunk("doc-1", 0, "dept:maintenance", [1, 0])]),
-    ).rejects.toBeInstanceOf(DocumentScopeConflictError);
+    // Capture the rejection WITHOUT asserting on it yet. `.rejects.toBe
+    // InstanceOf(...)` used to sit here directly — vitest aborts a test at
+    // its first failing assertion, so under reverse verification (guard
+    // disabled) that line failed first with "promise resolved undefined
+    // instead of rejecting" and the identity check below never ran. That is
+    // exactly the "an error was thrown" failure mode this test's own header
+    // comment says AC1 must not reduce to. See E06-S043 EVIDENCE for the
+    // fix (Phase 4 §5 narrow exception — test's own technical defect).
+    let thrown: unknown;
+    try {
+      await store.upsert([chunk("doc-1", 0, "dept:maintenance", [1, 0])]);
+    } catch (err) {
+      thrown = err;
+    }
 
+    // Data first: this is what must fail when the guard is removed.
     const after = await store.query(QUERY, FINANCE_SCOPE, 10);
     // Item-by-item identity, not just length — this is the assertion the
     // spec's reverse-verification note requires.
     expect(after).toEqual(before);
+
+    // Then the error contract.
+    expect(thrown).toBeInstanceOf(DocumentScopeConflictError);
   });
 
   it("AC2 承上:maintenance 看不到任何東西,不得有部分寫入", async () => {
     const store = createInMemoryVectorStore();
     await store.upsert(financeDocV1());
 
-    await expect(
-      store.upsert([chunk("doc-1", 0, "dept:maintenance", [1, 0])]),
-    ).rejects.toBeInstanceOf(DocumentScopeConflictError);
+    // Same reordering as AC1 above: capture, don't assert yet.
+    let thrown: unknown;
+    try {
+      await store.upsert([chunk("doc-1", 0, "dept:maintenance", [1, 0])]);
+    } catch (err) {
+      thrown = err;
+    }
 
     const maintenanceHits = await store.query(QUERY, MAINTENANCE_SCOPE, 10);
     expect(maintenanceHits).toEqual([]);
     // The store's total row count is also unchanged — no partial write of
     // the rejected maintenance chunk sitting invisibly in the store.
     expect(await store.count()).toBe(2);
+
+    expect(thrown).toBeInstanceOf(DocumentScopeConflictError);
   });
 
   it("AC6 錯誤帶有穩定 code,訊息說明是 scope 變更被拒且不只說「匯入失敗」,也不洩漏目前的 scopeKey", async () => {
@@ -150,29 +171,47 @@ describe("createInMemoryVectorStore — E06-S043 re-ingest scope guard", () => {
     // Same documentId + same scopeKey overall intent, but one record in the
     // batch has no scopeKey at all — Phase 1 must reject the WHOLE batch
     // before Phase 2 (the replace) ever starts.
-    await expect(
-      store.upsert([
+    // Same "capture, don't assert yet" reordering as AC1/AC2: this test
+    // wasn't on the reviewer's list (this particular reverse verification
+    // doesn't touch the missing-scopeKey validation), but it has the exact
+    // same throw-before-data-assertion shape guarding the same kind of
+    // atomicity claim, so it gets the same defensive fix.
+    let thrown: unknown;
+    try {
+      await store.upsert([
         chunk("doc-1", 0, "dept:finance", [1, 0], "新版第一段"),
         { ...chunk("doc-1", 1, "dept:finance", [0.9, 0.1], "新版第二段"), scopeKey: "" },
-      ]),
-    ).rejects.toBeInstanceOf(VectorStoreError);
+      ]);
+    } catch (err) {
+      thrown = err;
+    }
 
     const after = await store.query(QUERY, FINANCE_SCOPE, 10);
     expect(after).toEqual(before);
     expect(await store.count()).toBe(2);
+
+    expect(thrown).toBeInstanceOf(VectorStoreError);
   });
 
   it("同一次 upsert 呼叫本身對同一 documentId 帶兩個不同 scopeKey → 一樣拒絕,一樣不寫入", async () => {
     const store = createInMemoryVectorStore();
 
-    await expect(
-      store.upsert([
+    // Found while re-reading beyond the reviewer's list: this test hits the
+    // SAME `checkDocumentScopeConsistency` guard as AC1/AC2 (its
+    // batch-internal-conflict branch), so it fails the identical way under
+    // reverse verification #1 — capture first, assert data, then error type.
+    let thrown: unknown;
+    try {
+      await store.upsert([
         chunk("doc-2", 0, "dept:finance", [1, 0]),
         chunk("doc-2", 1, "dept:maintenance", [0.9, 0.1]),
-      ]),
-    ).rejects.toBeInstanceOf(DocumentScopeConflictError);
+      ]);
+    } catch (err) {
+      thrown = err;
+    }
 
     expect(await store.count()).toBe(0);
+    expect(thrown).toBeInstanceOf(DocumentScopeConflictError);
   });
 
   it("不同 documentId 之間互不影響——同一次呼叫可以混合多個文件、各自的 scope", async () => {

@@ -164,16 +164,28 @@ describe("IngestionService.ingest (E06-S042)", () => {
 
       // Same documentId, DIFFERENT scopeKey — must be refused end to end,
       // through the real re-ingest entry point, not just at the store layer.
-      await expect(
-        service.ingest({
+      // Capture, don't assert yet: `.rejects.toBeInstanceOf(...)` used to sit
+      // here directly — vitest aborts a test at its first failing assertion,
+      // so under reverse verification (the store's scope guard disabled) that
+      // line failed first with "promise resolved ... instead of rejecting"
+      // and the identity checks below never ran. Same test-technical defect
+      // as store.test.ts's AC1/AC2 (E06-S043 EVIDENCE, 2026-09-02 correction),
+      // found while auditing every AC1/AC2-shaped test for this story, not
+      // just the two files the independent reviewer named.
+      let thrown: unknown;
+      try {
+        await service.ingest({
           documentId: "reingest-doc",
           scopeKey: "dept:maintenance",
           pdfBytes: fixture("cjk-non-embedded.pdf"),
-        }),
-      ).rejects.toBeInstanceOf(DocumentScopeConflictError);
+        });
+      } catch (err) {
+        thrown = err;
+      }
 
       // AC1: finance's visibility is IDENTICAL, item by item — not merely
-      // "an error was thrown".
+      // "an error was thrown". Data first: this is what must fail when the
+      // guard is removed.
       const afterHits = await vectorStore.query(queryEmbedding, financeScope, 20);
       expect(afterHits).toEqual(beforeHits);
       expect(await vectorStore.count()).toBe(first.chunkCount);
@@ -181,6 +193,9 @@ describe("IngestionService.ingest (E06-S042)", () => {
       // AC2: maintenance gets nothing — not even a partial write.
       const maintenanceHits = await vectorStore.query(queryEmbedding, maintenanceScope, 20);
       expect(maintenanceHits).toEqual([]);
+
+      // Then the error contract.
+      expect(thrown).toBeInstanceOf(DocumentScopeConflictError);
     },
   );
 

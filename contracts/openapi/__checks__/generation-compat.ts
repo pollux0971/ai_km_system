@@ -1,7 +1,17 @@
 /**
  * 2026-09-02 assignment — typecheck-only proof that
  * `contracts/openapi/generation.yaml` stays compatible with the generation
- * seam `services/rag-skeleton` already implements.
+ * seam that implements it.
+ *
+ * REPOINTED (E04-S064, retiring `services/rag-skeleton`): this file used to
+ * import `Citation`/`GenerationResult` from
+ * `services/rag-skeleton/src/generation/provider.ts`. That package never
+ * shipped the route — `POST /v1/generate` lives in
+ * `services/model-gateway` (`generation.yaml` §paths./generate), and its
+ * types are `services/model-gateway/src/generation/provider.ts`'s
+ * `Citation`/`GenerateResult`. `Citation` is structurally identical (both
+ * checked below); `GenerateResult` is not — see `responseAssignable`'s own
+ * comment for the one real divergence this repoint surfaced.
  *
  * Evidence layer: **policy L0** (static — typecheck only). This file is never
  * executed and never bundled; it proves shape compatibility and nothing else.
@@ -15,8 +25,8 @@
 import type { components } from "./generated/generation.js";
 import type {
   Citation,
-  GenerationResult,
-} from "../../../services/rag-skeleton/src/generation/provider.js";
+  GenerateResult,
+} from "../../../services/model-gateway/src/generation/provider.js";
 import type { RetrievalHit } from "../../../services/retrieval/src/vector/store.js";
 
 type Schemas = components["schemas"];
@@ -33,9 +43,54 @@ type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
  */
 export const citationExact: Exact<Schemas["Citation"], Citation> = true;
 
-/** A contract response must be usable everywhere a pipeline result is. */
-export const responseAssignable: AssignableTo<Schemas["GenerationResponse"], GenerationResult> =
-  true;
+/**
+ * What the gateway actually returns must be a valid instance of the
+ * contract's response shape — field by field, not as one whole-object
+ * assignability check.
+ *
+ * WHY FIELD BY FIELD (E04-S064 repoint finding #1): a single
+ * `AssignableTo<GenerateResult, Schemas["GenerationResponse"]>` does not
+ * compile, for a reason that has nothing to do with contract drift —
+ * `GenerateResult["citations"]` is `readonly Citation[]` (this repo's
+ * domain types are readonly throughout) and TypeScript never considers a
+ * `readonly T[]` assignable to a mutable `T[]` (the generated OpenAPI type),
+ * regardless of how compatible the element type is. Checking the array's
+ * ELEMENT type instead (`citationsElementAssignable` below) proves the same
+ * thing this seam actually needs proven without tripping over that
+ * technicality.
+ *
+ * WHY FIELD BY FIELD (E04-S064 repoint finding #2, a REAL divergence): the
+ * pre-repoint version checked `AssignableTo<Schemas["GenerationResponse"],
+ * GenerationResult>` against `@ai-km/rag-skeleton`'s `GenerationResult`,
+ * which had no `model` field at all, so "a contract response is usable
+ * everywhere a pipeline result is" held trivially in that direction. Model
+ * Gateway's own `GenerateResult` requires `model: string`, while
+ * `generation.yaml`'s `GenerationResponse.model` is OPTIONAL — a
+ * schema-conformant body is PERMITTED to omit `model`, which would violate
+ * `GenerateResult`'s required field. That is a genuine, pre-existing
+ * looseness in the contract relative to what this seam's implementation
+ * always provides (`model-gateway-routes.ts` forwards `gateway.generate()`'s
+ * result verbatim, which always sets `model`) — not a bug introduced by this
+ * repoint. Not loosening the contract and not loosening `GenerateResult`
+ * here (both are outside this story's scope — 鐵律 #1, and `GenerateResult`
+ * is Team B's type); `modelAssignable` below asserts the direction that IS
+ * true and meaningful: whatever `GenerateResult` always provides for `model`
+ * is a valid value for the contract's optional field. A domain-owner call on
+ * tightening `generation.yaml`'s `model` to required is a follow-up, not
+ * this file's job.
+ */
+export const answerAssignable: AssignableTo<
+  GenerateResult["answer"],
+  Schemas["GenerationResponse"]["answer"]
+> = true;
+export const citationsElementAssignable: AssignableTo<
+  GenerateResult["citations"][number],
+  Schemas["GenerationResponse"]["citations"][number]
+> = true;
+export const modelAssignable: AssignableTo<
+  GenerateResult["model"],
+  Schemas["GenerationResponse"]["model"]
+> = true;
 
 /**
  * `citations` is REQUIRED, not optional. An answer that may legitimately omit

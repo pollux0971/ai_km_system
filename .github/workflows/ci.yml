@@ -6,7 +6,12 @@ on:
   pull_request:
 
 jobs:
-  build:
+  # lint + typecheck + unit tests, deliberately WITHOUT the e2e package.
+  # Unit tests must not sit behind the playwright install or the e2e run:
+  # before this split, all of it lived in one `pnpm test` step at the end
+  # of a single job, so e2e's failure (see the `e2e` job below) meant the
+  # unit suite's own red/green was never independently visible in CI.
+  lint-typecheck-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,21 +27,14 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
-      - run: pnpm --filter @ai-km/e2e exec playwright install --with-deps chromium
-      - run: pnpm test
-
-      # This workflow covers the L0 gate (build/lint/typecheck/test) only.
-      # Integration, security-negative, and E2E gates beyond the contract
-      # gate below are added per-story as real services/tests land — see
-      # AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md.
+      - run: pnpm turbo run test --filter='!@ai-km/e2e'
 
   contract-gate:
-    # Deliberately its own job, independent of `build`: `build` is a long
-    # (~1h) serial pipeline that fails today for a pre-existing, unrelated
-    # reason (E02 login proxy target not started in CI). A separate job
-    # keeps that failure from ever being confused with a contract-gate
-    # failure — see contracts/openapi/__checks__/run-gate.mjs for what this
-    # gate actually checks (an error inside a *-compat.ts file).
+    # Deliberately its own job, independent of the others: this checks
+    # exactly one thing (an error inside a *-compat.ts file — see
+    # contracts/openapi/__checks__/run-gate.mjs), so its red must never be
+    # confused with a lint/typecheck/unit-test failure or with e2e's
+    # pre-existing, unrelated failure below.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,3 +48,32 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm contract-gate
+
+  e2e:
+    # Deliberately its own job, independent of the others: as of
+    # 2026-08-28 this job is RED on main (`@ai-km/e2e#test` failing,
+    # historically `connect ECONNREFUSED 127.0.0.1:4000`) — a pre-existing
+    # regression tracked separately, not something either of the other two
+    # jobs' green should be able to hide, and not something this job's red
+    # should get to hide either.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @ai-km/e2e exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
+  # This workflow covers the L0 gate (lint/typecheck/unit test), the
+  # contract gate, and E2E as three independently-readable jobs.
+  # Integration and security-negative gates are added per-story as real
+  # services/tests land — see
+  # AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md.

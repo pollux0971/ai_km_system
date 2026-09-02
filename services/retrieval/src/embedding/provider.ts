@@ -22,6 +22,16 @@ export type Embedding = Float32Array;
 export interface EmbeddingProvider extends FidelityRatedComponent {
   readonly dimensions: number;
   /**
+   * E06-S026 — the identity string this provider reports for the vectors it
+   * produces (mirrors the Model Gateway's own `EmbeddingProvider.model` /
+   * `EmbedResult.model`). Required (not optional) on THIS interface: a
+   * caller cannot forget to declare it the way `VectorRecord.embeddingModel`
+   * can be omitted, because there is exactly one implementer in this package
+   * (`createModelGatewayEmbeddingProvider`, `../service.ts`) and it is new
+   * code added by this story, not a frozen fixture.
+   */
+  readonly model: string;
+  /**
    * Embeds a batch. Order of the result MUST match order of the input.
    * Batching is in the contract because it is the difference between one
    * round trip and N against a real model.

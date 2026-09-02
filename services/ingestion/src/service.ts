@@ -86,6 +86,23 @@ export class IngestionEmptyDocumentError extends Error {
   override readonly name = "IngestionEmptyDocumentError";
 }
 
+/**
+ * E06-S026 — the Model Gateway's `EmbedResponse` did not report a usable
+ * `model` identifier or a valid positive `dimensions`. Refused BEFORE any
+ * `VectorRecord` is built or `vectorStore.upsert()` is called — this is the
+ * "寫入路徑(索引管線)" Functional AC2 refers to: a chunk written without a
+ * recorded embedding identity can never be safely compared against a future
+ * query, and the fix is not to invent a default (that is exactly the
+ * "大概是現在這個 provider" guess the spec's Anti-hallucination Guard
+ * forbids) — it is to refuse the write and surface a loud, diagnosable
+ * error. In practice this never fires against the real deterministic
+ * provider (`services/model-gateway`), which always reports both; it exists
+ * to catch a future provider (or a misconfigured gateway) that doesn't.
+ */
+export class IngestionEmbeddingIdentityError extends Error {
+  override readonly name = "IngestionEmbeddingIdentityError";
+}
+
 export interface IngestDocumentInput {
   readonly documentId: string;
   /** Department/group key every resulting chunk is written with. Required — see `IngestionScopeError`. */
@@ -186,6 +203,25 @@ export function createIngestionService(deps: IngestionDeps): IngestionService {
       const embedRequest: EmbedRequest = { input: chunks.map((chunk) => chunk.text) };
       const embedResponse = await deps.modelGateway.embed(embedRequest, correlationId);
 
+      // E06-S026 Functional AC2 — fail closed BEFORE building a single
+      // `VectorRecord` or touching the store: a chunk written without a
+      // recorded embedding identity can never be compared against a future
+      // query, and defaulting to e.g. "unknown" would be exactly the
+      // "大概是現在這個 provider" guess the spec's Anti-hallucination Guard
+      // forbids.
+      if (typeof embedResponse.model !== "string" || embedResponse.model.trim() === "") {
+        throw new IngestionEmbeddingIdentityError(
+          "Model Gateway 未回報有效的 embedding model 身分,拒絕寫入——沒有身分的向量無法在查詢時" +
+            "被比對,也不能用預設值補齊(那等於猜測,可能與實際模型不符)。",
+        );
+      }
+      if (!Number.isInteger(embedResponse.dimensions) || embedResponse.dimensions <= 0) {
+        throw new IngestionEmbeddingIdentityError(
+          `Model Gateway 回報的 embedding dimensions(${embedResponse.dimensions})不是正整數,` +
+            "拒絕寫入,理由同 embedding model 缺失的情況。",
+        );
+      }
+
       // The gateway already guarantees `data.length === input.length` and
       // index-ordering (see `gateway.ts`'s own check) — this loop trusts that
       // contract rather than re-deriving it, and only guards against
@@ -205,6 +241,9 @@ export function createIngestionService(deps: IngestionDeps): IngestionService {
           endOffset: chunk.endOffset,
           scopeKey: input.scopeKey,
           embedding: Float32Array.from(datum.embedding),
+          // E06-S026 — validated non-empty/positive immediately above.
+          embeddingModel: embedResponse.model,
+          embeddingDimensions: embedResponse.dimensions,
         };
       });
 

@@ -37,11 +37,14 @@ export {
   VectorStoreError,
   DocumentScopeConflictError,
   DOCUMENT_SCOPE_CONFLICT_MESSAGE,
+  EmbeddingVersionMismatchError,
+  assertEmbeddingIdentityMatches,
 } from "./vector/store.js";
-export type { VectorRecord, RetrievalHit, VectorStore } from "./vector/store.js";
+export type { VectorRecord, RetrievalHit, VectorStore, EmbeddingIdentity } from "./vector/store.js";
 export {
   createSqliteVecVectorStore,
   SQLITE_VEC_MIGRATION,
+  migrateEmbeddingIdentityColumns,
   PartitionOverlapError,
 } from "./vector/sqlite-vec.store.js";
 export type {

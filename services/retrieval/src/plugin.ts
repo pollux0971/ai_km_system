@@ -19,7 +19,20 @@ export interface RetrievalPluginOptions {
 }
 
 const retrievalPluginImpl: FastifyPluginAsync<RetrievalPluginOptions> = async (app, options) => {
-  const service = options.service ?? createRetrievalService({});
+  // E06-S026 — the real composition root turns the embedding-version check
+  // ON. A caller with a store this story's ingestion pipeline actually wrote
+  // to always carries embedding identity; an unmigrated/legacy store
+  // correctly gets refused (`EmbeddingVersionMismatchError`) rather than
+  // silently ranking by a mismatched model. This default does not disturb
+  // any existing test: every test file in this package that exercises
+  // `retrieve()` against real data constructs its OWN `RetrievalService` via
+  // `createRetrievalService({ store, embedding })` and passes it in as
+  // `options.service` (see `plugin.test.ts`'s AC-RS3, `service.test.ts`,
+  // `rerank/retrieve-with-reranking.test.ts`), bypassing this default
+  // entirely; the only test that reaches this exact line (`plugin.test.ts`'s
+  // AC-RS2) does so against a fresh, empty store, where the version check's
+  // loop has nothing to iterate and never fires either way.
+  const service = options.service ?? createRetrievalService({ enforceEmbeddingVersion: true });
   app.decorate("retrieval", service);
 };
 

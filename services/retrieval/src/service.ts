@@ -91,7 +91,12 @@ import { createDeterministicEmbeddingProvider as createModelGatewayDeterministic
 import type { GenerationProvider } from "@ai-km/service-model-gateway/src/generation/provider.js";
 
 import { assertNoScopeLeak, type RetrievalScope } from "./authorization/scope.js";
-import { createInMemoryVectorStore, type RetrievalHit, type VectorStore } from "./vector/store.js";
+import {
+  createInMemoryVectorStore,
+  type EmbeddingIdentity,
+  type RetrievalHit,
+  type VectorStore,
+} from "./vector/store.js";
 import type { EmbeddingProvider } from "./embedding/provider.js";
 import { effectiveFidelity, type FidelityRatedComponent } from "./evidence-tier.js";
 
@@ -115,6 +120,38 @@ export interface RetrievalServiceOptions {
   readonly store?: VectorStore;
   /** Defaults to a model-gateway-backed deterministic (PF1) provider. */
   readonly embedding?: EmbeddingProvider;
+  /**
+   * E06-S026 — when `true`, `retrieve()` passes its own embedding provider's
+   * identity (`{ model, dimensions }`) to `store.query()` as
+   * `expectedIdentity`, so a store whose persisted vectors disagree with (or
+   * never recorded) that identity makes retrieval THROW
+   * (`EmbeddingVersionMismatchError`) instead of silently ranking by an
+   * incompatible model. See `vector/store.ts`'s `EmbeddingIdentity` doc
+   * comment for the full mechanism.
+   *
+   * Defaults to `false` — deliberately NOT because the protection should be
+   * off in a real deployment, but because every existing caller of
+   * `createRetrievalService()` in this package's ALREADY-MERGED test suite
+   * (`service.test.ts`, `plugin.test.ts`,
+   * `rerank/retrieve-with-reranking.test.ts`) builds `VectorRecord`s
+   * directly and predates this concept entirely — none of them set
+   * `embeddingModel`/`embeddingDimensions`. Defaulting this to `true` would
+   * make every one of those pre-existing, unrelated tests start throwing
+   * `EmbeddingVersionMismatchError` instead of returning the results they
+   * assert on, and `.claude/rules/STORY_WORKFLOW.md` forbids modifying their
+   * frozen fixtures/assertions to work around that.
+   *
+   * `plugin.ts`'s own default composition root — the actual thing a future
+   * real caller (`apps/api`) would reach — turns this ON explicitly (see its
+   * comment): as of 2026-09-02 `services/retrieval`'s plugin is not
+   * registered into `apps/api` at all (confirmed by grep, same precondition
+   * E06-S043 recorded for its own guard), so today's exposure from this
+   * default being `false` here is zero either way. Flipping this default to
+   * `true` unconditionally — and fixing the three pre-existing test files'
+   * fixtures to carry real identity — is a legitimate follow-up, deliberately
+   * left out of this story's Change Budget; see EVIDENCE.
+   */
+  readonly enforceEmbeddingVersion?: boolean;
 }
 
 const DEFAULT_TOP_K = 4;
@@ -163,6 +200,13 @@ export function createModelGatewayEmbeddingProvider(
     componentId: "embedding:deterministic",
     fidelityCeiling: embedding.fidelityCeiling,
     dimensions: embedding.dimensions,
+    // E06-S026 — the Model Gateway provider's own `model` string (e.g.
+    // "embedding:deterministic"), NOT re-derived from a response: it is
+    // static per configured provider, so reading it once here (rather than
+    // from every `EmbedResponse.model`) is correct and avoids trusting a
+    // per-call value for something that must not vary within one provider's
+    // lifetime.
+    model: embedding.model,
 
     async embed(texts) {
       const response = await gateway.embed(
@@ -186,6 +230,7 @@ export function createModelGatewayEmbeddingProvider(
 export function createRetrievalService(options: RetrievalServiceOptions = {}): RetrievalService {
   const store = options.store ?? createInMemoryVectorStore();
   const embedding = options.embedding ?? createModelGatewayEmbeddingProvider();
+  const enforceEmbeddingVersion = options.enforceEmbeddingVersion ?? false;
 
   return {
     componentId: "retrieval:service",
@@ -203,8 +248,14 @@ export function createRetrievalService(options: RetrievalServiceOptions = {}): R
         throw new RetrievalServiceError(`${embedding.componentId} 未回傳查詢向量。`);
       }
 
+      // E06-S026 — opt-in (see `RetrievalServiceOptions.enforceEmbeddingVersion`'s
+      // doc comment for why this is not unconditional yet).
+      const expectedIdentity: EmbeddingIdentity | undefined = enforceEmbeddingVersion
+        ? { model: embedding.model, dimensions: embedding.dimensions }
+        : undefined;
+
       // Scope goes INTO the query — see vector/store.ts's header.
-      const hits = await store.query(queryVector, scope, topK);
+      const hits = await store.query(queryVector, scope, topK, expectedIdentity);
 
       // Re-assert on the SERVICE boundary as well as the store boundary. A
       // future store implementation (or this one, mis-wired) is a new

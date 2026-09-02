@@ -34,6 +34,45 @@ export interface VectorRecord extends ScopedRecord {
   readonly endOffset: number;
   readonly scopeKey: string;
   readonly embedding: Embedding;
+  /**
+   * E06-S026 — identity of the embedding function that produced `embedding`:
+   * the provider's `model` string and the `dimensions` it declared for this
+   * vector. This is what makes a stored vector comparable to a freshly
+   * computed query vector; without it, a provider swap (or a version/model
+   * change with the same provider) is indistinguishable from normal drift —
+   * see `EmbeddingVersionMismatchError`'s doc comment below.
+   *
+   * OPTIONAL ON THE TYPE — deliberately. This package's own tests
+   * (`store.test.ts`, `../service.test.ts`, `../plugin.test.ts`,
+   * `../rerank/retrieve-with-reranking.test.ts`, and
+   * `tests/sqlite-vec-store.integration.test.ts`) predate this concept and
+   * build `VectorRecord`s directly without it; per `.claude/rules/
+   * STORY_WORKFLOW.md` those tests' content is frozen and this story adds
+   * fields, it does not touch them. Making these fields REQUIRED would force
+   * edits to every one of those fixtures to keep compiling.
+   *
+   * The real write path (`services/ingestion`'s `createIngestionService`)
+   * always supplies both, and refuses to write when the Model Gateway does
+   * not report them (`IngestionEmbeddingIdentityError`) — see that package's
+   * `service.ts`. So "missing" only ever means "written before E06-S026, or
+   * written directly against this store's low-level API rather than through
+   * the ingestion pipeline" — both cases `query()`'s optional
+   * `expectedIdentity` parameter treats as UNKNOWN and refuses (AC5), never
+   * as compatible.
+   */
+  readonly embeddingModel?: string;
+  readonly embeddingDimensions?: number;
+}
+
+/**
+ * E06-S026 — the embedding identity a query is computed with: the
+ * `EmbeddingProvider`'s `model` and `dimensions` at query time. Passed as
+ * `VectorStore.query()`'s optional 4th argument so the store can refuse to
+ * rank against vectors it knows were produced by a different function.
+ */
+export interface EmbeddingIdentity {
+  readonly model: string;
+  readonly dimensions: number;
 }
 
 export interface RetrievalHit {
@@ -67,18 +106,102 @@ export interface RetrievalHit {
    * E04-S067 evidence files for why this was deferred and then closed).
    */
   readonly embedding?: Embedding;
+
+  /**
+   * E06-S026 — the stored chunk's own embedding identity, when the
+   * `VectorStore` that produced this hit can supply it (mirrors
+   * `embedding?`'s reasoning above: optional so a store/test double with no
+   * knowledge of this concept is still a valid `RetrievalHit` producer).
+   * Exposed mainly so a caller (or a test) can verify what was actually
+   * persisted without a second, store-specific query.
+   */
+  readonly embeddingModel?: string;
+  readonly embeddingDimensions?: number;
 }
 
 export interface VectorStore extends FidelityRatedComponent {
   upsert(records: readonly VectorRecord[]): Promise<void>;
-  /** Scope is REQUIRED. There is deliberately no unscoped query method. */
+  /**
+   * Scope is REQUIRED. There is deliberately no unscoped query method.
+   *
+   * `expectedIdentity` (E06-S026) is OPTIONAL and OFF by default precisely so
+   * this signature change does not retroactively change the behaviour of any
+   * existing call site — see `EmbeddingIdentity`'s doc comment and
+   * `RetrievalServiceOptions.enforceEmbeddingVersion` in `../service.ts` for
+   * why. When supplied, an implementation MUST compare it against the
+   * identity recorded on every candidate row THIS query would otherwise
+   * consider (within the caller's authorised scope) and throw
+   * `EmbeddingVersionMismatchError` — refusing to return ANY hits — the
+   * moment one disagrees or is missing, BEFORE doing any similarity ranking.
+   */
   query(
     embedding: Embedding,
     scope: RetrievalScope,
     limit: number,
+    expectedIdentity?: EmbeddingIdentity,
   ): Promise<readonly RetrievalHit[]>;
   count(): Promise<number>;
   close(): Promise<void>;
+}
+
+/**
+ * E06-S026 — thrown by `VectorStore.query()` when an `expectedIdentity` was
+ * supplied and at least one candidate row's recorded embedding identity
+ * either disagrees with it, or is missing entirely (fail-closed: missing
+ * identity means "written before this feature existed, or via a path that
+ * skipped it", never "assume compatible" — Scope In's explicit migration
+ * rule). Its own named class (not a subtype of `VectorStoreError` — that
+ * class's `name` is a narrowed string-literal type a subclass cannot
+ * override with a different literal — nor of `EmbeddingError`, since the
+ * vectors involved are perfectly well-formed; the problem is that they were
+ * never comparable to begin with, not a computation error).
+ */
+export class EmbeddingVersionMismatchError extends Error {
+  override readonly name = "EmbeddingVersionMismatchError";
+}
+
+/**
+ * Shared by both stores (mirrors `checkDocumentScopeConsistency`'s pattern)
+ * so the refusal condition and message cannot drift between the in-memory
+ * and sqlite-vec implementations.
+ *
+ * Deliberately does NOT name a chunkId, documentId, or scopeKey in the
+ * message — this runs on the query path, and the Security Acceptance
+ * Criterion for this story forbids an error message leaking document
+ * content, chunk text, or a scope-key listing. Model/dimensions identifiers
+ * are configuration facts (which embedding function is deployed), not
+ * tenant data, so stating them is what AC3/AC6 require ("錯誤訊息同時指出
+ * 索引身分與查詢身分" / "必須說明這是 re-index event").
+ */
+export function assertEmbeddingIdentityMatches(
+  indexed: { readonly embeddingModel?: string; readonly embeddingDimensions?: number } | undefined,
+  expected: EmbeddingIdentity,
+): void {
+  const indexedModel = indexed?.embeddingModel;
+  const indexedDimensions = indexed?.embeddingDimensions;
+  const REINDEX_GUIDANCE =
+    "這是一次 re-index event:embedding 的產生方式已經改變(或從未記錄過),舊索引與新查詢不再" +
+    "可比。請重新索引受影響的內容(重新呼叫 ingestion 的 ingest()),而不是忽略這個錯誤或放行——" +
+    "見 embedding/provider.ts 與 contracts/openapi/embedding.yaml 對 re-index event 的定義。";
+
+  if (
+    typeof indexedModel !== "string" ||
+    indexedModel.trim() === "" ||
+    typeof indexedDimensions !== "number" ||
+    !Number.isFinite(indexedDimensions)
+  ) {
+    throw new EmbeddingVersionMismatchError(
+      `索引中存在沒有記錄 embedding 身分(model/dimensions)的資料,視為未知,拒絕檢索——不得猜測` +
+        `為「大概是現在這個 provider」。${REINDEX_GUIDANCE}`,
+    );
+  }
+  if (indexedModel !== expected.model || indexedDimensions !== expected.dimensions) {
+    throw new EmbeddingVersionMismatchError(
+      `查詢向量的 embedding 身分(model=${expected.model}, dimensions=${expected.dimensions})與` +
+        `索引中既有向量的身分(model=${indexedModel}, dimensions=${indexedDimensions})不符,拒絕` +
+        `檢索——不得回傳任何結果,即使維度相同。${REINDEX_GUIDANCE}`,
+    );
+  }
 }
 
 export class VectorStoreError extends Error {
@@ -239,11 +362,24 @@ export function createInMemoryVectorStore(): VectorStore {
       }
     },
 
-    async query(embedding, scope, limit) {
+    async query(embedding, scope, limit, expectedIdentity) {
       if (!Number.isInteger(limit) || limit <= 0) {
         throw new VectorStoreError("limit 必須是正整數。");
       }
       const allowed = buildScopePredicate(scope);
+
+      // E06-S026 — BEFORE any scoring: every authorised candidate's recorded
+      // embedding identity must match `expectedIdentity`, or this call throws
+      // and returns NOTHING (not a partial/filtered result — see
+      // `assertEmbeddingIdentityMatches`'s doc comment). Only runs at all when
+      // a caller opted in by supplying `expectedIdentity` — see
+      // `EmbeddingIdentity`'s doc comment for why this is not unconditional.
+      if (expectedIdentity) {
+        for (const record of rows.values()) {
+          if (!allowed(record)) continue;
+          assertEmbeddingIdentityMatches(record, expectedIdentity);
+        }
+      }
 
       const scored: RetrievalHit[] = [];
       for (const record of rows.values()) {
@@ -260,6 +396,14 @@ export function createInMemoryVectorStore(): VectorStore {
           // Already held in memory as part of `record` — no extra work to
           // carry it onto the hit. See `RetrievalHit.embedding`'s docstring.
           embedding: record.embedding,
+          // `exactOptionalPropertyTypes` is on for this package (see
+          // `sqlite-vec.store.ts`'s identical pattern for `embedding`) — an
+          // explicit `embeddingModel: undefined` is a type error distinct
+          // from the key being absent, hence the conditional spread.
+          ...(record.embeddingModel !== undefined ? { embeddingModel: record.embeddingModel } : {}),
+          ...(record.embeddingDimensions !== undefined
+            ? { embeddingDimensions: record.embeddingDimensions }
+            : {}),
         });
       }
 

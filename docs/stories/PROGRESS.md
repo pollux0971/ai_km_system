@@ -32,6 +32,11 @@ mock 也做不了才標 `blocked-team-b`。
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 26 | 0 | 0 | 0 | 0 |
 | E13 Feedback & Analytics | 21 | 21 | 0 | 0 | 0 | 0 |
+| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S074 + 啟用 S009/S016/S022) | 38 | 29 | 3 | 0 | 2 | 4 |
+| E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
+| E12 Model & Prompt Platform(使用者增補 E12-S029～S034) | 6 | 4 | 0 | 2 | 0 | 0 |
+| E06 Knowledge Ingestion & Indexing(Wave 1 索引側 + 衍生缺陷 S043) | 6 | 4 | 1 | 0 | 0 | 1 |
+| **合計** | **262** | 243 | 4 | 4 | 3 | 8 |
 
 > 總覽表在每次狀態轉換時一併更新。
 

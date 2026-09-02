@@ -13,7 +13,8 @@
     "contract-gate": "node contracts/openapi/__checks__/run-gate.mjs",
     "test": "turbo run test",
     "test:e2e": "turbo run test --filter=@ai-km/e2e",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "demo:w1-00": "pnpm --filter @ai-km/tool-asr-readiness exec tsx ../w1-00-demo/run.ts"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

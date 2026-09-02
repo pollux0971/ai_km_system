@@ -85,6 +85,20 @@ describe("FeedbackDetail (E11-S017)", () => {
   });
 });
 
+describe("FeedbackDetail reason code label (E01-S035)", () => {
+  it("renders a known reason code as its Chinese label, not the raw code", async () => {
+    mockedGetFeedback.mockResolvedValue({
+      ok: true,
+      value: { ...sampleFeedback, reason: "OFF_TOPIC" },
+    });
+
+    render(<FeedbackDetail feedbackId="f1" />);
+
+    expect(await screen.findByText("答案離題")).toBeInTheDocument();
+    expect(screen.queryByText("OFF_TOPIC")).not.toBeInTheDocument();
+  });
+});
+
 describe("FeedbackDetail free-text comment (E13-S008)", () => {
   it("shows the free-text comment when the feedback item has one", async () => {
     mockedGetFeedback.mockResolvedValue({

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
+import { getFeedbackReasonLabel } from "@ai-km/api-client";
 import { computeOkNgRate, listFeedback, type FeedbackFilterCriteria, type FeedbackItem } from "@/lib/feedback";
 
 const logger = createLogger("admin:feedback-list");
@@ -196,7 +197,7 @@ function LoadedFeedbackList({
                     <strong>{VERDICT_LABEL[item.verdict]}</strong>
                   </Link>
                 </p>
-                {item.reason && <p>{item.reason}</p>}
+                {item.reason && <p>{getFeedbackReasonLabel(item.reason)}</p>}
                 <p>{item.answerExcerpt}</p>
                 <p>
                   <time dateTime={item.submittedAt}>{new Date(item.submittedAt).toLocaleString("zh-TW")}</time>

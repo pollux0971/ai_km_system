@@ -1217,3 +1217,37 @@ E04-S064 **未放寬契約(鐵律 #1)、未放寬型別(Team B 所有)**,只斷�
 
 **本日兩次同型錯誤,皆因把「缺一種」讀成「沒有」**:我把「沒有 L0」讀成「沒有 gate」;
 分類器最初把「手抄副本」與「完全沒有」報成同一種。**副本 ≠ 沒有;runtime 驗證 ≠ 沒有型別比對。**
+
+### 5-xi 補充分類:SSE 事件 payload 是 L0 與 L2 都碰不到的一類(2026-09-02,E04-S072 blocked 時發現)
+
+**SSE 事件的 payload 既不經 route schema,也不經型別匯出**,因此:
+
+- **L0 碰不到**:沒有具名匯出型別可綁(payload 由 `res.write(JSON.stringify({...}))` 內聯產生)。
+- **L2 碰不到**:不掛 route schema,Fastify 從不驗證它。
+- **L2-EQ(E04-S073)也碰不到**:`onRoute` 讀的是 route 註冊的 schema,SSE payload 不在其中。
+
+**全 repo 目前只有兩個**:`conversations.yaml` 的 `ChangeEvent` 與 `ResyncEvent`。
+
+**這一類要靠「從實作推導型別」來綁**——見 E04-S072 的方案 (d):刪掉序列化函式的
+顯式回傳註記,讓 `ReturnType<typeof fn>` 推出真實形狀,再由 compat 綁它。
+**關鍵在於型別必須是推導的,不是手寫的**——手寫一個物件型別放在回傳它的函式旁邊
+是第二份真相,正是 E04-S073 要抓的病。
+
+⚠️ **日後 E03 的跨視窗同步若新增事件型別,必須知道這一類的存在**,否則新增的事件
+payload 會落進同一個三不管地帶。
+
+### `ResyncEvent` 的處置(更正一則顧問的建議)
+
+技術顧問建議把 `ResyncEvent.reason` 加進待裁的契約收緊批次(第三條)。**實測後不採納**:
+
+- `conversations.yaml` 的 `ResyncEvent.reason` **已經是 enum**:
+  `[EVENT_LOG_TRUNCATED, UNKNOWN_LAST_EVENT_ID, SERVER_RESTART]`。
+- 實作只送出前兩個(`change-events.ts` 三處內聯,兩個相異值)。
+- 契約比實作寬**一個值**,但 `SERVER_RESTART` 是**保留值**;把它從契約移除是對任何
+  已在處理該值的客戶端的**破壞性變更**。
+
+**結論:契約已經說了真話,不需要收緊。** 一份契約保留一個尚未使用的值不是缺陷。
+
+`ResyncEvent` 在 coverage 維持 UNBOUND,allowlist 理由改為:
+「SSE 內聯字面,無具名序列化器可綁(三處 `res.write` 各自內聯);解除條件:出現具名
+序列化器時」。**不與 `ChangeEvent` 同案處理**——後者有 `toWirePayload` 可推導,前者沒有。

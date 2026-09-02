@@ -1252,6 +1252,47 @@ payload 會落進同一個三不管地帶。
 「SSE 內聯字面,無具名序列化器可綁(三處 `res.write` 各自內聯);解除條件:出現具名
 序列化器時」。**不與 `ChangeEvent` 同案處理**——後者有 `toWirePayload` 可推導,前者沒有。
 
+### 5-xi 追記:L2-EQ 拆成兩半,只有 response-shape 進 gate(2026-09-03,E04-S073 follow-up「gate-response-shape」)
+
+E04-S073 落地時的限制寫的是「L2-EQ 在使用者對其 DIVERGES 裁示前,不得接進任何
+gate」。**技術顧問 2026-09-03 裁定:這句話綁的是「帶著未解發現的那個檢查」,不是
+「這個 package」。** `tools/contract-equivalence/` 底下其實是兩個獨立的活檢查:
+
+- **route-schema**(`check.live.test.ts`,E04-S073 本體):runtime 實際驗證請求用的
+  schema 是否等於契約。**兩條真分歧仍未解**——`GET /admin/metrics/latency`、
+  `GET /admin/feedback` 的 querystring `default`(見本節上方「5-rho」與
+  `docs/stories/PENDING_DECISIONS.md`)。這半邊維持**不接進 exit code**,但從
+  2026-09-03 起`contract-gate` 每次執行都會印出它的完整報告(含 DIVERGES),
+  不再是純手動、沒人看得到的狀態。
+- **response-shape**(`check-response-shapes.live.test.ts`,E04-S079):實際回應
+  是否符合契約宣告的 2xx 形狀。**零未解發現**——22 條宣告的 JSON 2xx 操作、
+  21 條本次執行實際比對、**全部乾淨**(見 `tools/contract-equivalence/
+  README.md`「Response-shape coverage: three numbers, not a fraction」的完整
+  三數字拆解,以及為什麼不能只印 21/21 或 22/22 這種比例)。**接進 gate,
+  紅會讓 `contract-gate` job 真的失敗**。
+
+**判準與本節開頭同一個病灶,但方向相反**:上面 5-xi 講的是「把兩個不同的東西
+用同一條規則量」(6 個 TS2591 錯誤數);這裡是「把兩個不同的檢查用同一條政策
+(要不要接 gate)量」。**政策應該跟著「有沒有懸而未決的問題」走,不是跟著
+「住在同一個目錄」走。**
+
+**具體受益者**:`GET /v1/admin/health` 在這次接線之前,唯一的形狀保護就是這個
+從未被排進任何 gate 的檢查——它自己的測試(`apps/api/src/health/
+admin-health.test.ts`)只逐欄抽查(`checkedAt` 是字串、`subsystems` 長度與名稱、
+`status` 屬於允許集合),從來沒有斷言過完整形狀,也沒有掛 ajv 的
+`expectResponseMatchesContract`。這條 route 在其餘 21 條之中是唯一一條「多送或
+少送一個欄位,今天不會有任何東西發現」的路由(其餘 20 條見 `check-response-
+shapes.live.test.ts` 自己的模組註解)。
+
+反向驗證(CI,非本機):對 `apps/api/src/health/checks.ts` 的 `compute()` 做突變
+(在組合後的 `SystemHealth` 物件加一個 `debugFlag: true`,經由一個未標註型別的
+中繼變數迴避 TS 的 excess-property 檢查,而非直接在回傳的物件字面上加——後者會
+在 `tsc` 就報錯,反而測不出「gate 隔離」這件事本身),`contract-gate` job 紅、
+指名 `GET /admin/health` 與 `debugFlag`,而 `lint-typecheck-unit` 在**同一次 CI
+run** 維持綠——證明這個突變**只**會被這個新接的 gate 抓到,不會被既有任何
+typecheck 或單元測試意外附帶抓到。詳見 `docs/stories/PROGRESS.md` E04-S073 列
+的更新與 commit 訊息裡的兩個 run URL。
+
 ---
 
 ## 5-rho. 🔴 L2-EQ 首次執行的結果:2 條真分歧,以及四件沒人在找的事(2026-09-02,E04-S073)

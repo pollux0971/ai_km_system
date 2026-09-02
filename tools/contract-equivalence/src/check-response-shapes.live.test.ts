@@ -78,6 +78,21 @@
  *
  * `contracts/openapi/*.yaml` is loaded independently (`load-contracts.ts`),
  * exactly like `check.live.test.ts` — the real files, never a fixture.
+ *
+ * E04-S073 FOLLOW-UP (2026-09-03, "gate-response-shape"): this file's own
+ * two `it`s are now wired into `contract-gate` (see
+ * `contracts/openapi/__checks__/run-gate.mjs`'s "response-shape (gated)"
+ * section) — this is the HALF of `@ai-km/contract-equivalence` the user's
+ * advisor ruled clear to gate, because its 2026-09-02 result was zero
+ * unresolved findings (22/22 exercised routes clean). `check.live.test.ts`
+ * (the route-schema comparison, with two real, still-undecided querystring
+ * `default` DIVERGES) stays observed-only — see that file's own doc and
+ * README.md "Two sections, two different exit-code relationships" for why
+ * the ruling treats these as two separately-gateable checks, not one
+ * package. This file's `beforeAll` also now prints a three-number coverage
+ * report (declared / exercised / not-covered, by name) — see
+ * `response-shape-coverage.ts` for why a flattering "N of N" fraction is
+ * not good enough on its own.
  */
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -87,6 +102,7 @@ import { loadAllContracts, resolveContractsDir } from "./load-contracts.js";
 import { buildYamlIndex, responseJsonSchema, type YamlOperation } from "./yaml-index.js";
 import { routeKeyOf, routeKeyToString } from "./path-match.js";
 import { diffResponseInstance, type InstanceDiffResult } from "./response-instance-diff.js";
+import { computeResponseShapeCoverage } from "./response-shape-coverage.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -424,6 +440,26 @@ beforeAll(async () => {
   console.log(
     `SUMMARY: ${findings.length} routes exercised — clean=${clean}  withExtraFields=${withExtra}  withMissingFields=${withMissing}`,
   );
+
+  // E04-S073 follow-up (2026-09-03, "gate-response-shape") — THREE numbers,
+  // not a fraction. "N of N clean" only ever describes the routes this
+  // run reached; a route it never called is invisible to that ratio, not
+  // counted as a zero. Print the honest denominator (every JSON 2xx
+  // operation any contract declares), what this run actually compared,
+  // and — by name, never folded into a count — which declared operations
+  // it did NOT reach. This does not gate: an uncovered route is neither a
+  // failure nor allowlist-eligible, it is a fact about this run's own
+  // reach. See README.md "Response-shape coverage: three numbers, not a
+  // fraction".
+  const coverage = computeResponseShapeCoverage(specs, new Set(findings.map((f) => f.key)));
+  console.log("─".repeat(78));
+  console.log("COVERAGE (informational — never fails this suite, never allowlist-eligible):");
+  console.log(`  declared JSON 2xx operations across all contracts: ${coverage.declared.length}`);
+  console.log(`  exercised and compared by this run: ${coverage.exercised.length}`);
+  console.log(`  NOT covered by this run: ${coverage.notCovered.length}`);
+  if (coverage.notCovered.length > 0) {
+    for (const key of coverage.notCovered) console.log(`    not covered: ${key}`);
+  }
 }, 30_000);
 
 afterAll(async () => {

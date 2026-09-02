@@ -1136,3 +1136,54 @@ if (!process.env.CI) return;
 Team A 範圍,不需新授權。登記為 **E01-S034**。
 
 **5-pi 維持開啟**,擋路者身分今天換了第二次。原始問題(`:4000`)已關閉。
+
+---
+
+## 5-xi 結案證據(2026-09-02,E04-S064 退場 rag-skeleton 之後)
+
+**當初的判斷是對的:那 6 個 `TS2591` 是被遮蔽,不是被修好。** 現在有直接證據。
+
+| 時點 | 閉包檔數 | 錯誤數 |
+|---|---|---|
+| 骨架期(發現時) | 97 | **6** |
+| E04-S060 之後(barrel 拉進 Fastify → ajv → `@types/node`) | 287→295 | **0** |
+| E04-S064 退場 rag-skeleton 之後 | **98** | **6** |
+
+錯誤落在**同一批檔案**:`apps/{web,admin}/src/lib/api.ts`、`apps/web/src/lib/conversations.ts`、
+`apps/web/src/lib/feature-flags.ts`(3 個)。根因未變:`"types": []` 讓 `process` 不可解析,
+而這些前端模組被 compat 檔的型別閉包**間接**拉進來。
+
+**閉包一縮回來,遮蔽就蒸發了。** 這條路徑走了一整圈回到原點,而中間那段「0 errors」
+是這個 repo 至今最漂亮的假綠燈:**沒有人改過任何一行相關程式碼,錯誤就從 6 變 0 又變回 6。**
+
+`run-gate.mjs` 全程行為正確——它 PASS(6 個都不在 `*-compat.ts` 裡)並且**每次都把
+檔數與錯誤數印出來**。這正是當初把「恰好 6 個錯誤」那條規則換掉的理由:
+**釘住數字會讓數字變成目標;印出數字才會讓變化被看見。**
+
+### 對 E04-S065 後半的影響:目標已達成,需重新界定範圍
+
+S065 後半原本的目標是「把閉包縮回三位數以下」。**它已經達成了——98——但不是靠那個
+story 計畫的 type-only 入口,而是靠刪掉一個 package。** 該 story 後半剩下的是:
+1. `run-gate.mjs` 加閉包檔數上限斷言(反向驗證:故意 import barrel → 超限 → 紅);
+2. `embedding-compat.ts` 重指向(見下);
+3. 那 6 個錯誤本身要不要修,以及由誰修。
+
+### 新發現:`embedding-compat.ts` 可能守著接縫的錯誤那一端
+
+`embedding.yaml` 描述的是 **model-gateway 的 `POST /v1/embeddings`**,但
+`embedding-compat.ts` 目前指向 `services/retrieval` 的 provider 介面——那是**消費端,
+不是提供端**。與 `generation-compat.ts` 重指向前的問題同形。歸 S065 後半,
+**當獨立發現處理,不是順手清理**。
+
+### 新發現:`generation.yaml` 的 `model` 欄位鬆於實作(需 domain owner 裁示)
+
+E04-S064 把 `generation-compat.ts` 指向 model-gateway 後**立刻**掀出:
+`GenerationResponse.model` 在契約裡是**選填**,而 `GenerateResult.model` 是**必填**。
+一個符合 schema 但省略 `model` 的回應會違反實作型別。
+
+**舊檢查之所以恆真,是因為 skeleton 的 `GenerationResult` 根本沒有 `model` 欄位**——
+一個因為對著「沒有東西可以不一致的東西」而恆綠的 gate。
+
+E04-S064 **未放寬契約(鐵律 #1)、未放寬型別(Team B 所有)**,只斷言了真正成立的
+方向,並把「要不要把 `generation.yaml` 的 `model` 收緊為必填」留為 domain owner 決定。
+**這是既有鬆散,不是本次重指向造成的。**

@@ -71,6 +71,28 @@ jobs:
       - run: pnpm build
       - run: pnpm --filter @ai-km/e2e exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+        env:
+          # E04-S068: tests/e2e/helpers/lock-guard.ts's DEFAULT_LOCK_FILE_PATH
+          # / DEFAULT_OWNER_FILE_PATH are hardcoded dev-machine paths under
+          # /data/python/AI_KM-worktrees/, which do not exist on a GitHub
+          # runner. Point both at a runner-local path instead. This is
+          # configuration only — zero change to the guard's block/proceed
+          # decision logic; that configurability is exactly what it's for.
+          # AI_KM_E2E_LOCK_FILE is the block/proceed authority (must point
+          # at a writable path whose parent dir exists, so flock reports
+          # "free" instead of "unusable"). AI_KM_E2E_OWNER_FILE is read
+          # only for the thrown error's human-readable label, never for
+          # the decision, but is set here too so a CI run never even
+          # attempts to read the nonexistent dev-machine path.
+          # NOTE: this env block is deliberately on the STEP, not the job
+          # -- the `runner` context is only available at step scope
+          # (jobs.<id>.steps[*].env), not at jobs.<id>.env. Putting it at
+          # job level makes the whole workflow file fail to parse, with
+          # no job ever created and no readable error beyond GitHub's
+          # generic "This run likely failed because of a workflow file
+          # issue." (confirmed live: runs 33586338481 and 33586437616).
+          AI_KM_E2E_LOCK_FILE: ${{ runner.temp }}/.e2e.lock
+          AI_KM_E2E_OWNER_FILE: ${{ runner.temp }}/.e2e.owner
 
   # This workflow covers the L0 gate (lint/typecheck/unit test), the
   # contract gate, and E2E as three independently-readable jobs.

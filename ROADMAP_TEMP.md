@@ -1187,3 +1187,33 @@ E04-S064 把 `generation-compat.ts` 指向 model-gateway 後**立刻**掀出:
 E04-S064 **未放寬契約(鐵律 #1)、未放寬型別(Team B 所有)**,只斷言了真正成立的
 方向,並把「要不要把 `generation.yaml` 的 `model` 收緊為必填」留為 domain owner 決定。
 **這是既有鬆散,不是本次重指向造成的。**
+
+### 5-xi 最終收尾(2026-09-02,E04-S065 後半之後)
+
+這條記錄從「契約防漂移 gate 是紅的」開始,走了一整天,最後結論和它開始時完全不同。
+四句話,寫給下一個讀這份 ROADMAP 的人:
+
+1. **今天三次 repoint(`generation`→model-gateway、`embedding`→model-gateway、
+   `conversations`／`analytics`→`services/conversation`／`feedback`)修的是「指錯端」**
+   ——compat 檢查對著消費端或對著一個已退場的型別,抓不到任何東西。
+2. **而量測出來的是「大部分根本沒指」**:全部 schema 分類後 `UNBOUND=52`。
+   `core.yaml` 與 `transcriptions.yaml` **完全沒有 compat 檔**,且 transcriptions
+   唯一的 route 經實測**沒有任何 runtime 驗證**(route options 只有 `preHandler`,
+   全檔 `schema:`／`getSchema` 零命中)。
+3. **有些指向的是副本**:6 個 route 把 schema 從 yaml **手抄**成物件字面,
+   另有 4 個 `*_QUERYSTRING_SCHEMA` 同樣是手抄。副本與 yaml 之間**沒有任何東西在比對**。
+4. **副本從 E04-S073(L2-EQ)起被比對**——用 Fastify `onRoute` 讀**實際註冊的 schema**
+   與契約 deep-equal。在它落地之前,`TRANSCRIBED` 只證明「有一個同名的字面存在」,
+   **一個已漂移的副本與忠實副本讀起來完全相同**。
+
+### 兩種 gate,覆蓋率從此兩種都算
+
+**L0 與 L2 是兩種不同的 gate,不可互相取代,也不可把缺一種讀成沒有:**
+
+- **L0**(compat 檔):靜態型別比對。契約的產生型別 vs 實作的手寫型別。**不執行**。
+- **L2**(`getSchema()` 註冊):yaml 的 schema 直接進 Fastify,**在 runtime 驗證真實請求**。
+- **L2-EQ**(E04-S073):驗證「runtime 用來驗請求的那份 schema」**等於契約**。
+  它不是 runtime 驗證,是驗證驗證器。**命名刻意與 L0／L2 區隔,不得混用。**
+
+**本日兩次同型錯誤,皆因把「缺一種」讀成「沒有」**:我把「沒有 L0」讀成「沒有 gate」;
+分類器最初把「手抄副本」與「完全沒有」報成同一種。**副本 ≠ 沒有;runtime 驗證 ≠ 沒有型別比對。**

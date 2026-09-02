@@ -15,7 +15,7 @@
  */
 
 import type { ProviderFidelity, FidelityRatedComponent } from "../evidence-tier.js";
-import type { RetrievalHit } from "../vector/store.js";
+import type { RetrievalHit } from "@ai-km/service-retrieval";
 
 export interface Citation {
   readonly chunkId: string;

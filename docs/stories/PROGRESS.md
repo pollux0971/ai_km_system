@@ -35,8 +35,8 @@ mock 也做不了才標 `blocked-team-b`。
 | E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S066 + 啟用 S009/S016/S022) | 30 | 20 | 2 | 0 | 1 | 7 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(使用者增補 E12-S029～S034) | 6 | 4 | 0 | 2 | 0 | 0 |
-| E06 Knowledge Ingestion & Indexing(僅追蹤 Wave 1 索引側) | 5 | 2 | 1 | 0 | 0 | 2 |
-| **合計** | **252** | 232 | 3 | 4 | 2 | 11 |
+| E06 Knowledge Ingestion & Indexing(Wave 1 索引側 + 衍生缺陷 S043) | 6 | 2 | 1 | 0 | 0 | 3 |
+| **合計** | **253** | 232 | 3 | 4 | 2 | 12 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -375,3 +375,4 @@ mock 也做不了才標 `blocked-team-b`。
 | E06-S026 | todo | — | [spec](specs/E06-S026.spec.md) | **啟用原模板 story，以此處定義為準**（epic 檔該 story 內文為共用樣板，無 story 專屬規格）。 **🔴 重量級——走完整狀態機,需 spec 檔與獨立 review**。embedding 模型／版本 metadata 落庫,且查詢向量與索引向量版本不符時**拒絕檢索**而非靜默降級。**重量級理由:失敗模式是「靜默給出錯誤結果」的原型**——換 provider 後庫裡的向量與查詢當下算的向量來自不同函式,排序全錯、零錯誤、零日誌、輸出看起來完全合理,沒有任何測試能在事後分辨「排序爛」與「模型換了」。骨架註解已寫明這是 re-index event,但 store 現在沒有任何欄位記錄它。**使用者 2026-09-02 裁示:優先序提升到早於原編號位置。** HARD:E04-S061、E06-S042。 |
 | E06-S041 | done | `main` | `b526b94` | **b526b94 · 4 tests 綠 · 反向驗證 AC-IS1「app.ingestion 對 SIBLING 可見」（拿掉 fp() → 紅，還原 → 綠，紅綠兩段在該 commit body）。** Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。建立 `services/ingestion` package 與 Fastify plugin 空殼。**使用者 2026-09-02 裁示納入 Wave 1,範圍限索引側四項。** HARD:無。規格＝測試:走真實 `register()→ready()`、從父實例斷言 decoration 可見;契約未載入 → 404。AC 引用 **ADR 0007 §4/§5**。反向驗證:拿掉 `fp()` → 父實例 decoration 斷言紅。 |
 | E06-S042 | todo | — | — | Wave 1（rag-skeleton → 正式服務）。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。索引管線 `parse → chunk → embed(經 model-gateway in-process) → store`。**W1-00 結果檢查(一份真實 PDF 端到端跑通、引用偏移量指回原文)就在這一項通過。** HARD:E06-S041、E06-S022、E06-S008、E04-S061、g1–g4(已完成)。規格＝測試:真實 PDF 走完管線後,引用的 `slice` 逐字等於原文對應段落。反向驗證:跳過 embed 直接存零向量 → W1-00 引用比對紅。 |
+| E06-S043 | todo | — | [spec](specs/E06-S043.spec.md) | **🔴 重量級——走完整狀態機,需 spec 檔與獨立 review。** 同一 `documentId` 以不同 `scopeKey` 重新匯入會**靜默改寫可見性**。**兩個方向同時發生**(實測,非推論):未授權方取得完整讀取權,原授權方失去該文件且症狀與「查無資料」無法區分,兩者皆不報錯。**根因早於 E06-S042**——`chunkId` 是 `${documentId}#${ordinal}` 無 scope 維度(E06-S022),兩個 store 都以 chunkId 為鍵 upsert(E04-S061),皆為 wave0 就進 main;E06-S042 只是第一個同時真寫入又以真 scope 查詢的呼叫端,使其**第一次可觀察**,**未造成、未修復**。技術顧問曾推測 sqlite-vec 會更糟(舊分片列殘留 → 兩個 scope 同時可見),**經審核者直接下 SQL 查表推翻**:`upsert()` 在 insert 前先 delete,兩個 store 行為一致。🚩 **硬前置:本 story 關閉之前,`services/ingestion` 與 `services/retrieval` 的 plugin 不得註冊進 `apps/api`**(顧問 2026-09-02 裁定;目前曝險為零,已 grep 確認 apps/api 未註冊任一)。⚠️ 「跨部門搬移文件是否合法」屬 Scope Out,**需使用者裁示**;在此之前一律拒絕。HARD:E04-S061、E06-S042。 |

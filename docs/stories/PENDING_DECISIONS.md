@@ -6,6 +6,79 @@
 
 ## 待批示
 
+### [2026-09-02] Wave 1 收尾:七項待裁,協調者已備妥全部證據
+
+> **本段是一次歸檔,不是新問題。** 以下七項在 2026-09-02 的對話中逐一報告過,
+> 但當時只存在於對話裡。**一個沒歸檔的待決事項,和沒問過長得一樣**——這正是本波
+> 反覆抓到的形狀(未綁的 schema 看起來和綁了的一樣;未登記的發現看起來和沒發現一樣)。
+
+| # | 事項 | 需要你的原因 | 不做的後果 |
+|---|---|---|---|
+| 1 | **`E04-S071` 的兩行 fixture** | 碰 `apps/**` 與 `services/**`(鐵律 #6) | **已核可的契約收緊落不了地**;main 會紅 |
+| 2 | **`E04-S072` 的 `ChangeEvent`** | 碰 `services/conversation`(Team B) | SSE payload 永遠無 gate |
+| 3 | **`ResyncEvent.reason` 收緊** | 改 `contracts/`(鐵律 #1) | 契約比實作寬 |
+| 4 | **跨部門重匯語意** | spec 明訂為 Scope Out,保留給你 | E06-S043 維持「一律拒絕」 |
+| 5 | **`E04-S077`／`E04-S079` 的修法授權** | 修法在 `services/**` | 路徑參數與回應永遠不驗證 |
+| 6 | **`E04-S078` 的兩個方案擇一** | (a) 改契約=鐵律 #1;(b) 政策判定 | `/v1/health` 維持在豁免清單 |
+| 7 | **W1-00 驗收** | **只有你能算它通過** | 自動斷言成立,驗收未完成 |
+
+**1. `E04-S071` — 兩行 fixture**
+> `apps/admin/src/lib/feedback.test.ts:32` 的 `reason` 改為 enum 值;
+> `services/model-gateway/src/testing/contract-check.test.ts` 的 `fabricatedBody` 補 `model`。**零 production 碼。**
+
+契約收緊本身**已通過獨立審核**(APPROVE WITH FOLLOW-UP),審核者七項全部自行查證,
+並**重建 story 之前的狀態**證明原本的單向斷言永遠不可能變紅。
+技術顧問裁定 fixture 更新是**契約變更的另一半**,不是範圍蔓延——留著斷言舊契約的
+fixture 等於變更沒落地,拆成另一個 story 會讓 main 在兩者之間紅著。
+審核者已逐一讀過那兩條測試自述的意圖,確認**是編碼了舊契約的 fixture,不是被收緊掀出的生產缺陷**。
+
+**2. `E04-S072` — 方案 (d),同檔兩處變動**
+> 刪除 `services/conversation/src/routes/change-events.ts:36` 的 `: Record<string, unknown>` 回傳註記;
+> 新增 `export type ChangeEventWire = ReturnType<typeof toWirePayload>`。**零 runtime 變動。**
+
+你原本批准的一行(只加匯出)**產生不出有用的型別**——`ReturnType<>` 解的是宣告不是推導,
+得到 `Record<string, unknown>`,零欄位資訊。開發者以 `tsc` 證明並**拒絕交出那個假綠燈**。
+開發者提的替代方案是「把形狀手寫進簽章」,**協調者否決**:那是在回傳它的函式旁邊放第二份真相,
+正是 `E04-S073` 要抓的病。方案 (d) 讓型別**從實作衍生**,只有一份真相。
+風險已查證:`toWirePayload` **只有一個呼叫端**且直接 `JSON.stringify`,型別**收窄**不放寬。
+
+**3. `ResyncEvent.reason` 改 enum**
+`conversations.yaml` 的該欄位改 `enum: [UNKNOWN_LAST_EVENT_ID, EVENT_LOG_TRUNCATED]`
+(值自 `change-events.ts` 三處 `res.write` 的字面讀出)。與 1 同批視為一次 contract event 較省事。
+⚠️ 技術顧問原先建議的第三條(以為 yaml 寫的是無約束 `string`)**經協調者實測後不採納**——
+`ResyncEvent.reason` 的 yaml **已經是 enum**,含一個保留值 `SERVER_RESTART`,移除它是破壞性變更。
+**本項指的是另一件事**:實作只送兩個值,契約列三個,保留值合理,**故本項實際上可能無事可做**;
+列在此處是為了讓你確認「保留一個未使用的 enum 值」是刻意的。
+
+**4. 跨部門重匯語意**
+同 `documentId`、不同 `scopeKey` 重匯 = **拒絕**(E06-S043 現行實作)。
+技術顧問建議維持:「把文件從 A 部門移到 B 部門」不該是重匯的副作用,
+將來若需要應是**獨立、有稽核紀錄的顯式操作**。此項在 `E06-S043` 的 spec 中明訂為 Scope Out,保留給你。
+
+**5. `E04-S077`／`E04-S079` 的修法授權**
+`E04-S077` 的**唯讀評估已完成並合併**:11 條路徑參數 route,**0 條可利用**——
+10 條有兩層獨立防護,唯一單層的是刻意的跨擁有者管理員讀取。
+**所以不急**,但修法(逐條加 `params` schema)在 `services/**`。
+`E04-S079`(全 app 無 `response:` schema)的評估尚未做,同樣不需授權,修法同樣需要。
+**兩者同批決定較省事**;spec 內已備妥「需要哪些資料夾、哪些允許清單要改」的表。
+
+**6. `E04-S078` — `GET /v1/health` 在任何契約裡都不存在**
+(a) 補進契約(**改 `contracts/`,鐵律 #1**);或 (b) 判定為內部端點。
+**(b) 不是「不做」**:它同樣要落成機械檢查(豁免清單,每條帶理由與解除條件),
+否則下一條未登記的 route 一樣沒人知道。**該機制不預判你的選擇,兩個方案下都需要,已在建。**
+
+**7. W1-00 驗收 — 只有你能算它通過**
+```
+pnpm demo:w1-00
+```
+它會印出問題、scopeKey、命中的文字、偏移量、一段**獨立重新抽取**的切片,
+以及用 `⟦⟧` 標出引用在整份文件裡的位置——**還會印出它沒有證明什麼**。
+自動斷言(`extractedText.slice(start, end) === hit.text`,不符即 `exit 1`)**成立**;
+但 W1-00 是你指定的結果檢查,它要的是**你親眼看過引用落在原文哪裡**。
+⚠️ demo 會印 `Cannot load "@napi-rs/canvas"` 的 warning,那是**刻意排除的選用相依**造成的預期雜訊,
+抽取仍成功;真的失敗會以非零 exit 大聲結束(已在 `tools/w1-00-demo/run.ts` 註記)。
+
+
 ### [2026-08-15] E05-S024 — Document version history 該現在做成純前端 mock,還是等 E06-S030(Team B)?
 
 **背景**:

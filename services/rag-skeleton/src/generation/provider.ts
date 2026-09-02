@@ -14,7 +14,7 @@
  * claim, not the most realistic one available.
  */
 
-import type { ProviderFidelity, FidelityRatedComponent } from "../evidence-tier.js";
+import type { ProviderFidelity, FidelityRatedComponent } from "@ai-km/service-retrieval";
 import type { RetrievalHit } from "@ai-km/service-retrieval";
 
 export interface Citation {

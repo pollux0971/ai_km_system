@@ -12,17 +12,17 @@
  */
 
 import { chunkDocument, type ChunkOptions } from "@ai-km/service-ingestion";
-import type { EmbeddingProvider } from "./embedding/provider.js";
 import type { GenerationProvider, GenerationResult } from "./generation/provider.js";
 import { assertCitationsGrounded } from "./generation/provider.js";
 import type { VectorRecord, VectorStore, RetrievalHit } from "@ai-km/service-retrieval";
 import { assertNoScopeLeak, type RetrievalScope } from "@ai-km/service-retrieval";
+import type { EmbeddingProvider } from "@ai-km/service-retrieval";
 import {
   effectiveFidelity,
   requireProviderFidelity,
   type ProviderFidelity,
   type FidelityRatedComponent,
-} from "./evidence-tier.js";
+} from "@ai-km/service-retrieval";
 
 export interface SourceDocument {
   readonly documentId: string;

@@ -71,12 +71,10 @@
  * (organisation, knowledge base) if KNN latency becomes a problem.
  */
 
-// Same seam as vector/store.ts: evidence-tier.ts and embedding/provider.ts
-// have not relocated out of @ai-km/rag-skeleton yet, and depending on that
-// package here would be circular. Relative reach-across, not a new
-// workspace dependency — see the comment at the top of store.ts.
-import type { FidelityRatedComponent } from "../../../rag-skeleton/src/evidence-tier.js";
-import type { Embedding } from "../../../rag-skeleton/src/embedding/provider.js";
+// Same relocation as vector/store.ts — see the comment at the top of that
+// file. evidence-tier.ts and embedding/provider.ts now live in this package.
+import type { FidelityRatedComponent } from "../evidence-tier.js";
+import type { Embedding } from "../embedding/provider.js";
 import { assertNoScopeLeak, type RetrievalScope } from "../authorization/scope.js";
 import {
   VectorStoreError,

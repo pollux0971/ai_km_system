@@ -28,9 +28,7 @@ import {
 } from "../src/vector/sqlite-vec.store.js";
 import { createInMemoryVectorStore } from "../src/vector/store.js";
 import { toRetrievalScope } from "../src/authorization/scope.js";
-// evidence-tier.ts has not relocated out of @ai-km/rag-skeleton yet — see the
-// comment at the top of ../src/vector/store.ts.
-import { requireProviderFidelity } from "../../rag-skeleton/src/evidence-tier.js";
+import { requireProviderFidelity } from "../src/evidence-tier.js";
 import type { VectorRecord } from "../src/vector/store.js";
 
 const DIM = 2;

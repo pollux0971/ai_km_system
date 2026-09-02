@@ -30,7 +30,7 @@ import $RefParser from "@apidevtools/json-schema-ref-parser";
 import ajvModule from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 
-import type { ProviderFidelity, FidelityRatedComponent } from "../evidence-tier.js";
+import type { ProviderFidelity, FidelityRatedComponent } from "@ai-km/service-retrieval";
 
 const Ajv2020 = ajvModule.default;
 const addFormats = addFormatsModule.default;

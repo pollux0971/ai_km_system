@@ -23,7 +23,7 @@ import {
   fakeServerComponent,
   loadContract,
 } from "../src/testing/contract-check.js";
-import { requireProviderFidelity } from "../src/evidence-tier.js";
+import { requireProviderFidelity } from "@ai-km/service-retrieval";
 
 const closers: Array<() => Promise<void>> = [];
 afterAll(async () => {

@@ -16,7 +16,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { createInMemoryVectorStore, toRetrievalScope } from "@ai-km/service-retrieval";
+import {
+  createInMemoryVectorStore,
+  toRetrievalScope,
+  DocumentScopeConflictError,
+} from "@ai-km/service-retrieval";
 import { createModelGateway } from "@ai-km/service-model-gateway/src/gateway.js";
 import { createDeterministicEmbeddingProvider } from "@ai-km/service-model-gateway/src/embedding/deterministic.provider.js";
 import type { GenerationProvider } from "@ai-km/service-model-gateway/src/generation/provider.js";
@@ -129,6 +133,71 @@ describe("IngestionService.ingest (E06-S042)", () => {
     ).rejects.toBeInstanceOf(PdfEmptyTextError);
     expect(await vectorStore.count()).toBe(0);
   });
+
+  it(
+    "E06-S043 AC1+AC2 ★ 透過真實 ingest() 入口重匯:同一 documentId 換 scope 被拒," +
+      "finance 重匯前後查詢結果逐筆相同,maintenance 什麼都拿不到",
+    async () => {
+      const { modelGateway, vectorStore } = buildDeps();
+      const service = createIngestionService({ modelGateway, vectorStore });
+
+      // pdfjs-dist's worker transport transfers/detaches the `Uint8Array`'s
+      // underlying buffer on use (same note as the W1-00 test above), so each
+      // `ingest()` call below gets its OWN fresh read of the fixture.
+      const first = await service.ingest({
+        documentId: "reingest-doc",
+        scopeKey: "dept:finance",
+        pdfBytes: fixture("cjk-non-embedded.pdf"),
+      });
+      expect(first.chunkCount).toBeGreaterThan(0);
+
+      const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+      const maintenanceScope = toRetrievalScope({
+        principalId: "u-maint",
+        allowedScopeKeys: ["dept:maintenance"],
+      });
+      const queryEmbedResponse = await modelGateway.embed({ input: ["知識管理系統設計文件"] }, "reingest-query");
+      const queryEmbedding = Float32Array.from(queryEmbedResponse.data[0]!.embedding);
+
+      const beforeHits = await vectorStore.query(queryEmbedding, financeScope, 20);
+      expect(beforeHits.length).toBe(first.chunkCount);
+
+      // Same documentId, DIFFERENT scopeKey — must be refused end to end,
+      // through the real re-ingest entry point, not just at the store layer.
+      // Capture, don't assert yet: `.rejects.toBeInstanceOf(...)` used to sit
+      // here directly — vitest aborts a test at its first failing assertion,
+      // so under reverse verification (the store's scope guard disabled) that
+      // line failed first with "promise resolved ... instead of rejecting"
+      // and the identity checks below never ran. Same test-technical defect
+      // as store.test.ts's AC1/AC2 (E06-S043 EVIDENCE, 2026-09-02 correction),
+      // found while auditing every AC1/AC2-shaped test for this story, not
+      // just the two files the independent reviewer named.
+      let thrown: unknown;
+      try {
+        await service.ingest({
+          documentId: "reingest-doc",
+          scopeKey: "dept:maintenance",
+          pdfBytes: fixture("cjk-non-embedded.pdf"),
+        });
+      } catch (err) {
+        thrown = err;
+      }
+
+      // AC1: finance's visibility is IDENTICAL, item by item — not merely
+      // "an error was thrown". Data first: this is what must fail when the
+      // guard is removed.
+      const afterHits = await vectorStore.query(queryEmbedding, financeScope, 20);
+      expect(afterHits).toEqual(beforeHits);
+      expect(await vectorStore.count()).toBe(first.chunkCount);
+
+      // AC2: maintenance gets nothing — not even a partial write.
+      const maintenanceHits = await vectorStore.query(queryEmbedding, maintenanceScope, 20);
+      expect(maintenanceHits).toEqual([]);
+
+      // Then the error contract.
+      expect(thrown).toBeInstanceOf(DocumentScopeConflictError);
+    },
+  );
 
   it("componentId 標示為真實管線,與 E06-S041 的空殼區隔", async () => {
     const { modelGateway, vectorStore } = buildDeps();

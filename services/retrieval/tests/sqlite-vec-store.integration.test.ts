@@ -25,8 +25,9 @@ import {
   createSqliteVecVectorStore,
   PartitionOverlapError,
   type SqliteDatabase,
+  type SqliteStatement,
 } from "../src/vector/sqlite-vec.store.js";
-import { createInMemoryVectorStore } from "../src/vector/store.js";
+import { createInMemoryVectorStore, DocumentScopeConflictError } from "../src/vector/store.js";
 import { toRetrievalScope } from "../src/authorization/scope.js";
 import { requireProviderFidelity } from "../src/evidence-tier.js";
 import type { VectorRecord } from "../src/vector/store.js";
@@ -326,5 +327,312 @@ describe("sqlite-vec store — PF2", () => {
       /UNIQUE constraint/,
     );
     expect(new PartitionOverlapError("probe").name).toBe("PartitionOverlapError");
+  });
+});
+
+/**
+ * E06-S043 — same scope-guard scenarios as `src/vector/store.test.ts`, run
+ * against the REAL sqlite-vec store (AC5: the two stores must behave
+ * identically — "which store you are running" must never be an
+ * authorization decision).
+ *
+ * Per the spec, direct SQL against `_vec` and `_meta` is used where that is
+ * the only way to be sure, rather than trusting `store.query()` alone — a
+ * previous reviewer found reasoning from source code alone produced a wrong
+ * prediction about this exact area.
+ */
+describe("sqlite-vec store — E06-S043 re-ingest scope guard (PF2)", () => {
+  function financeDocV1(documentId: string): VectorRecord[] {
+    return [
+      {
+        chunkId: `${documentId}#0`,
+        documentId,
+        text: "第一段:年度預算編列作業要點",
+        startOffset: 0,
+        endOffset: 10,
+        scopeKey: "dept:finance",
+        embedding: vec([1, 0]),
+      },
+      {
+        chunkId: `${documentId}#1`,
+        documentId,
+        text: "第二段:資本支出核准門檻",
+        startOffset: 10,
+        endOffset: 20,
+        scopeKey: "dept:finance",
+        embedding: vec([0.9, 0.1]),
+      },
+    ];
+  }
+
+  it("AC1+AC2 ★ 不同 scope 重匯被拒,直接查 _vec/_meta 兩表證明:finance 逐筆不變,maintenance 一筆都沒有", async () => {
+    const db = openDb(path.join(dir, "reingest-conflict.sqlite"));
+    const store = createSqliteVecVectorStore({ db: db as unknown as SqliteDatabase, dimensions: DIM });
+    const docId = "doc-conflict";
+    await store.upsert(financeDocV1(docId));
+
+    const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+    const maintenanceScope = toRetrievalScope({
+      principalId: "u-maint",
+      allowedScopeKeys: ["dept:maintenance"],
+    });
+    const before = await store.query(QUERY, financeScope, 10);
+    expect(before).toHaveLength(2);
+
+    // Capture, don't assert yet — same reordering as store.test.ts's AC1/
+    // AC2. `.rejects.toBeInstanceOf(...)` used to sit here directly, which
+    // under reverse verification (guard disabled) failed first with
+    // "promise resolved undefined instead of rejecting" and none of the
+    // query/raw-SQL identity checks below ever ran.
+    let thrown: unknown;
+    try {
+      await store.upsert([
+        {
+          chunkId: `${docId}#0`,
+          documentId: docId,
+          text: "被拒的重匯內容",
+          startOffset: 0,
+          endOffset: 5,
+          scopeKey: "dept:maintenance",
+          embedding: vec([1, 0]),
+        },
+      ]);
+    } catch (err) {
+      thrown = err;
+    }
+
+    // (a) via the store's own query — item-by-item identity, not just count.
+    const after = await store.query(QUERY, financeScope, 10);
+    expect(after).toEqual(before);
+    const maintenanceHits = await store.query(QUERY, maintenanceScope, 10);
+    expect(maintenanceHits).toEqual([]);
+
+    // (b) direct SQL against _vec and _meta — bypassing the store entirely,
+    // per the spec's instruction that source-level reasoning about this area
+    // has previously been wrong.
+    const vecRows = db
+      .prepare(`SELECT chunk_id AS chunkId, scope_key AS scopeKey FROM rag_chunks_vec WHERE chunk_id LIKE ?`)
+      .all(`${docId}%`) as Array<{ chunkId: string; scopeKey: string }>;
+    expect(vecRows).toHaveLength(2);
+    expect(vecRows.every((r) => r.scopeKey === "dept:finance")).toBe(true);
+    expect(vecRows.map((r) => r.chunkId).sort()).toEqual([`${docId}#0`, `${docId}#1`]);
+
+    const metaRows = db
+      .prepare(`SELECT chunk_id AS chunkId, text AS text FROM rag_chunks_meta WHERE document_id = ?`)
+      .all(docId) as Array<{ chunkId: string; text: string }>;
+    expect(metaRows).toHaveLength(2);
+    expect(metaRows.some((r) => r.text === "被拒的重匯內容")).toBe(false);
+
+    // Then the error contract.
+    expect(thrown).toBeInstanceOf(DocumentScopeConflictError);
+  });
+
+  it("AC6 sqlite-vec 這一側的錯誤 code 與訊息與 in-memory 一致,且不洩漏目前的 scopeKey", async () => {
+    const db = openDb(path.join(dir, "reingest-message.sqlite"));
+    const store = createSqliteVecVectorStore({ db: db as unknown as SqliteDatabase, dimensions: DIM });
+    const docId = "doc-message";
+    await store.upsert(financeDocV1(docId));
+
+    try {
+      await store.upsert([
+        {
+          chunkId: `${docId}#0`,
+          documentId: docId,
+          text: "x",
+          startOffset: 0,
+          endOffset: 1,
+          scopeKey: "dept:maintenance",
+          embedding: vec([1, 0]),
+        },
+      ]);
+      expect.unreachable("must throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(DocumentScopeConflictError);
+      const e = err as DocumentScopeConflictError;
+      expect(e.code).toBe("DOCUMENT_SCOPE_CONFLICT");
+      expect(e.message).not.toBe("匯入失敗");
+      expect(e.message).not.toContain("dept:finance");
+      expect(e.message).not.toContain("dept:maintenance");
+    }
+  });
+
+  it("AC3 ★ 相同 scope 重匯較短版本 → 直接查 _vec/_meta 證明舊的多餘 chunk 真的被刪除,不是只是查不到", async () => {
+    const db = openDb(path.join(dir, "reingest-shrink.sqlite"));
+    const store = createSqliteVecVectorStore({ db: db as unknown as SqliteDatabase, dimensions: DIM });
+    const docId = "doc-shrink";
+    await store.upsert(financeDocV1(docId)); // 2 chunks
+
+    await store.upsert([
+      {
+        chunkId: `${docId}#0`,
+        documentId: docId,
+        text: "合併後的單一段落",
+        startOffset: 0,
+        endOffset: 8,
+        scopeKey: "dept:finance",
+        embedding: vec([1, 0]),
+      },
+    ]);
+
+    expect(await store.count()).toBe(1);
+
+    const vecRows = db
+      .prepare(`SELECT chunk_id AS chunkId FROM rag_chunks_vec WHERE chunk_id LIKE ?`)
+      .all(`${docId}%`) as Array<{ chunkId: string }>;
+    expect(vecRows.map((r) => r.chunkId)).toEqual([`${docId}#0`]);
+
+    const metaRows = db
+      .prepare(`SELECT chunk_id AS chunkId FROM rag_chunks_meta WHERE document_id = ?`)
+      .all(docId) as Array<{ chunkId: string }>;
+    expect(metaRows.map((r) => r.chunkId)).toEqual([`${docId}#0`]);
+
+    const scope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+    const hits = await store.query(QUERY, scope, 10);
+    expect(hits.map((h) => h.chunkId)).toEqual([`${docId}#0`]);
+    expect(hits[0]?.text).toBe("合併後的單一段落");
+  });
+
+  it("AC4 ★ 替換途中真的失敗(注入的 I/O 錯誤,非驗證階段)→ ROLLBACK,新舊不混合", async () => {
+    const file = path.join(dir, "reingest-atomic-fail.sqlite");
+    const db = openDb(file);
+    const docId = "doc-atomic";
+    const seedStore = createSqliteVecVectorStore({ db: db as unknown as SqliteDatabase, dimensions: DIM });
+    const oldRecords = financeDocV1(docId);
+    await seedStore.upsert(oldRecords);
+
+    // A db proxy where the SECOND call to INSERT INTO rag_chunks_vec throws —
+    // simulating a genuine failure partway through the transaction, not a
+    // Phase-1 validation rejection. Everything else passes straight through
+    // to the SAME underlying connection, so BEGIN/COMMIT/ROLLBACK apply to
+    // the real data seeded above.
+    let insertVecCalls = 0;
+    const faulty: SqliteDatabase = {
+      prepare: (sql: string) => {
+        const real = db.prepare(sql);
+        if (sql.trim().startsWith("INSERT INTO rag_chunks_vec")) {
+          const wrapped: SqliteStatement = {
+            run: (...params: unknown[]) => {
+              insertVecCalls += 1;
+              if (insertVecCalls === 2) {
+                throw new Error("simulated mid-transaction I/O failure");
+              }
+              return real.run(...params);
+            },
+            all: (...params: unknown[]) => real.all(...params) as unknown[],
+            get: (...params: unknown[]) => real.get(...params),
+          };
+          return wrapped as unknown as ReturnType<SqliteDatabase["prepare"]>;
+        }
+        return real as unknown as ReturnType<SqliteDatabase["prepare"]>;
+      },
+      exec: (sql: string) => db.exec(sql),
+      close: () => db.close(),
+    };
+    const faultyStore = createSqliteVecVectorStore({ db: faulty, dimensions: DIM });
+
+    const newRecords: VectorRecord[] = [
+      {
+        chunkId: `${docId}#0`,
+        documentId: docId,
+        text: "應該從未落地的新內容 A",
+        startOffset: 0,
+        endOffset: 5,
+        scopeKey: "dept:finance",
+        embedding: vec([0.7, 0.7]),
+      },
+      {
+        chunkId: `${docId}#1`,
+        documentId: docId,
+        text: "應該從未落地的新內容 B",
+        startOffset: 5,
+        endOffset: 10,
+        scopeKey: "dept:finance",
+        embedding: vec([0.6, 0.8]),
+      },
+    ];
+
+    await expect(faultyStore.upsert(newRecords)).rejects.toThrow(/simulated mid-transaction/);
+
+    // Direct SQL, same underlying connection: the ROLLBACK must have restored
+    // BOTH chunks to exactly their pre-attempt state — old text, old vectors
+    // — not "chunk 0 updated, chunk 1 failed" left half-applied.
+    const metaRows = db
+      .prepare(`SELECT chunk_id AS chunkId, text AS text FROM rag_chunks_meta WHERE document_id = ? ORDER BY chunk_id`)
+      .all(docId) as Array<{ chunkId: string; text: string }>;
+    expect(metaRows).toEqual([
+      { chunkId: `${docId}#0`, text: oldRecords[0]!.text },
+      { chunkId: `${docId}#1`, text: oldRecords[1]!.text },
+    ]);
+
+    const vecRows = db
+      .prepare(`SELECT chunk_id AS chunkId FROM rag_chunks_vec WHERE chunk_id LIKE ? ORDER BY chunk_id`)
+      .all(`${docId}%`) as Array<{ chunkId: string }>;
+    expect(vecRows.map((r) => r.chunkId)).toEqual([`${docId}#0`, `${docId}#1`]);
+
+    expect(await seedStore.count()).toBe(2);
+  });
+
+  it("AC5 ★ in-memory 與 sqlite-vec 對同一劇本行為一致:拒絕、finance 不變、maintenance 全空", async () => {
+    const docId = "doc-parity";
+    const attempt = {
+      chunkId: `${docId}#0`,
+      documentId: docId,
+      text: "衝突內容",
+      startOffset: 0,
+      endOffset: 4,
+      scopeKey: "dept:maintenance",
+      embedding: vec([1, 0]),
+    };
+    const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+    const maintenanceScope = toRetrievalScope({
+      principalId: "u-maint",
+      allowedScopeKeys: ["dept:maintenance"],
+    });
+
+    const memory = createInMemoryVectorStore();
+    await memory.upsert(financeDocV1(docId));
+    const memoryBefore = await memory.query(QUERY, financeScope, 10);
+    let memoryError: unknown;
+    try {
+      await memory.upsert([attempt]);
+    } catch (e) {
+      memoryError = e;
+    }
+    const memoryAfter = await memory.query(QUERY, financeScope, 10);
+    const memoryMaintenance = await memory.query(QUERY, maintenanceScope, 10);
+
+    const disk = createSqliteVecVectorStore({
+      db: openDb(path.join(dir, "reingest-parity.sqlite")) as unknown as SqliteDatabase,
+      dimensions: DIM,
+    });
+    await disk.upsert(financeDocV1(docId));
+    const diskBefore = await disk.query(QUERY, financeScope, 10);
+    let diskError: unknown;
+    try {
+      await disk.upsert([attempt]);
+    } catch (e) {
+      diskError = e;
+    }
+    const diskAfter = await disk.query(QUERY, financeScope, 10);
+    const diskMaintenance = await disk.query(QUERY, maintenanceScope, 10);
+
+    // Data first: `expect(memoryError).toBeInstanceOf(...)` used to sit
+    // ahead of these — under reverse verification (guard disabled)
+    // `memoryError`/`diskError` are `undefined`, so that assertion failed
+    // first and the identity comparisons below never ran, even though this
+    // block already captures the error via try/catch rather than `.rejects`
+    // (the same masking happens with a manual assertion order, not just
+    // vitest's `.rejects` helper).
+    expect(memoryAfter.map((h) => h.chunkId)).toEqual(memoryBefore.map((h) => h.chunkId));
+    expect(diskAfter.map((h) => h.chunkId)).toEqual(diskBefore.map((h) => h.chunkId));
+    expect(memoryMaintenance).toEqual([]);
+    expect(diskMaintenance).toEqual([]);
+
+    // Then the error contract.
+    expect(memoryError).toBeInstanceOf(DocumentScopeConflictError);
+    expect(diskError).toBeInstanceOf(DocumentScopeConflictError);
+    expect((memoryError as DocumentScopeConflictError).code).toBe(
+      (diskError as DocumentScopeConflictError).code,
+    );
   });
 });

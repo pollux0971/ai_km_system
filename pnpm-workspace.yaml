@@ -4,6 +4,14 @@ packages:
   - "services/*"
   - "tests/*"
   - "tools/*"
+  # E04-S070: `tools/mutate.mjs` + `tools/mutate.test.ts` sit directly under
+  # `tools/`, not a `tools/<name>/` subdirectory (the story specifies those
+  # exact literal paths) — `tools/*` only globs tools' immediate children
+  # (tools/asr-readiness, tools/w1-00-demo), never the `tools/` directory
+  # itself, so `tools` is listed here as its own literal workspace package
+  # too. Nesting is intentional and does not conflict: pnpm/turbo key each
+  # workspace package purely off where its own `package.json` sits.
+  - "tools"
 allowBuilds:
   # esbuild's install script only downloads the platform-specific binary
   # (needed transitively by vitest/vite, added in E01-S001) — no arbitrary

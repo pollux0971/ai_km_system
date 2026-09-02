@@ -17,7 +17,7 @@ import type {
   Citation,
   GenerationResult,
 } from "../../../services/rag-skeleton/src/generation/provider.js";
-import type { RetrievalHit } from "../../../services/rag-skeleton/src/vector/store.js";
+import type { RetrievalHit } from "../../../services/retrieval/src/vector/store.js";
 
 type Schemas = components["schemas"];
 

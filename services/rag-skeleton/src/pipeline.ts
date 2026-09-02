@@ -15,7 +15,7 @@ import { chunkDocument, type ChunkOptions } from "@ai-km/service-ingestion";
 import type { EmbeddingProvider } from "./embedding/provider.js";
 import type { GenerationProvider, GenerationResult } from "./generation/provider.js";
 import { assertCitationsGrounded } from "./generation/provider.js";
-import type { VectorRecord, VectorStore, RetrievalHit } from "./vector/store.js";
+import type { VectorRecord, VectorStore, RetrievalHit } from "@ai-km/service-retrieval";
 import { assertNoScopeLeak, type RetrievalScope } from "@ai-km/service-retrieval";
 import {
   effectiveFidelity,
@@ -97,7 +97,7 @@ export class RagPipeline {
     const [queryVector] = await this.options.embedding.embed([question]);
     if (!queryVector) throw new Error("embedding provider 未回傳查詢向量。");
 
-    // Scope goes INTO the query — see vector/store.ts.
+    // Scope goes INTO the query — see services/retrieval/src/vector/store.ts.
     const retrieved = await this.options.store.query(queryVector, scope, topK);
 
     // Re-assert on the pipeline boundary as well as the store boundary. A

@@ -7,7 +7,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
@@ -16,8 +16,22 @@
     "fastify-plugin": "^5.0.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
-  }
+  },
+  "peerDependencies": {
+    "better-sqlite3": "^11.8.1",
+    "sqlite-vec": "0.1.9"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    },
+    "sqlite-vec": {
+      "optional": true
+    }
+  },
+  "comment:sqlite-vec": "sqlite-vec is pinned to an EXACT version, no `^` range. pnpm's auto-install-peers defaults to true and resolves even OPTIONAL peers, so a range here would let an install silently move the vector extension underneath a persisted index — a re-index event, not a patch bump. User decision 2026-09-02: upstream asg017/sqlite-vec 0.1.9 (the last stable; 0.1.10-alpha.4 deliberately not used)."
 }

@@ -1,30 +1,62 @@
 /**
  * E04-S038 Functional AC2 — typecheck-only proof that the frozen
  * `contracts/openapi/conversations.yaml` produces types that are compatible
- * with the shapes apps/web has been using since E03-S001.
+ * with the shapes the service that actually implements it returns.
+ *
+ * REPOINTED (E04-S069, evidence from E04-S064's `generation-compat.ts`
+ * repoint): this file used to import five `apps/web/src/lib/*` modules —
+ * the FRONTEND's own runtime types, not the seam that implements the route.
+ * `conversations.yaml` describes `services/conversation`'s REST routes
+ * (`registerConversationRoutes`/`registerMessageRoutes` in
+ * `services/conversation/src/routes/*.ts`), and every one of those routes
+ * returns a repository row VERBATIM — `conversations.ts` returns
+ * `createConversation`/`lookupConversation`/`updateConversation`'s
+ * `ConversationRow` (or `listConversations`'s `ConversationListPage`)
+ * straight from `return row` / `return result.row`, and `messages.ts` /
+ * `message-feedback.ts` do the same with `MessageRow`, with no reshaping in
+ * between. Binding here to the repository row is therefore binding to what
+ * actually serialises, not a step removed from it (鐵律 #2's "route
+ * SERIALIZES, not an internal repository row" caveat does not fire here
+ * BECAUSE the two are the same value — see below for the one place in this
+ * package where they are NOT, and why that stays unbound).
  *
  * This file is never executed and never bundled. It is a `tsc --noEmit`
  * gate; see ./README.md for the exact commands.
  *
- * It deliberately imports the REAL frontend types (not a hand-copied
- * mirror) — the whole point of the check is that the contract cannot drift
- * away from `apps/web/src/lib/{conversations,messages}.ts` without this
- * file going red.
+ * UNBINDABLE, RECORDED RATHER THAN FAKED: `ChangeEvent` (this contract's SSE
+ * payload shape, `contracts/events/conversation-change-events.md`) has no
+ * bindable exported provider type. `registerChangeEventRoutes`
+ * (`services/conversation/src/routes/change-events.ts`) serialises a
+ * private, non-exported `toWirePayload()` function's return value
+ * (`Record<string, unknown>`, built inline) — NOT the exported
+ * `ChangeEventRow` repository type, which differs from the wire shape in the
+ * one field that matters (`seq` on the row vs. `id` on the wire). Binding
+ * this file's `ChangeEvent` check to `ChangeEventRow` would produce a
+ * spurious mismatch (no `id` field, an extra `seq` field) that is not a real
+ * contract violation — the rename is intentional and already correct at
+ * runtime, just not reflected in any exported TYPE. Exporting
+ * `toWirePayload`'s return shape (or a new named wire type) would mean
+ * adding an export inside `services/conversation` — a Team B folder outside
+ * this story's `contracts/openapi/__checks__/`-only scope (鐵律 #6 / this
+ * story's HARD CONSTRAINT #1) — so it is left unbound here and listed in
+ * EVIDENCE for the user to grant or decline. The `changeEventOwnerFree`
+ * check below is unaffected: it only inspects the CONTRACT's own schema, no
+ * implementation binding required.
  */
 import type { components } from "./generated/conversations";
 import type {
+  AiModel,
   ConversationListPage,
   ConversationMode,
-  ConversationSummary,
-} from "../../../apps/web/src/lib/conversations";
+  ConversationRow,
+  KnowledgeScope,
+} from "../../../services/conversation/src/repository/conversations.repository";
 import type {
   AnswerFeedbackVerdict,
+  AnswerState,
   FeedbackReason,
-  Message,
-} from "../../../apps/web/src/lib/messages";
-import type { AnswerState } from "../../../apps/web/src/lib/answer-state";
-import type { KnowledgeScope } from "../../../apps/web/src/lib/knowledge-scopes";
-import type { AiModel } from "../../../apps/web/src/lib/ai-models";
+  MessageRow,
+} from "../../../services/conversation/src/repository/messages.repository";
 
 type Schemas = components["schemas"];
 
@@ -37,13 +69,13 @@ type AssignableTo<A extends B, B> = A extends B ? true : never;
 /**
  * Mutual assignability. Resolves to `never` (→ assigning `true` to it is a
  * compile error) unless the two unions are exactly the same set — used for
- * the enums, where a contract that is merely *narrower* than the frontend
- * union would silently make values the UI can already produce
- * unrepresentable.
+ * the enums, where a contract that is merely *narrower* than the
+ * implementation's union would silently make values the service can already
+ * produce unrepresentable.
  */
 type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 
-/* ── Enum sets must match the frontend unions exactly ─────────────────── */
+/* ── Enum sets must match the service's own unions exactly ─────────────── */
 
 export const modeExact: Exact<Schemas["ConversationMode"], ConversationMode> = true;
 export const modelExact: Exact<Schemas["AiModel"], AiModel> = true;
@@ -52,15 +84,16 @@ export const answerStateExact: Exact<Schemas["AnswerState"], AnswerState> = true
 export const verdictExact: Exact<Schemas["AnswerFeedbackVerdict"], AnswerFeedbackVerdict> = true;
 export const feedbackReasonExact: Exact<Schemas["FeedbackReason"], FeedbackReason> = true;
 
-/* ── Entities must be assignable to the shapes apps/web already reads ──── */
+/* ── Entities must be assignable to what the routes actually return ────── */
 
-export const conversationAssignable: AssignableTo<Schemas["Conversation"], ConversationSummary> = true;
-export const listPageAssignable: AssignableTo<Schemas["ConversationListPage"], ConversationListPage> = true;
-export const messageAssignable: AssignableTo<Schemas["Message"], Message> = true;
+export const conversationAssignable: AssignableTo<Schemas["Conversation"], ConversationRow> = true;
+export const listPageAssignable: AssignableTo<Schemas["ConversationListPage"], ConversationListPage> =
+  true;
+export const messageAssignable: AssignableTo<Schemas["Message"], MessageRow> = true;
 
 /**
  * Value-level smoke check: a literal shaped like a contract `Conversation`
- * must be usable everywhere a `ConversationSummary` is expected. Catches
+ * must be usable everywhere a `ConversationRow` is expected. Catches
  * required/optional drift that the pure type-level checks above would let
  * through in the "contract adds a required field" direction.
  */
@@ -76,7 +109,7 @@ const conversationSample: Schemas["Conversation"] = {
   createdAt: "2026-08-12T09:00:00.000Z",
   updatedAt: "2026-08-12T09:15:00.000Z",
 };
-export const conversationSummary: ConversationSummary = conversationSample;
+export const conversationRow: ConversationRow = conversationSample;
 
 const messageSample: Schemas["Message"] = {
   id: "1b6a1f2c-3d4e-4f50-8a61-7c8d9e0f1a2b",
@@ -89,7 +122,7 @@ const messageSample: Schemas["Message"] = {
   feedback: "OK",
   citationFeedback: { "1": "OK" },
 };
-export const message: Message = messageSample;
+export const messageRow: MessageRow = messageSample;
 
 /**
  * Security AC — no request body may let a client name the owner. Each of

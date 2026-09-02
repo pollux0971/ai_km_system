@@ -654,6 +654,9 @@ importers:
 
   services/retrieval:
     dependencies:
+      '@ai-km/service-model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       better-sqlite3:
         specifier: ^11.8.1
         version: 11.10.0

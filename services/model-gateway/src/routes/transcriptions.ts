@@ -13,6 +13,12 @@
  * there — `InternalErrorBody.code` is the same `INTERNAL_ERROR` both use).
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+// Type-only: brings in `@fastify/multipart`'s `declare module 'fastify'`
+// augmentation (`FastifyRequest.parts()`, used below) so this file
+// typechecks on its own merits, not by coincidentally being compiled
+// alongside `testing/build-test-app.ts` (which registers the plugin for
+// real). Erased at build — the host app registers the actual plugin.
+import type {} from "@fastify/multipart";
 import { hostRequireSession, requestAuth } from "../plugin-types.js";
 import { parseAndValidateWav, WavValidationError, type WavRejectionReason } from "../asr/wav.js";
 import { normalizeTranscript } from "../asr/normalize.js";
@@ -155,7 +161,7 @@ export function registerTranscriptionRoutes(
       result = await provider.transcribe({
         wav: audioBuffer,
         language,
-        prompt: language === "zh" ? RECOGNITION_PROMPT_ZH : undefined,
+        ...(language === "zh" ? { prompt: RECOGNITION_PROMPT_ZH } : {}),
         timeoutMs,
         correlationId,
       });

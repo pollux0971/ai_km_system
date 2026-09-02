@@ -38,24 +38,19 @@
  * exists solely to satisfy that shape and throws if it is ever actually
  * invoked, rather than silently returning a fake vector.
  */
-// Deep imports rather than the package barrel (`@ai-km/service-model-gateway`)
-// deliberately: that barrel's index.ts re-exports `modelGatewayPlugin`, which
-// pulls in the ASR route module transitively, and this package's tsconfig
-// turns on `exactOptionalPropertyTypes` (model-gateway's own tsconfig does
-// not), surfacing a pre-existing, unrelated type error in that ASR code once
-// it is part of the same compilation unit (tracked separately as E12-S034;
-// see this story's EVIDENCE file). `gateway.ts` itself only imports the
-// embedding/generation provider modules — never the ASR route — so importing
-// it (and them) directly avoids dragging in code this adapter has nothing to
-// do with.
-import { createModelGateway } from "@ai-km/service-model-gateway/src/gateway.js";
-import { createCannedGenerationProvider as createModelGatewayCannedProvider } from "@ai-km/service-model-gateway/src/generation/canned.provider.js";
-import type {
-  ContextChunk,
-  GenerateInput,
-  GenerationProvider as ModelGatewayGenerationProvider,
-} from "@ai-km/service-model-gateway/src/generation/provider.js";
-import type { EmbeddingProvider } from "@ai-km/service-model-gateway/src/embedding/provider.js";
+// Package barrel (`@ai-km/service-model-gateway`): the deep imports this
+// file used before E12-S034 are gone now that model-gateway's tsconfig also
+// sets `exactOptionalPropertyTypes` — the barrel no longer surfaces a
+// pre-existing, unrelated type error in the ASR route module it re-exports
+// transitively via `modelGatewayPlugin`.
+import {
+  createModelGateway,
+  createCannedGenerationProvider as createModelGatewayCannedProvider,
+  type ContextChunk,
+  type GenerateInput,
+  type GenerationProvider as ModelGatewayGenerationProvider,
+  type EmbeddingProvider,
+} from "@ai-km/service-model-gateway";
 import type { GenerationProvider, GenerationRequest, GenerationResult } from "./provider.js";
 
 export interface CannedProviderOptions {

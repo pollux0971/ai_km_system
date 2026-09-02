@@ -6,7 +6,8 @@
     "lib": ["ES2022"],
     "types": ["node"],
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "exactOptionalPropertyTypes": true
   },
   "include": ["src"]
 }

@@ -15,12 +15,11 @@ import { chunkDocument, type ChunkOptions } from "@ai-km/service-ingestion";
 import type { GenerationProvider, GenerationResult } from "./generation/provider.js";
 // The ONE `assertCitationsGrounded` (E12-S033 consolidation) — see
 // `@ai-km/service-model-gateway`'s `generation/provider.ts` for why this
-// package no longer carries its own copy. Deep import for the same reason
-// `./embedding/model-gateway-deterministic.provider.ts` uses one: the
-// package barrel drags in ASR route code that trips a pre-existing,
-// unrelated `exactOptionalPropertyTypes` error (E12-S034), and `gateway.ts`'s
-// own import graph never touches that code.
-import { assertCitationsGrounded } from "@ai-km/service-model-gateway/src/generation/provider.js";
+// package no longer carries its own copy. Package barrel: E12-S034 turned on
+// `exactOptionalPropertyTypes` in model-gateway's own tsconfig, so the
+// barrel no longer trips a pre-existing, unrelated type error in the ASR
+// route code it re-exports transitively.
+import { assertCitationsGrounded } from "@ai-km/service-model-gateway";
 import type { VectorRecord, VectorStore, RetrievalHit } from "@ai-km/service-retrieval";
 import { assertNoScopeLeak, type RetrievalScope } from "@ai-km/service-retrieval";
 import type { EmbeddingProvider } from "@ai-km/service-retrieval";

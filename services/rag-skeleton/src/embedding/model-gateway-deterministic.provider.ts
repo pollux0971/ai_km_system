@@ -30,19 +30,17 @@
  * exists solely to satisfy that shape and throws if it is ever actually
  * invoked, rather than silently returning a fake answer.
  */
-// Deep imports rather than the package barrel (`@ai-km/service-model-gateway`)
-// deliberately: that barrel's index.ts re-exports `modelGatewayPlugin`, which
-// pulls in the ASR route module transitively, and this package's tsconfig
-// turns on `exactOptionalPropertyTypes` (model-gateway's own tsconfig does
-// not), surfacing a pre-existing, unrelated type error in that ASR code once
-// it is part of the same compilation unit (tracked separately as E12-S034;
-// see this story's EVIDENCE file). `gateway.ts` itself only imports the
-// embedding/generation provider modules — never the ASR route — so importing
-// it (and them) directly avoids dragging in code this adapter has nothing to
-// do with.
-import { createModelGateway } from "@ai-km/service-model-gateway/src/gateway.js";
-import { createDeterministicEmbeddingProvider as createModelGatewayDeterministicProvider } from "@ai-km/service-model-gateway/src/embedding/deterministic.provider.js";
-import type { GenerationProvider } from "@ai-km/service-model-gateway/src/generation/provider.js";
+// Package barrel (`@ai-km/service-model-gateway`): the deep imports this
+// file used before E12-S034 are gone now that model-gateway's tsconfig also
+// sets `exactOptionalPropertyTypes` — the barrel no longer surfaces a
+// pre-existing, unrelated type error in the ASR route module it re-exports
+// transitively via `modelGatewayPlugin`.
+import {
+  createModelGateway,
+  createDeterministicEmbeddingProvider as createModelGatewayDeterministicProvider,
+  type GenerationProvider,
+} from "@ai-km/service-model-gateway";
+// `Embedding` / `EmbeddingProvider` moved to services/retrieval in E04-S066.
 import type { Embedding, EmbeddingProvider } from "@ai-km/service-retrieval";
 
 export interface DeterministicProviderOptions {

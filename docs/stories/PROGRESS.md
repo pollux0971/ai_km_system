@@ -25,18 +25,18 @@ mock 也做不了才標 `blocked-team-b`。
 
 | Epic | Stories | approved | done | in-progress | blocked* | todo |
 |---|---|---|---|---|---|---|
-| E01 Application Shell & User Workspace | 33 | 32 | 0 | 1 | 0 | 0 |
+| E01 Application Shell & User Workspace | 34 | 32 | 0 | 1 | 0 | 1 |
 | E03 AI Conversation Experience | 47 | 44 | 0 | 1 | 0 | 2 |
 | E05 Knowledge Management Experience | 31 | 30 | 0 | 0 | 1 | 0 |
 | E07 Maintenance Assistant Experience | 25 | 25 | 0 | 0 | 0 | 0 |
 | E09 AI ERP & Reporting Experience | 24 | 24 | 0 | 0 | 0 | 0 |
 | E11 Admin Console | 26 | 26 | 0 | 0 | 0 | 0 |
 | E13 Feedback & Analytics | 21 | 21 | 0 | 0 | 0 | 0 |
-| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S068 + 啟用 S009/S016/S022) | 32 | 23 | 2 | 0 | 1 | 6 |
+| E04 RAG & Conversation Intelligence(使用者增補 E04-S037～S068 + 啟用 S009/S016/S022) | 32 | 23 | 3 | 1 | 1 | 4 |
 | E02 Identity, RBAC & Authorization(僅追蹤使用者增補 E02-S031～S034) | 4 | 4 | 0 | 0 | 0 | 0 |
 | E12 Model & Prompt Platform(使用者增補 E12-S029～S034) | 6 | 4 | 0 | 2 | 0 | 0 |
 | E06 Knowledge Ingestion & Indexing(Wave 1 索引側 + 衍生缺陷 S043) | 6 | 4 | 1 | 0 | 0 | 1 |
-| **合計** | **255** | 237 | 3 | 4 | 2 | 9 |
+| **合計** | **256** | 237 | 4 | 5 | 2 | 8 |
 
 > 總覽表在每次狀態轉換時一併更新。
 
@@ -77,6 +77,7 @@ mock 也做不了才標 `blocked-team-b`。
 | E01-S031 | approved | story/E01-S031-e2e-stale-assumptions | [E01-S031.md](E01-S031.md) | **修正 12 支既有 E2E 的過時假設(解除 4 個 story 的 AC)**:10 支把「硬導覽會登出」(舊 mock 的記憶體 session)當成切換使用者的手段,而 E03-S035 的真實 cookie session **正確地**撐過硬導覽;2 支 `knowledge-selector` 因真實網路延遲打破 `.check()` 的驗證視窗。全部 12 支已改為明確 `logout()` / `.click()`+`toBeChecked()`,AC3 反向驗證(暫還原 2 支確認會紅)通過。三輪全量 813 次執行:12 支清單內 100% 通過;清單外 4 次一次性逾時(`knowledge-ui-e2e`/`smoke`/`model-selector`/`multi-turn-conversation`,各僅出現 1 次、無重複),依 ROADMAP_TEMP.md 第 5-ter 節門檻不構成已具名 flaky,記錄為觀察事實。ai-km-e4 逐條對照 AC1–4 後裁示 approved。E01-S027/E03-S038/E01-S030 EVIDENCE 已補雙向留痕註記。規格:[E01-S031.spec.md](specs/E01-S031.spec.md) |
 | E01-S032 | approved | `story/E01-S032-web-build-serialization` | [E01-S032.md](E01-S032.md) | **建置競爭,擋住所有 story 的 L1 gate**:`@ai-km/e2e` 沒把 `@ai-km/web`/`@ai-km/admin` 宣告為依賴,所以 turbo 的 `^build` 不會把 `web:build` 排在 `e2e:test` 之前 → `next build` 與 e2e webServer 的 `next dev` **同時寫 `apps/web/.next`** → `Cannot find module './<chunk>.js'`/`PageNotFoundError`,且每次指向不同頁面(競爭特徵,非快取損毀;W4 已清 `.next` 後原樣重現)。目前各 lane 只能用 `--filter` 繞開,拿不到一次完整 `pnpm test` 綠燈。由 W4 發現、總指揮驗證機制。**由 W7 執行**(它是 `turbo.json` 與 `tests/e2e` 的近期修改者),排在 E03-S046 之後。修法:`tests/e2e/package.json` 新增 `@ai-km/web`/`@ai-km/admin` devDependency,讓 turbo `^build` 自然排序。反向驗證時在 `admin:build` 真實重現同一類 `PageNotFoundError`(4 秒內命中);修正後連續兩輪完整 `pnpm test`(8m50s、6m20s)皆跑完、零 race 症狀,265/277 通過,12 個失敗與既有已知結構性失敗完全一致。規格:[E01-S032.spec.md](specs/E01-S032.spec.md) |
 | E01-S033 | approved | `story/E01-S033-route-announcer-selector-fix` | [E01-S033.md](E01-S033.md) | 獨立審核 `/story-review` APPROVE(2026-08-29;diff 逐 hunk 核對僅 selector scope、無語意變動;gate 獨立重跑全綠;無造假跡象)。`smoke.spec.ts` 的 `getByText('AI KM', {exact:true})` 撞 Next.js route-announcer 已修正(scope 到 `getByRole("banner")`,比照既有 `getByRole("main")` 先例)。AC2 以真實注入 DOM 碰撞的方式反向驗證(修正前逐字重現 strict-mode violation、修正後同一注入下通過),非空洞驗證。AC3 掃描額外發現 2 個同類漏網(`app-shell.spec.ts`、`responsive-baseline.spec.ts`)一併修正;其餘 `getByRole("alert")` 用法皆已安全。全量 E2E 306 passed/8 failed(既有 E01-S027 環境性 flaky,與本 story 無關),針對性 `--repeat-each=3` 45/45 全綠。規格:[E01-S033.spec.md](specs/E01-S033.spec.md) |
+| E01-S034 | todo | — | — | E2E harness 缺陷(E01-S030 follow-up)。分級依 `.claude/rules/STORY_WORKFLOW.md`「工作分級」。 **輕量級**。`assertPortsFreeForCI` 在 CI 上讓 e2e **全數無法執行**(268 failed / 63 did not run,共 331;錯誤出現 **534 次**)。**由來**:E04-S068 修好鎖守衛後,run `33586577564` 第一次讓 e2e 真的跑起來,擋路者隨即換成這一個。**機制(讀碼 + 對 log 確認)**:`assertPortsFreeForCI([3000, 3001])` 位於 `playwright.config.ts:79` **模組頂層**,而 playwright 的 config **每個 worker process 都重新求值一次**;CI 設 `workers: 2`,主程序先起 3000/3001,兩個 worker 接著各自重新求值,**看到主程序剛佔用的埠**而拋錯。守衛的意圖(防止殘留 process 被靜默重用而測到舊程式)是對的,**執行時機不對**。⚠️ **同一個病的第三次,也是最乾淨的一次**:`port-check.ts:64` 第一行是 `if (!process.env.CI) return;`——**這個守衛在 CI 以外完全不執行**,而 CI 的 e2e 自 2026-08-28 起進不去,所以它被寫出來、審核、合併之後**一次都沒執行過**,直到今天。一個只可能在唯一沒人到得了的地方執行的檢查。規格＝測試:CI 上 e2e 能真正跑完(不論結果),埠檢查不得因 worker 重新求值 config 而誤判。**反向驗證必須在 CI 上做**(顧問裁示:CI gate 的紅只有 CI 能證明),紅的一半已存在:run `33586577564`。🚩 **修好之前,e2e 在 CI 上的任何綠都不存在**——沒有一條 e2e 跑得起來。HARD:E04-S068(已完成)。 |
 
 ## E03 AI Conversation Experience(46)
 

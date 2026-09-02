@@ -1097,3 +1097,42 @@ E04-S057 的 EVIDENCE 當時宣稱守門「在真實環境驗證過」。**真�
 
 > **任何依賴絕對路徑、機器慣例或本機拓樸的守門,必須在 CI 上真的紅過或綠過
 > 一次,才算驗證。** 本機驗證證明的是「在這台機器上成立」,不是「成立」。
+
+### 補記 3:`:4000` 沒了,`:4100` 第一次被嘗試,而擋路的換成第三個守衛(2026-09-02,E04-S068 之後)
+
+E04-S068 修好鎖守衛後,run `33586577564`:
+
+- **守門放行**:`AI_KM_E2E_LOCK_FILE` 解析到 `/home/runner/work/_temp/.e2e.lock`,
+  Playwright 跑到 `Running 331 tests using 2 workers`,module-eval 沒有拋錯。
+- **`:4100` 有史以來第一次被嘗試**:`[WebServer] $ tsx watch src/main.ts` 終於出現在 log 裡。
+- **`ECONNREFUSED` 出現次數:0。** E03-S038 的 :4100 webServer 取代 :4000 這件事
+  **成立**,舊問題不存在了。
+- **但 e2e 仍然紅**,268 failed / 63 did not run(共 331)。
+
+**新的擋路者:`E01-S030` 的埠檢查,534 次。**
+
+```
+[E01-S030] CI requires webServer ports to be free before Playwright starts them,
+but found existing listener(s): port 3000 / port 3001
+```
+
+**機制(先讀碼再對 log 確認)**:`assertPortsFreeForCI([3000, 3001])` 位於
+`tests/e2e/playwright.config.ts:79`,是**模組頂層**。playwright 的 config
+**每個 worker process 都會重新求值一次**,不是只求值一次。CI 設 `workers: 2`,
+於是主程序先把 3000/3001 起起來,兩個 worker 接著各自重新求值 config,
+看到**主程序剛剛佔用的埠**,然後拋錯。
+
+**這是同一個病的第三次,而且是最乾淨的一次。** `port-check.ts:64` 第一行是:
+
+```ts
+if (!process.env.CI) return;
+```
+
+**這個守衛在 CI 以外完全不執行**,而 CI 的 e2e 自 2026-08-28 起就進不去。
+也就是說:它被寫出來、被審核、被合併,**一次都沒有執行過**,直到今天。
+一個只可能在唯一沒人到得了的地方執行的檢查。
+
+**判定**:非 Wave 1 造成。`E01-S030` 是 Team A 的既有 story,`tests/e2e/` 屬
+Team A 範圍,不需新授權。登記為 **E01-S034**。
+
+**5-pi 維持開啟**,擋路者身分今天換了第二次。原始問題(`:4000`)已關閉。

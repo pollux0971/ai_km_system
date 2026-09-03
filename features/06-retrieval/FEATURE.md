@@ -92,6 +92,8 @@ pnpm --filter @ai-km/features accept -- --tags '@retrieval and @standalone and n
 
 ## 開放問題
 
+- 反向驗證 (b) 把整條 scope 謂詞拿掉,紅在 store 層的 `assertNoScopeLeak`(`vector/store.ts:414`);`service.ts:272` 那份同層防線
+  這次沒被執行到。「兩層缺一層另一層會響」目前只驗證了一層;下一次用窄突變(只拿掉 store 層的 post-assert)證明 service 層那份。
 - phase-2 的 composition root 要不要對 `retrieve()` 加 topK 上限?契約沒定,見 `02-authorization` 落地後再議。
 - sqlite-vec 路徑的 phase-1 場景目前沒有回填(`tests/sqlite-vec-store.integration.test.ts` 11 條仍是 vitest),
   phase-3 時以 `Scenario Outline` 兩種 store 各跑一次。

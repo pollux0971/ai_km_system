@@ -77,7 +77,10 @@
   排序壞掉仍有順序、過濾壞掉仍有筆數、嵌入壞掉仍有向量;會變的是值。
 - **證據是炸掉那條斷言的失敗訊息原文**,不是紅的條數。審核者確認訊息說的是決定性性質,不是副作用。
   同一場景多條斷言時第一條炸的決定紅的意義——決定性比對放最前,或拆兩個場景。
-- **優先用 `tools/mutate.mjs`**;手動做的說明為何工具不適用。
+- **vitest 層級**優先用 `tools/mutate.mjs`(它只驅動 vitest,解析 vitest JSON reporter)。
+- **`.feature`(phase／整合點)層級目前是手動的**:備份 → 突變 → 跑 cucumber 取紅的訊息原文 → 用備份
+  bytes 還原 → `sha256sum`/`md5sum` 逐位元比對 → 重跑回綠,四段都進 commit body。
+  讓 `mutate.mjs` 支援 cucumber 是一個待排的 phase(等 main 上 E04-S083 的 signal 修復落地後再動同一個檔)。
 
 ### 5.3 機制要用量的,不要用讀的
 
@@ -130,6 +133,8 @@ git diff --name-only main...<branch> | grep -E '\.test\.ts$|^features/steps/|\.f
 3. phase-1 第一個場景固定是「這個能力單獨跑起來會怎樣」;整合檔必有 `@e2e`。寫不出來就是切錯了。
 4. 一個 phase 少於 3 或多於 15 個場景都要懷疑。
 5. 步驟只准用使用者語言(不寫 "calls retrieve()",寫 "asks a question")。
+6. **裸跑 `pnpm accept`(不帶 `--tags`)會列出所有 todo 整合點的 undefined 步驟(例如 I2)**——那是「還沒做」不是「弄壞了」。
+   驗收一律帶 `--tags`;`accept:integration` 只跑已通過的整合點。
 
 ## 8. 最小模式
 

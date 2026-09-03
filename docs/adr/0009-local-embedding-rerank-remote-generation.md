@@ -1,6 +1,22 @@
 # ADR 0009: 檢索側跑本機小模型,生成側打外部 gateway
 
-Status: **Proposed** — 待使用者拍板。四項決策連動,請整份看,不要只批其中一項。
+Status: **Proposed** — 待使用者拍板。
+
+> **2026-09-04 更新:拆成兩批,可以分開拍板。** 使用者表示 gateway 尚未接上
+> (Cloudflare 還沒設),因此:
+>
+> - **第一批(D2 / D3 / D4)——不需要網路,可以先批。** embedding 與 rerank 都跑在
+>   本機 GTX 1650 上,一個封包都不出去。生成側在此期間**維持現有的 canned
+>   provider**,不會壞掉任何東西。
+> - **第二批(D1)——延後,等 gateway 可達。** 這不是被否決,是被排到後面。
+>
+> **這個順序反而更好**:檢索品質是可以量的(Recall@5),而生成品質本來就建立在
+> 檢索品質之上。先把檢索做對,生成接上去才有意義。
+>
+> ⚠️ **附帶更正一個可能的誤解**:D1 **不需要 Cloudflare**,也不需要公開網域。
+> `AI_KM_GATEWAY_URL` 只是環境變數,填 `http://<內網 IP>:<port>` 與填
+> `https://<網域>` 對程式完全一樣。同網段直接打內網位址即可;公開網域是「之後
+> 要從外面存取」才需要的東西,與本 ADR 的技術決策無關。
 
 > ADR 編號 0008 保留給 `paradigm/scaffold` 分支上的分階段 Gherkin 範式
 > (使用者 2026-09-03 裁示該範式不併入 main,在自己的分支上長)。本 ADR 在
@@ -58,7 +74,7 @@ ggml_cuda_init: found 1 CUDA devices (Total VRAM: 3716 MiB):
 
 ## Decision
 
-### D1 — 生成走外部 gateway,不在本機跑 LLM
+### D1 — 生成走外部 gateway,不在本機跑 LLM(**第二批,延後**)
 
 新增 `HttpGenerationProvider`(`services/model-gateway/src/generation/`),透過上述
 三個端點呼叫使用者的 gateway。`GenerationProviderName` 由 `"fake"` 擴充一個成員。
@@ -66,7 +82,7 @@ ggml_cuda_init: found 1 CUDA devices (Total VRAM: 3716 MiB):
 `AI_KM_GATEWAY_URL` / `AI_KM_GATEWAY_API_KEY` 一律走環境變數;**key 不得進
 source / fixtures / log**(鐵律 §5.7),log 輸出必須遮蔽。
 
-### D2 — Embedding 用 bge-m3,本機跑
+### D2 — Embedding 用 bge-m3,本機跑(**第一批**)
 
 模型 `BAAI/bge-m3`,GGUF 取自 `smarttasks/bge-m3-GGUF`,**Q8_0(634.6 MB)**。
 維度 1024(取代目前 `DEFAULT_EMBEDDING_DIMENSIONS = 256` 這個 deterministic
@@ -91,7 +107,7 @@ sparse / ColBERT 模式**未啟用**。走 llama.cpp 這條路拿不到那個能
 若日後需要混合檢索,替代方案是 **SQLite FTS5 / BM25 另建詞彙索引** —— 對識別碼
 類查詢而言更簡單也更可解釋。
 
-### D3 — 新增 cross-encoder 重排階段(這是新增的一段,不是取代 MMR)
+### D3 — 新增 cross-encoder 重排階段(**第一批**;這是新增的一段,不是取代 MMR)
 
 模型 `BAAI/bge-reranker-v2-m3`,GGUF 取自 `Geofront/BGE-Reranker-v2-M3-GGUF`,
 **Q8_0(636 MB)**,Apache-2.0。
@@ -115,7 +131,7 @@ dense 召回(bge-m3,大候選池)
   → MMR(多樣性,取 topK)
 ```
 
-### D4 — 更正 `E04-S037` 的紀錄
+### D4 — 更正 `E04-S037` 的紀錄(**第一批**)
 
 該列的「目標機器 VRAM 充裕,品質優先不省容量」是**已被實測推翻的前提**,連同建立在
 它上面的「Qwen3-32B Q4_K_M 優先 / 14B 替代」一併更正。更正方向是讓紀錄符合實測,
@@ -123,6 +139,11 @@ dense 召回(bge-m3,大候選池)
 本機跑 32B 根本不是一個可選項)。
 
 **本機兩個模型 Q8_0 合計約 1.27 GB**,在 3716 MiB 上寬鬆。大模型完全不碰這台。
+
+⚠️ **D1 延後時,D4 的更正仍然成立,但要寫得精確**:「32B 放不進 3716 MiB」是實測
+推出的事實,與 D1 批不批無關。差別在於**取代方案**:D1 批了就是「走外部 gateway」,
+D1 未批就是「**生成側維持 canned provider,真實 LLM 待定**」。紀錄要寫後者,
+**不得**把一個還沒拍板的方案寫成既定計畫——那正是本 ADR 開頭在批評的那種紀錄。
 
 ## Consequences
 
@@ -187,13 +208,24 @@ API」),**必須先實際跑起來拿到真實回應,再寫 provider**,不得從
 在這條路徑上再插一段,若守門不變,**reranker 沒被呼叫也沒有人會知道**。本工作的
 反向驗證必須紅在**順序或分數**上,不得是「有拿到結果」。
 
-**R7 — 外部依賴。** 生成側現在依賴使用者那台機器可達。離線 / 斷網時 RAG 的答題
-不可用(檢索仍可用)。需要決定降級行為:回錯誤,還是退回 canned provider。
+**R7 — 外部依賴(僅 D1,第二批)。** 生成側會依賴使用者那台機器可達。離線 / 斷網時
+RAG 的答題不可用(檢索仍可用)。需要決定降級行為:回錯誤,還是退回 canned provider。
+**D1 延後期間此風險不存在**,因為生成側就是 canned provider。
 
 ### 待補
 
-- **gateway 網域**(使用者提供後填入本節)。
-- R1 的子決策(a 或 b)。
+**第一批(D2/D3/D4)開工前只差一項:**
+
+- 使用者拍板。**沒有其他待補項** —— 兩個模型都有 GGUF、都放得進 1650、不需要網路。
+
+**第二批(D1)待補:**
+
+- gateway 位址(內網 IP 或網域皆可,**不需要 Cloudflare**)。
+- R1 的子決策(a 或 b)—— 這條**只在 D1 開工前需要**,因為 canned provider 已經
+  自己產生 grounded citations,不受此影響。
+
+**與批次無關的待決:**
+
 - 4070 到位後是否把 embedding / rerank 也搬過去,或維持本機。
 
 ## 影響範圍

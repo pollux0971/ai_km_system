@@ -140,9 +140,9 @@ paths:
           schema:
             type: integer
             minimum: 1
+            default: 7
           description: >
-            Trailing window size in days. Implementation decides the default
-            — this contract only freezes the response shape.
+            Trailing window size in days. Defaults to 7 when omitted.
           examples:
             default:
               value: 7
@@ -190,6 +190,7 @@ paths:
           schema:
             type: integer
             minimum: 1
+            default: 1
         - name: pageSize
           in: query
           required: false
@@ -197,6 +198,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 200
+            default: 20
       responses:
         "200":
           description: One page of the feedback queue.

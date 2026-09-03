@@ -44,6 +44,17 @@ data/
 models/asr/*.bin
 tools/asr-readiness/fixtures/*.wav
 
+# RAG models (ADR 0009 batch 1) — GGUF weights are hundreds of MB each and are
+# downloaded per machine, never committed. The *.md alongside them IS tracked:
+# it records which file, from which HF repo, at which sha, so a second machine
+# reproduces the same weights rather than "some bge-m3".
+models/embedding/**
+models/rerank/**
+!models/embedding/
+!models/rerank/
+!models/embedding/*.md
+!models/rerank/*.md
+
 # TLS certs/keys and Caddy's own runtime state (E01-S028) — private keys
 # must never reach git. `tls internal`'s self-signed CA and any real
 # certificate supplied later both live in these paths at deploy time.

@@ -1,6 +1,15 @@
 # ADR 0009: 檢索側跑本機小模型,生成側打外部 gateway
 
-Status: **Proposed** — 待使用者拍板。
+Status: **第一批(D2/D3/D4)Accepted 2026-09-04** — 使用者在協調者 session 直接批示「開始吧」。**第二批(D1)仍為 Proposed**,依使用者同日指示延後(gateway 尚未接上)。
+
+> **授權紀錄(措辭刻意精確)。** 使用者原話「開始吧」,回應的是協調者上一則訊息中
+> 「第一批(D2/D3/D4)—— 開工前只差你一句話」這句。因此本次授權涵蓋:
+> **在 `services/model-gateway` 與 `services/retrieval` 的相關範圍內**實作 D2(bge-m3
+> embedding provider)與 D3(cross-encoder 重排階段),以及 D4 的紀錄更正。
+> `services/*` 屬 Team B 資料夾,依 CLAUDE.md 鐵律 #6 需使用者明示授權——本段即該授權。
+>
+> **不涵蓋**:D1(生成走外部 gateway)、R1 的 citation 子決策、任何 `contracts/*.yaml`
+> 的變更(若實作中發現需要改契約,停下來問,鐵律 #1)。
 
 > **2026-09-04 更新:拆成兩批,可以分開拍板。** 使用者表示 gateway 尚未接上
 > (Cloudflare 還沒設),因此:

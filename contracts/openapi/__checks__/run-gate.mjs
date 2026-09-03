@@ -44,6 +44,24 @@
  * Errors anywhere else in the closure (outside `*-compat.ts`) are noise from
  * the closure's size and are reported, not judged — same as before.
  *
+ * CHECK 3, WIDENED 2026-09-03 (E04-S084, "allowlist surplus") — the same
+ * check now also fails the OTHER direction: it walks every entry in
+ * ./unbound-schema-allowlist.mjs and fails if that entry's `match()` no
+ * longer matches even one schema this run classified UNBOUND. Before this,
+ * the coverage loop only ever walked UNBOUND schemas looking up an
+ * allowlist entry for each — an entry whose covered schema(s) had all
+ * since become BOUND was never visited by that loop, so it could never be
+ * flagged as surplus. Verified directly on 2026-09-03: re-adding
+ * `conversations.yaml`'s `ChangeEvent` (BOUND-L0 since E04-S072, same day)
+ * to the allowlist left `pnpm contract-gate` at exit 0. The allowlist's own
+ * `unlock` field exists to say when an entry should disappear; without this
+ * check nothing ever notices that moment arrived, so the file could only
+ * grow. A broadly-matching entry that still covers at least one real
+ * UNBOUND schema alongside already-bound ones is correctly NOT surplus —
+ * see the check's own inline comment in run-gate.mjs for why "matches zero
+ * UNBOUND schemas" and "covers only bound schemas" are different questions
+ * on such an entry.
+ *
  * FOURTH CHECK, ADDED 2026-09-03 (E04-S073 follow-up, "gate-response-shape")
  * — response-shape, GATED; route-schema, OBSERVED ONLY
  *
@@ -183,6 +201,10 @@ const stateCounts = { "BOUND-L0": 0, "BOUND-L2": 0, TRANSCRIBED: 0, "BOUND-VIA-P
 const contractLevelGaps = []; // { yaml, schemas }
 const schemaLevelGapsByYaml = []; // { yaml, schemas: [{schema, matchedClass}] }
 const unescalated = [];
+const allUnboundPairs = []; // { yaml, schema } — every schema this run classified UNBOUND,
+// regardless of whether an allowlist entry currently covers it. Built once here so Check 3b
+// below can ask "does this allowlist entry still match anything in here" against the full
+// universe, not just the ones that happened to find an entry in the loop below.
 
 console.log(
   "\nbinding coverage (BOUND-L0/L2/TRANSCRIBED/BOUND-VIA-PARENT/UNBOUND; see binding-coverage.mjs):",
@@ -197,6 +219,7 @@ for (const r of coverage) {
     console.log(`    ${c.state.padEnd(16)} ${s}${suffix}`);
     if (c.state === "UNBOUND") {
       const key = `${r.yaml}::${s}`;
+      allUnboundPairs.push({ yaml: r.yaml, schema: s });
       const entry = UNBOUND_SCHEMA_ALLOWLIST.find((e) => e.match(r.yaml, s));
       if (entry) {
         schemaGaps.push({ schema: s, class: entry.class });
@@ -268,6 +291,59 @@ if (unescalated.length > 0) {
   for (const key of unescalated) console.error(`  ${key}`);
 } else {
   console.log("\nPASS: every UNBOUND schema is covered by a class in unbound-schema-allowlist.mjs.");
+}
+
+/* ── Check 3b: allowlist surplus (2026-09-03, E04-S084) ──────────────────── */
+//
+// Check 3 above walks every UNBOUND schema and asks "does some allowlist
+// entry cover it" — it never walks the allowlist itself. So an entry that
+// used to cover a real gap but no longer matches ANY UNBOUND schema (because
+// everything it covered got bound in the meantime) is never visited by that
+// loop and never flagged. This is not hypothetical: on 2026-09-03 the
+// E04-S072 developer, at the coordinator's request, tried re-adding
+// conversations.yaml's `ChangeEvent` — by then BOUND-L0, bound by that same
+// story — to unbound-schema-allowlist.mjs, and `pnpm contract-gate` stayed
+// exit 0. An allowlist entry's whole point is that its `unlock` condition
+// removes it once satisfied; without this check nothing ever notices that
+// moment, so the file can only grow.
+//
+// THE TRAP: an entry with a broad `match()` (e.g. `unimplemented-route`'s
+// `yaml === "analytics.yaml" && [...four schema names]`, or
+// `error-envelope-self-check-only`'s "any *Body/*ErrorBody schema across
+// five yamls") can legitimately cover several schemas at once, some of
+// which may already be BOUND while others are still UNBOUND. That is NOT
+// surplus — the entry is still doing real work for the ones still gapped.
+// The correct test is "does this entry match at least one UNBOUND (yaml,
+// schema) pair" — NOT "are all schemas this entry's match() would accept
+// currently unbound". Those two questions give different answers for a
+// broad entry with mixed bound/unbound members, and only the first one is
+// what "surplus" means. `allUnboundPairs` (built in the Check 3 loop above,
+// before allowlist lookup narrows anything) is the full universe of
+// (yaml, schema) pairs actually classified UNBOUND this run — checking an
+// entry against every pair in it, not against "the schemas it was written
+// to describe", is what keeps a broad-but-still-useful entry from being
+// misjudged surplus.
+const surplusEntries = UNBOUND_SCHEMA_ALLOWLIST.filter(
+  (entry) => !allUnboundPairs.some((p) => entry.match(p.yaml, p.schema)),
+);
+
+if (surplusEntries.length > 0) {
+  failed = true;
+  console.error(
+    `\nFAIL: ${surplusEntries.length} allowlist class(es) in unbound-schema-allowlist.mjs match ZERO ` +
+      "UNBOUND schema(s) this run — every schema each once covered is now bound (or its match() never " +
+      "matched a real schema to begin with). A class with no UNBOUND schema left to cover is surplus " +
+      "and must be removed:\n",
+  );
+  for (const entry of surplusEntries) {
+    console.error(`  class "${entry.class}"`);
+    console.error(`    unlock (should already have happened): ${entry.unlock}`);
+  }
+} else {
+  console.log(
+    `\nPASS: every one of the ${UNBOUND_SCHEMA_ALLOWLIST.length} allowlist classes still matches at ` +
+      "least one UNBOUND schema.",
+  );
 }
 
 /* ── Check 4a/4b: contract-equivalence live checks (2026-09-03) ──────────── */

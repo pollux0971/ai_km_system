@@ -48,6 +48,11 @@ tools/asr-readiness/fixtures/*.wav
 # must never reach git. `tls internal`'s self-signed CA and any real
 # certificate supplied later both live in these paths at deploy time.
 infra/docker/certs/
+
+# tools/mutate.mjs's pre-flight self-check ledger (E04-S083) — local
+# machine state recording the last-known-clean sha256 of files it has
+# targeted, not a repo artifact.
+tools/.mutate-ledger/
 infra/docker/caddy-data/
 infra/docker/caddy-config/
 *.pem

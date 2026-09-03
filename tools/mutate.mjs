@@ -65,6 +65,94 @@
  *       not contain it: red, but for the WRONG REASON. This is the
  *       mechanised form of the E06-S043 defect this tool exists to catch.
  *
+ *   Signals (SIGHUP/SIGINT/SIGTERM) are handled OUTSIDE this 0-5 space —
+ *   see SIGNAL SAFETY below — and exit with the OS convention 128+signum
+ *   (129/130/143) instead, so a caller inspecting the exit code can always
+ *   tell "the guard tool finished its own classification" (0-5) apart from
+ *   "something external killed it mid-run" (128+n).
+ *
+ * ── SIGNAL SAFETY (E04-S083) ─────────────────────────────────────────────
+ *
+ * The `finally` block that restores the file (step 7 above) only runs for
+ * a JS exception; a killing signal skips it entirely. This was found in
+ * production on 2026-09-03: a `good-guard.mjs`-shaped fixture was left
+ * mutated on disk because the process that was mutating it never reached
+ * its own `finally`.
+ *
+ * The fix has two parts, and the first one is less trivial than it looks:
+ *
+ *   1. `process.on("SIGINT"/"SIGTERM"/"SIGHUP", ...)` alone is NOT enough.
+ *      Empirically verified while building this fix: a signal handler
+ *      registered this way is NOT invoked while the process is blocked
+ *      inside a synchronous `child_process.spawnSync` call — which is
+ *      exactly the window where the file sits mutated on disk (steps 5/6,
+ *      running the mutated code under vitest). `spawnSync` blocks Node's
+ *      own event loop, and the loop is what delivers queued signal
+ *      callbacks; a `kill -TERM` sent during that window is silently lost
+ *      (confirmed with a minimal repro: the child ran to completion and
+ *      the handler never fired). So this file no longer calls `spawnSync`
+ *      for the vitest child — `runVitestJson` now uses async `spawn`
+ *      instead, keeping the event loop free so the registered handler
+ *      actually gets to run promptly when a signal arrives mid-run.
+ *   2. The mutation state (`activeMutation`: the absolute path + the
+ *      original bytes) is promoted to MODULE scope so a signal handler —
+ *      which cannot be a closure over `run()`'s locals — can still reach
+ *      it. `restoreActiveMutation()` is idempotent (guarded by
+ *      `activeMutation` being non-null, then immediately nulled out), so
+ *      it is safe to call from both the signal handler and `run()`'s own
+ *      `finally` — whichever runs first does the actual write; the other
+ *      is a no-op. A signal that arrives before any mutation exists
+ *      (`activeMutation === null`) restores nothing and reports nothing
+ *      wrong — there is nothing to undo yet.
+ *
+ * On a caught signal: restore-if-mutated, best-effort `kill()` the
+ * in-flight vitest child (it is `pnpm --filter <pkg> exec vitest`, which
+ * itself forks a further vitest process — killing the immediate child does
+ * NOT guarantee that grandchild dies too; a stricter process-group kill
+ * was judged out of scope for this fix and is noted here rather than
+ * silently assumed away), then `process.exit(128 + signum)`.
+ *
+ * ── PRE-FLIGHT SELF-CHECK / LEDGER (E04-S083) ─────────────────────────────
+ *
+ * A signal handler only helps for signals this process can catch. A
+ * `SIGKILL`, a power loss, or an OOM kill leaves the file mutated on disk
+ * with NO chance for any in-process code to run at all. The next time
+ * anyone points `mutate.mjs` at that same file, every downstream
+ * measurement (the "baseline" run, the sha256 "before") is taken against
+ * an already-corrupted starting point — silently. `--file`'s own sha256 is
+ * checked against a small on-disk ledger (`tools/.mutate-ledger/
+ * <relFile-with-/-replaced-by-__>.json`, gitignored — this is local machine
+ * state, not a repo artifact) BEFORE anything else happens:
+ *
+ *   - No ledger entry for this file yet → nothing to compare against; the
+ *     current content is trusted as the baseline and a ledger entry is
+ *     written recording its sha256. (First-ever run against a file always
+ *     succeeds this check — there is no way to bootstrap a comparison
+ *     without a first trusted reading.)
+ *   - A ledger entry exists and matches the file's current sha256 → proceed
+ *     normally. (This is also the common case on every later run — the
+ *     tool always restores back to this same hash, so the ledger stays
+ *     valid across an unbounded number of clean runs with no further
+ *     writes needed.)
+ *   - A ledger entry exists and does NOT match → refuse to start (exit 1),
+ *     naming the file and both sha256 values. This is the "restore
+ *     unsafe" case E04-S083 exists to catch.
+ *
+ *   KNOWN, DISCLOSED TRADEOFF: this ledger cannot distinguish "the previous
+ *   mutate.mjs run against this file crashed without restoring" from "you
+ *   edited this file yourself, on purpose, for an unrelated reason, since
+ *   the last time mutate.mjs touched it" — both look identical from here
+ *   (current sha256 != last-recorded sha256). Fail-closed treats both as a
+ *   refusal, which means a file with a legitimate uncommitted edit made
+ *   after its last mutate.mjs run cannot be used as a `--file` target until
+ *   the ledger entry is deleted. The refusal message says so and names the
+ *   ledger path to delete. An alternative (comparing against `git show
+ *   HEAD:<path>` instead of a self-maintained ledger) was considered and
+ *   rejected: it would hard-require the file be git-tracked AND clean
+ *   against HEAD, which is a strictly worse version of the exact same
+ *   tradeoff for a fixtures directory that is routinely edited alongside
+ *   this tool itself.
+ *
  * ── PROVENANCE ───────────────────────────────────────────────────────────
  *
  * The shape is borrowed from `/data/python/nightmare-assault/dev/tools/
@@ -97,10 +185,10 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 /** Thrown for every exit-1 condition (usage / baseline / environment). */
@@ -206,6 +294,141 @@ function firstLine(message) {
   return String(message).split("\n")[0];
 }
 
+/**
+ * ── Module-scope signal-safety state (E04-S083) ──────────────────────────
+ * `activeMutation` holds `{ absFile, origBytes }` for exactly as long as
+ * the mutated bytes are on disk and un-restored; `null` otherwise. It has
+ * to live here, not inside `run()`, because a signal handler cannot close
+ * over a specific call's local variables — it is registered once and must
+ * be able to see whatever `run()` is doing right now. `activeChild` is the
+ * currently in-flight vitest child process (if any), kept so a signal
+ * handler can also try to stop it rather than leaving it to run to
+ * completion in the background after this process has already exited.
+ */
+let activeMutation = null;
+let activeChild = null;
+
+/**
+ * Idempotent by construction: the first caller to see `activeMutation !==
+ * null` performs the write and immediately nulls the module state; any
+ * later caller (the signal handler firing after `run()`'s own `finally`
+ * already restored, or vice versa) sees `null` and does nothing. Returns
+ * the absolute path that was restored, or `null` if there was nothing to
+ * restore (either already restored, or a signal arrived before any
+ * mutation had been written at all).
+ */
+function restoreActiveMutation() {
+  if (activeMutation === null) return null;
+  const { absFile, origBytes } = activeMutation;
+  writeFileSync(absFile, origBytes);
+  activeMutation = null;
+  return absFile;
+}
+
+/** OS convention: a caught, fatal signal exits with 128 + signal number. */
+const SIGNAL_EXIT_CODES = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
+
+/**
+ * Registers SIGHUP/SIGINT/SIGTERM handlers that restore-if-mutated (see
+ * `restoreActiveMutation`), best-effort stop the in-flight vitest child,
+ * and exit with the OS-conventional 128+signum code. Returns an
+ * uninstall function so `run()` can clean up after itself instead of
+ * leaking listeners if it is ever invoked more than once in one process
+ * (the CLI entrypoint below always exits right after, so this mostly
+ * matters for future in-process/test callers of `run()`).
+ *
+ * Only registered for the duration of `run()` — NOT at module import time
+ * — so importing `sha256Hex`/`verifyRestoredHash` etc. (as
+ * `mutate.test.ts` does, without calling `run()`) never attaches signal
+ * listeners to whatever process did the importing (e.g. the vitest worker
+ * running that very test file).
+ */
+function installSignalHandlers() {
+  const installed = [];
+  for (const signal of Object.keys(SIGNAL_EXIT_CODES)) {
+    const handler = () => {
+      const restoredFile = restoreActiveMutation();
+      if (restoredFile !== null) {
+        console.error(`[mutate.mjs] 收到 ${signal},已將 ${restoredFile} 還原為突變前的原始內容後結束。`);
+      } else {
+        console.error(`[mutate.mjs] 收到 ${signal},結束(此時沒有任何檔案處於突變狀態,無需還原)。`);
+      }
+      if (activeChild) {
+        try {
+          activeChild.kill(signal);
+        } catch {
+          // best-effort only — see module docstring's SIGNAL SAFETY section
+          // on why killing the immediate child does not guarantee its own
+          // grandchild vitest process also dies.
+        }
+      }
+      process.exit(SIGNAL_EXIT_CODES[signal]);
+    };
+    process.on(signal, handler);
+    installed.push([signal, handler]);
+  }
+  return () => {
+    for (const [signal, handler] of installed) {
+      process.off(signal, handler);
+    }
+  };
+}
+
+/**
+ * Ledger path for a target file: `tools/.mutate-ledger/<relFile with "/"
+ * replaced by "__">.json`. Kept under `tools/` (not `tmpdir()`) because it
+ * must survive between separate invocations on the same machine — that is
+ * the entire point — and `tmpdir()` offers no such guarantee. Gitignored:
+ * this is local-machine state about what mutate.mjs last saw, not a repo
+ * artifact.
+ */
+function ledgerPathFor(repoRoot, relFile) {
+  const safeName = relFile.replace(/[\\/]/g, "__");
+  return path.join(repoRoot, "tools", ".mutate-ledger", `${safeName}.json`);
+}
+
+/**
+ * The pre-flight self-check (E04-S083). Must run BEFORE anything else
+ * touches `absFile` — see module docstring's PRE-FLIGHT SELF-CHECK /
+ * LEDGER section for the full design and its disclosed tradeoff. Throws
+ * `UsageError` (exit 1) on a mismatch; otherwise arms/leaves the ledger and
+ * returns normally.
+ */
+function checkAndArmLedger(repoRoot, relFile, currentHash) {
+  const ledgerPath = ledgerPathFor(repoRoot, relFile);
+  if (existsSync(ledgerPath)) {
+    let recorded;
+    try {
+      recorded = JSON.parse(readFileSync(ledgerPath, "utf8"));
+    } catch (err) {
+      throw new UsageError(
+        `${relFile} 的自檢紀錄(${ledgerPath})損毀,無法解析為 JSON:${err.message}。` +
+          `如果確定 ${relFile} 目前的內容是正確的,刪除這個檔案後重跑即可讓本工具把目前內容當成新的基準重新建立紀錄。`,
+      );
+    }
+    if (recorded.sha256 !== currentHash) {
+      throw new UsageError(
+        `自檢失敗:${relFile} 目前的 sha256(${currentHash})與上次 mutate.mjs 執行後記錄的原始值 ` +
+          `sha256(${recorded.sha256},記錄於 ${recorded.recordedAt})不一致。這個檔案疑似停在前一次` +
+          `未還原的狀態(process 被中斷、SIGKILL、機器重開、或某次突變沒有被還原乾淨),拒絕在這個` +
+          `可能已經是錯的基準上開始新的突變。(也可能是你自己對這個檔案做了合法的修改——本工具無法` +
+          `區分這兩種情況,所以一律 fail closed。如果目前內容是你有意的修改,刪除 ${ledgerPath} 後` +
+          `重跑,讓本工具把目前內容當成新的基準。)`,
+      );
+    }
+    return;
+  }
+  // First time this file has ever been targeted (or its ledger entry was
+  // deleted) — trust the current content as the baseline and arm the
+  // ledger so the NEXT run can detect drift.
+  mkdirSync(path.dirname(ledgerPath), { recursive: true });
+  writeFileSync(
+    ledgerPath,
+    JSON.stringify({ file: relFile, sha256: currentHash, recordedAt: new Date().toISOString() }, null, 2) + "\n",
+    "utf8",
+  );
+}
+
 /** Walk up from `startDir` looking for the pnpm workspace root marker. */
 function findRepoRoot(startDir) {
   let dir = startDir;
@@ -253,44 +476,81 @@ function findOwningPackage(absPath, repoRoot) {
  * itself appends its own `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL` diagnostic
  * text after vitest's JSON on stdout, which is no longer valid JSON —
  * `--outputFile` writes vitest's report to a file pnpm never touches.
+ *
+ * ASYNC, via `spawn` — deliberately NOT `spawnSync` (see module docstring's
+ * SIGNAL SAFETY section: a `spawnSync` call blocks Node's own event loop,
+ * and that loop is what a registered `process.on("SIGTERM", ...)` handler
+ * needs in order to run at all — verified empirically that a signal sent
+ * while blocked inside `spawnSync` is simply never delivered to the
+ * handler). The child is recorded on `activeChild` for the duration of the
+ * run so a signal handler elsewhere in this module can best-effort stop it.
  */
 function runVitestJson({ repoRoot, pkgName, absTestFile, testName }) {
   const outFile = path.join(tmpdir(), `mutate-mjs-${randomUUID()}.json`);
   const args = ["--filter", pkgName, "exec", "vitest", "run", absTestFile];
   if (testName) args.push("-t", testName);
   args.push("--reporter=json", `--outputFile=${outFile}`);
-
-  const result = spawnSync("pnpm", args, { cwd: repoRoot, encoding: "utf8" });
   const commandLine = `pnpm ${args.join(" ")}`;
 
-  if (result.error) {
-    throw new UsageError(`啟動 vitest 失敗(${commandLine}):${result.error.message}`);
-  }
-
-  let raw;
-  try {
-    raw = readFileSync(outFile, "utf8");
-  } catch (err) {
-    throw new UsageError(
-      `vitest 沒有寫出 JSON 報告(${commandLine},process exit code ${result.status})。` +
-        `stdout 尾段:\n${(result.stdout ?? "").split("\n").slice(-20).join("\n")}\n` +
-        `stderr 尾段:\n${(result.stderr ?? "").split("\n").slice(-20).join("\n")}\n原始錯誤:${err.message}`,
-    );
-  } finally {
+  return new Promise((resolve, reject) => {
+    let child;
     try {
-      unlinkSync(outFile);
-    } catch {
-      // best-effort cleanup only
+      child = spawn("pnpm", args, { cwd: repoRoot });
+    } catch (err) {
+      reject(new UsageError(`啟動 vitest 失敗(${commandLine}):${err.message}`));
+      return;
     }
-  }
+    activeChild = child;
 
-  let report;
-  try {
-    report = JSON.parse(raw);
-  } catch (err) {
-    throw new UsageError(`vitest 的 JSON 報告無法解析(${commandLine}):${err.message}\n原始內容:\n${raw}`);
-  }
-  return { report, commandLine };
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk;
+    });
+
+    child.on("error", (err) => {
+      if (activeChild === child) activeChild = null;
+      reject(new UsageError(`啟動 vitest 失敗(${commandLine}):${err.message}`));
+    });
+
+    child.on("close", (status) => {
+      if (activeChild === child) activeChild = null;
+
+      let raw;
+      try {
+        raw = readFileSync(outFile, "utf8");
+      } catch (err) {
+        reject(
+          new UsageError(
+            `vitest 沒有寫出 JSON 報告(${commandLine},process exit code ${status})。` +
+              `stdout 尾段:\n${stdout.split("\n").slice(-20).join("\n")}\n` +
+              `stderr 尾段:\n${stderr.split("\n").slice(-20).join("\n")}\n原始錯誤:${err.message}`,
+          ),
+        );
+        return;
+      } finally {
+        try {
+          unlinkSync(outFile);
+        } catch {
+          // best-effort cleanup only
+        }
+      }
+
+      let report;
+      try {
+        report = JSON.parse(raw);
+      } catch (err) {
+        reject(new UsageError(`vitest 的 JSON 報告無法解析(${commandLine}):${err.message}\n原始內容:\n${raw}`));
+        return;
+      }
+      resolve({ report, commandLine });
+    });
+  });
 }
 
 function parseArgs(argv) {
@@ -358,6 +618,18 @@ function printEvidence(fields) {
  * a plain number back.
  */
 export async function run(argv) {
+  // Signal handlers are installed for the lifetime of this call and torn
+  // down afterwards (see `installSignalHandlers`'s doc comment for why
+  // this happens here and not at module import time).
+  const uninstallSignalHandlers = installSignalHandlers();
+  try {
+    return await runInner(argv);
+  } finally {
+    uninstallSignalHandlers();
+  }
+}
+
+async function runInner(argv) {
   const args = parseArgs(argv);
 
   const repoRoot = findRepoRoot(process.cwd());
@@ -377,6 +649,11 @@ export async function run(argv) {
   const origHash = sha256Hex(origBytes);
   const origText = origBytes.toString("utf8");
 
+  // Pre-flight self-check (E04-S083) — BEFORE anything else touches
+  // `absFile`, including the --replace occurrence check below. See module
+  // docstring's PRE-FLIGHT SELF-CHECK / LEDGER section.
+  checkAndArmLedger(repoRoot, relFile, origHash);
+
   const occurrences = findOccurrences(origText, args.replace);
   if (occurrences.length !== 1) {
     const where = occurrences.map((o) => o.line).join(", ");
@@ -390,7 +667,7 @@ export async function run(argv) {
   const mutationOffset = occurrences[0].offset;
 
   // Step 3 — baseline FIRST, before anything is touched.
-  const baseline = runVitestJson({ repoRoot, pkgName, absTestFile: absExpectFail, testName: args.testName });
+  const baseline = await runVitestJson({ repoRoot, pkgName, absTestFile: absExpectFail, testName: args.testName });
   if (!isValidGreenBaseline(baseline.report)) {
     throw new UsageError(
       `${args.expectFail} 在套用突變之前不是有效的綠色基準(必須 success 且 numPassedTests > 0,` +
@@ -401,8 +678,12 @@ export async function run(argv) {
   }
   const greenTestCount = baseline.report.numPassedTests;
 
-  // Step 4 — apply the mutation.
+  // Step 4 — apply the mutation. `activeMutation` is set BEFORE the write
+  // (not after) so there is no window, however small, where the file has
+  // already been mutated on disk but a signal handler wouldn't know to
+  // restore it.
   const mutatedText = applyMutationAt(origText, mutationOffset, args.replace, args.with);
+  activeMutation = { absFile, origBytes };
   writeFileSync(absFile, mutatedText, "utf8");
 
   const evidenceBase = {
@@ -422,7 +703,7 @@ export async function run(argv) {
   let meaning;
   try {
     // Step 5/6 — run vitest directly (never through turbo) and classify.
-    const mutated = runVitestJson({ repoRoot, pkgName, absTestFile: absExpectFail, testName: args.testName });
+    const mutated = await runVitestJson({ repoRoot, pkgName, absTestFile: absExpectFail, testName: args.testName });
     const classified = classifyVitestJsonReport(mutated.report);
 
     if (classified.outcome === "passed") {
@@ -444,7 +725,11 @@ export async function run(argv) {
   } finally {
     // Step 7 — restore from the IN-MEMORY bytes. No git, always, no matter
     // what happened above (including an exception mid-classification).
-    writeFileSync(absFile, origBytes);
+    // Shared with the signal handler via `restoreActiveMutation` so the
+    // two are mutually idempotent — see module docstring's SIGNAL SAFETY
+    // section. Under normal (non-signal) operation this is simply the
+    // restore, same as before.
+    restoreActiveMutation();
   }
 
   const restoredBytes = readFileSync(absFile);
@@ -465,7 +750,7 @@ export async function run(argv) {
   // baseline in step 3 was not reproducible (flaky test), not that this
   // tool's own restore is broken — bucketed under exit 1 (see module
   // docstring) rather than inventing a new code the interface doesn't define.
-  const postRestore = runVitestJson({ repoRoot, pkgName, absTestFile: absExpectFail, testName: args.testName });
+  const postRestore = await runVitestJson({ repoRoot, pkgName, absTestFile: absExpectFail, testName: args.testName });
   if (!isValidGreenBaseline(postRestore.report)) {
     printEvidence({
       ...evidenceBase,

@@ -36,7 +36,8 @@
  * recorded in this story's commit body and PROGRESS.md row, not in this
  * file.
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -261,5 +262,155 @@ describe("mutate.mjs — restoration leaves the fixture byte-identical no matter
     const shaAfter = /sha256 after restore: (\w+)/.exec(before.stdout)?.[1];
     expect(shaBefore).toBeTruthy();
     expect(shaBefore).toBe(shaAfter);
+  });
+});
+
+/**
+ * ── E04-S083: signal safety ───────────────────────────────────────────────
+ *
+ * A real, external `kill -TERM` is sent to a real mutate.mjs child process
+ * — this must NOT be verified by having mutate.mjs mutate-test itself
+ * (that would be circular). The decisive assertion is the fixture's sha256
+ * AFTER the kill, compared against its sha256 BEFORE the run — not "did it
+ * exit", not "did it throw" (see this story's brief: existence-only
+ * assertions look identical whether the restore fired or not).
+ */
+describe("mutate.mjs — signal safety (E04-S083)", () => {
+  it("SIGTERM sent after the mutation lands on disk, but before mutate.mjs's own restore, still leaves the fixture byte-identical to its pre-mutation content", async () => {
+    const relFile = "tools/__fixtures__/slow-guard.mjs";
+    const fixturePath = path.join(repoRoot, relFile);
+    const originalContent = readFileSync(fixturePath, "utf8");
+    const originalHash = sha256Hex(Buffer.from(originalContent, "utf8"));
+    const mutatedNeedle = "score < 0.5";
+    expect(originalContent).not.toContain(mutatedNeedle);
+
+    const child = spawn(
+      "node",
+      [
+        mutateScript,
+        "--file",
+        relFile,
+        "--replace",
+        "score >= 0.5",
+        "--with",
+        mutatedNeedle,
+        "--expect-fail",
+        "tools/__fixtures__/slow-guard.test.ts",
+      ],
+      { cwd: repoRoot },
+    );
+    // Drain stdout/stderr so the child never blocks on a full pipe buffer.
+    child.stdout?.resume();
+    child.stderr?.resume();
+
+    try {
+      // Poll the fixture on disk until the mutation has actually landed —
+      // this is what proves the SIGTERM below arrives inside the real
+      // danger window (after write, before restore), not before or after it.
+      const deadline = Date.now() + 30_000;
+      let mutationObserved = false;
+      while (Date.now() < deadline) {
+        if (readFileSync(fixturePath, "utf8").includes(mutatedNeedle)) {
+          mutationObserved = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(mutationObserved).toBe(true);
+
+      child.kill("SIGTERM");
+
+      const { exitCode, signal } = await new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>(
+        (resolve) => {
+          child.on("exit", (code, sig) => resolve({ exitCode: code, signal: sig }));
+        },
+      );
+
+      // 143 = 128 + SIGTERM(15), the OS convention mutate.mjs's own signal
+      // handler exits with — NOT the process being killed out from under
+      // it (which would report `signal: "SIGTERM"` and `exitCode: null`).
+      expect(signal).toBeNull();
+      expect(exitCode).toBe(143);
+
+      const restoredHash = sha256Hex(Buffer.from(readFileSync(fixturePath, "utf8"), "utf8"));
+      expect(restoredHash).toBe(originalHash);
+    } finally {
+      // Best-effort: make sure nothing from this test lingers if an
+      // assertion above threw before the child had already exited.
+      if (child.exitCode === null && child.signalCode === null) {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // already gone
+        }
+      }
+    }
+  });
+});
+
+/**
+ * ── E04-S083: pre-flight self-check / ledger ───────────────────────────────
+ *
+ * Uses its own dedicated fixture (`ledger-check.mjs`) — see that file's doc
+ * comment for why it must not be shared with other tests in this file.
+ */
+describe("mutate.mjs — pre-flight self-check / ledger (E04-S083)", () => {
+  it("arms on first use, refuses to start once the file no longer matches the recorded original, and works again once restored", () => {
+    const relFile = "tools/__fixtures__/ledger-check.mjs";
+    const fixturePath = path.join(repoRoot, relFile);
+    const ledgerPath = path.join(repoRoot, "tools", ".mutate-ledger", "tools____fixtures____ledger-check.mjs.json");
+    const originalContent = readFileSync(fixturePath, "utf8");
+
+    // Start from a clean slate so this test does not depend on ledger state
+    // left over from a previous run of this suite.
+    if (existsSync(ledgerPath)) rmSync(ledgerPath);
+
+    const runArgs = [
+      "--file",
+      relFile,
+      "--replace",
+      "score >= 0.5",
+      "--with",
+      "score < 0.5",
+      "--expect-fail",
+      "tools/__fixtures__/ledger-check.test.ts",
+    ];
+
+    // 1. No ledger entry yet — arms it, then runs normally end to end.
+    const first = runMutate(runArgs);
+    expect(first.exitCode).toBe(0);
+    expect(existsSync(ledgerPath)).toBe(true);
+    expect(readFileSync(fixturePath, "utf8")).toBe(originalContent);
+
+    // 2. Simulate "left mutated by an interrupted previous run" WITHOUT
+    // going through mutate.mjs at all — exactly what a SIGKILL, an OOM
+    // kill, or a power loss would leave behind.
+    const corruptedContent = originalContent.replace("score >= 0.5", "score < 0.5");
+    expect(corruptedContent).not.toBe(originalContent);
+    writeFileSync(fixturePath, corruptedContent, "utf8");
+    const corruptedHash = sha256Hex(Buffer.from(corruptedContent, "utf8"));
+    const originalHash = sha256Hex(Buffer.from(originalContent, "utf8"));
+
+    // 3. The next run must refuse to even start. The decisive assertion is
+    // that BOTH sha256 values appear in the refusal, not merely that it
+    // errored (an existence-only "it threw" assertion would look identical
+    // whether the check compared the right thing or nothing at all).
+    const second = runMutate(runArgs);
+    expect(second.exitCode).toBe(1);
+    expect(second.stderr).toContain(relFile);
+    expect(second.stderr).toContain(corruptedHash);
+    expect(second.stderr).toContain(originalHash);
+    expect(second.stderr).toContain("自檢失敗");
+    // The refusal must not have touched the (already-corrupted) file.
+    expect(readFileSync(fixturePath, "utf8")).toBe(corruptedContent);
+
+    // 4. Restore the fixture by hand (the message's own prescribed
+    // recovery is deleting the ledger, not this — but re-matching the
+    // ledger's recorded content is the other legitimate way out, and this
+    // proves the check is a comparison, not a permanent lockout).
+    writeFileSync(fixturePath, originalContent, "utf8");
+    const third = runMutate(runArgs);
+    expect(third.exitCode).toBe(0);
+    expect(readFileSync(fixturePath, "utf8")).toBe(originalContent);
   });
 });

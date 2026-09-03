@@ -7,6 +7,7 @@ import { createTestDatabase } from "./testing/db.js";
 import { validateAgainstAuthContract } from "./testing/contract.js";
 import { findSessionWithUserByTokenHash } from "./repository.js";
 import { hashSessionToken } from "./crypto.js";
+import * as crypto from "./crypto.js";
 import {
   _resetSandboxSeedersForTest,
   registerSandboxSeeder,
@@ -864,20 +865,109 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
   });
 
   it("AC3: 20 different accounts each failing once from the SAME IP locks the 21st attempt, even for a brand-new username", async () => {
-    const { app } = await build({
-      AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:20",
-    });
-    const ip = "198.51.100.5";
-    for (let i = 0; i < 20; i += 1) {
-      await login(app, `nonexistent-user-${i}`, "wrong", ip);
+    // E02-S035 (CI flake fix — root cause corrected from an earlier draft
+    // of this comment that blamed generic CI-runner load; see the CI log
+    // evidence below for why that was incomplete).
+    //
+    // ROOT CAUSE: this test's cost is LINEAR in its attempt count against a
+    // CONSTANT timeout. It runs 21 sequential logins, and every one — success
+    // or failure, real user or not — unconditionally pays for a real scrypt
+    // computation (crypto.ts's verifyPassword, N=2**14; the "always hash,
+    // even for an unknown user" behaviour is deliberate, for AC2's
+    // constant-time requirement — not something this fix may remove from
+    // production). The sibling tests in this same describe block do 3-7
+    // logins each and finish comfortably under budget; this one does 21 and
+    // was, by construction, sitting right on top of vitest's 5000ms default.
+    //
+    // Measured directly from a real failing CI run (main, run 33709974731,
+    // commit 07728f3 — the exact HEAD this branch forked from):
+    //   AC3 (21 logins):                         5052ms → "Test timed out in 5000ms"
+    //   AC1 (7 logins, same file, same run):      2584ms
+    //   AC2 (4 logins):                           1890ms
+    //   "does not lock below threshold" (3):      1977ms
+    //   AC1/AC7 (3 logins):                       1631ms
+    //   AC3/AC7 (4 logins):                       1474ms
+    // All five siblings passed in the SAME run AC3 failed in. If the cause
+    // were runner-wide load, all six would have slowed down together — they
+    // did not. Only the one whose cost scales with 21 real hashes, not 3-7,
+    // was anywhere near the line. main's job history over the same window
+    // (success/success/failure/success/success/failure across 7 runs, every
+    // failure `lint-typecheck-unit` with `e2e`/`contract-gate` green every
+    // time) is consistent with a test parked on a boundary that ordinary
+    // runner-speed variance crosses roughly half the time — not with an
+    // occasional external load spike. (CPU contention — reproduced earlier
+    // by pinning this process to one core under ~60 concurrent
+    // `yes > /dev/null` — still makes it worse on top of this; it's a real
+    // secondary amplifier, just not the reason the test sits on the line to
+    // begin with.)
+    //
+    // FIX: reduce the fixed-and-per-attempt cost, not the attempt count (21
+    // distinct accounts is what AC3 is about) and not the timeout constant
+    // (raising it only postpones the next occurrence to a slightly slower
+    // runner or a slightly larger perIpMaxFailures). AI_KM_SEED_DEMO_USERS:
+    // false skips the 10 real scrypt calls seedDemoUsers would otherwise do
+    // on every build() for accounts this test never logs into. Stubbing
+    // verifyPassword removes the 21 real per-login computations entirely —
+    // this does not touch what's under test: the throttle decision reads the
+    // failure counters (countRecentFailuresByIp/Username in plugin.ts), not
+    // passwordOk, so a broken rate limiter still fails this test exactly as
+    // before (see reverse verification below). AC3/AC7 already uses the
+    // OTHER legitimate lever this file accepts — fewer attempts
+    // (perIpMaxFailures:3, 4 logins, 1474ms) — proving the same property;
+    // removing the per-login cost here is the same kind of move, applied to
+    // the one AC that specifically needs 20+1 distinct accounts to make its
+    // point ("even for a brand-new username").
+    //
+    // While reverse-verifying this fix, the ORIGINAL assertion
+    // (`res.statusCode === 401`) turned out to already be a blind spot,
+    // unrelated to the flake: the final request uses a brand-new,
+    // never-seen username on purpose (that's the point of this test — a
+    // never-seen username still gets IP-throttled), but an unknown username
+    // *always* 401s via the ordinary invalid-credentials branch too
+    // (`if (!user || !passwordOk)`), byte-identical to the throttled
+    // response by AC1/AC5 design. So disabling throttling entirely left
+    // this test GREEN — it was asserting "a response happened", not "it was
+    // the throttle that rejected it". Fixed the same way the neighbouring
+    // "telemetry" describe block below already discriminates the two:
+    // asserting on the LOGIN_RATE_LIMITED log line, which plugin.ts only
+    // emits from the `throttled` branch. Because verifyPassword is stubbed,
+    // this whole test now runs in well under a second, so a mutation that
+    // breaks the throttle shows up as THIS assertion failing on content —
+    // not as a second timeout race (see reverse verification below).
+    const verifySpy = vi
+      .spyOn(crypto, "verifyPassword")
+      .mockResolvedValue(false);
+    try {
+      const { harness, sink } = await buildWithLogSink({
+        AI_KM_LOGIN_RATE_LIMIT: "perIpMaxFailures:20",
+        AI_KM_SEED_DEMO_USERS: "false",
+      });
+      const { app } = harness;
+      const ip = "198.51.100.5";
+      for (let i = 0; i < 20; i += 1) {
+        await login(app, `nonexistent-user-${i}`, "wrong", ip);
+      }
+      const res = await login(
+        app,
+        "brand-new-never-seen-username",
+        "anything",
+        ip,
+      );
+      expect(res.statusCode).toBe(401);
+      const rateLimitEvents = sink.lines.filter(
+        (l) => l.code === "LOGIN_RATE_LIMITED",
+      );
+      // Custom message (not just toHaveLength's default) so the decisive
+      // fact — a LOGIN_RATE_LIMITED rejection, specifically — is IN the
+      // failure text, not just visible in a diff a mutation-testing tool
+      // can't see into.
+      expect(
+        rateLimitEvents.length,
+        `expected exactly one LOGIN_RATE_LIMITED rejection for the 21st attempt, got ${rateLimitEvents.length}`,
+      ).toBe(1);
+    } finally {
+      verifySpy.mockRestore();
     }
-    const res = await login(
-      app,
-      "brand-new-never-seen-username",
-      "anything",
-      ip,
-    );
-    expect(res.statusCode).toBe(401);
   });
 
   it("AC3/AC7: a low perIpMaxFailures locks the IP after fewer distinct-account failures", async () => {

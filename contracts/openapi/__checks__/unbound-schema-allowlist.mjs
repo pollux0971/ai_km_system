@@ -31,6 +31,19 @@
  * a new class otherwise — after real triage, with a real reason, escalation
  * and unlock condition. Never add one just because `pnpm contract-gate`
  * reports it UNBOUND.
+ *
+ * REMOVING FROM THIS FILE (2026-09-03, E04-S084): once every schema a class's
+ * `match()` used to cover is bound, DELETE the entry — do not keep it as a
+ * documented empty placeholder ("this class is EMPTY now, kept for the
+ * record"). run-gate.mjs's Check 3b runs every entry's `match()` against
+ * every schema this run classified UNBOUND and fails the whole gate if an
+ * entry matches none of them, specifically so this file cannot silently
+ * carry a dead entry indistinguishable from a real, live gap. A class kept
+ * empty on purpose would make `pnpm contract-gate` permanently red under
+ * that check — it was tried here (the former `bindable-not-yet-bound`
+ * class, hardcoded to `match: () => false`) and removed for exactly this
+ * reason. Its provenance is not lost: see git blame/log on this file and
+ * docs/stories/PROGRESS.md's E04-S065/E04-S076/E04-S080 rows.
  */
 
 const BODY_SUFFIX = /Body$/;
@@ -81,45 +94,17 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
       "least the request/response bodies — whichever a domain owner picks, " +
       "the route currently has none of the three.",
   },
-  {
-    class: "bindable-not-yet-bound",
-    match: () => false, // EMPTY as of 2026-09-03 — see reason
-    // (kept as a documented empty class rather than deleted: it records that
-    //  every member was bound rather than that the class never existed.)
-    reason:
-      "EMPTY — every schema that was ever in this class has been bound. "
-      + "E04-S076 bound auth.yaml's LoginRequest (naming and exporting "
-      + "packages/auth-client's inline credentials parameter as LoginCredentials); "
-      + "E04-S080 bound generation.yaml's GenerationRequest/ContextChunk and "
-      + "analytics.yaml's UsageMetrics/LatencyMetrics/FeedbackQueuePage. The two "
-      + "stories ran on branches that each still listed the other's targets, so "
-      + "this merge is where the class reaches zero. UsageEventCreated, the sixth "
-      + "original member, was triaged out to `response-literal-no-exported-type` "
-      + "below — it has no implementation type at all. Original text follows for "
-      + "provenance: a real implementation " +
-      "type already exists, it is just never referenced by auth-compat.ts. " +
-      "packages/auth-client/src/index.ts's AuthClient.login only takes an " +
-      "INLINE anonymous `{ username, password }` parameter today — binding it " +
-      "needs that type named and exported first, a Team-A-owned one-line " +
-      "change (auth-client is not a Team B folder), not a cross-team " +
-      "escalation. This class used to also cover generation.yaml's " +
-      "GenerationRequest/ContextChunk and analytics.yaml's UsageMetrics/" +
-      "LatencyMetrics/FeedbackQueuePage — E04-S080 bound all five (each " +
-      "already had a real implementation type sitting unused, the same " +
-      "situation this entry still describes for LoginRequest) and removed " +
-      "them from this match(); LoginRequest is the only one left because it " +
-      "additionally needs a one-line export before it can be bound, which was " +
-      "out of E04-S080's scope. `UsageEventCreated`, the sixth original " +
-      "member, turned out to have NO implementation type at all (see the " +
-      "`response-literal-no-exported-type` class below) and does not belong " +
-      "in this class even after triage.",
-    escalation: "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half); E04-S080 row (2026-09-03) for the narrowing",
-    unlock:
-      "someone names and exports that inline `{ username, password }` " +
-      "parameter type in packages/auth-client, then binds it in " +
-      "auth-compat.ts with an AssignableTo/Exact check — no contract or " +
-      "service change required.",
-  },
+  // "bindable-not-yet-bound" (E04-S065/E04-S076/E04-S080) removed here, 2026-09-03
+  // (E04-S084): it had gone EMPTY — match() hardcoded to '() => false', every
+  // member since bound or triaged elsewhere — and was being kept only as a
+  // documented placeholder instead of deleted. That is exactly the shape this
+  // story exists to catch: run-gate.mjs Check 3b now fails the gate on any entry
+  // whose match() matches zero UNBOUND schemas, so a placeholder entry that can
+  // never match anything would make 'pnpm contract-gate' permanently red. The
+  // provenance this entry used to preserve in prose is not lost: it lives in git
+  // blame/log for this file and in docs/stories/PROGRESS.md's E04-S065/S076/S080
+  // rows. An entry that reaches zero UNBOUND matches must be REMOVED going
+  // forward, not kept empty for the record.
   {
     class: "response-literal-no-exported-type",
     match: (yaml, schema) => yaml === "analytics.yaml" && schema === "UsageEventCreated",

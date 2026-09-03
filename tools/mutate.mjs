@@ -79,6 +79,15 @@
  * mutated on disk because the process that was mutating it never reached
  * its own `finally`.
  *
+ * CORRECTION to this story's own registration: the root cause was
+ * originally written down as "the whole file has no SIGINT/SIGTERM
+ * handler." That is NECESSARY but not SUFFICIENT — adding a handler alone
+ * would have produced a fix that never fires, the same shape as this
+ * wave's `flock` defect ("a fix written against an assumed mechanism
+ * instead of a measured one never triggers"). The handler only helps if
+ * the process is actually free to run it; see point 1 below for why it
+ * wasn't.
+ *
  * The fix has two parts, and the first one is less trivial than it looks:
  *
  *   1. `process.on("SIGINT"/"SIGTERM"/"SIGHUP", ...)` alone is NOT enough.
@@ -112,46 +121,69 @@
  * was judged out of scope for this fix and is noted here rather than
  * silently assumed away), then `process.exit(128 + signum)`.
  *
- * ── PRE-FLIGHT SELF-CHECK / LEDGER (E04-S083) ─────────────────────────────
+ * ── PRE-FLIGHT SELF-CHECK: IN-FLIGHT MARKER (E04-S083, redesigned) ────────
  *
  * A signal handler only helps for signals this process can catch. A
  * `SIGKILL`, a power loss, or an OOM kill leaves the file mutated on disk
  * with NO chance for any in-process code to run at all. The next time
  * anyone points `mutate.mjs` at that same file, every downstream
- * measurement (the "baseline" run, the sha256 "before") is taken against
- * an already-corrupted starting point — silently. `--file`'s own sha256 is
- * checked against a small on-disk ledger (`tools/.mutate-ledger/
- * <relFile-with-/-replaced-by-__>.json`, gitignored — this is local machine
- * state, not a repo artifact) BEFORE anything else happens:
+ * measurement (the "baseline" run, the sha256 "before") would silently be
+ * taken against an already-corrupted starting point.
  *
- *   - No ledger entry for this file yet → nothing to compare against; the
- *     current content is trusted as the baseline and a ledger entry is
- *     written recording its sha256. (First-ever run against a file always
- *     succeeds this check — there is no way to bootstrap a comparison
- *     without a first trusted reading.)
- *   - A ledger entry exists and matches the file's current sha256 → proceed
- *     normally. (This is also the common case on every later run — the
- *     tool always restores back to this same hash, so the ledger stays
- *     valid across an unbounded number of clean runs with no further
- *     writes needed.)
- *   - A ledger entry exists and does NOT match → refuse to start (exit 1),
- *     naming the file and both sha256 values. This is the "restore
- *     unsafe" case E04-S083 exists to catch.
+ * FIRST DESIGN (rejected on review, kept here as a recorded dead end): a
+ * persistent ledger recording the last-known-clean sha256 for every file
+ * ever targeted, compared on every run. It worked, but it could not tell
+ * "the previous run crashed without restoring" apart from "you edited this
+ * file yourself, on purpose, for an unrelated reason, since the last time
+ * mutate.mjs touched it" — both look identical (current sha256 != last
+ * recorded sha256). In THIS repo that second case is not an edge case, it
+ * is the normal work loop (write test → write implementation → mutate to
+ * verify the guard → fix the implementation → mutate again) — a persistent
+ * ledger would refuse to start on almost every real invocation, training
+ * whoever hits it to reflexively delete the ledger file, which destroys
+ * the exact protection it exists to provide (same shape as "an
+ * intermittent red that trains people to just re-run it" from E04-S082's
+ * brief — just relocated to a different check).
  *
- *   KNOWN, DISCLOSED TRADEOFF: this ledger cannot distinguish "the previous
- *   mutate.mjs run against this file crashed without restoring" from "you
- *   edited this file yourself, on purpose, for an unrelated reason, since
- *   the last time mutate.mjs touched it" — both look identical from here
- *   (current sha256 != last-recorded sha256). Fail-closed treats both as a
- *   refusal, which means a file with a legitimate uncommitted edit made
- *   after its last mutate.mjs run cannot be used as a `--file` target until
- *   the ledger entry is deleted. The refusal message says so and names the
- *   ledger path to delete. An alternative (comparing against `git show
- *   HEAD:<path>` instead of a self-maintained ledger) was considered and
- *   rejected: it would hard-require the file be git-tracked AND clean
- *   against HEAD, which is a strictly worse version of the exact same
- *   tradeoff for a fixtures directory that is routinely edited alongside
- *   this tool itself.
+ * FIX: an IN-FLIGHT MARKER instead of a standing baseline. The marker
+ * exists ONLY for the lifetime of one mutation and is written to
+ * `tools/.mutate-inflight/<relFile-with-/-replaced-by-__>.json`
+ * (gitignored — local machine state, not a repo artifact):
+ *
+ *   - Written right BEFORE the mutated bytes are written to `--file`,
+ *     containing `{ file, originalSha256, mutatedSha256, originalBytesBase64,
+ *     recordedAt }` — the sha256 of both the pre- and post-mutation content,
+ *     plus the original bytes themselves so the tool can heal the file, not
+ *     just diagnose it.
+ *   - Deleted the instant the file is restored — by `restoreActiveMutation`,
+ *     the SAME function the signal handler and the normal `finally` both
+ *     call (see SIGNAL SAFETY above), so the marker's lifetime is bound to
+ *     `activeMutation`'s.
+ *
+ * On the NEXT invocation, BEFORE touching anything: no marker for this file
+ * → proceed unconditionally, no comparison at all. A legitimate edit made
+ * between two mutate.mjs runs never has a marker sitting around, so it can
+ * never trip this check — this is the property the ledger design didn't
+ * have. A marker found present means the run that wrote it never reached
+ * its own cleanup — compare the file's CURRENT sha256 against the two
+ * hashes recorded in the marker:
+ *
+ *   - Matches `originalSha256` → that previous run's restore actually
+ *     succeeded; it just died before deleting its own marker. Harmless —
+ *     delete the stale marker and proceed normally.
+ *   - Matches `mutatedSha256` → exactly the failure mode this exists to
+ *     catch: the file is still sitting in mutated content from a run that
+ *     never got to restore it (a SIGKILL, an OOM kill, a crashed machine).
+ *     Refuse to start (exit 1), naming the file and both hashes. The
+ *     marker carries the original bytes, so the tool restores the file
+ *     from them and deletes the marker as part of refusing — it heals
+ *     itself; the refusal is only about not silently proceeding to layer a
+ *     NEW mutation on top of an invocation nobody asked for right now, not
+ *     about needing a human to manually fix the bytes.
+ *   - Matches NEITHER → an unrecognised state (the file was edited to some
+ *     THIRD content while a marker sat there) — refuse (exit 1), report
+ *     both recorded hashes and the current one, and leave the file alone;
+ *     this case is ambiguous enough that auto-healing would be a guess.
  *
  * ── PROVENANCE ───────────────────────────────────────────────────────────
  *
@@ -296,31 +328,42 @@ function firstLine(message) {
 
 /**
  * ── Module-scope signal-safety state (E04-S083) ──────────────────────────
- * `activeMutation` holds `{ absFile, origBytes }` for exactly as long as
- * the mutated bytes are on disk and un-restored; `null` otherwise. It has
- * to live here, not inside `run()`, because a signal handler cannot close
- * over a specific call's local variables — it is registered once and must
- * be able to see whatever `run()` is doing right now. `activeChild` is the
- * currently in-flight vitest child process (if any), kept so a signal
- * handler can also try to stop it rather than leaving it to run to
- * completion in the background after this process has already exited.
+ * `activeMutation` holds `{ absFile, origBytes, markerPath }` for exactly
+ * as long as the mutated bytes are on disk and un-restored; `null`
+ * otherwise. It has to live here, not inside `run()`, because a signal
+ * handler cannot close over a specific call's local variables — it is
+ * registered once and must be able to see whatever `run()` is doing right
+ * now. `markerPath` (see the in-flight marker functions below) travels
+ * with it so the SAME restore call also cleans up the marker — the
+ * marker's lifetime is bound to `activeMutation`'s by construction, not by
+ * two places remembering to stay in sync. `activeChild` is the currently
+ * in-flight vitest child process (if any), kept so a signal handler can
+ * also try to stop it rather than leaving it to run to completion in the
+ * background after this process has already exited.
  */
 let activeMutation = null;
 let activeChild = null;
 
 /**
  * Idempotent by construction: the first caller to see `activeMutation !==
- * null` performs the write and immediately nulls the module state; any
- * later caller (the signal handler firing after `run()`'s own `finally`
- * already restored, or vice versa) sees `null` and does nothing. Returns
- * the absolute path that was restored, or `null` if there was nothing to
- * restore (either already restored, or a signal arrived before any
- * mutation had been written at all).
+ * null` performs the write (and the marker cleanup) and immediately nulls
+ * the module state; any later caller (the signal handler firing after
+ * `run()`'s own `finally` already restored, or vice versa) sees `null` and
+ * does nothing. Returns the absolute path that was restored, or `null` if
+ * there was nothing to restore (either already restored, or a signal
+ * arrived before any mutation had been written at all).
  */
 function restoreActiveMutation() {
   if (activeMutation === null) return null;
-  const { absFile, origBytes } = activeMutation;
+  const { absFile, origBytes, markerPath } = activeMutation;
   writeFileSync(absFile, origBytes);
+  if (markerPath) {
+    try {
+      unlinkSync(markerPath);
+    } catch {
+      // best-effort — a missing marker at this point is not an error.
+    }
+  }
   activeMutation = null;
   return absFile;
 }
@@ -375,57 +418,116 @@ function installSignalHandlers() {
 }
 
 /**
- * Ledger path for a target file: `tools/.mutate-ledger/<relFile with "/"
- * replaced by "__">.json`. Kept under `tools/` (not `tmpdir()`) because it
- * must survive between separate invocations on the same machine — that is
- * the entire point — and `tmpdir()` offers no such guarantee. Gitignored:
- * this is local-machine state about what mutate.mjs last saw, not a repo
- * artifact.
+ * In-flight marker path for a target file: `tools/.mutate-inflight/<relFile
+ * with "/" replaced by "__">.json`. Kept under `tools/` (not `tmpdir()`)
+ * because it must survive between separate invocations on the same
+ * machine — that is the entire point of a crash-recovery marker — and
+ * `tmpdir()` offers no such guarantee. Gitignored: local-machine state
+ * about an in-progress (or crashed) mutation, not a repo artifact.
  */
-function ledgerPathFor(repoRoot, relFile) {
+export function inFlightMarkerPathFor(repoRoot, relFile) {
   const safeName = relFile.replace(/[\\/]/g, "__");
-  return path.join(repoRoot, "tools", ".mutate-ledger", `${safeName}.json`);
+  return path.join(repoRoot, "tools", ".mutate-inflight", `${safeName}.json`);
 }
 
 /**
- * The pre-flight self-check (E04-S083). Must run BEFORE anything else
- * touches `absFile` — see module docstring's PRE-FLIGHT SELF-CHECK /
- * LEDGER section for the full design and its disclosed tradeoff. Throws
- * `UsageError` (exit 1) on a mismatch; otherwise arms/leaves the ledger and
- * returns normally.
+ * Writes the in-flight marker BEFORE the mutated bytes are written to
+ * `absFile` (see call site in `run()`) — so even a crash landing between
+ * this write and the mutation write leaves a marker whose `mutatedSha256`
+ * simply never gets matched (the file is still original), which the
+ * pre-flight check below treats as the harmless "previous run didn't even
+ * get to mutate" case. Stores the original bytes (base64) alongside both
+ * hashes so a future run can self-heal instead of merely diagnosing.
  */
-function checkAndArmLedger(repoRoot, relFile, currentHash) {
-  const ledgerPath = ledgerPathFor(repoRoot, relFile);
-  if (existsSync(ledgerPath)) {
-    let recorded;
+function writeInFlightMarker(markerPath, relFile, origBytes, originalSha256, mutatedSha256) {
+  mkdirSync(path.dirname(markerPath), { recursive: true });
+  writeFileSync(
+    markerPath,
+    JSON.stringify(
+      {
+        file: relFile,
+        originalSha256,
+        mutatedSha256,
+        originalBytesBase64: origBytes.toString("base64"),
+        recordedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ) + "\n",
+    "utf8",
+  );
+}
+
+/**
+ * The pre-flight self-check (E04-S083, redesigned per coordinator review —
+ * see module docstring's PRE-FLIGHT SELF-CHECK: IN-FLIGHT MARKER section
+ * for the full design, including the rejected persistent-ledger design
+ * this replaces and why). Must run BEFORE anything else touches `absFile`.
+ * Throws `UsageError` (exit 1) when a stale marker proves the file is
+ * still sitting in mutated content from an interrupted previous run,
+ * or when the marker's recorded state can't explain the current content
+ * at all; otherwise (no marker, or a stale-but-harmless marker) cleans up
+ * and returns normally — NEVER writes anything for the common case of "no
+ * marker exists", so a legitimate edit made between two mutate.mjs runs
+ * can never trip this check.
+ */
+function checkNoStaleInFlightMarker(repoRoot, absFile, relFile, currentHash) {
+  const markerPath = inFlightMarkerPathFor(repoRoot, relFile);
+  if (!existsSync(markerPath)) return;
+
+  let marker;
+  try {
+    marker = JSON.parse(readFileSync(markerPath, "utf8"));
+  } catch (err) {
+    throw new UsageError(
+      `${relFile} 有一個殘留的突變中標記(${markerPath})但無法解析為 JSON:${err.message}。` +
+        `請手動核對 ${relFile} 目前內容是否正確,確認後刪除這個標記檔再重跑。`,
+    );
+  }
+
+  if (currentHash === marker.originalSha256) {
+    // The previous run's restore actually succeeded — it just died before
+    // deleting its own marker. Harmless; clean up and proceed.
     try {
-      recorded = JSON.parse(readFileSync(ledgerPath, "utf8"));
-    } catch (err) {
-      throw new UsageError(
-        `${relFile} 的自檢紀錄(${ledgerPath})損毀,無法解析為 JSON:${err.message}。` +
-          `如果確定 ${relFile} 目前的內容是正確的,刪除這個檔案後重跑即可讓本工具把目前內容當成新的基準重新建立紀錄。`,
-      );
-    }
-    if (recorded.sha256 !== currentHash) {
-      throw new UsageError(
-        `自檢失敗:${relFile} 目前的 sha256(${currentHash})與上次 mutate.mjs 執行後記錄的原始值 ` +
-          `sha256(${recorded.sha256},記錄於 ${recorded.recordedAt})不一致。這個檔案疑似停在前一次` +
-          `未還原的狀態(process 被中斷、SIGKILL、機器重開、或某次突變沒有被還原乾淨),拒絕在這個` +
-          `可能已經是錯的基準上開始新的突變。(也可能是你自己對這個檔案做了合法的修改——本工具無法` +
-          `區分這兩種情況,所以一律 fail closed。如果目前內容是你有意的修改,刪除 ${ledgerPath} 後` +
-          `重跑,讓本工具把目前內容當成新的基準。)`,
-      );
+      unlinkSync(markerPath);
+    } catch {
+      // best-effort
     }
     return;
   }
-  // First time this file has ever been targeted (or its ledger entry was
-  // deleted) — trust the current content as the baseline and arm the
-  // ledger so the NEXT run can detect drift.
-  mkdirSync(path.dirname(ledgerPath), { recursive: true });
-  writeFileSync(
-    ledgerPath,
-    JSON.stringify({ file: relFile, sha256: currentHash, recordedAt: new Date().toISOString() }, null, 2) + "\n",
-    "utf8",
+
+  if (currentHash === marker.mutatedSha256) {
+    // Exactly the failure mode this check exists to catch: the file is
+    // still sitting in mutated content from a run that never reached its
+    // own restore (SIGKILL, OOM kill, a crashed machine — anything this
+    // process could not have caught even with the SIGNAL SAFETY fix above).
+    let healed = false;
+    if (typeof marker.originalBytesBase64 === "string") {
+      try {
+        writeFileSync(absFile, Buffer.from(marker.originalBytesBase64, "base64"));
+        unlinkSync(markerPath);
+        healed = true;
+      } catch {
+        healed = false;
+      }
+    }
+    throw new UsageError(
+      `${relFile} 疑似停在前一次未乾淨結束的突變狀態(process 被中斷、SIGKILL、機器重開,或某次突變` +
+        `沒有被還原乾淨):目前 sha256(${currentHash})等於上次記錄的突變後值(${marker.mutatedSha256}),` +
+        `原始值應為 ${marker.originalSha256}。` +
+        (healed
+          ? `本工具已用標記裡保存的原始內容自動把 ${relFile} 還原,並清除殘留的標記(${markerPath})` +
+            `——請重新執行剛才的指令。`
+          : `本工具無法自動還原(標記未附帶可用的原始內容),請手動核對後還原 ${relFile},並刪除 ${markerPath}。`),
+    );
+  }
+
+  // Neither original nor mutated — an unrecognised state. Auto-healing
+  // here would be a guess; report both recorded hashes and refuse.
+  throw new UsageError(
+    `${relFile} 有一個殘留的突變中標記(${markerPath}),但目前 sha256(${currentHash})既不等於標記` +
+      `記錄的原始值(${marker.originalSha256})也不等於突變後值(${marker.mutatedSha256})——無法判斷` +
+      `安全的下一步,拒絕開始。請手動核對 ${relFile} 目前的內容,視情況還原後刪除這個標記檔再重跑。`,
   );
 }
 
@@ -651,8 +753,8 @@ async function runInner(argv) {
 
   // Pre-flight self-check (E04-S083) — BEFORE anything else touches
   // `absFile`, including the --replace occurrence check below. See module
-  // docstring's PRE-FLIGHT SELF-CHECK / LEDGER section.
-  checkAndArmLedger(repoRoot, relFile, origHash);
+  // docstring's PRE-FLIGHT SELF-CHECK: IN-FLIGHT MARKER section.
+  checkNoStaleInFlightMarker(repoRoot, absFile, relFile, origHash);
 
   const occurrences = findOccurrences(origText, args.replace);
   if (occurrences.length !== 1) {
@@ -678,12 +780,17 @@ async function runInner(argv) {
   }
   const greenTestCount = baseline.report.numPassedTests;
 
-  // Step 4 — apply the mutation. `activeMutation` is set BEFORE the write
-  // (not after) so there is no window, however small, where the file has
-  // already been mutated on disk but a signal handler wouldn't know to
-  // restore it.
+  // Step 4 — apply the mutation. The in-flight marker is written FIRST
+  // (recording both the original and the about-to-be-written mutated
+  // sha256, plus the original bytes for self-healing), then
+  // `activeMutation` is set BEFORE the mutation write itself (not after)
+  // so there is no window, however small, where the file has already been
+  // mutated on disk but a signal handler wouldn't know to restore it.
   const mutatedText = applyMutationAt(origText, mutationOffset, args.replace, args.with);
-  activeMutation = { absFile, origBytes };
+  const mutatedHash = sha256Hex(Buffer.from(mutatedText, "utf8"));
+  const markerPath = inFlightMarkerPathFor(repoRoot, relFile);
+  writeInFlightMarker(markerPath, relFile, origBytes, origHash, mutatedHash);
+  activeMutation = { absFile, origBytes, markerPath };
   writeFileSync(absFile, mutatedText, "utf8");
 
   const evidenceBase = {

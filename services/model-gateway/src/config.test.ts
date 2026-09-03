@@ -57,3 +57,73 @@ describe("resolveModelGatewayConfig", () => {
     expect(config.fakeText).toBe("自訂假文字");
   });
 });
+
+describe("resolveModelGatewayConfig — embedding provider (E04-S088)", () => {
+  it("defaults embeddingProvider to fake and embeddingServerUrl to undefined when unset", () => {
+    const config = resolveModelGatewayConfig(BASE, {});
+    expect(config.embeddingProvider).toBe("fake");
+    expect(config.embeddingServerUrl).toBeUndefined();
+    expect(config.embeddingDimensions).toBe(256);
+  });
+
+  it("options.embeddingProvider takes precedence over AI_KM_EMBEDDING_PROVIDER", () => {
+    const config = resolveModelGatewayConfig(
+      { ...BASE, embeddingProvider: "fake", embeddingServerUrl: "http://127.0.0.1:8181" },
+      { AI_KM_EMBEDDING_PROVIDER: "llama-server" },
+    );
+    expect(config.embeddingProvider).toBe("fake");
+  });
+
+  it("reads AI_KM_EMBEDDING_PROVIDER / AI_KM_EMBEDDING_SERVER_URL from env when options omit them", () => {
+    const config = resolveModelGatewayConfig(BASE, {
+      AI_KM_EMBEDDING_PROVIDER: "llama-server",
+      AI_KM_EMBEDDING_SERVER_URL: "http://127.0.0.1:8181",
+    });
+    expect(config.embeddingProvider).toBe("llama-server");
+    expect(config.embeddingServerUrl).toBe("http://127.0.0.1:8181");
+  });
+
+  it("refuses an unrecognised AI_KM_EMBEDDING_PROVIDER value rather than silently defaulting to fake", () => {
+    expect(() =>
+      resolveModelGatewayConfig(BASE, { AI_KM_EMBEDDING_PROVIDER: "totally-made-up" }),
+    ).toThrowError(ModelGatewayConfigError);
+  });
+
+  it("refuses llama-server without an embedding server URL (neither option nor env)", () => {
+    expect(() =>
+      resolveModelGatewayConfig(BASE, { AI_KM_EMBEDDING_PROVIDER: "llama-server" }),
+    ).toThrowError(ModelGatewayConfigError);
+  });
+
+  it.each(["http://8.8.8.8:8181", "http://example.com:8181"])(
+    "refuses a public AI_KM_EMBEDDING_SERVER_URL (same SSRF guard as ASR): %s",
+    (embeddingServerUrl) => {
+      expect(() =>
+        resolveModelGatewayConfig(BASE, {
+          AI_KM_EMBEDDING_PROVIDER: "llama-server",
+          AI_KM_EMBEDDING_SERVER_URL: embeddingServerUrl,
+        }),
+      ).toThrowError(ModelGatewayConfigError);
+    },
+  );
+
+  it("allows llama-server in production with a loopback embedding server URL", () => {
+    expect(() =>
+      resolveModelGatewayConfig(
+        { ...BASE, nodeEnv: "production" },
+        { AI_KM_EMBEDDING_PROVIDER: "llama-server", AI_KM_EMBEDDING_SERVER_URL: "http://127.0.0.1:8181" },
+      ),
+    ).not.toThrow();
+  });
+
+  it("embeddingDimensions default (256) is unrelated to and unaffected by choosing llama-server", () => {
+    const config = resolveModelGatewayConfig(BASE, {
+      AI_KM_EMBEDDING_PROVIDER: "llama-server",
+      AI_KM_EMBEDDING_SERVER_URL: "http://127.0.0.1:8181",
+    });
+    // The deterministic placeholder's own default dimension count is
+    // untouched by selecting the real provider — HttpEmbeddingProvider
+    // reports its own 1024 independently (see http.provider.test.ts).
+    expect(config.embeddingDimensions).toBe(256);
+  });
+});

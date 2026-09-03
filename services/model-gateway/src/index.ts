@@ -30,8 +30,10 @@ export {
   GenerationNoContextError,
 } from "./gateway.js";
 export { EmbeddingUnavailableError } from "./embedding/provider.js";
-export type { EmbeddingProvider, EmbedInput, EmbedResult } from "./embedding/provider.js";
+export type { EmbeddingProvider, EmbeddingProviderName, EmbedInput, EmbedResult } from "./embedding/provider.js";
 export { createDeterministicEmbeddingProvider } from "./embedding/deterministic.provider.js";
+export { HttpEmbeddingProvider, BGE_M3_DIMENSIONS } from "./embedding/http.provider.js";
+export type { HttpEmbeddingProviderOptions } from "./embedding/http.provider.js";
 export {
   GenerationUnavailableError,
   FabricatedCitationError,

@@ -5,14 +5,19 @@
  * declared model, one method, and typed failures the route maps to contract
  * codes. Same reasoning, same review surface.
  *
- * WHY THERE IS STILL NO HTTP PROVIDER HERE
+ * WHY THERE WAS NO HTTP PROVIDER HERE UNTIL NOW
  *
  * `WhisperServerProvider` could be written because whisper.cpp publishes the
- * upstream API it speaks. No embedding runtime has been chosen for this
- * deployment — that is **E04-S037** (`todo`, Team B: hardware sizing and local
- * model preparation). Writing an `HttpEmbeddingProvider` now would mean
- * inventing the upstream request/response shape, which ATOMIC_STORY_BOUNDARIES'
- * AI Agent Rule forbids ("不知道 provider capability → 查 contract/config").
+ * upstream API it speaks. No embedding runtime had been chosen for this
+ * deployment until ADR 0009 D2 (bge-m3, GGUF, llama.cpp `llama-server`) — and
+ * even after that choice, writing an `HttpEmbeddingProvider` would still have
+ * meant inventing the upstream request/response shape, which
+ * ATOMIC_STORY_BOUNDARIES' AI Agent Rule forbids ("不知道 provider capability
+ * → 查 contract/config"). That block was lifted by **E04-S087**, which ran
+ * `llama-server` for real and measured (not guessed) the endpoint, the
+ * request/response JSON, and the dimension count — see
+ * `models/embedding/README.md`'s "E04-S087" section. `./http.provider.ts`
+ * (E04-S088) is built strictly against those measured facts.
  *
  * What DID move here (E12-S032): the deterministic feature-hashing provider —
  * FNV-1a, CJK bigrams, L2-normalised, ceiling PF1 — relocated verbatim from
@@ -22,7 +27,7 @@
  */
 import type { ProviderFidelity } from "../fidelity.js";
 
-export type EmbeddingProviderName = "fake";
+export type EmbeddingProviderName = "fake" | "llama-server";
 
 export interface EmbedInput {
   readonly texts: readonly string[];

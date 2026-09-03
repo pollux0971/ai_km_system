@@ -24,6 +24,40 @@ sha256sum models/embedding/bge-m3-Q8_0.gguf   # 必須等於上表
 **sha256 對不上就不要用。** 這是社群轉檔,而轉壞的 embedding 模型**不會 crash,只會
 讓排序變差** —— 沒有東西會替你報錯。
 
+## ⚠️ 執行環境:忘了 `-ngl` 會安靜地跑在 CPU 上
+
+llama.cpp 建於 `/data/python/llama.cpp`(commit `95ef7fc`),沿用 `models/asr/README.md`
+為 whisper.cpp 記下的同一組 CUDA 參數(同機、同 CUDA 12.0、同 sm_75):
+
+```bash
+cmake -B build -DGGML_CUDA=1 -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12 \
+  -DCMAKE_CUDA_ARCHITECTURES=75
+cmake --build build --config Release -j
+```
+
+CUDA 確實可用:
+
+```
+$ llama-server --list-devices
+Available devices:
+  CUDA0: NVIDIA GeForce GTX 1650 (3716 MiB, 3657 MiB free)
+```
+
+**但 `llama-server` 預設不 offload,而且不會警告。** 2026-09-04 實測同一個模型、
+同一個指令,只差 `-ngl`:
+
+| 啟動方式 | `nvidia-smi` 顯存 | 伺服器自己的 log |
+|---|---|---|
+| 不給 `-ngl` | **5 MiB**(完全沒用 GPU) | 看起來完全正常 |
+| `-ngl 99` | **390 MiB** | **看起來一模一樣** |
+
+**伺服器的 log 兩種情況下沒有差別。** 判斷有沒有真的用到 GPU 的唯一方式是
+`nvidia-smi`,不是讀 log。對 embedding 來說,跑 CPU 的**輸出完全相同**,只是慢——
+除非計時,否則沒有人會發現。
+
+啟動一律帶 `-ngl 99`,並在接線後以 `nvidia-smi` 確認顯存真的被佔用。
+
 ## 已知的限制與空白(不要在別處重新發現一次)
 
 - **只支援 dense。** 來源頁面明說 *"These scores are for standard single-vector dense

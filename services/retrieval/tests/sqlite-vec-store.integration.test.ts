@@ -31,6 +31,7 @@ import { createInMemoryVectorStore, DocumentScopeConflictError } from "../src/ve
 import { toRetrievalScope } from "../src/authorization/scope.js";
 import { requireProviderFidelity } from "../src/evidence-tier.js";
 import type { VectorRecord } from "../src/vector/store.js";
+import { rerankMmr, RerankError } from "../src/rerank/mmr.js";
 
 const DIM = 2;
 const dir = mkdtempSync(path.join(tmpdir(), "rag-sqlite-vec-"));
@@ -327,6 +328,101 @@ describe("sqlite-vec store — PF2", () => {
       /UNIQUE constraint/,
     );
     expect(new PartitionOverlapError("probe").name).toBe("PartitionOverlapError");
+  });
+
+  it("AC-V8 (E04-S067) query() 回傳的 hit 帶 embedding,且與寫入時逐值相同(不是「有拿到向量」,是「向量本身沒錯」)", async () => {
+    const store = createSqliteVecVectorStore({
+      db: openDb(path.join(dir, "embedding-roundtrip.sqlite")) as unknown as SqliteDatabase,
+      dimensions: DIM,
+    });
+    const written = vec([0.6, 0.8]);
+    await store.upsert([record("rt1", "dept:finance", [0.6, 0.8])]);
+
+    const hits = await store.query(
+      QUERY,
+      toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] }),
+      1,
+    );
+
+    expect(hits).toHaveLength(1);
+    const roundTripped = hits[0]!.embedding;
+    expect(roundTripped).toBeInstanceOf(Float32Array);
+    // Element-by-element, not "present" / "length > 0": a broken decode
+    // (wrong byteOffset, wrong element count, transposed bytes) still
+    // returns *an* array of the right length — only comparing the actual
+    // values catches that.
+    expect(Array.from(roundTripped!)).toEqual(Array.from(written));
+    expect(roundTripped![0]).toBe(written[0]);
+    expect(roundTripped![1]).toBe(written[1]);
+  });
+
+  it("AC-V9 (E04-S067) MMR (λ<1) 在 sqlite-vec store 上真的重排,不再拋 RerankError", async () => {
+    const store = createSqliteVecVectorStore({
+      db: openDb(path.join(dir, "mmr-sqlite-vec.sqlite")) as unknown as SqliteDatabase,
+      dimensions: DIM,
+    });
+    // Same construction as `rerank/mmr.test.ts`'s A/B/C fixture, adapted to
+    // real geometry instead of hand-picked scores: "mmr-a" is the closest to
+    // the query; "mmr-b" is a near-duplicate of "mmr-a" (high cosine to it)
+    // that is SLIGHTLY less relevant; "mmr-c" is a genuinely different
+    // direction (negative dot product with "mmr-a") whose relevance to the
+    // query is worse than "mmr-b"'s by only a hair. Pure relevance therefore
+    // keeps the near-duplicate; MMR at λ=0.5 must swap it for the diverse one.
+    await store.upsert([
+      record("mmr-a", "dept:mmr", [0.6, 0.8]),
+      record("mmr-b", "dept:mmr", [0.59, 0.81]),
+      record("mmr-c", "dept:mmr", [0.55, -0.8]),
+    ]);
+    const scope = toRetrievalScope({ principalId: "u-mmr", allowedScopeKeys: ["dept:mmr"] });
+    const hits = await store.query(QUERY, scope, 3);
+
+    // Sanity check on the geometry itself before trusting the rerank
+    // assertions below: pure relevance order must be a > b > c.
+    expect(hits.map((h) => h.chunkId)).toEqual(["mmr-a", "mmr-b", "mmr-c"]);
+
+    const pureTop2 = rerankMmr(hits, 2, { lambda: 1 }).map((h) => h.chunkId);
+    expect(pureTop2).toEqual(["mmr-a", "mmr-b"]);
+
+    // This is the call that used to throw RerankError on this store, because
+    // `RetrievalHit.embedding` was always undefined — see `requireEmbedding`
+    // in `rerank/mmr.ts`. It must now both (a) not throw and (b) actually
+    // change WHICH chunks come back, using the real embeddings read out of
+    // vec0, not fall back to pure-similarity order.
+    const mmrTop2 = rerankMmr(hits, 2, { lambda: 0.5 }).map((h) => h.chunkId);
+    expect(mmrTop2).toEqual(["mmr-a", "mmr-c"]);
+    expect(mmrTop2).not.toEqual(pureTop2);
+    expect(mmrTop2).not.toContain("mmr-b");
+  });
+
+  it("AC-V9b (E04-S067) λ<1 仍然沒有 embedding 時,RerankError 的行為維持不變(拋錯,不是靜默退化)", () => {
+    // Not a sqlite-vec call — a direct check that `rerankMmr` itself still
+    // throws for a hit with no `embedding` at all, so this story's fix
+    // (populating the field) is not mistaken for a change to `rerankMmr`'s
+    // own contract. `RetrievalHit.embedding` stays optional on the type; a
+    // `VectorStore` that omits it must still fail loudly at λ<1. Two
+    // candidates are required: with only one, `rerankMmr` never evaluates
+    // the redundancy term (nothing is selected yet on the first pick), so
+    // `requireEmbedding` would never even run and the test would pass for
+    // the wrong reason.
+    const first = {
+      chunkId: "no-vec-1",
+      documentId: "doc-no-vec-1",
+      text: "no vector at all",
+      startOffset: 0,
+      endOffset: 1,
+      scopeKey: "dept:mmr",
+      score: 0.9,
+    };
+    const second = {
+      chunkId: "no-vec-2",
+      documentId: "doc-no-vec-2",
+      text: "also no vector",
+      startOffset: 0,
+      endOffset: 1,
+      scopeKey: "dept:mmr",
+      score: 0.5,
+    };
+    expect(() => rerankMmr([first, second], 2, { lambda: 0.5 })).toThrow(RerankError);
   });
 });
 

@@ -41,7 +41,16 @@
  *   - the citation slice printed below is cut from a SEPARATE extraction of
  *     the PDF, never from the hit object, and a mismatch fails loudly and
  *     exits non-zero
- */
+  *
+ * EXPECTED NOISE — do not treat as a failure: this prints
+ *   Warning: Cannot load "@napi-rs/canvas" package: "Error: Cannot find module ..."
+ * pdfjs-dist declares @napi-rs/canvas as an optionalDependency for rendering
+ * pages to a canvas. This demo only extracts TEXT, so the module is
+ * deliberately excluded (see docs/stories/E06-S008.md) and extraction
+ * succeeds without it. The warning is pdfjs announcing an absence we chose;
+ * it is not a degraded path. If extraction ever fails, it fails loudly with
+ * a non-zero exit — the warning alone never indicates that.
+*/
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

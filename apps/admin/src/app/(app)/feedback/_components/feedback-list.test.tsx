@@ -90,6 +90,17 @@ describe("FeedbackList (E11-S016)", () => {
     expect(screen.getByText("回答完全解決問題")).toBeInTheDocument();
   });
 
+  it("E01-S035: renders a known reason code as its Chinese label, not the raw code", async () => {
+    mockedListFeedback.mockResolvedValue(
+      page([item({ id: "f1", verdict: "ng", reason: "OFF_TOPIC", submittedAt: "2026-08-17T01:00:00.000Z" })]),
+    );
+
+    render(<FeedbackList />);
+
+    expect(await screen.findByText("答案離題")).toBeInTheDocument();
+    expect(screen.queryByText("OFF_TOPIC")).not.toBeInTheDocument();
+  });
+
   it("shows an NG item's own verdict, distinct from OK", async () => {
     mockedListFeedback.mockResolvedValue(page([item({ id: "f1", verdict: "ng", submittedAt: "2026-08-17T01:00:00.000Z" })]));
 

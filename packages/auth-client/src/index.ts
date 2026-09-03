@@ -25,8 +25,20 @@ export interface AuthSession {
   group?: string;
 }
 
+/**
+ * Named and exported (E04-S076) so `contracts/openapi/__checks__/auth-compat.ts`
+ * has something real to bind `LoginRequest` to — an inline anonymous parameter
+ * type has no name a compat file can import. Type-level change only; the
+ * shape is unchanged, so every existing call site (which already passes an
+ * object literal, never a value of this type by variable) keeps compiling.
+ */
+export interface LoginCredentials {
+  username: string;
+  password: string;
+}
+
 export interface AuthClient {
-  login(credentials: { username: string; password: string }): Promise<Result<AuthSession, ApiError>>;
+  login(credentials: LoginCredentials): Promise<Result<AuthSession, ApiError>>;
   logout(): Promise<Result<void, ApiError>>;
   getSession(): Promise<Result<AuthSession | null, ApiError>>;
 }

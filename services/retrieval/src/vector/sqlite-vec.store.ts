@@ -80,6 +80,8 @@ import {
   VectorStoreError,
   groupRecordsByDocumentId,
   checkDocumentScopeConsistency,
+  assertEmbeddingIdentityMatches,
+  type EmbeddingIdentity,
   type RetrievalHit,
   type VectorRecord,
   type VectorStore,
@@ -114,11 +116,13 @@ export interface SqliteVecStoreOptions {
  */
 export const SQLITE_VEC_MIGRATION = (tableName: string, dimensions: number): string => `
 CREATE TABLE IF NOT EXISTS ${tableName}_meta (
-  chunk_id     TEXT PRIMARY KEY,
-  document_id  TEXT NOT NULL,
-  text         TEXT NOT NULL,
-  start_offset INTEGER NOT NULL,
-  end_offset   INTEGER NOT NULL
+  chunk_id             TEXT PRIMARY KEY,
+  document_id          TEXT NOT NULL,
+  text                 TEXT NOT NULL,
+  start_offset         INTEGER NOT NULL,
+  end_offset           INTEGER NOT NULL,
+  embedding_model      TEXT,
+  embedding_dimensions INTEGER
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName}_vec USING vec0(
   chunk_id TEXT PRIMARY KEY,
@@ -126,6 +130,39 @@ CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName}_vec USING vec0(
   embedding FLOAT[${dimensions}]
 );
 `;
+
+/**
+ * E06-S026 — additive backward-compat migration for a `_meta` table created
+ * by CODE OLDER THAN THIS STORY, before `embedding_model`/`embedding_
+ * dimensions` existed.
+ *
+ * WHY THIS IS SEPARATE FROM `SQLITE_VEC_MIGRATION`: `CREATE TABLE IF NOT
+ * EXISTS` is a no-op against a table that already exists — it does NOT add
+ * columns to it. A `.sqlite` file written before this story landed would
+ * therefore silently keep its old 5-column shape forever unless something
+ * else runs `ALTER TABLE ... ADD COLUMN` against it. This function is that
+ * something, called unconditionally on every store construction, immediately
+ * after `SQLITE_VEC_MIGRATION` — cheap (one `PRAGMA table_info` read) and
+ * idempotent (checks before adding), so it costs nothing on a table that is
+ * already current.
+ *
+ * NOT a destructive migration and not a data backfill: existing rows get
+ * `NULL` for both new columns, which `assertEmbeddingIdentityMatches` treats
+ * as UNKNOWN and refuses at query time (AC5) — this function's only job is
+ * to make that column exist to be NULL, not to guess a value for it.
+ */
+export function migrateEmbeddingIdentityColumns(db: SqliteDatabase, tableName: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${tableName}_meta)`).all() as Array<{
+    name: string;
+  }>;
+  const names = new Set(columns.map((c) => c.name));
+  if (!names.has("embedding_model")) {
+    db.exec(`ALTER TABLE ${tableName}_meta ADD COLUMN embedding_model TEXT`);
+  }
+  if (!names.has("embedding_dimensions")) {
+    db.exec(`ALTER TABLE ${tableName}_meta ADD COLUMN embedding_dimensions INTEGER`);
+  }
+}
 
 /**
  * Thrown when one chunk comes back from more than one partition query.
@@ -153,15 +190,21 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
   }
 
   db.exec(SQLITE_VEC_MIGRATION(table, dimensions));
+  // E06-S026 — backward-compat: a `_meta` table created by pre-story code has
+  // no `embedding_model`/`embedding_dimensions` columns, and `CREATE TABLE IF
+  // NOT EXISTS` above is a no-op against it. See this function's doc comment.
+  migrateEmbeddingIdentityColumns(db, table);
 
   const insertMeta = db.prepare(
-    `INSERT INTO ${table}_meta (chunk_id, document_id, text, start_offset, end_offset)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO ${table}_meta (chunk_id, document_id, text, start_offset, end_offset, embedding_model, embedding_dimensions)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(chunk_id) DO UPDATE SET
        document_id = excluded.document_id,
        text = excluded.text,
        start_offset = excluded.start_offset,
-       end_offset = excluded.end_offset`,
+       end_offset = excluded.end_offset,
+       embedding_model = excluded.embedding_model,
+       embedding_dimensions = excluded.embedding_dimensions`,
   );
   const deleteVec = db.prepare(`DELETE FROM ${table}_vec WHERE chunk_id = ?`);
   const insertVec = db.prepare(
@@ -184,6 +227,19 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
   const existingChunkIdsForDoc = db.prepare(
     `SELECT chunk_id AS chunkId FROM ${table}_meta WHERE document_id = ?`,
   );
+  // E06-S026 — read-only, run BEFORE any KNN for a given scope. Every chunk
+  // meta row currently sitting in this scope's partition, so `query()` can
+  // refuse the WHOLE call the moment one disagrees with `expectedIdentity` —
+  // without this running first, a mismatch could only be caught per-row
+  // AFTER the KNN had already picked a top-k and this store would have to
+  // choose between returning a filtered (silently smaller) result or
+  // discovering the mismatch too late to un-return rows.
+  const identitiesForScope = db.prepare(
+    `SELECT DISTINCT m.embedding_model AS embeddingModel, m.embedding_dimensions AS embeddingDimensions
+       FROM ${table}_vec v
+       JOIN ${table}_meta m ON m.chunk_id = v.chunk_id
+      WHERE v.scope_key = ?`,
+  );
 
   /**
    * ONE authorised scope per execution. `scope_key = ?` is the only operator a
@@ -197,13 +253,16 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
    * been undone; `AC-V6` will catch it.
    */
   const knnByScope = db.prepare(
-    `SELECT v.chunk_id      AS chunkId,
-            v.scope_key     AS scopeKey,
-            v.distance      AS distance,
-            m.document_id   AS documentId,
-            m.text          AS text,
-            m.start_offset  AS startOffset,
-            m.end_offset    AS endOffset
+    `SELECT v.chunk_id             AS chunkId,
+            v.scope_key            AS scopeKey,
+            v.distance             AS distance,
+            v.embedding            AS embedding,
+            m.document_id          AS documentId,
+            m.text                 AS text,
+            m.start_offset         AS startOffset,
+            m.end_offset           AS endOffset,
+            m.embedding_model      AS embeddingModel,
+            m.embedding_dimensions AS embeddingDimensions
        FROM ${table}_vec v
        JOIN ${table}_meta m ON m.chunk_id = v.chunk_id
       WHERE v.embedding MATCH ?
@@ -269,6 +328,15 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
               record.text,
               record.startOffset,
               record.endOffset,
+              // E06-S026 — `?? null`, not a default: absence here means "this
+              // caller did not supply an identity" (e.g. these tests,
+              // predating this concept — see `VectorRecord.embeddingModel`'s
+              // doc comment), and `NULL` is exactly what `query()`'s
+              // `expectedIdentity` check treats as UNKNOWN, not "assume
+              // compatible". The real write path (`services/ingestion`)
+              // always supplies both.
+              record.embeddingModel ?? null,
+              record.embeddingDimensions ?? null,
             );
             // vec0 virtual tables do not support UPSERT; delete-then-insert is
             // the documented pattern for replacing a row. It also moves the
@@ -291,7 +359,12 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
       }
     },
 
-    async query(embedding: Embedding, scope: RetrievalScope, limit: number) {
+    async query(
+      embedding: Embedding,
+      scope: RetrievalScope,
+      limit: number,
+      expectedIdentity?: EmbeddingIdentity,
+    ) {
       if (!Number.isInteger(limit) || limit <= 0) {
         throw new VectorStoreError("limit 必須是正整數。");
       }
@@ -301,6 +374,32 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
       // all, so there is no statement for a later edit to widen.
       const scopeKeys = [...new Set(scope.allowedScopeKeys)];
       if (scopeKeys.length === 0) return [];
+
+      // E06-S026 — BEFORE any KNN: every chunk currently sitting in each
+      // authorised scope must agree with `expectedIdentity`, or this throws
+      // and NO KNN runs for ANY scope — "reject before returning results",
+      // not "filter out the bad ones and return what is left" (Scope In /
+      // AC3's "不得回傳任何結果,即使維度相同"). Only runs when a caller
+      // opted in — see `RetrievalServiceOptions.enforceEmbeddingVersion`.
+      if (expectedIdentity) {
+        for (const scopeKey of scopeKeys) {
+          const identityRows = identitiesForScope.all(scopeKey) as Array<{
+            embeddingModel: string | null;
+            embeddingDimensions: number | null;
+          }>;
+          for (const row of identityRows) {
+            assertEmbeddingIdentityMatches(
+              {
+                ...(row.embeddingModel !== null ? { embeddingModel: row.embeddingModel } : {}),
+                ...(row.embeddingDimensions !== null
+                  ? { embeddingDimensions: row.embeddingDimensions }
+                  : {}),
+              },
+              expectedIdentity,
+            );
+          }
+        }
+      }
 
       // One `= ?` query per authorised scope. sqlite-vec restricts the KNN to
       // that shard, so nothing outside the principal's range is ever scored.
@@ -327,6 +426,29 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
           }
           originPartition.set(chunkId, scopeKey);
 
+          // `v.embedding` comes back as a Buffer (Node's better-sqlite3 blob
+          // type), the exact bytes `Buffer.from(record.embedding.buffer...)`
+          // wrote on the insert side. Decode with the mirror-image view:
+          // Float32Array over that same buffer, byteOffset/4 for length so a
+          // sliced/pooled Buffer (Node may hand back a view into a shared
+          // allocation) is not misread past its own bytes.
+          //
+          // Guarded rather than assumed present: if the SELECT above did not
+          // ask for `v.embedding` (e.g. a future edit drops the column),
+          // `r.embedding` is `undefined`, and this must leave `embedding`
+          // unset on the hit rather than throw here — `RetrievalHit.
+          // embedding` is optional precisely so `rerank/mmr.ts`'s
+          // `requireEmbedding` is the thing that fails loudly (`RerankError`)
+          // at λ<1, not an unrelated crash inside the store itself.
+          const embeddingBuffer = r.embedding as Buffer | undefined;
+          const embedding = embeddingBuffer
+            ? new Float32Array(
+                embeddingBuffer.buffer,
+                embeddingBuffer.byteOffset,
+                embeddingBuffer.byteLength / 4,
+              )
+            : undefined;
+
           merged.push({
             chunkId,
             documentId: String(r.documentId),
@@ -337,6 +459,26 @@ export function createSqliteVecVectorStore(options: SqliteVecStoreOptions): Vect
             // vec0 returns distance; smaller is closer. Convert so callers
             // compare scores the same way as the in-memory store.
             score: -Number(r.distance),
+            // E04-S067 — read back so `rerank/mmr.ts` can run at λ<1 against
+            // this store, not just the in-memory one. See `RetrievalHit.
+            // embedding`'s docstring in store.ts for why this is optional on
+            // the type and why a missing one fails loudly rather than
+            // silently degrading. Spread rather than assigning `undefined`
+            // directly: `RetrievalHit` is compiled under
+            // `exactOptionalPropertyTypes`, which treats an explicit
+            // `embedding: undefined` as a type error distinct from the key
+            // being absent.
+            ...(embedding ? { embedding } : {}),
+            // E06-S026 — round-tripped so a caller/test can verify what was
+            // actually persisted without a second, store-specific query.
+            // `NULL` (pre-migration or identity-less rows) becomes absent on
+            // the hit, same `exactOptionalPropertyTypes` reasoning as above.
+            ...(r.embeddingModel !== null && r.embeddingModel !== undefined
+              ? { embeddingModel: String(r.embeddingModel) }
+              : {}),
+            ...(r.embeddingDimensions !== null && r.embeddingDimensions !== undefined
+              ? { embeddingDimensions: Number(r.embeddingDimensions) }
+              : {}),
           });
         }
       }

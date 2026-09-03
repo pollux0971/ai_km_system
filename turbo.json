@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["contracts/**/*.yaml"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

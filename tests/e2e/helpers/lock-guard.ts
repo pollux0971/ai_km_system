@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { isPlaywrightWorkerProcess } from "./port-check";
 
 const DEFAULT_OWNER_FILE_PATH = "/data/python/AI_KM-worktrees/.e2e.owner";
 const DEFAULT_LOCK_FILE_PATH = "/data/python/AI_KM-worktrees/.e2e.lock";
@@ -194,4 +195,69 @@ export function assertNotBlockingLockHolder(options: LockGuardOptions = {}): voi
       `rerun on 2026-08-29). Wait for the lock to free, or run this inside the same flock-` +
       `protected wrapper that set AI_KM_E2E_LOCK_TOKEN (see e2e-locked.sh).`,
   );
+}
+
+/**
+ * E01-S036. `assertNotBlockingLockHolder` above is correct in isolation but
+ * was being called at `playwright.config.ts` module scope, and — exactly
+ * like `assertPortsFreeForCI` before E01-S034 fixed it two lines below in
+ * the same file — Playwright re-evaluates that module in EVERY worker
+ * process, not once. `isLockFileContended`'s underlying `flock -n <path> -c
+ * true` acquires the lock and releases it again immediately (see that
+ * function's own doc comment), so when two sibling workers of the SAME run
+ * happen to evaluate the config at overlapping instants, one worker's
+ * momentary acquisition can make the other worker's own probe observe exit
+ * 1 ("held") a beat later — and this guard, running unmodified inside a
+ * worker, reads that as "someone else holds the shared lock" and refuses to
+ * start. That is exactly the failure observed on run `33658608842`
+ * (`330 passed / 1 failed`, the one failure being this guard's own message
+ * naming CI's runner-local lock path
+ * `/home/runner/work/_temp/.e2e.lock` — a path that, per E04-S068, only a
+ * sibling worker of that same run could ever have been contending) and NOT
+ * reproducible on the very next run of identical code (`33658642647`,
+ * green) — an intermittent per-worker self-race, not a real foreign holder.
+ *
+ * The fix mirrors E01-S034's fix for the neighboring port guard: run the
+ * check only in the process that would actually be harmed by proceeding
+ * unguarded — i.e. NOT in a worker. `isPlaywrightWorkerProcess()` is
+ * imported from `./port-check` rather than re-implemented here: "am I a
+ * Playwright worker" is the exact same question for both guards (keyed on
+ * Playwright's own public, documented `process.env.TEST_WORKER_INDEX`; see
+ * that function's own doc comment in port-check.ts for the primary-source
+ * verification), and this story's own defect — two guards a few lines
+ * apart in the same file, only one of which got E01-S034's fix — is a
+ * direct argument against maintaining a second, separately-drifting copy
+ * of that detection.
+ *
+ * `assertNotBlockingLockHolder` above is left behaviourally byte-unchanged,
+ * same as E01-S034 left `assertPortsFreeForCI` unchanged: the existing
+ * `lock-guard.test.ts` / `lock-guard.real-flock.test.ts` suites keep pinning
+ * exactly what they already pinned, and the worker/main gating is a
+ * separately-testable composition on top, not fused into the guard's own
+ * decision logic.
+ *
+ * **What breaks if this detection is ever wrong, in either direction — and
+ * only one of them matters:**
+ *  - A real WORKER process where `TEST_WORKER_INDEX` were (wrongly) unset
+ *    would re-run the check against a lock a sibling worker might be
+ *    momentarily (and harmlessly) touching, and could still false-fire —
+ *    this is a recurrence of today's own bug, but it is LOUD: CI fails
+ *    immediately and visibly, exactly as run `33658608842` did.
+ *  - The real MAIN process where `TEST_WORKER_INDEX` were (wrongly) set
+ *    would skip the check entirely — a SILENT regression straight back to
+ *    the pre-E04-S057 hazard this guard exists to prevent: Playwright's
+ *    `reuseExistingServer` silently attaching to another agent's already-
+ *    running dev servers and corrupting their measurement (W1's E01-S022
+ *    rerun on 2026-08-29). Nothing about this failure mode is loud —
+ *    the run would simply proceed against the wrong servers and produce a
+ *    plausible-looking but corrupted result.
+ * Only the second direction is silent, so this story's reverse verification
+ * is aimed at proving specifically that the real main process is never
+ * misdetected as a worker (see `lock-guard-once.test.ts`'s "must still
+ * true-fire" case, which uses a genuinely foreign `flock` holder with
+ * `TEST_WORKER_INDEX` unset), not merely that a worker CAN be skipped.
+ */
+export function assertNotBlockingLockHolderOnce(options: LockGuardOptions = {}): void {
+  if (isPlaywrightWorkerProcess()) return;
+  assertNotBlockingLockHolder(options);
 }

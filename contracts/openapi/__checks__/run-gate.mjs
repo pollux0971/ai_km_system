@@ -43,6 +43,41 @@
  *
  * Errors anywhere else in the closure (outside `*-compat.ts`) are noise from
  * the closure's size and are reported, not judged — same as before.
+ *
+ * FOURTH CHECK, ADDED 2026-09-03 (E04-S073 follow-up, "gate-response-shape")
+ * — response-shape, GATED; route-schema, OBSERVED ONLY
+ *
+ * `tools/contract-equivalence/` (E04-S073's own L2-EQ package) ships two
+ * live checks against the real `apps/api` server, and until now this
+ * script ran neither — see that package's README.md "Why this is not part
+ * of any gate" for the reason as it stood through 2026-09-02: a real,
+ * user-undecided DIVERGES existed, and CLAUDE.md 鐵律 #1 forbids silently
+ * resolving a contract question by wiring a red into the build.
+ *
+ * The user's technical advisor ruled on 2026-09-03 that this constraint
+ * attaches to the CHECK that carries the unresolved finding, not to the
+ * package the checks happen to ship from:
+ *
+ *   - `check.live.test.ts` (route-schema: does the schema Fastify actually
+ *     validates against equal the contract's schema?) still has two real,
+ *     unresolved DIVERGES — `GET /admin/metrics/latency`'s and
+ *     `GET /admin/feedback`'s querystring `default`s (see PROGRESS.md's
+ *     E04-S073 row). Those are the user's call. This section runs it,
+ *     prints its full report (including the DIVERGES), and NEVER sets
+ *     `failed` — its exit code is observed, not enforced.
+ *   - `check-response-shapes.live.test.ts` (response-shape: does what a
+ *     route actually returns match the contract's declared 2xx shape?,
+ *     E04-S079) found ZERO unresolved findings — 22 declared JSON 2xx
+ *     operations, 21 exercised, all clean (see that file's own printed
+ *     coverage report for the 22/21/1-not-covered breakdown; the 1
+ *     uncovered route, `POST /transcriptions`, is answered by an existing
+ *     test elsewhere — see that file's module doc point 4). Gating this
+ *     half forces no red over anyone's unanswered question, so it is
+ *     wired in for real: a non-zero exit here DOES fail this whole gate.
+ *
+ * See tools/contract-equivalence/README.md "Two sections, two different
+ * exit-code relationships" and ROADMAP_TEMP.md 5-xi's 2026-09-03 addendum
+ * for the fuller writeup of this split.
  */
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -55,6 +90,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../..");
 const tsc = path.join(repoRoot, "node_modules/.bin/tsc");
 const project = path.join(here, "tsconfig.json");
+const contractEquivalenceDir = path.join(repoRoot, "tools/contract-equivalence");
 
 let out = "";
 try {
@@ -209,6 +245,63 @@ if (unescalated.length > 0) {
 } else {
   console.log("\nPASS: every UNBOUND schema is covered by a class in unbound-schema-allowlist.mjs.");
 }
+
+/* ── Check 4a/4b: contract-equivalence live checks (2026-09-03) ──────────── */
+
+/**
+ * Runs one `tools/contract-equivalence` vitest file directly (never through
+ * turbo — see tools/mutate.mjs's own module doc for why a warm turbo cache
+ * would manufacture a false negative here), returns its exit code and
+ * combined stdout+stderr. Never throws on a non-zero exit: both call sites
+ * below decide for themselves whether that exit code affects `failed`.
+ */
+function runContractEquivalenceVitest(testFile, extraArgs = []) {
+  const vitestBin = path.join(contractEquivalenceDir, "node_modules/.bin/vitest");
+  try {
+    const stdout = execFileSync(vitestBin, ["run", testFile, ...extraArgs], {
+      encoding: "utf8",
+      cwd: contractEquivalenceDir,
+    });
+    return { exitCode: 0, output: stdout };
+  } catch (error) {
+    return {
+      exitCode: typeof error.status === "number" ? error.status : 1,
+      output: `${error.stdout ?? ""}${error.stderr ?? ""}`,
+    };
+  }
+}
+
+console.log(`\n${"=".repeat(78)}`);
+console.log("response-shape (gated) — tools/contract-equivalence, E04-S079/E04-S073 follow-up");
+console.log("=".repeat(78));
+const responseShape = runContractEquivalenceVitest("src/check-response-shapes.live.test.ts");
+console.log(responseShape.output);
+if (responseShape.exitCode !== 0) {
+  failed = true;
+  console.error(
+    `FAIL: response-shape check exited ${responseShape.exitCode} — a route's actual response body ` +
+      "diverged from its contract's declared 2xx shape (see the route + field diff above).",
+  );
+} else {
+  console.log("PASS: response-shape check exited 0.");
+}
+
+console.log(`\n${"=".repeat(78)}`);
+console.log("route-schema (observed, pending PENDING_DECISIONS) — does NOT affect this gate's exit code");
+console.log("=".repeat(78));
+const routeSchema = runContractEquivalenceVitest("src/check.live.test.ts", [
+  "-t",
+  "every registered route's Fastify schema equals its contract operation's schema",
+]);
+console.log(routeSchema.output);
+console.log(
+  `OBSERVED (not gated): route-schema check exited ${routeSchema.exitCode}. Two real DIVERGES are ` +
+    "known and unresolved — GET /admin/metrics/latency's and GET /admin/feedback's querystring " +
+    "defaults (contracts declare none, the implementation adds one) — see docs/stories/PENDING_DECISIONS.md " +
+    "and PROGRESS.md's E04-S073 row. Deciding those is the user's call, per CLAUDE.md 鐵律 #1; until " +
+    "then this section is printed for visibility only and can never fail this gate or be silenced " +
+    "into an allowlist.",
+);
 
 /* ── Verdict ─────────────────────────────────────────────────────────────── */
 

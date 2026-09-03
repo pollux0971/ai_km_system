@@ -84,7 +84,6 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
   {
     class: "bindable-not-yet-bound",
     match: (yaml, schema) =>
-      (yaml === "auth.yaml" && schema === "LoginRequest") ||
       (yaml === "generation.yaml" && (schema === "GenerationRequest" || schema === "ContextChunk")) ||
       (yaml === "analytics.yaml" &&
         ["UsageMetrics", "LatencyMetrics", "UsageEventCreated", "FeedbackQueuePage"].includes(schema)),
@@ -103,18 +102,15 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
       "services/conversation/src/repository/admin-read.repository.ts's " +
       "AdminFeedbackPage (name differs, same pattern conversations-compat.ts " +
       "already uses for Conversation/ConversationRow). auth.yaml's " +
-      "LoginRequest is one step further back: packages/auth-client/src/" +
-      "index.ts's AuthClient.login only takes an INLINE anonymous " +
-      "`{ username, password }` parameter today — binding it needs that type " +
-      "named and exported first, a Team-A-owned one-line change (auth-client " +
-      "is not a Team B folder), not a cross-team escalation.",
+      "LoginRequest was the sixth member of this class until E04-S076 named " +
+      "and exported packages/auth-client/src/index.ts's inline credentials " +
+      "parameter as `LoginCredentials` and bound it in auth-compat.ts — it no " +
+      "longer belongs here.",
     escalation: "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
     unlock:
       "someone extends the relevant *-compat.ts with an AssignableTo/Exact " +
-      "check against the already-exported type named above (or, for " +
-      "LoginRequest only, first names and exports that inline parameter type " +
-      "in packages/auth-client, then binds it) — no contract or service " +
-      "change required for any of the five model-gateway/feedback ones.",
+      "check against the already-exported type named above — no contract or " +
+      "service change required for any of the six remaining schemas.",
   },
   {
     class: "event-schema-no-provider-type",

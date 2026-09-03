@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import { createLogger } from "@ai-km/logger";
+import { getFeedbackReasonLabel } from "@ai-km/api-client";
 import { getFeedback, type FeedbackItem } from "@/lib/feedback";
 
 const logger = createLogger("admin:feedback-detail");
@@ -86,7 +87,7 @@ export default function FeedbackDetail({ feedbackId }: { feedbackId: string }) {
   return (
     <div>
       <h1>{VERDICT_LABEL[feedback.verdict]}</h1>
-      {feedback.reason && <p>{feedback.reason}</p>}
+      {feedback.reason && <p>{getFeedbackReasonLabel(feedback.reason)}</p>}
       {feedback.comment && (
         <div>
           <h2>留言</h2>

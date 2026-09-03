@@ -91,7 +91,12 @@ import { createDeterministicEmbeddingProvider as createModelGatewayDeterministic
 import type { GenerationProvider } from "@ai-km/service-model-gateway/src/generation/provider.js";
 
 import { assertNoScopeLeak, type RetrievalScope } from "./authorization/scope.js";
-import { createInMemoryVectorStore, type RetrievalHit, type VectorStore } from "./vector/store.js";
+import {
+  createInMemoryVectorStore,
+  type EmbeddingIdentity,
+  type RetrievalHit,
+  type VectorStore,
+} from "./vector/store.js";
 import type { EmbeddingProvider } from "./embedding/provider.js";
 import { effectiveFidelity, type FidelityRatedComponent } from "./evidence-tier.js";
 
@@ -115,6 +120,45 @@ export interface RetrievalServiceOptions {
   readonly store?: VectorStore;
   /** Defaults to a model-gateway-backed deterministic (PF1) provider. */
   readonly embedding?: EmbeddingProvider;
+  /**
+   * E06-S026 — when `true`, `retrieve()` passes its own embedding provider's
+   * identity (`{ model, dimensions }`) to `store.query()` as
+   * `expectedIdentity`, so a store whose persisted vectors disagree with (or
+   * never recorded) that identity makes retrieval THROW
+   * (`EmbeddingVersionMismatchError`) instead of silently ranking by an
+   * incompatible model. See `vector/store.ts`'s `EmbeddingIdentity` doc
+   * comment for the full mechanism.
+   *
+   * REQUIRED — NOT optional, and there is no default (2026-09-02, technical
+   * advisor review round 2). An earlier version of this field was optional
+   * with `?? false`, on the reasoning that every pre-existing test predates
+   * this concept and would break if the check were on by default. That
+   * reasoning was correct and still holds — see the false/true call sites
+   * below — but "optional with a silent off-default" has exactly the failure
+   * shape this whole story exists to close: a future caller that simply
+   * forgets this field gets protection turned off with no signal at all,
+   * the same "nobody notices" mechanism as the embedding-version bug itself.
+   * Making it required moves that failure from "silent at runtime" to "a
+   * typecheck error", and it covers callers that do not exist yet (a future
+   * worker, a new composition root) the same way a runtime default never
+   * could.
+   *
+   * Every existing call site in this package's ALREADY-MERGED test suite
+   * (`service.test.ts`, `plugin.test.ts`,
+   * `rerank/retrieve-with-reranking.test.ts`) and in
+   * `services/generation/src/rag-composition.test.ts` now passes `false`
+   * explicitly — an honest statement that those fixtures predate this
+   * concept and carry no identity metadata, not a silently-inherited
+   * default. `plugin.ts`'s own default composition root — the actual thing a
+   * future real caller (`apps/api`) would reach — passes `true` explicitly.
+   * As of 2026-09-02 `services/retrieval`'s plugin is not registered into
+   * `apps/api` at all (verified by grep — see EVIDENCE), so today's exposure
+   * from any of this is zero either way; fixing the pre-existing test
+   * fixtures to carry real identity so `true` can become the only value ever
+   * written is a legitimate follow-up, deliberately left out of this story's
+   * Change Budget.
+   */
+  readonly enforceEmbeddingVersion: boolean;
 }
 
 const DEFAULT_TOP_K = 4;
@@ -163,6 +207,13 @@ export function createModelGatewayEmbeddingProvider(
     componentId: "embedding:deterministic",
     fidelityCeiling: embedding.fidelityCeiling,
     dimensions: embedding.dimensions,
+    // E06-S026 — the Model Gateway provider's own `model` string (e.g.
+    // "embedding:deterministic"), NOT re-derived from a response: it is
+    // static per configured provider, so reading it once here (rather than
+    // from every `EmbedResponse.model`) is correct and avoids trusting a
+    // per-call value for something that must not vary within one provider's
+    // lifetime.
+    model: embedding.model,
 
     async embed(texts) {
       const response = await gateway.embed(
@@ -183,9 +234,10 @@ export function createModelGatewayEmbeddingProvider(
  * persistent store or a differently-configured provider without this file
  * knowing about either concern.
  */
-export function createRetrievalService(options: RetrievalServiceOptions = {}): RetrievalService {
+export function createRetrievalService(options: RetrievalServiceOptions): RetrievalService {
   const store = options.store ?? createInMemoryVectorStore();
   const embedding = options.embedding ?? createModelGatewayEmbeddingProvider();
+  const enforceEmbeddingVersion = options.enforceEmbeddingVersion;
 
   return {
     componentId: "retrieval:service",
@@ -203,8 +255,14 @@ export function createRetrievalService(options: RetrievalServiceOptions = {}): R
         throw new RetrievalServiceError(`${embedding.componentId} 未回傳查詢向量。`);
       }
 
+      // E06-S026 — opt-in (see `RetrievalServiceOptions.enforceEmbeddingVersion`'s
+      // doc comment for why this is not unconditional yet).
+      const expectedIdentity: EmbeddingIdentity | undefined = enforceEmbeddingVersion
+        ? { model: embedding.model, dimensions: embedding.dimensions }
+        : undefined;
+
       // Scope goes INTO the query — see vector/store.ts's header.
-      const hits = await store.query(queryVector, scope, topK);
+      const hits = await store.query(queryVector, scope, topK, expectedIdentity);
 
       // Re-assert on the SERVICE boundary as well as the store boundary. A
       // future store implementation (or this one, mis-wired) is a new

@@ -55,7 +55,11 @@ pnpm --filter @ai-km/contract-equivalence exec vitest run src/check.live.test.ts
 
 This prints the full MATCH/DIVERGES/ABSENT report to stdout and then
 asserts zero DIVERGES — **which currently fails**, on purpose. See "Current
-DIVERGES" below.
+DIVERGES" below. As of 2026-09-03 this exact test (filtered by `-t`) is
+also what `contract-gate`'s "route-schema (observed, pending
+PENDING_DECISIONS)" section runs — see "Two sections, two different
+exit-code relationships" above; running it here manually behaves
+identically, it is just not wrapped in `contract-gate`'s own headings.
 
 Unit tests for the normalisation/diff/path-matching/synthesis logic itself
 (pure, no real server) run the same way:
@@ -64,26 +68,73 @@ Unit tests for the normalisation/diff/path-matching/synthesis logic itself
 pnpm --filter @ai-km/contract-equivalence exec vitest run
 ```
 
-## Why this is not part of any gate
+## Two sections, two different exit-code relationships (2026-09-03 follow-up)
 
-This package deliberately defines **no `"test"` script** in `package.json`
+**This package is HALF gated, not fully gated and not fully ungated.**
+`pnpm contract-gate` (`contracts/openapi/__checks__/run-gate.mjs`) now runs
+both live checks below on every invocation and prints each under its own
+heading, but only one of the two headings can turn the gate red:
+
+- **`response-shape (gated)`** — runs `check-response-shapes.live.test.ts`
+  (E04-S079). A non-zero exit here **fails `contract-gate`**.
+- **`route-schema (observed, pending PENDING_DECISIONS)`** — runs the one
+  `check.live.test.ts` test that produces the full MATCH/DIVERGES/ABSENT
+  report (E04-S073). Its output — DIVERGES included — is always printed,
+  but its exit code **never** affects `contract-gate`'s own exit code, and
+  is not, and must never be, silenced into an allowlist.
+
+**Why the split runs through the CHECK, not the package**: E04-S073's
+original landing constraint (below, kept for history) said L2-EQ must not
+be wired into any gate until the user decided on its DIVERGES. On
+2026-09-03 the user's technical advisor ruled that constraint attaches to
+**whichever check still carries an unresolved finding**, not to
+`tools/contract-equivalence/` as a whole:
+
+- **route-schema** still has two real, unresolved DIVERGES — see "Current
+  DIVERGES" below — and those are the user's call (`docs/stories/
+  PENDING_DECISIONS.md`, `docs/stories/PROGRESS.md`'s E04-S073 row).
+  Gating it today would force red over a question nobody has answered yet
+  — exactly the outcome the original constraint existed to prevent.
+- **response-shape** has **zero** unresolved findings — 22 declared JSON
+  2xx operations, 21 exercised, all clean (see "Response-shape coverage:
+  three numbers, not a fraction" below) — so gating it forces no red on
+  anyone's unanswered question. Leaving it ungated bought nothing and
+  cost something concrete: `GET /v1/admin/health`'s only full-shape
+  protection was this unrun check (its own test,
+  `apps/api/src/health/admin-health.test.ts`, only spot-checks individual
+  fields — see that file for the exact assertions).
+
+**Someone arriving later must not conclude the whole package is gated, nor
+that none of it is** — it is exactly half, split along which check has an
+open question, and this file plus `contract-gate`'s own two headings are
+where that split is recorded.
+
+### Original landing constraint (2026-09-02, E04-S073, superseded above for response-shape only)
+
+This package originally defined **no `"test"` script** in `package.json`
 (only `"typecheck"`), so `pnpm turbo run test` never touches it, and no
-script here is named `"build"`, `"lint"` or `"check"` either (turbo's own
+script here was named `"build"`, `"lint"` or `"check"` either (turbo's own
 `"check"`/`"build"` tasks would otherwise fire for this package as a
 dependency of a `"test"` task it doesn't have anyway — see `turbo.json`).
-`pnpm contract-gate` (`contracts/openapi/__checks__/run-gate.mjs`) is
-untouched by this story.
+That remains true today — nothing here gained a `package.json` script;
+`run-gate.mjs` invokes `vitest` directly against this package's own
+`node_modules/.bin/vitest`, the same way `tools/mutate.mjs` does, so
+`turbo run test` still never touches this package.
 
-This is deliberate, per this story's own landing constraint: **a real
+The original reasoning still governs the route-schema half: **a real
 DIVERGES may never enter an allowlist, and must never be silently made to
 pass** — converting a transcription to `app.contracts.getSchema(...)` is
 Team B code that needs their authorization, so the user must see the full
-DIVERGES list and decide first. Wiring this into any automated gate before
-that decision would either (a) immediately break the build over two real,
+DIVERGES list and decide first. Wiring THAT check into a gate before that
+decision would either (a) immediately break the build over two real,
 already-known, low-severity findings nobody has approved fixing yet, or
 (b) invite exactly the failure mode this story's own history warns about
 — a gate loosened or bypassed to get back to green, which is worse than no
-gate at all. Running it stays a deliberate, manual action.
+gate at all. Running it as an observed-only section is the resolution:
+its output is never hidden (it still prints on every `contract-gate` run,
+unlike the fully-manual arrangement before 2026-09-03) and its red never
+gets bypassed, because nothing here treats its red as a failure to bypass
+in the first place.
 
 ## Current DIVERGES (as of this story, 2026-09-02)
 
@@ -174,3 +225,76 @@ a false red.
   declared the exact same path+method (none do today — see
   `path-match.ts`), the yaml index would let the second silently overwrite
   the first with no ambiguity warning.
+
+## Actual response SHAPE vs contract (E04-S079)
+
+The schema-vs-schema `response:<status>` field above (E04-S073) can only
+ever read ABSENT — there is no runtime `response:` schema anywhere in this
+app to diff a contract schema against. `response-instance-diff.ts` +
+`check-response-shapes.live.test.ts` answer a narrower, different question
+instead: given a REAL 2xx response body a route actually returned (captured
+via `app.inject()` against the real `apps/api` server, real login, no
+mocks), which fields does it carry that the contract does not document
+(potential leak), and which contract-required fields does it omit
+(potential broken consumer)?
+
+As of 2026-09-03 this is the check `contract-gate`'s "response-shape
+(gated)" section runs on every invocation — a non-zero exit here fails
+`contract-gate` (see "Two sections, two different exit-code relationships"
+above). It can still be run manually the same way, outside `contract-gate`
+(this package still defines no `"test"` script, so `pnpm turbo run test`
+never touches it directly — `run-gate.mjs` invokes its `vitest` binary
+directly, the same way `tools/mutate.mjs` does):
+
+```
+pnpm --filter @ai-km/contract-equivalence exec vitest run src/check-response-shapes.live.test.ts
+```
+
+**Result as of E04-S079 (2026-09-03): 21 of 21 exercised routes clean** — no
+extra fields, no missing fields. See `docs/stories/specs/E04-S079.spec.md`
+for the full per-route table, which four routes were not exercised and why,
+and whether an existing test would already catch a regression here (for 20
+of the 21, yes — an existing `expectResponseMatchesContract`/
+`validateAgainstAuthContract` call already runs ajv against the same
+`additionalProperties: false` schema on the same status; `GET
+/v1/admin/health` is the one exception with no such check today — this is
+exactly why the 2026-09-03 reverse-verification mutation for the gate
+wiring targets that route: it is the one route where NOTHING else in this
+repo would catch a response-shape regression).
+
+See `response-instance-diff.ts`'s own module doc for exactly what this
+comparison does and does not check (field presence only, not
+types/formats/enums; one representative 2xx branch per route, not every
+branch a route can produce; no descent into an `additionalProperties`-only
+map).
+
+### Response-shape coverage: three numbers, not a fraction (2026-09-03)
+
+"21 of 21 exercised routes clean" only ever describes the routes this run
+reached — a route it never called is invisible to that fraction, not
+counted as a zero. That is the same shape of mistake the route-schema side
+of this tool made first and had to correct (an early report read
+"MATCH=9 DIVERGES=2" without printing that 15 more routes were ABSENT —
+see "Current DIVERGES" below and ROADMAP_TEMP.md 5-rho). This tool does not
+get to make that mistake twice.
+
+`check-response-shapes.live.test.ts`'s `beforeAll` now prints, every run,
+via `response-shape-coverage.ts`:
+
+- **declared** — every `"METHOD /path"` operation, across every loaded
+  contract, that declares at least one `application/json` 2xx response
+  (today: **22**).
+- **exercised** — how many of those this specific run actually captured
+  and diffed (today: **21**).
+- **NOT covered** — `declared` minus `exercised`, printed **by name**, not
+  folded into a count (today: **1** — `POST /transcriptions`; see this
+  file's module doc point 4 for why it is answered by an existing test
+  elsewhere instead of being re-exercised here).
+
+An uncovered route is neither a gate failure nor allowlist-eligible: it is
+a fact about this run's own reach, not a finding about the route. Adding
+it to any allowlist would misrepresent it as a known, accepted gap rather
+than "this run's scenario list doesn't reach it (yet)" — a real distinction
+this repo's own allowlists (`unbound-schema-allowlist.mjs`,
+`undocumented-route-allowlist.ts`) exist to preserve for actual findings,
+not for routes nobody has looked at yet.

@@ -23,25 +23,52 @@
  * This file is never executed and never bundled. It is a `tsc --noEmit`
  * gate; see ./README.md for the exact commands.
  *
- * UNBINDABLE, RECORDED RATHER THAN FAKED: `ChangeEvent` (this contract's SSE
- * payload shape, `contracts/events/conversation-change-events.md`) has no
- * bindable exported provider type. `registerChangeEventRoutes`
+ * `ChangeEvent` (this contract's SSE payload shape,
+ * `contracts/events/conversation-change-events.md`) — BOUND as of E04-S072,
+ * option (d), user-approved 2026-09-03. Previously listed here as
+ * unbindable: `registerChangeEventRoutes`
  * (`services/conversation/src/routes/change-events.ts`) serialises a
- * private, non-exported `toWirePayload()` function's return value
- * (`Record<string, unknown>`, built inline) — NOT the exported
- * `ChangeEventRow` repository type, which differs from the wire shape in the
- * one field that matters (`seq` on the row vs. `id` on the wire). Binding
- * this file's `ChangeEvent` check to `ChangeEventRow` would produce a
- * spurious mismatch (no `id` field, an extra `seq` field) that is not a real
- * contract violation — the rename is intentional and already correct at
- * runtime, just not reflected in any exported TYPE. Exporting
- * `toWirePayload`'s return shape (or a new named wire type) would mean
- * adding an export inside `services/conversation` — a Team B folder outside
- * this story's `contracts/openapi/__checks__/`-only scope (鐵律 #6 / this
- * story's HARD CONSTRAINT #1) — so it is left unbound here and listed in
- * EVIDENCE for the user to grant or decline. The `changeEventOwnerFree`
- * check below is unaffected: it only inspects the CONTRACT's own schema, no
- * implementation binding required.
+ * private, non-exported `toWirePayload()` function's return value, NOT the
+ * exported `ChangeEventRow` repository type, which differs from the wire
+ * shape in the one field that matters (`seq` on the row vs. `id` on the
+ * wire) — binding to `ChangeEventRow` would have produced a spurious
+ * mismatch that is not a real contract violation.
+ *
+ * The user's first authorization (2026-09-02, "precisely one line") asked
+ * for `export type ChangeEventWire = ReturnType<typeof toWirePayload>` with
+ * `toWirePayload`'s signature left untouched. That line type-checked but
+ * was useless: `toWirePayload` carried an explicit `: Record<string,
+ * unknown>` return annotation, and `ReturnType<>` resolves the DECLARED
+ * type, not the literal actually returned — so `ChangeEventWire` came back
+ * as `Record<string, unknown>`, with every field erased. Proven with `tsc`
+ * (not inferred from reading): a field-by-field `AssignableTo` in the
+ * direction this file uses everywhere else failed to compile
+ * (`TS2344: Type 'unknown' does not satisfy the constraint 'number'`), and
+ * the only direction that DID compile (`Schemas["ChangeEvent"]` assignable
+ * to `ChangeEventWire`) held for ANY shape — a false-green binding that
+ * would never turn red no matter how `toWirePayload` broke.
+ *
+ * The user's second authorization (2026-09-03, `docs/stories/
+ * PENDING_DECISIONS.md` top entry) approved option (d) instead: delete the
+ * `: Record<string, unknown>` annotation on `toWirePayload` so its return
+ * type is INFERRED from the object literal, then add the type-only export
+ * on top of the now-real inferred type. Verified with `tsc
+ * --emitDeclarationOnly` against a byte-for-byte copy of the function body
+ * (not read off the source): the inferred type is exactly `{ id: number;
+ * type: <the 5-member literal union>; conversationId: string; occurredAt:
+ * string; messageId?: string; originClientId?: string }`. `toWirePayload`
+ * has exactly one call site (`change-events.ts`'s SSE writer, which
+ * immediately `JSON.stringify`s the result) — narrowing its inferred return
+ * type is a strictly NARROWER type than `Record<string, unknown>`, so it
+ * cannot break that caller.
+ *
+ * `changeEventAssignable` below follows the same field-by-field
+ * `AssignableTo<implementation, contract>` direction as
+ * `generation-compat.ts`'s `answerAssignable`/`citationsElementAssignable`
+ * — a single whole-object `AssignableTo<ChangeEventWire,
+ * Schemas["ChangeEvent"]>` is exactly the direction that held trivially for
+ * the broken `Record<string, unknown>` binding above, so it is not used
+ * here for the same reason it was rejected there.
  */
 import type { components } from "./generated/conversations";
 import type {
@@ -57,6 +84,7 @@ import type {
   FeedbackReason,
   MessageRow,
 } from "../../../services/conversation/src/repository/messages.repository";
+import type { ChangeEventWire } from "../../../services/conversation/src/routes/change-events";
 
 type Schemas = components["schemas"];
 
@@ -123,6 +151,36 @@ const messageSample: Schemas["Message"] = {
   citationFeedback: { "1": "OK" },
 };
 export const messageRow: MessageRow = messageSample;
+
+/**
+ * `ChangeEvent` (E04-S072) — field by field, `AssignableTo<implementation,
+ * contract>`, same direction as `generation-compat.ts`'s
+ * `answerAssignable`/`citationsElementAssignable`. `type` is checked as
+ * `Exact`, not `AssignableTo`, because it is a closed enum on both sides —
+ * `type` is the contract's literal union and the wire's inferred literal
+ * union must be exactly that set, in both directions (a narrower contract
+ * would make an event `toWirePayload` can already emit unrepresentable; a
+ * wider one would leave the client with a `type` value it never handles).
+ */
+export const changeEventIdAssignable: AssignableTo<ChangeEventWire["id"], Schemas["ChangeEvent"]["id"]> =
+  true;
+export const changeEventTypeExact: Exact<ChangeEventWire["type"], Schemas["ChangeEvent"]["type"]> = true;
+export const changeEventConversationIdAssignable: AssignableTo<
+  ChangeEventWire["conversationId"],
+  Schemas["ChangeEvent"]["conversationId"]
+> = true;
+export const changeEventOccurredAtAssignable: AssignableTo<
+  ChangeEventWire["occurredAt"],
+  Schemas["ChangeEvent"]["occurredAt"]
+> = true;
+export const changeEventMessageIdAssignable: AssignableTo<
+  Exclude<ChangeEventWire["messageId"], undefined>,
+  Exclude<Schemas["ChangeEvent"]["messageId"], undefined>
+> = true;
+export const changeEventOriginClientIdAssignable: AssignableTo<
+  Exclude<ChangeEventWire["originClientId"], undefined>,
+  Exclude<Schemas["ChangeEvent"]["originClientId"], undefined>
+> = true;
 
 /**
  * Security AC — no request body may let a client name the owner. Each of

@@ -32,8 +32,21 @@ function ownerKeyOf(request: FastifyRequest): OwnerKey {
   return toOwnerKey(auth.ownerKey);
 }
 
-/** `ChangeEvent.id` on the wire is the row's `seq` — see contract schema. */
-function toWirePayload(event: ChangeEventRow): Record<string, unknown> {
+/**
+ * `ChangeEvent.id` on the wire is the row's `seq` — see contract schema.
+ *
+ * No explicit return-type annotation (E04-S072, option (d), user-approved
+ * 2026-09-03): an annotation of `Record<string, unknown>` type-checks but
+ * erases every field — `ReturnType<typeof toWirePayload>` then resolves to
+ * that erased declared type, not the object literal's actual shape, so a
+ * type-only export built on it carried zero field information. Letting the
+ * return type be INFERRED from the literal below means `ChangeEventWire`
+ * (in `../../../contracts/openapi/__checks__/conversations-compat.ts`) binds
+ * to the real shape. This function has exactly one call site (below), which
+ * immediately `JSON.stringify`s the result, so narrowing its inferred type
+ * cannot break a caller.
+ */
+function toWirePayload(event: ChangeEventRow) {
   return {
     id: event.seq,
     type: event.type,
@@ -43,6 +56,16 @@ function toWirePayload(event: ChangeEventRow): Record<string, unknown> {
     ...(event.originClientId ? { originClientId: event.originClientId } : {}),
   };
 }
+
+/**
+ * Type-only export of the SSE wire shape (E04-S072, option (d)). Zero
+ * runtime change — `ReturnType<>` is erased at compile time. Consumed by
+ * `contracts/openapi/__checks__/conversations-compat.ts` to bind
+ * `ChangeEvent` against what this route actually serialises, instead of the
+ * `ChangeEventRow` repository type (which differs in the one field that
+ * matters: `seq` on the row vs. `id` on the wire).
+ */
+export type ChangeEventWire = ReturnType<typeof toWirePayload>;
 
 function parseLastEventId(request: FastifyRequest): number | "malformed" | undefined {
   const headerRaw = request.headers["last-event-id"];

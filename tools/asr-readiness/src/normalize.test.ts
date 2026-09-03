@@ -45,4 +45,31 @@ describe("keywordHitRate", () => {
   it("matches substrings, not whole-word only", () => {
     expect(keywordHitRate("這個deadline很趕", ["deadline"])).toBe(1);
   });
+
+  // E12-S030 L3, 2026-09-04: the user's real recording transcribed as
+  // "請幫我確認一下這個API的Error Code,然後把Deadline更新到系統裡。謝謝。"
+  // — every one of expected.json's five keywords was recognised, yet
+  // verify-asr scored 60% and failed, because whisper capitalises English
+  // technical terms and this comparison was case-sensitive. The check claims
+  // to measure "was the keyword recognised"; it was measuring "was it
+  // recognised AND capitalised the same way". Case is not part of what the
+  // AC asks about, so it is folded away — for the ASCII side only.
+  it("matches an English keyword regardless of the case ASR happened to produce", () => {
+    expect(
+      keywordHitRate(
+        "請幫我確認一下這個API的Error Code,然後把Deadline更新到系統裡。謝謝。",
+        ["確認", "API", "error code", "deadline", "系統"],
+      ),
+    ).toBe(1);
+  });
+
+  it("still distinguishes different words, not merely different cases", () => {
+    expect(keywordHitRate("這裡只有 Deadline", ["deadline", "headline"])).toBe(0.5);
+  });
+
+  // Case folding must not disturb the Chinese side: toLowerCase() is a no-op
+  // for Han characters, and a keyword that is genuinely absent stays absent.
+  it("does not turn an absent Chinese keyword into a hit", () => {
+    expect(keywordHitRate("請幫我確認一下這個API", ["確認", "系統"])).toBe(0.5);
+  });
 });

@@ -21,9 +21,26 @@ export function isTraditionalOnly(text: string): boolean {
   return cn2tw(text) === text;
 }
 
-/** Fraction (0–1) of `keywords` that appear as a substring of `text`. Empty keyword list scores 1 (vacuously satisfied). */
+/**
+ * Fraction (0–1) of `keywords` that appear as a substring of `text`, compared
+ * CASE-INSENSITIVELY. Empty keyword list scores 1 (vacuously satisfied).
+ *
+ * Case is folded because the AC asks whether a keyword was RECOGNISED, and
+ * whisper capitalises English technical terms as it sees fit. Found in
+ * E12-S030's L3 run on 2026-09-04: the user's real recording came back as
+ * "…這個API的Error Code,然後把Deadline更新到系統裡。" — all five of
+ * expected.json's keywords present — and scored 60% against an 80% threshold,
+ * purely because `error code`/`deadline` are lowercase in the fixture. The
+ * check was measuring "recognised AND capitalised identically", which is not
+ * the property it exists to assert.
+ *
+ * `toLowerCase()` is a no-op for Han characters, so the Chinese keywords are
+ * unaffected, and folding case does not make different WORDS match — only
+ * different cases of the same word (both covered by tests).
+ */
 export function keywordHitRate(text: string, keywords: readonly string[]): number {
   if (keywords.length === 0) return 1;
-  const hits = keywords.filter((keyword) => text.includes(keyword)).length;
+  const haystack = text.toLowerCase();
+  const hits = keywords.filter((keyword) => haystack.includes(keyword.toLowerCase())).length;
   return hits / keywords.length;
 }

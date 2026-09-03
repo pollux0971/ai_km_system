@@ -12,6 +12,11 @@ packages:
   # too. Nesting is intentional and does not conflict: pnpm/turbo key each
   # workspace package purely off where its own `package.json` sits.
   - "tools"
+  # ADR 0008: `features/` is the cucumber runner + step definitions for the
+  # staged-Gherkin paradigm (one folder per capability, one .feature per
+  # phase). Its own package so @cucumber/cucumber + tsx are pinned in one
+  # place and `pnpm --filter @ai-km/features accept` is the single entry point.
+  - "features"
 allowBuilds:
   # esbuild's install script only downloads the platform-specific binary
   # (needed transitively by vitest/vite, added in E01-S001) — no arbitrary

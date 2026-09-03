@@ -3,6 +3,9 @@ description: 以獨立審查者身分審核一個已實作的 story(不改碼,�
 argument-hint: <Story ID,例如 E01-S001;留空則審核目前 branch 對應的 story>
 ---
 
+> **DEPRECATED(2026-09-03,ADR 0008)**:epic-story 開發方式已由分階段 Gherkin 取代。新工作請用 `/feature`、`/phase-done`、`/integrate`、`/decide`、`/sprint`(見 `.claude/rules/GHERKIN_WORKFLOW.md`)。本指令只保留給尚未收尾的舊 story(PROGRESS.md 中 in-progress / blocked 者),一個 sprint 後刪除。
+
+
 以「沒有參與實作的獨立審查者」身分,審核 story:`$ARGUMENTS`
 (留空時從目前 branch 名稱 `story/EXX-SYYY-*` 推斷)。
 

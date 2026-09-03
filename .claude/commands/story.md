@@ -3,6 +3,9 @@ description: 依 STORY_WORKFLOW 自主開發一個 atomic story(開發→驗證�
 argument-hint: <Story ID,例如 E01-S001;留空則依垂直切片順序自動挑選下一個>
 ---
 
+> **DEPRECATED(2026-09-03,ADR 0008)**:epic-story 開發方式已由分階段 Gherkin 取代。新工作請用 `/feature`、`/phase-done`、`/integrate`、`/decide`、`/sprint`(見 `.claude/rules/GHERKIN_WORKFLOW.md`)。本指令只保留給尚未收尾的舊 story(PROGRESS.md 中 in-progress / blocked 者),一個 sprint 後刪除。
+
+
 執行 story 自主開發循環,目標 story:`$ARGUMENTS`(若為空,依
 `.claude/rules/STORY_WORKFLOW.md` 全域規則第 2 條的順序,從
 `AI_KM_BMAD_High_Granularity/planning/TRACEABILITY.md` 與 `docs/stories/`

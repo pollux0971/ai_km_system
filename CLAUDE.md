@@ -3,23 +3,38 @@
 本 repo 是 AI KM 企業知識管理平台的 monorepo(Team A 視角)。規格基準在
 `AI_KM_BMAD_High_Granularity/`(唯讀,禁止修改)。
 
-## 強制工作流
+## 強制工作流(2026-09-03 起:分階段 Gherkin,ADR 0008)
 
-**任何 story 開發(實作 EXX-SYYY)必須遵守 `.claude/rules/STORY_WORKFLOW.md`
-的狀態機**,不得繞過。入口:
+**開發演算法是 `.claude/rules/GHERKIN_WORKFLOW.md`**。epic-story 狀態機
+(`STORY_WORKFLOW.md`)已退場,只保留給尚未收尾的舊 story;其用血換來的規則
+全數搬進 GHERKIN_WORKFLOW §5,一條不丟。開工前先讀:
 
-- `/story <ID>` — 自主開發循環(INIT→PLAN→IMPLEMENT→VERIFY⇄FIX→SELF-REVIEW→EVIDENCE)
-- `/story-review <ID>` — 獨立審核(只讀 + 重跑 gate,不改碼)
-- `/keep-working-till-end [N]` — 自主連續開發(story→review→merge 循環),
-  直到剩餘工作全部需要 Team B 或達 N 個 story
-- `/advisor <問題>` — 不確定時的最優解分析(先查規格權威,必要時才問使用者)
-- `/progress` — 唯讀進度回報
+1. `docs/roadmap.md` 的「現況」表——現在在哪個整合點、回填到哪
+2. 你要做的 `features/NN-name/FEATURE.md` 與 `NEXT.md`
+3. 對應的 `phase-N.feature`(**測試就是規格**)
+4. 相關的 `contracts/openapi/*.yaml` 與 `docs/adr/`
 
-**進度追蹤**:`docs/stories/PROGRESS.md` 是進度唯一真相來源。任何 story 狀態
-轉換都必須即時更新該檔;session 開始接手開發工作時先讀它還原進度,不憑記憶。
-待使用者批示的問題累積在 `docs/stories/PENDING_DECISIONS.md`。
+入口:
 
-非 story 的雜項修改(修 CI、調 scaffold)不需走完整狀態機,但仍受下方鐵律約束。
+- `/feature <描述>` — 新需求分流,**先提案、等確認、再寫檔**
+- `/phase-done <NN-name>/<phase-N>` — 驗收一個 phase(場景綠、單獨執行、反向驗證、人工確認)
+- `/integrate <IN>` — 驗收整合點(`@e2e` 由使用者親手確認,不能被測試代替)
+- `/decide <描述>` — 記 ADR(先評估契約影響;硬約定要使用者拍板)
+- `/sprint [週]` — 讀所有 `NEXT.md` 算 ready,WIP ≤ 2
+
+**狀態唯一來源**:各 `features/*/FEATURE.md` 的 phase 表。`docs/stories/PROGRESS.md`
+與 `PENDING_DECISIONS.md` 自 2026-09-03 凍結為唯讀歷史。新的待決事項是 `docs/adr/`
+的 Proposed ADR。
+
+**遇到問題**:做 phase 時發現缺陷 → 在同一個 `.feature` 加一個場景(紅)修到綠,
+不開編號;新需求 → `/feature`;依賴卡住 → `NEXT.md` 寫 gate 與「現在能先做什麼」,
+其他資料夾繼續。
+
+**角色守門**:開發 agent 不改 `*.test.ts`、`features/steps/**`、`.feature`;
+測試 agent 依 `.feature` 先寫(紅);共用檔只有協調者改;`.feature` 只由使用者或
+`/feature` 流程經確認後改。
+
+非 phase 的雜項修改(修 CI、調 scaffold)不需走 `/phase-done`,但仍受下方鐵律約束。
 
 ## 鐵律(違反即停止並回報)
 

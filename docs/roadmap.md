@@ -1,0 +1,180 @@
+# Roadmap(ADR 0008 之後)
+
+一個回填(phase-1 = Wave 0)+ 九個整合點。回填內部順序自由;I2–I9 嚴格依序,不可跳。
+每個整合點通過時,系統都是「一個人做得到某件事」的完整可用狀態。
+策略說明見 ADR 0008 §2,整合點的 Gherkin 在 `docs/integration/`。
+
+## 現況
+
+| 欄位 | 值 |
+|---|---|
+| 目前階段 | I2 · web 提問(I1 已通過 2026-09-03,使用者親眼確認引用) |
+| 回填進度 | 1 / 12 資料夾(06-retrieval 完成,作為參考實作) |
+| 契約版本 | `contracts/openapi/*.yaml` 七份,凍結;變更走 `/decide` + 使用者 |
+| 舊 story | 253 approved 封存於 `docs/stories/PROGRESS.md`(唯讀歷史);對照表 `docs/architecture/story-to-capability-map.md` |
+| 最後更新 | 2026-09-03 |
+
+## 全貌
+
+```mermaid
+graph TD
+  C[contracts 凍結 + compat gate + L2-EQ] --> B[回填 · 12 個 phase-1]
+  B --> I1[I1 真實 PDF 引用 ✓]
+  I1 --> I2[I2 web 提問 ★ 第一次有價值]
+  I2 --> I3[I3 部門授權真的來自身分]
+  I3 --> I4[I4 UI 上傳與文件狀態]
+  I4 --> I5[I5 回饋與 admin 指標]
+  I5 --> I6[I6 admin 管部門群組]
+  I6 --> I7[I7 稽核]
+  I7 --> I9[I9 on-prem 部署]
+  I8[I8 維修/ERP 真資料 · 位置待定] -.-> I9
+```
+
+---
+
+## 回填 · 12 個 phase-1
+
+**前提**:`features/` scaffold(cucumber、`_world.ts`、`common.steps.ts`、`standalone.json`)已就位。
+
+**規則**:phase-1 的每個場景綁到既有測試的入口;綁不到的寫進 phase-2。每個資料夾至少一個場景
+做過反向驗證(改壞 → 紅)。回填不重驗 253 個 story 的細節,只證明「能力現在會做的事」有機器證據。
+
+| Phase | 交付 | 狀態 | 參考 |
+|---|---|---|---|
+| 06-retrieval/phase-1 | 授權檢索、Deny-Wins、洩漏偵測、offsets、身分守門、MMR | done 2026-09-03 | **參考實作**,其他資料夾照它的形狀 |
+| 05-ingestion/phase-1 | PDF 抽取(offsets、golden hash、空檔／加密拒絕)、chunk、embed、store、重匯拒絕 | todo | |
+| 07-generation/phase-1 | context 組裝、引用回填、捏造引用拒絕、空 context 短路 | todo | |
+| 04-model-gateway/phase-1 | embed/generate in-process 主路徑、兩條薄路由、契約驗證、fidelity 守門、ASR | todo | |
+| 01-identity/phase-1 | 登入、session cookie、sandbox seeder、CSRF | todo | |
+| 03-conversation/phase-1 | 對話 CRUD、訊息、修訂、SSE change events、resync | todo | |
+| 09-feedback-analytics/phase-1 | OK/NG、reason enum、usage events、admin 指標聚合、403 | todo | |
+| 10-admin-console/phase-1 | admin 頁面(部門、群組、connector、health)`@e2e` | todo | |
+| 11-app-shell/phase-1 | 導覽、首頁、M3、跨視窗同步 `@e2e` | todo | |
+| 08-knowledge-management/phase-1 | 知識庫頁面(目前對 mock)`@e2e`,標明 mock | todo | |
+| 02-authorization/phase-1 | 空殼單獨跑起來(`services/identity` 薄切片能產出 scope 的證明) | todo | E04-S009 blocked-team-b |
+| 12-audit-observability/phase-1 | 空殼單獨跑起來(`services/audit` 0 行)+ health 路由 | todo | |
+
+**回填完成定義**:12 個 phase-1 全 `done`,`pnpm accept:phase1` 全綠,`pnpm gherkin:dup` PASS。
+
+---
+
+## I1 · 真實 PDF 引用 ✓ 2026-09-03
+
+**你做得到什麼**:一份真實中文 PDF 進去,檢索命中的引用能 `slice` 回原文逐字相等;
+同一份文件在兩個部門下各自只對自己可見。
+
+**驗收**:[i1-real-pdf-citation.feature](integration/i1-real-pdf-citation.feature) —
+`@e2e @manual` 由使用者 2026-09-03 確認「對,就是那段」;其餘 5 個自動場景綠;反向驗證:
+offset +1 → 紅在「切出的原文與引用文字不同」。
+
+---
+
+## I2 · web 提問 ★
+
+**你做得到什麼**:在 apps/web 登入、問一個關於已索引文件的問題、讀到經 model gateway 產生的答案、
+點引用打開偏移量指向的原文段落。模型可仍是假的(PF1),答案是 canned;證明的是體驗層到資料層
+的接縫存在且對 scope fail-closed。
+
+| 需要的 phase | 說明 |
+|---|---|
+| 06-retrieval/phase-2 | 接進 apps/api composition root |
+| 07-generation/phase-2 | `answer()` 從 app.retrieval 拿 hits,回填引用 |
+| 03-conversation/phase-2 | 送訊息 → RAG 回答 → 訊息帶 citations(契約 conversations.yaml 已有欄位?待 `/feature` 分流確認) |
+| 11-app-shell/phase-2 | 引用可點、開原文段落面板 |
+| 05-ingestion/phase-2 | 一條「把 fixture PDF 索引進 dev DB」的指令,讓 I2 有東西可問 |
+
+**已知限制(要進 ADR)**:`02-authorization` 未落地前,scope 由 demo 使用者的 session 固定給 `dept:eng`。
+
+**驗收**:[i2-ask-in-web.feature](integration/i2-ask-in-web.feature)
+
+**通過後立刻做**:使用者拿自己的一份真實文件問三個問題,把「答非所問」的紀錄下來——那是 E04-S037
+(真模型)的第一份需求,比繼續寫程式重要。
+
+---
+
+## I3 · 部門授權真的來自身分
+
+**你做得到什麼**:兩個部門的人問同一題,各自只看到自己部門的文件;管理員把人換部門後立刻生效。
+
+| 需要的 phase | 說明 |
+|---|---|
+| 02-authorization/phase-2 | 從 identity 的 session 產出 `RetrievalScope`(E04-S009 解除 blocked) |
+| 06-retrieval/phase-2 的暫時限制移除 | 固定 `dept:eng` 拿掉 |
+| 01-identity/phase-2 | 使用者的部門／群組落庫 |
+
+**驗收**:`docs/integration/i3-*.feature`(待 `/feature` 建立)
+
+---
+
+## I4 · UI 上傳與文件狀態
+
+**你做得到什麼**:從 UI 上傳一份文件,看到它排隊／處理中／可問;壞檔(掃描檔、加密)會說原因。
+
+| 需要的 phase | 說明 |
+|---|---|
+| 08-knowledge-management/phase-2 | 上傳、狀態列表接真 API |
+| 05-ingestion/phase-3 | async、`apps/worker-ingestion`(目前 0 行)、失敗原因落庫 |
+| 06-retrieval/phase-3 | sqlite-vec 成為預設持久 store |
+| 12-audit-observability/phase-2 | 文件狀態事件進稽核 |
+
+---
+
+## I5 · 回饋與 admin 指標
+
+**你做得到什麼**:對答案按 OK/NG 並選原因;管理員在 admin 看到真實聚合(不是 mock)。
+
+| 需要的 phase | 說明 |
+|---|---|
+| 09-feedback-analytics/phase-2 | 接真 RAG 回答的 feedback;reason code → 繁中標籤(今天發現 admin 原樣渲染 `INCORRECT`) |
+
+---
+
+## I6 · admin 管部門與群組
+
+**你做得到什麼**:管理員在 admin 建部門、把人加進群組,I3 的可見性立刻反映。
+
+| 需要的 phase | 說明 |
+|---|---|
+| 10-admin-console/phase-2 | 部門／群組頁接真 API |
+| 02-authorization/phase-3 | 群組 → scopeKeys 的對應與變更即時生效 |
+
+---
+
+## I7 · 稽核
+
+**你做得到什麼**:誰在何時問了什麼、看到哪些文件、答案引用了什麼,可查可匯出;未授權的資料不進 log。
+
+| 需要的 phase | 說明 |
+|---|---|
+| 12-audit-observability/phase-3 | `services/audit` 從 0 行到可查 |
+
+---
+
+## I8 · 維修助理與 ERP 報表(位置待定)
+
+**你做得到什麼**:E07／E09 的體驗跑在真資料上,或明確標為 mock 展示。**後端來源待使用者定義**;
+定義前不建 `13-maintenance-assistant`、`14-erp-reporting` 資料夾。
+
+---
+
+## I9 · on-prem 部署
+
+**你做得到什麼**:一台機器 `docker compose up`,I2～I7 全部做得到。E01-S028 的 image 接真服務。
+
+---
+
+## 未排程
+
+`/feature` 新增但還沒歸進任何整合點的。`/sprint` 時決定要不要拉進來。
+
+| 能力 | 加入日期 | 建議位置 | 備註 |
+|---|---|---|---|
+| E04-S037 真模型 provider(PF3) | 2026-09-03 | I2 之後、I3 之前或並行 | 使用者裁 embedding 模型(d11) |
+| 契約收緊第四條:analytics.yaml querystring default | 2026-09-03 | 隨時 | 待使用者一個字 |
+
+## 節奏
+
+- 1 週一個 sprint,2–4 個 phase,WIP ≤ 2
+- 回填約 2 sprint(可與 I2 的 phase-2 並行:回填不改實作)
+- I2 約 2 sprint;之後每個整合點 1–2 sprint
+- 估計不是承諾。超過兩倍是資訊(範圍錯、依賴沒浮出、分級分錯),在 retro 記一筆

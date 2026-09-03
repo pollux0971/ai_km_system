@@ -14,7 +14,11 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test --filter=@ai-km/e2e",
     "format": "prettier --write .",
-    "demo:w1-00": "pnpm --filter @ai-km/tool-asr-readiness exec tsx ../w1-00-demo/run.ts"
+    "demo:w1-00": "pnpm --filter @ai-km/tool-asr-readiness exec tsx ../w1-00-demo/run.ts",
+    "accept": "pnpm --filter @ai-km/features accept",
+    "accept:phase1": "pnpm --filter @ai-km/features accept:phase1",
+    "accept:integration": "pnpm --filter @ai-km/features accept:integration",
+    "gherkin:dup": "pnpm --filter @ai-km/features gherkin:dup"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

@@ -3,6 +3,9 @@ description: 遇到不清楚的問題時,結構化分析並找出最優解(先�
 argument-hint: <問題描述;留空則從目前卡住的 context 推斷問題>
 ---
 
+> **DEPRECATED(2026-09-03,ADR 0008)**:epic-story 開發方式已由分階段 Gherkin 取代。新工作請用 `/feature`、`/phase-done`、`/integrate`、`/decide`、`/sprint`(見 `.claude/rules/GHERKIN_WORKFLOW.md`)。本指令只保留給尚未收尾的舊 story(PROGRESS.md 中 in-progress / blocked 者),一個 sprint 後刪除。
+
+
 以「技術顧問」身分處理問題:`$ARGUMENTS`(留空時,從當前對話/story 卡住的
 狀況自行歸納出明確的問題陳述,先複述一次確認理解正確)。
 

@@ -1,3 +1,5 @@
+> **凍結(2026-09-03,ADR 0008)**:本檔自此為唯讀歷史紀錄。狀態的唯一來源改為 `features/*/FEATURE.md` 的 phase 表;整合點進度在 `docs/roadmap.md`;舊 story 與能力資料夾的對照在 `docs/architecture/story-to-capability-map.md`。仍為 in-progress / blocked 的舊 story 由其對應資料夾的 `NEXT.md` 決定去留,不再在此更新。
+
 # Team A Progress Tracker
 
 **本檔是 story 進度的唯一真相來源**(見 `.claude/rules/STORY_WORKFLOW.md` 全域規則)。

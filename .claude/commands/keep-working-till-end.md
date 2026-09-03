@@ -3,6 +3,9 @@ description: 自主連續開發 Team A stories(story→review→merge 循環),�
 argument-hint: (可選)本輪最多完成的 story 數,例如 5;留空 = 不設上限
 ---
 
+> **DEPRECATED(2026-09-03,ADR 0008)**:epic-story 開發方式已由分階段 Gherkin 取代。新工作請用 `/feature`、`/phase-done`、`/integrate`、`/decide`、`/sprint`(見 `.claude/rules/GHERKIN_WORKFLOW.md`)。本指令只保留給尚未收尾的舊 story(PROGRESS.md 中 in-progress / blocked 者),一個 sprint 後刪除。
+
+
 進入自主連續開發模式。目標:把 Team A 的 story 一路推進到「**剩下的工作全部
 需要 Team B 加入才能繼續**」為止(即 PROGRESS.md 中不再有可動工的 `todo`,
 剩餘皆為 `approved` / `blocked-team-b` / 等使用者批示的 `blocked`)。

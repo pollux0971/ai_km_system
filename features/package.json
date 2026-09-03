@@ -1,0 +1,24 @@
+{
+  "name": "@ai-km/features",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ADR 0008 — 分階段 Gherkin 規格與 cucumber 步驟定義。每個能力一個資料夾,每個 phase 一份 .feature;docs/integration/ 的整合點驗收也由這裡的 runner 執行。",
+  "scripts": {
+    "accept": "NODE_OPTIONS=--import=tsx cucumber-js",
+    "accept:phase1": "NODE_OPTIONS=--import=tsx cucumber-js --tags '@phase-1 and not @manual and not @e2e'",
+    "accept:integration": "NODE_OPTIONS=--import=tsx cucumber-js ../docs/integration --tags '(@i1) and not @manual and not @e2e'",
+    "accept:integration:next": "NODE_OPTIONS=--import=tsx cucumber-js ../docs/integration --tags '(@i2) and not @manual and not @e2e'",
+    "gherkin:dup": "tsx scripts/check-gherkin-dup.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint steps scripts --ext .ts",
+    "test": "tsx scripts/check-gherkin-dup.ts"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^11.3.0",
+    "@types/node": "^22.10.0",
+    "fastify": "^5.2.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}

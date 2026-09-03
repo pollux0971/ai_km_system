@@ -1,5 +1,11 @@
 # Story 自主開發審核除錯循環(Story Autonomous Dev-Review-Debug Loop)
 
+> **Superseded by `.claude/rules/GHERKIN_WORKFLOW.md`(2026-09-03,ADR 0008)。**
+> 本檔的狀態機不再是新工作的演算法,只適用於 PROGRESS.md 中尚未收尾的舊 story
+> (in-progress / blocked)。「工作分級」以下的規則(反向驗證對著會變的量、失敗訊息才是
+> 證據、機制要量不要讀、驗收不是測試)已原封搬進 GHERKIN_WORKFLOW §5,以那裡為準;
+> 本檔保留為出處與歷史,不再修改。
+
 本文件是本 repo 唯一的 story 開發演算法。任何 AI agent 或人類要實作 atomic story
 (`E01-S001` 格式)時,必須逐字遵守此流程。與本文件衝突的臨時指示,除非使用者
 明確說「本次覆蓋 STORY_WORKFLOW」,一律以本文件為準。

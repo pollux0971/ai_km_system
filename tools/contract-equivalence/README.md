@@ -54,11 +54,11 @@ pnpm --filter @ai-km/contract-equivalence exec vitest run src/check.live.test.ts
 ```
 
 This prints the full MATCH/DIVERGES/ABSENT report to stdout and then
-asserts zero DIVERGES — **which currently fails**, on purpose. See "Current
-DIVERGES" below. As of 2026-09-03 this exact test (filtered by `-t`) is
-also what `contract-gate`'s "route-schema (observed, pending
-PENDING_DECISIONS)" section runs — see "Two sections, two different
-exit-code relationships" above; running it here manually behaves
+asserts zero DIVERGES. As of E04-S081 (2026-09-03) this **passes**: the two
+DIVERGES that used to fail this assertion are resolved — see "Historical
+DIVERGES (resolved by E04-S081)" below. This exact test (filtered by `-t`)
+is also what `contract-gate`'s "route-schema (gated)" section runs — see
+"Both sections are gated" below; running it here manually behaves
 identically, it is just not wrapped in `contract-gate`'s own headings.
 
 Unit tests for the normalisation/diff/path-matching/synthesis logic itself
@@ -68,48 +68,48 @@ Unit tests for the normalisation/diff/path-matching/synthesis logic itself
 pnpm --filter @ai-km/contract-equivalence exec vitest run
 ```
 
-## Two sections, two different exit-code relationships (2026-09-03 follow-up)
+## Both sections are gated (2026-09-03, E04-S082 — supersedes the split below)
 
-**This package is HALF gated, not fully gated and not fully ungated.**
-`pnpm contract-gate` (`contracts/openapi/__checks__/run-gate.mjs`) now runs
-both live checks below on every invocation and prints each under its own
-heading, but only one of the two headings can turn the gate red:
+**This package is fully gated.** `pnpm contract-gate`
+(`contracts/openapi/__checks__/run-gate.mjs`) runs both live checks below
+on every invocation, prints each under its own heading, and a non-zero
+exit from *either* heading now fails the gate:
 
 - **`response-shape (gated)`** — runs `check-response-shapes.live.test.ts`
-  (E04-S079). A non-zero exit here **fails `contract-gate`**.
-- **`route-schema (observed, pending PENDING_DECISIONS)`** — runs the one
-  `check.live.test.ts` test that produces the full MATCH/DIVERGES/ABSENT
-  report (E04-S073). Its output — DIVERGES included — is always printed,
-  but its exit code **never** affects `contract-gate`'s own exit code, and
-  is not, and must never be, silenced into an allowlist.
+  (E04-S079). Gated since 2026-09-03 (E04-S073 follow-up, "gate-response-shape").
+- **`route-schema (gated)`** — runs the one `check.live.test.ts` test that
+  produces the full MATCH/DIVERGES/ABSENT report (E04-S073). Gated since
+  2026-09-03 (E04-S082): E04-S081 resolved both of its DIVERGES by adding
+  the missing `default`s to `analytics.yaml` (see "Historical DIVERGES
+  (resolved by E04-S081)" below), so the reason this half was left
+  unenforced no longer applies. Its full report — ABSENT included — is
+  still printed every run; ABSENT never fails it (see below).
 
-**Why the split runs through the CHECK, not the package**: E04-S073's
-original landing constraint (below, kept for history) said L2-EQ must not
-be wired into any gate until the user decided on its DIVERGES. On
-2026-09-03 the user's technical advisor ruled that constraint attaches to
-**whichever check still carries an unresolved finding**, not to
-`tools/contract-equivalence/` as a whole:
+**ABSENT is not, and by construction cannot be, gated.** 15 of the 26
+routes report ABSENT — overwhelmingly because no route in this application
+registers a Fastify `params:` or `response:` schema at all (tracked as
+E04-S077 and E04-S079's follow-on authorization requests, both
+`blocked-team-b`). `divergedRoutes()` (`print-report.ts`) filters strictly
+on `status === "DIVERGES"`, so gating this check's exit code cannot turn an
+ABSENT route red. Gating ABSENT would make `main` permanently red on
+someone else's unanswered authorization question — exactly what the
+observed-only landing below existed to prevent.
 
-- **route-schema** still has two real, unresolved DIVERGES — see "Current
-  DIVERGES" below — and those are the user's call (`docs/stories/
-  PENDING_DECISIONS.md`, `docs/stories/PROGRESS.md`'s E04-S073 row).
-  Gating it today would force red over a question nobody has answered yet
-  — exactly the outcome the original constraint existed to prevent.
-- **response-shape** has **zero** unresolved findings — 22 declared JSON
-  2xx operations, 21 exercised, all clean (see "Response-shape coverage:
-  three numbers, not a fraction" below) — so gating it forces no red on
-  anyone's unanswered question. Leaving it ungated bought nothing and
-  cost something concrete: `GET /v1/admin/health`'s only full-shape
-  protection was this unrun check (its own test,
-  `apps/api/src/health/admin-health.test.ts`, only spot-checks individual
-  fields — see that file for the exact assertions).
+### History: the two-sections split (2026-09-03, E04-S073 follow-up, superseded above)
 
-**Someone arriving later must not conclude the whole package is gated, nor
-that none of it is** — it is exactly half, split along which check has an
-open question, and this file plus `contract-gate`'s own two headings are
-where that split is recorded.
+Between 2026-09-03's "gate-response-shape" follow-up and E04-S082 later the
+same day, this package was **half gated**: `response-shape` gated,
+`route-schema` still observed-only. E04-S073's original landing constraint
+(further below, kept for history) said L2-EQ must not be wired into any
+gate until the user decided on its DIVERGES; the user's technical advisor
+ruled that constraint attaches to **whichever check still carries an
+unresolved finding**, not to `tools/contract-equivalence/` as a whole —
+`route-schema` still had two real, unresolved DIVERGES at that point (see
+"Historical DIVERGES" below), while `response-shape` had zero. E04-S081
+resolved those two DIVERGES the same day, which is what let E04-S082 gate
+the remaining half.
 
-### Original landing constraint (2026-09-02, E04-S073, superseded above for response-shape only)
+### Original landing constraint (2026-09-02, E04-S073, superseded above in full since E04-S082)
 
 This package originally defined **no `"test"` script** in `package.json`
 (only `"typecheck"`), so `pnpm turbo run test` never touches it, and no
@@ -121,25 +121,29 @@ That remains true today — nothing here gained a `package.json` script;
 `node_modules/.bin/vitest`, the same way `tools/mutate.mjs` does, so
 `turbo run test` still never touches this package.
 
-The original reasoning still governs the route-schema half: **a real
-DIVERGES may never enter an allowlist, and must never be silently made to
-pass** — converting a transcription to `app.contracts.getSchema(...)` is
-Team B code that needs their authorization, so the user must see the full
-DIVERGES list and decide first. Wiring THAT check into a gate before that
-decision would either (a) immediately break the build over two real,
-already-known, low-severity findings nobody has approved fixing yet, or
-(b) invite exactly the failure mode this story's own history warns about
-— a gate loosened or bypassed to get back to green, which is worse than no
-gate at all. Running it as an observed-only section is the resolution:
-its output is never hidden (it still prints on every `contract-gate` run,
-unlike the fully-manual arrangement before 2026-09-03) and its red never
-gets bypassed, because nothing here treats its red as a failure to bypass
-in the first place.
+The original reasoning governed the route-schema half until E04-S081
+resolved its DIVERGES: **a real DIVERGES may never enter an allowlist, and
+must never be silently made to pass** — the user had to see the full
+DIVERGES list and decide first, rather than a gate being wired in ahead of
+that decision (which would either break the build over findings nobody had
+approved fixing, or invite the gate being loosened to get back to green —
+worse than no gate at all). Running it as an observed-only section was
+that resolution while the DIVERGES stood: its output was never hidden and
+its red was never bypassed. That is no longer the live state — see "Both
+sections are gated" above — but the reasoning is kept here because the
+same shape of decision (gate now, or observe until a real answer lands)
+will recur.
 
-## Current DIVERGES (as of this story, 2026-09-02)
+## Historical DIVERGES (found 2026-09-02, resolved 2026-09-03 by E04-S081)
 
-Two real, explained divergences — not normalisation gaps, not bugs in this
-tool:
+Two real, explained divergences existed from `check.live.test.ts`'s first
+run until E04-S081 — not normalisation gaps, not bugs in this tool. The
+user's technical advisor authorized adding the defaults to
+`analytics.yaml` (`docs/stories/PENDING_DECISIONS.md`'s now-resolved
+entry), and E04-S081 landed that on 2026-09-03; `pnpm --filter
+@ai-km/contract-equivalence exec vitest run src/check.live.test.ts` now
+reports `SUMMARY: 26 total — MATCH=11 DIVERGES=0 ABSENT=15`. Kept below for
+the historical record of what the two divergences were:
 
 - **`GET /v1/admin/metrics/latency`** — `analytics.yaml`'s `days` query
   parameter carries no `default` ("Implementation decides the default —
@@ -168,11 +172,12 @@ Every one of the 10 originally-named transcriptions
 `UPDATE_CONVERSATION_BODY_SCHEMA`, `SET_FEEDBACK_BODY_SCHEMA`,
 `SET_FEEDBACK_REASON_BODY_SCHEMA`, `SET_FEEDBACK_COMMENT_BODY_SCHEMA`,
 `LIST_QUERYSTRING_SCHEMA`, `USAGE_METRICS_QUERYSTRING_SCHEMA`,
-`LIST_FEEDBACK_QUERYSTRING_SCHEMA`) is a full **MATCH** except the two
-querystring defaults named above. The one route that already pulls its
-schema live from the contract (`CreateMessageRequest`, via `getSchema()`)
-is also a MATCH — a useful sanity check that this tool isn't trivially
-green everywhere.
+`LIST_FEEDBACK_QUERYSTRING_SCHEMA`) was a full **MATCH** except the two
+querystring defaults named above — and since E04-S081 added those defaults
+to `analytics.yaml`, all 10 are now full MATCH with no exception. The one
+route that already pulls its schema live from the contract
+(`CreateMessageRequest`, via `getSchema()`) is also a MATCH — a useful
+sanity check that this tool isn't trivially green everywhere.
 
 Also surfaced (informational, does not affect any route's MATCH/DIVERGES
 verdict — see `RouteReport.responseFields`'s doc comment in
@@ -201,16 +206,16 @@ new findings of this story.
 
 **Deliberately NOT normalised**: `default` (a real, contract-vs-runtime
 structural difference is reported even where the contract's own prose
-allows it — see "Current DIVERGES" above) and every other `format` value.
-A rule that silently equates two genuinely different things is worse than
-a false red.
+allows it — see "Historical DIVERGES" above) and every other `format`
+value. A rule that silently equates two genuinely different things is
+worse than a false red.
 
 ## Stated limitations
 
 - Response-schema comparison only ever looks at 2xx status codes (never a
   non-2xx/Error-envelope variant) — and, empirically, finds nothing to
   compare on the runtime side for any route in this app today (see
-  "Current DIVERGES" above). This is reported as informational
+  "Historical DIVERGES" above). This is reported as informational
   (`responseFields`), separate from a route's MATCH/DIVERGES verdict, for
   exactly that reason: folding it into `status` would make every route
   read ABSENT regardless of whether its real, load-bearing
@@ -240,8 +245,8 @@ mocks), which fields does it carry that the contract does not document
 
 As of 2026-09-03 this is the check `contract-gate`'s "response-shape
 (gated)" section runs on every invocation — a non-zero exit here fails
-`contract-gate` (see "Two sections, two different exit-code relationships"
-above). It can still be run manually the same way, outside `contract-gate`
+`contract-gate` (see "Both sections are gated" above). It can still be
+run manually the same way, outside `contract-gate`
 (this package still defines no `"test"` script, so `pnpm turbo run test`
 never touches it directly — `run-gate.mjs` invokes its `vitest` binary
 directly, the same way `tools/mutate.mjs` does):
@@ -275,8 +280,8 @@ reached — a route it never called is invisible to that fraction, not
 counted as a zero. That is the same shape of mistake the route-schema side
 of this tool made first and had to correct (an early report read
 "MATCH=9 DIVERGES=2" without printing that 15 more routes were ABSENT —
-see "Current DIVERGES" below and ROADMAP_TEMP.md 5-rho). This tool does not
-get to make that mistake twice.
+see "Historical DIVERGES" above and ROADMAP_TEMP.md 5-rho). This tool does
+not get to make that mistake twice.
 
 `check-response-shapes.live.test.ts`'s `beforeAll` now prints, every run,
 via `response-shape-coverage.ts`:

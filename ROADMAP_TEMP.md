@@ -1293,6 +1293,36 @@ run** 維持綠——證明這個突變**只**會被這個新接的 gate 抓到,
 typecheck 或單元測試意外附帶抓到。詳見 `docs/stories/PROGRESS.md` E04-S073 列
 的更新與 commit 訊息裡的兩個 run URL。
 
+### 5-xi 再追記:route-schema 也接進 gate 了,兩半合一(2026-09-03,E04-S082)
+
+上面這段追記寫的「route-schema 這半維持不接進 exit code」**已經不成立**。
+**E04-S081** 在同一天稍晚把 `analytics.yaml` 缺的三個 `default` 補上(使用者
+「照做」批示第 4 項),讓 route-schema 唯二的真分歧歸零——`pnpm --filter
+@ai-km/contract-equivalence exec vitest run src/check.live.test.ts` 現在報
+`SUMMARY: 26 total — MATCH=11 DIVERGES=0 ABSENT=15`(協調者於 `main` 獨立
+複驗過)。留著兩個真分歧不接 gate 的理由消失後,**E04-S082** 把 route-schema
+從 `run-gate.mjs` 的 observed 區塊移進 gated 區塊——現在 `contract-gate` 的
+兩個區塊(`response-shape`、`route-schema`)**都會**讓紅色的那個影響 job 的
+exit code,不再是半接半不接。
+
+**ABSENT 刻意不接、也不可能被接**:26 條裡 15 條仍是 ABSENT——絕大多數因為
+全 app 沒有任何 route 註冊 `params:`／`response:` schema(登記為 E04-S077、
+E04-S079,兩者都卡在還沒人給的授權上)。`divergedRoutes()`
+(`print-report.ts`)只篩 `status === "DIVERGES"`,ABSENT 永遠進不了這個陣列,
+所以接 gate 這個動作本身結構上就碰不到 ABSENT——把 ABSENT 也接進去會讓
+`main` 永遠紅在別人還沒回答的授權問題上,正是 5-xi 這整段追記系列一開始想
+避免的事。
+
+反向驗證(本機):把 `analytics.yaml` 的 `days` `default: 7` 拿掉,新 gate
+邏輯下 `pnpm contract-gate` **exit 1**,逐字點名
+`GET /v1/admin/metrics/latency` 與 `(root).properties.days.default:
+contract=(absent) runtime=7`;還原後重跑回到 `exit 0`。同一個突變套用在
+**改動前**的 `run-gate.mjs`(用 `git stash` 取回)上,`check.live.test.ts`
+一樣印出同一條 DIVERGES、測試本身 exit 1,但 `pnpm contract-gate` 仍然
+`exit 0`——差異就是這個 story 的全部意義。CI 上另外用拋棄分支重現同一個
+突變,確認 `contract-gate` job 真的變紅、`lint-typecheck-unit` 在同一次
+run 維持綠。詳見 `docs/stories/PROGRESS.md` E04-S082 列。
+
 ---
 
 ## 5-rho. 🔴 L2-EQ 首次執行的結果:2 條真分歧,以及四件沒人在找的事(2026-09-02,E04-S073)

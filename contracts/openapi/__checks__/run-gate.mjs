@@ -59,12 +59,10 @@
  * package the checks happen to ship from:
  *
  *   - `check.live.test.ts` (route-schema: does the schema Fastify actually
- *     validates against equal the contract's schema?) still has two real,
+ *     validates against equal the contract's schema?) had two real,
  *     unresolved DIVERGES — `GET /admin/metrics/latency`'s and
  *     `GET /admin/feedback`'s querystring `default`s (see PROGRESS.md's
- *     E04-S073 row). Those are the user's call. This section runs it,
- *     prints its full report (including the DIVERGES), and NEVER sets
- *     `failed` — its exit code is observed, not enforced.
+ *     E04-S073 row). Those were the user's call.
  *   - `check-response-shapes.live.test.ts` (response-shape: does what a
  *     route actually returns match the contract's declared 2xx shape?,
  *     E04-S079) found ZERO unresolved findings — 22 declared JSON 2xx
@@ -72,12 +70,38 @@
  *     coverage report for the 22/21/1-not-covered breakdown; the 1
  *     uncovered route, `POST /transcriptions`, is answered by an existing
  *     test elsewhere — see that file's module doc point 4). Gating this
- *     half forces no red over anyone's unanswered question, so it is
- *     wired in for real: a non-zero exit here DOES fail this whole gate.
+ *     half forces no red over anyone's unanswered question, so it was
+ *     wired in for real from 2026-09-03: a non-zero exit here DOES fail
+ *     this whole gate.
  *
- * See tools/contract-equivalence/README.md "Two sections, two different
- * exit-code relationships" and ROADMAP_TEMP.md 5-xi's 2026-09-03 addendum
- * for the fuller writeup of this split.
+ * FIFTH CHECK, ADDED 2026-09-03 (E04-S082, "gate-route-schema") — route-
+ * schema is now GATED too
+ *
+ * E04-S081 resolved both of route-schema's DIVERGES by adding the missing
+ * `default`s to `analytics.yaml` (the user's authorized choice — see
+ * docs/stories/PENDING_DECISIONS.md's now-resolved entry). With DIVERGES
+ * at zero (`SUMMARY: 26 total — MATCH=11 DIVERGES=0 ABSENT=15`, verified
+ * on `main`), the reason route-schema was left unenforced is gone, so this
+ * story moves it into the gated section below: a non-zero exit from
+ * `check.live.test.ts` now DOES fail this whole gate, exactly like
+ * response-shape above.
+ *
+ * ABSENT is deliberately NOT gated by this move, and cannot be by
+ * construction: `divergedRoutes()` (`tools/contract-equivalence/src/
+ * print-report.ts`) filters strictly on `status === "DIVERGES"`, so an
+ * ABSENT route never appears in the array this check asserts is empty.
+ * 15 of the 26 routes report ABSENT today — overwhelmingly because no
+ * route in this application registers a Fastify `params:` or `response:`
+ * schema at all (tracked separately as E04-S077 and E04-S079, both
+ * `blocked-team-b` on authorization nobody has given yet). Gating ABSENT
+ * would make `main` permanently red on someone else's unanswered
+ * question — precisely the failure mode the original observed-only
+ * landing (E04-S073) existed to prevent. The full report, ABSENT included,
+ * is still printed on every run below.
+ *
+ * See tools/contract-equivalence/README.md "Both sections are gated" and
+ * ROADMAP_TEMP.md 5-xi's 2026-09-03 addenda for the fuller writeup of
+ * this split's history.
  */
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -287,20 +311,36 @@ if (responseShape.exitCode !== 0) {
 }
 
 console.log(`\n${"=".repeat(78)}`);
-console.log("route-schema (observed, pending PENDING_DECISIONS) — does NOT affect this gate's exit code");
+console.log("route-schema (gated) — tools/contract-equivalence, E04-S073/E04-S081/E04-S082");
 console.log("=".repeat(78));
 const routeSchema = runContractEquivalenceVitest("src/check.live.test.ts", [
   "-t",
   "every registered route's Fastify schema equals its contract operation's schema",
 ]);
 console.log(routeSchema.output);
+if (routeSchema.exitCode !== 0) {
+  failed = true;
+  console.error(
+    `FAIL: route-schema check exited ${routeSchema.exitCode} — the schema Fastify actually validates ` +
+      "a request against diverged from its contract operation's schema for the same field (see the " +
+      "route + field diff above).",
+  );
+} else {
+  console.log(
+    "PASS: route-schema check exited 0 — zero DIVERGES. (E04-S081 resolved the only two known ones by " +
+      "adding their querystring defaults to analytics.yaml; see docs/stories/PENDING_DECISIONS.md's " +
+      "resolved entry and PROGRESS.md's E04-S081 row.)",
+  );
+}
 console.log(
-  `OBSERVED (not gated): route-schema check exited ${routeSchema.exitCode}. Two real DIVERGES are ` +
-    "known and unresolved — GET /admin/metrics/latency's and GET /admin/feedback's querystring " +
-    "defaults (contracts declare none, the implementation adds one) — see docs/stories/PENDING_DECISIONS.md " +
-    "and PROGRESS.md's E04-S073 row. Deciding those is the user's call, per CLAUDE.md 鐵律 #1; until " +
-    "then this section is printed for visibility only and can never fail this gate or be silenced " +
-    "into an allowlist.",
+  "NOTE (does not affect the verdict above): 15 of the 26 routes report ABSENT — no runtime " +
+    "params/response schema exists to compare against the contract's, tracked as E04-S077 " +
+    "(params) and E04-S079 (response), both blocked-team-b on authorization nobody has given yet. " +
+    'ABSENT can never fail this check: divergedRoutes() (print-report.ts) filters strictly on ' +
+    'status === "DIVERGES", so an ABSENT route never enters the array asserted empty above. Gating ' +
+    "ABSENT would make this gate permanently red on someone else's unanswered authorization question " +
+    "— exactly what E04-S073's original observed-only landing existed to prevent — so it stays " +
+    "printed for visibility only, never gated, and must never be silenced into an allowlist.",
 );
 
 /* ── Verdict ─────────────────────────────────────────────────────────────── */

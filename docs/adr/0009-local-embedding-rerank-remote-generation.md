@@ -186,10 +186,32 @@ D1 未批就是「**生成側維持 canned provider,真實 LLM 待定**」。紀
 **本 ADR 不預先選定,列為實作前必須先決的子決策**,因為捏造來源是 RAG 最危險的
 失效,而兩條路失敗的方式不一樣。
 
-**R2 — reranker 的 `max_length=512` 會靜默截斷。**
-query + passage 必須塞進 512 token。超過就截斷,**截斷不報錯**,它會拿半段文字去
-評分。實作前必須量出目前 chunk 的實際 token 分佈,並在超過時做出明確處理(拒絕、
-或明確截斷並記錄),不得讓它安靜發生。
+**R2 — 超長輸入的行為(2026-09-04 已量測,原本寫錯,更正如下)。**
+
+~~原文:`max_length=512` 會靜默截斷,拿半段文字去評分。~~ **這是錯的。**
+
+該說法來自模型卡上 Python `transformers` 範例裡的 `max_length=512` —— 在**那條**
+路徑上截斷確實是靜默的。但本專案走的是 llama.cpp 的 server,行為不同。E04-S089 量
+到、協調者複驗:
+
+```
+HTTP 500
+{"error":{"code":500,"message":"input (2110 tokens) is too large to process.
+ increase the physical batch size (current batch size: 512)","type":"server_error"}}
+```
+
+**它大聲失敗,不是靜默截斷。** 這是「讀出來的機制」又一次出錯——本 repo 已為此付過
+兩次帳(flock 的 exit 66、共用的 turbo 快取),這是第三次,而且是寫在 ADR 裡散布出去的。
+
+**真正的風險比原本寫的更精確**:**一份過長的文件會讓整個 `/rerank` 批次失敗**。所以
+危險的不是「半段文字被評分」,而是**呼叫端在那時安靜地退回未重排的順序** —— 那才是
+靜默的那一半。
+
+E04-S089 的處置:provider 以 server 自己的 `/tokenize` + `/detokenize` **主動截斷**
+(公式已對著真實 server 驗到 512 token 的邊界),並透過 `onTruncated` 回報。實測 chunk
+token 分佈(真實 `chunkDocument()`,`targetSize=480`):n=13,min/max/mean =
+38/324/135.3,最壞情況(密集無標點中文)403 token。今天離 512 還有餘裕,所以主動截斷
+是守門而不是繞路。
 
 **R3 — 兩份 GGUF 都是社群轉檔,且都沒有寫轉檔工具版本。**
 轉壞了不會 crash,只會排序變差 —— 又一個靜默失效。採用前需要:

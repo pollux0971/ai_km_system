@@ -63,3 +63,14 @@ export {
 export type { RerankOptions } from "./rerank/mmr.js";
 export { retrieveWithReranking } from "./rerank/retrieve-with-reranking.js";
 export type { RetrieveWithRerankingOptions } from "./rerank/retrieve-with-reranking.js";
+export { CrossEncoderError, sigmoid, CROSS_ENCODER_FIDELITY } from "./rerank/cross-encoder.js";
+export type { CrossEncoderProvider, CrossEncoderScore } from "./rerank/cross-encoder.js";
+export {
+  HttpCrossEncoderProvider,
+  CrossEncoderUnavailableError,
+  CrossEncoderTimeoutError,
+} from "./rerank/cross-encoder-http.provider.js";
+export type {
+  HttpCrossEncoderProviderOptions,
+  CrossEncoderTruncationInfo,
+} from "./rerank/cross-encoder-http.provider.js";

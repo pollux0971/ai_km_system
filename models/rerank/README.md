@@ -39,13 +39,27 @@ dense 召回(bge-m3,大候選池)
   → MMR(多樣性,取 topK)
 ```
 
-## ⚠️ `max_length = 512` 會靜默截斷
+## ⚠️ 超長輸入:大聲失敗,不是靜默截斷(2026-09-04 更正)
 
-query + passage 必須一起塞進 512 token。**超過就截斷,而截斷不報錯** —— 它會拿半段
-文字去評分,分數看起來完全正常。
+~~本節原本寫「超過 512 就靜默截斷,拿半段文字去評分」。~~ **那是錯的**,來自模型卡
+上 Python `transformers` 範例的 `max_length=512`——那條路徑截斷確實是靜默的,但走
+llama.cpp 的 server 不是。實測(E04-S089 量到,協調者複驗):
 
-接線前必須量出目前 chunk 的實際 token 分佈,並對超長的情況做出**明確**處理
-(拒絕,或明確截斷並記錄)。不得讓它安靜發生。
+```
+HTTP 500
+{"error":{"code":500,"message":"input (2110 tokens) is too large to process.
+ increase the physical batch size (current batch size: 512)","type":"server_error"}}
+```
+
+**真正的風險**:一份過長的文件會讓**整個 `/rerank` 批次**失敗。危險的不是半段文字被
+評分,而是**呼叫端在那時安靜地退回未重排的順序**。
+
+實測 chunk token 分佈(真實 `chunkDocument()` 路徑,`targetSize=480`,以
+`llama-tokenize` 對著本模型的 GGUF 量):n=13,min/max/mean = **38/324/135.3**;
+最壞情況(密集無標點中文,滿 480 字)**403 token**,0.84 token/字。
+
+`E04-S089` 的 `HttpCrossEncoderProvider` 以 server 自己的 `/tokenize` + `/detokenize`
+**主動截斷**(公式已對著真實 server 驗到 512 token 的邊界),並以 `onTruncated` 回報。
 
 ## 已知空白
 

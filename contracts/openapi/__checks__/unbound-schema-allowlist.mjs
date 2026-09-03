@@ -146,27 +146,24 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
   },
   {
     class: "event-schema-no-provider-type",
-    match: (yaml, schema) => yaml === "conversations.yaml" && (schema === "ChangeEvent" || schema === "ResyncEvent"),
+    match: (yaml, schema) => yaml === "conversations.yaml" && schema === "ResyncEvent",
     reason:
-      "ChangeEvent: registerChangeEventRoutes (services/conversation/src/" +
-      "routes/change-events.ts) serialises a private, unexported " +
-      "toWirePayload() object literal for the SSE wire payload, not the " +
-      "exported ChangeEventRow repository type — they differ in the one " +
-      "field that matters (`seq` on the row vs. `id` on the wire). " +
-      "ResyncEvent is the same route file's OTHER SSE event " +
-      "(`res.write(\\`event: resync\\ndata: ${JSON.stringify({ reason: ... " +
-      "})}\\n\\n\\`)`) — an inline object literal with no exported type at " +
-      "all, not even a private one. Binding either requires adding a " +
-      "type-only export from services/conversation, a Team B folder outside " +
-      "this story's contracts/openapi/__checks__/-only scope.",
+      "ResyncEvent is services/conversation/src/routes/change-events.ts's " +
+      "OTHER SSE event (`res.write(\\`event: resync\\ndata: " +
+      "${JSON.stringify({ reason: ... })}\\n\\n\\`)`, three call sites) — " +
+      "each an inline object literal with no exported type at all, not even " +
+      "a private one, so there is no single named type to bind against. " +
+      "(ChangeEvent, formerly in this same class, was bound by E04-S072 " +
+      "— option (d), user-approved 2026-09-03 — once the sibling event, " +
+      "`toWirePayload`, gained a real named return type; ResyncEvent has no " +
+      "such function to name.)",
     escalation:
-      "conversations-compat.ts's own 'UNBINDABLE, RECORDED RATHER THAN " +
-      "FAKED' header comment (ChangeEvent); docs/stories/PROGRESS.md " +
-      "E04-S065 row (2026-09-02, back half) for both",
+      "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half); " +
+      "E04-S072 row (2026-09-03) for ChangeEvent's removal from this class",
     unlock:
-      "pending user authorization for a one-line type-only export from " +
-      "services/conversation naming the SSE wire shape for ChangeEvent and/or " +
-      "ResyncEvent.",
+      "pending user authorization for either a type-only export naming " +
+      "ResyncEvent's wire shape, or refactoring the three inline " +
+      "`res.write` call sites to share one named serializer function first.",
   },
   {
     class: "unimplemented-route",

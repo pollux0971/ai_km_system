@@ -484,7 +484,7 @@ export interface operations {
     getLatencyMetrics: {
         parameters: {
             query?: {
-                /** @description Trailing window size in days. Implementation decides the default — this contract only freezes the response shape. */
+                /** @description Trailing window size in days. Defaults to 7 when omitted. */
                 days?: number;
             };
             header?: never;

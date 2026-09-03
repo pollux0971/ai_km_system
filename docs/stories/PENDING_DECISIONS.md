@@ -557,31 +557,12 @@ build && pnpm --filter @ai-km/api start` 操作,會在**任何環境**(不只
 Docker)得到一模一樣的 crash——這個路徑目前對任何呼叫者都是壞的,不是
 E01-S028 這個 story 造成的,也不是只有 Docker 部署會碰到。
 
-### [2026-09-03] `E04-S073` 的 2 個 querystring `default` DIVERGES 是否收斂
+### ✅ [2026-09-03] `E04-S073` 的 2 個 querystring `default` DIVERGES 是否收斂 —— 已批示,見下方「已批示」區
 
-**背景**:`tools/contract-equivalence/` 的 L2-EQ(route-schema 比對)首次執行即發現
-兩條真分歧,`normalize.ts` 刻意不把 `default` 正規化掉,所以這兩條會一直真實存在,
-不會因為工具升級而自己消失:
-
-| route | 欄位 | 契約 | 實作 |
-|---|---|---|---|
-| `GET /v1/admin/metrics/latency` | `days` 的 `default` | 未宣告(yaml 原文寫「implementation decides the default」) | `7` |
-| `GET /v1/admin/feedback` | `page`／`pageSize` 的 `default` | 未宣告(無說明文字) | `1`／`20` |
-
-**需要你決定的是哪一半**:契約補上 `default: 7`/`1`/`20`(讓契約說實話),還是
-實作拿掉這兩個 `default`、改讀 `?? fallback`(讓實作照契約字面走)。兩者都是
-契約層決定(`CLAUDE.md` 鐵律 #1),不是實作細節,開發者不得代為選邊。
-
-**現況(2026-09-03 追記)**:這兩條分歧目前是 `contract-gate` 的
-`route-schema (observed, pending PENDING_DECISIONS)` 區塊唯一還在紅的原因
-——這個區塊的紅**不會**讓 `contract-gate` job 失敗(見
-`tools/contract-equivalence/README.md`「Two sections, two different
-exit-code relationships」),但每次執行都會印出來,直到這裡被裁示為止。
-裁示後的收斂本身(改 yaml 或改 `services/feedback`)才會讓這兩條真的變成
-MATCH,到時候 `route-schema` 這半才有機會跟著接進 exit code。
-
-**不做的後果**:這個區塊永遠印著兩條已知分歧,`route-schema` 半邊永遠只能是
-「觀察,不擋」,不會升級成守門。
+使用者「照做」批示第 4 項(見本檔最上方)核准「契約補上 default」這一半;
+**E04-S081** 已落地、**E04-S082** 已把 route-schema 接進 `contract-gate` 的
+exit code。完整結論記在下方「已批示」區,本條原文保留於此處僅供追蹤連結,
+不再視為待批示問題。
 
 ## ✅ 已解除:`@ai-km/service-retrieval` 的 turbo 快取不可信(2026-09-02,已於同日解除)
 
@@ -603,4 +584,31 @@ hash 會隨相依變動,就是 task graph 真的看見那條邊。
 
 ## 已批示
 
-(目前無)
+### ✅ [2026-09-03] `E04-S073` 的 2 個 querystring `default` DIVERGES 是否收斂 —— 契約補上 default
+
+**原問題**:`tools/contract-equivalence/` 的 L2-EQ(route-schema 比對)首次執行
+發現兩條真分歧,`normalize.ts` 刻意不把 `default` 正規化掉,所以這兩條不會因
+工具升級自己消失:
+
+| route | 欄位 | 契約 | 實作 |
+|---|---|---|---|
+| `GET /v1/admin/metrics/latency` | `days` 的 `default` | 未宣告(yaml 原文寫「implementation decides the default」) | `7` |
+| `GET /v1/admin/feedback` | `page`／`pageSize` 的 `default` | 未宣告(無說明文字) | `1`／`20` |
+
+**裁示**:使用者在協調者 session 親口批示「照做」(見本檔最上方 2026-09-03 條目
+第 4 項),選擇「契約補上 default」這一半,而非「實作拿掉 default」。
+
+**落地**:**`E04-S081`** 把 `default: 7`(`days`)、`default: 1`(`page`)、
+`default: 20`(`pageSize`)三個值加進 `contracts/openapi/analytics.yaml`(值
+從 `services/feedback` 的實作讀出,非抄任務文字),同時刪掉 `days` 已過時的
+「implementation decides the default」散文。落地後 route-schema 比對
+`SUMMARY` 由 `MATCH=9 DIVERGES=2 ABSENT=15` 變成 `MATCH=11 DIVERGES=0
+ABSENT=15`(協調者於 `main` 獨立複驗過)。
+
+**後續**:DIVERGES 歸零讓「route-schema 因為帶著未解發現而不能接進 gate」這個
+理由消失,**`E04-S082`** 接著把 `contracts/openapi/__checks__/run-gate.mjs`
+的 route-schema 區塊從 observed-only 移進 gated——現在 `pnpm contract-gate`
+的兩個 L2-EQ 區塊(`response-shape`、`route-schema`)都會讓紅色影響 job 的
+exit code。詳見 `tools/contract-equivalence/README.md`「Both sections are
+gated」、`ROADMAP_TEMP.md` 5-xi 的 E04-S082 追記、`docs/stories/PROGRESS.md`
+的 E04-S081／E04-S082 兩列。

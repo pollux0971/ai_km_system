@@ -61,7 +61,23 @@ fixture 等於變更沒落地,拆成另一個 story 會讓 main 在兩者之間�
 正是 `E04-S073` 要抓的病。方案 (d) 讓型別**從實作衍生**,只有一份真相。
 風險已查證:`toWirePayload` **只有一個呼叫端**且直接 `JSON.stringify`,型別**收窄**不放寬。
 
-**3. `ResyncEvent.reason` 改 enum**
+**3. `ResyncEvent.reason` 改 enum — ✅ 已裁示但判定為 no-op,刻意未執行(2026-09-03)**
+
+使用者批准了本項,但**協調者查證後未執行**,理由如下,以待推翻:
+
+- `conversations.yaml` 的 `ResyncEvent.reason` **已經是 enum**:
+  `[EVENT_LOG_TRUNCATED, UNKNOWN_LAST_EVENT_ID, SERVER_RESTART]`(現場查證)。
+- 實作(`change-events.ts` 三處 `res.write`)只送出前兩個(現場查證)。
+- 技術顧問原本的提案是**收窄為兩個**,即移除 `SERVER_RESTART`。
+  **但那是破壞性變更**:任何已在處理該值的客戶端會失去契約依據,
+  而收窄**回應**欄位的相容性論證(讀 `string` 者接受 enum)**不適用於移除既有 enum 成員**。
+- 一份契約保留一個尚未使用的值**不是缺陷**,是留給未來的空間。
+
+**因此本項無事可做。** 若你的本意是「確認保留 `SERVER_RESTART` 是刻意的」,那已確認;
+若你的本意是「真的要移除它」,請明說,協調者會執行並在紀錄中標明這是破壞性變更。
+
+> ⚠️ **為什麼寫這麼長**:一個「已批准但未執行」的項目,在紀錄上與「被遺漏」無法區分。
+> 今天已有三次授權清單出錯,三次都是讀清單的人抓到的。
 `conversations.yaml` 的該欄位改 `enum: [UNKNOWN_LAST_EVENT_ID, EVENT_LOG_TRUNCATED]`
 (值自 `change-events.ts` 三處 `res.write` 的字面讀出)。與 1 同批視為一次 contract event 較省事。
 ⚠️ 技術顧問原先建議的第三條(以為 yaml 寫的是無約束 `string`)**經協調者實測後不採納**——

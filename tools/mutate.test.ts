@@ -36,12 +36,13 @@
  * recorded in this story's commit body and PROGRESS.md row, not in this
  * file.
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { sha256Hex, verifyRestoredHash } from "./mutate.mjs";
+import { inFlightMarkerPathFor, sha256Hex, verifyRestoredHash } from "./mutate.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mutateScript = path.join(repoRoot, "tools", "mutate.mjs");
@@ -261,5 +262,211 @@ describe("mutate.mjs — restoration leaves the fixture byte-identical no matter
     const shaAfter = /sha256 after restore: (\w+)/.exec(before.stdout)?.[1];
     expect(shaBefore).toBeTruthy();
     expect(shaBefore).toBe(shaAfter);
+  });
+});
+
+/**
+ * ── E04-S083: signal safety ───────────────────────────────────────────────
+ *
+ * A real, external `kill -TERM` is sent to a real mutate.mjs child process
+ * — this must NOT be verified by having mutate.mjs mutate-test itself
+ * (that would be circular). The decisive assertion is the fixture's sha256
+ * AFTER the kill, compared against its sha256 BEFORE the run — not "did it
+ * exit", not "did it throw" (see this story's brief: existence-only
+ * assertions look identical whether the restore fired or not).
+ */
+describe("mutate.mjs — signal safety (E04-S083)", () => {
+  it("SIGTERM sent after the mutation lands on disk, but before mutate.mjs's own restore, still leaves the fixture byte-identical to its pre-mutation content", async () => {
+    const relFile = "tools/__fixtures__/slow-guard.mjs";
+    const fixturePath = path.join(repoRoot, relFile);
+    const originalContent = readFileSync(fixturePath, "utf8");
+    const originalHash = sha256Hex(Buffer.from(originalContent, "utf8"));
+    const mutatedNeedle = "score < 0.5";
+    expect(originalContent).not.toContain(mutatedNeedle);
+
+    const child = spawn(
+      "node",
+      [
+        mutateScript,
+        "--file",
+        relFile,
+        "--replace",
+        "score >= 0.5",
+        "--with",
+        mutatedNeedle,
+        "--expect-fail",
+        "tools/__fixtures__/slow-guard.test.ts",
+      ],
+      { cwd: repoRoot },
+    );
+    // Drain stdout/stderr so the child never blocks on a full pipe buffer.
+    child.stdout?.resume();
+    child.stderr?.resume();
+
+    try {
+      // Poll the fixture on disk until the mutation has actually landed —
+      // this is what proves the SIGTERM below arrives inside the real
+      // danger window (after write, before restore), not before or after it.
+      const deadline = Date.now() + 30_000;
+      let mutationObserved = false;
+      while (Date.now() < deadline) {
+        if (readFileSync(fixturePath, "utf8").includes(mutatedNeedle)) {
+          mutationObserved = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(mutationObserved).toBe(true);
+
+      child.kill("SIGTERM");
+
+      const { exitCode, signal } = await new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>(
+        (resolve) => {
+          child.on("exit", (code, sig) => resolve({ exitCode: code, signal: sig }));
+        },
+      );
+
+      // 143 = 128 + SIGTERM(15), the OS convention mutate.mjs's own signal
+      // handler exits with — NOT the process being killed out from under
+      // it (which would report `signal: "SIGTERM"` and `exitCode: null`).
+      expect(signal).toBeNull();
+      expect(exitCode).toBe(143);
+
+      const restoredHash = sha256Hex(Buffer.from(readFileSync(fixturePath, "utf8"), "utf8"));
+      expect(restoredHash).toBe(originalHash);
+    } finally {
+      // Best-effort: make sure nothing from this test lingers if an
+      // assertion above threw before the child had already exited.
+      if (child.exitCode === null && child.signalCode === null) {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // already gone
+        }
+      }
+    }
+  });
+});
+
+/**
+ * ── E04-S083: pre-flight self-check / in-flight marker ─────────────────────
+ *
+ * Redesigned per coordinator review: the first design was a persistent
+ * ledger comparing every run's sha256 against the last-recorded one, which
+ * could not tell "previous run crashed" apart from "you made a legitimate
+ * edit since the last run" — and the second case is this repo's normal
+ * work loop, not an edge case. The in-flight marker fixes that by only
+ * ever existing for the lifetime of one mutation: no marker means nothing
+ * is compared at all, so a legitimate edit between two mutate.mjs runs can
+ * never trip this check. A marker found on disk means the run that wrote
+ * it never got to clean up after itself — see mutate.mjs's own PRE-FLIGHT
+ * SELF-CHECK: IN-FLIGHT MARKER doc section.
+ *
+ * Three decisive, non-circular assertions (real `kill -9`, real
+ * `sha256Hex`/`existsSync` — not mutate.mjs verifying itself):
+ *   1. A previous run killed with UNCATCHABLE `SIGKILL` (so even the
+ *      SIGNAL SAFETY fix above gets no chance to run) leaves both the file
+ *      AND its marker in the mutated state — the next run must refuse,
+ *      naming the file, and (since the marker carries the original bytes)
+ *      self-heal the file back to its pre-mutation content as a side
+ *      effect of refusing.
+ *   2. A plain, legitimate edit to the SAME file (no marker present)
+ *      afterwards runs mutate.mjs completely normally — this is the
+ *      scenario the ledger design would have wrongly refused.
+ *   3. After any clean run, the marker file does not exist.
+ *
+ * Uses its own dedicated fixture (`crash-guard.mjs`) — see that file's doc
+ * comment for why it must not be shared with other tests in this file.
+ */
+describe("mutate.mjs — pre-flight self-check / in-flight marker (E04-S083)", () => {
+  const relFile = "tools/__fixtures__/crash-guard.mjs";
+  const fixturePath = path.join(repoRoot, relFile);
+  const markerPath = inFlightMarkerPathFor(repoRoot, relFile);
+  const runArgs = [
+    "--file",
+    relFile,
+    "--replace",
+    "score >= 0.5",
+    "--with",
+    "score < 0.5",
+    "--expect-fail",
+    "tools/__fixtures__/crash-guard.test.ts",
+  ];
+
+  it("SIGKILL leaves the file AND its marker mutated; the next run refuses, self-heals, and a legitimate edit afterwards is never refused", async () => {
+    const originalContent = readFileSync(fixturePath, "utf8");
+    const originalHash = sha256Hex(Buffer.from(originalContent, "utf8"));
+    const mutatedNeedle = "score < 0.5";
+    expect(originalContent).not.toContain(mutatedNeedle);
+    // Start from a clean slate: no marker left over from a previous suite run.
+    if (existsSync(markerPath)) rmSync(markerPath);
+
+    // ── 1. Simulate an uncatchable crash mid-mutation ──────────────────
+    const child = spawn("node", [mutateScript, ...runArgs], { cwd: repoRoot });
+    child.stdout?.resume();
+    child.stderr?.resume();
+
+    const deadline1 = Date.now() + 30_000;
+    let mutationObserved = false;
+    while (Date.now() < deadline1) {
+      if (readFileSync(fixturePath, "utf8").includes(mutatedNeedle)) {
+        mutationObserved = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(mutationObserved).toBe(true);
+
+    // SIGKILL cannot be caught — this is the whole point of this test.
+    child.kill("SIGKILL");
+    const { signal } = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.on("exit", (code, sig) => resolve({ code, signal: sig }));
+    });
+    expect(signal).toBe("SIGKILL");
+
+    // Decisive: the file is ACTUALLY still mutated (not merely "the
+    // process died") and the marker is ACTUALLY still on disk.
+    const mutatedHash = sha256Hex(Buffer.from(readFileSync(fixturePath, "utf8"), "utf8"));
+    expect(mutatedHash).not.toBe(originalHash);
+    expect(existsSync(markerPath)).toBe(true);
+    const marker = JSON.parse(readFileSync(markerPath, "utf8"));
+    expect(marker.originalSha256).toBe(originalHash);
+    expect(marker.mutatedSha256).toBe(mutatedHash);
+
+    // ── 2. The next run must refuse, naming the file, and self-heal ────
+    const afterCrash = runMutate(runArgs);
+    expect(afterCrash.exitCode).toBe(1);
+    expect(afterCrash.stderr).toContain(relFile);
+    expect(afterCrash.stderr).toContain(mutatedHash);
+    expect(afterCrash.stderr).toContain(originalHash);
+    expect(afterCrash.stderr).toContain("疑似停在前一次未乾淨結束的突變狀態");
+    // Decisive: the file was actually healed back to the ORIGINAL bytes
+    // (not left mutated, not left in some third state), and the marker
+    // that made this refusal possible is gone.
+    const healedHash = sha256Hex(Buffer.from(readFileSync(fixturePath, "utf8"), "utf8"));
+    expect(healedHash).toBe(originalHash);
+    expect(existsSync(markerPath)).toBe(false);
+
+    // ── 3. A legitimate edit (no marker present) is NEVER refused ───────
+    // This is the scenario the rejected ledger design would have wrongly
+    // treated as suspicious. Edit a COMMENT line, not the `score >= 0.5`
+    // occurrence mutate.mjs itself will target, so this is unambiguously
+    // "someone changed the file for an unrelated reason", not a crash.
+    const legitimatelyEditedContent = readFileSync(fixturePath, "utf8").replace(
+      "// Fixture for mutate.mjs's own IN-FLIGHT MARKER meta-test",
+      "// Fixture for mutate.mjs's own IN-FLIGHT MARKER meta-test (edited for E04-S083's own reverse verification)",
+    );
+    expect(legitimatelyEditedContent).not.toBe(readFileSync(fixturePath, "utf8"));
+    writeFileSync(fixturePath, legitimatelyEditedContent, "utf8");
+    expect(existsSync(markerPath)).toBe(false); // no marker => nothing to compare against
+
+    const afterLegitEdit = runMutate(runArgs);
+    expect(afterLegitEdit.exitCode).toBe(0); // must NOT be refused
+
+    // ── 4. After ANY clean run, the marker must not exist ───────────────
+    expect(existsSync(markerPath)).toBe(false);
+
+    // Restore the fixture to its committed content for the next test run.
+    writeFileSync(fixturePath, originalContent, "utf8");
   });
 });

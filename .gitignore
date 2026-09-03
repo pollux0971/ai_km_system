@@ -48,6 +48,13 @@ tools/asr-readiness/fixtures/*.wav
 # must never reach git. `tls internal`'s self-signed CA and any real
 # certificate supplied later both live in these paths at deploy time.
 infra/docker/certs/
+
+# tools/mutate.mjs's pre-flight in-flight marker (E04-S083) — local machine
+# state recording an in-progress (or crashed) mutation, not a repo
+# artifact. Exists only for the lifetime of one mutation; see mutate.mjs's
+# own PRE-FLIGHT SELF-CHECK: IN-FLIGHT MARKER doc section.
+tools/.mutate-inflight/
+
 infra/docker/caddy-data/
 infra/docker/caddy-config/
 *.pem

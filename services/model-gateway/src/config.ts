@@ -190,17 +190,50 @@ export function resolveModelGatewayConfig(
  * be a worse failure than the one it prevents. So the check runs at the point
  * of registration: if the embedding routes are being mounted in production and
  * the only available provider is the placeholder fake, startup stops there.
+ *
+ * ── E04-S088 FOLLOW-UP (coordinator review) ─────────────────────────────
+ *
+ * This function used to take only `provider: string` — the DECLARED choice
+ * read out of config/env. That was a guard pointed at something that cannot
+ * disagree with itself: once `EmbeddingProviderChoice` grew a second legal
+ * value (`"llama-server"`), it became possible for `plugin.ts` to declare
+ * `embeddingProvider: "llama-server"` while its provider-construction code
+ * still always built `DeterministicEmbeddingProvider` — a real production
+ * bug that existed in this codebase for one review cycle. The guard, only
+ * ever looking at the string, said OK. Exactly the failure shape this repo
+ * keeps bleeding from: a gate checked against something that cannot refute
+ * it.
+ *
+ * So this now takes the ACTUAL constructed provider instance (or anything
+ * with a `.name`) and checks it against the declared string ITSELF, before
+ * ever asking whether that name is "fake". A caller that constructs a
+ * provider whose `.name` does not match what it declared to this function
+ * is refused unconditionally (not just in production) — that mismatch is a
+ * wiring defect, not an environment/config choice, and cannot be blamed on
+ * "which environment we're in" the way the fake-in-production rule can.
  */
+export interface ProviderIdentity {
+  readonly name: string;
+}
+
 export function assertProviderUsable(
   nodeEnv: NodeEnv,
   feature: "embedding" | "generation",
-  provider: string,
+  declaredProvider: string,
+  actualProvider: ProviderIdentity,
 ): void {
-  if (nodeEnv === "production" && provider === "fake") {
+  if (declaredProvider !== actualProvider.name) {
+    throw new ModelGatewayConfigError(
+      `${feature} provider 宣告為 "${declaredProvider}",但實際建構出來的 provider 回報的 name 是 ` +
+        `"${actualProvider.name}"——宣告與實際不符,拒絕啟動。這道守門檢查的是實際建構的 provider ` +
+        `實例,不是設定字串;字串相符不代表接線正確,字串不符則一定是接線的 bug,與 NODE_ENV 無關。`,
+    );
+  }
+  if (nodeEnv === "production" && actualProvider.name === "fake") {
     throw new ModelGatewayConfigError(
       `${feature} provider = "fake" 不得在 NODE_ENV=production 下啟用` +
         `(placeholder fake 只能用於 unit/E2E)。已拒絕啟動。` +
-        `真實 provider 需要 E04-S037 決定的模型執行環境。`,
+        `真實 provider 需要一個已測試、非 placeholder 的實作。`,
     );
   }
 }

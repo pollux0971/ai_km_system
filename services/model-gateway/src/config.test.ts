@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ModelGatewayConfigError, resolveModelGatewayConfig } from "./config.js";
+import { assertProviderUsable, ModelGatewayConfigError, resolveModelGatewayConfig } from "./config.js";
 
 const BASE = { nodeEnv: "development" as const, asrProvider: "whisper-server" as const, asrServerUrl: "http://127.0.0.1:8178" };
 
@@ -125,5 +125,63 @@ describe("resolveModelGatewayConfig — embedding provider (E04-S088)", () => {
     // untouched by selecting the real provider — HttpEmbeddingProvider
     // reports its own 1024 independently (see http.provider.test.ts).
     expect(config.embeddingDimensions).toBe(256);
+  });
+});
+
+
+describe("assertProviderUsable — checks the ACTUAL provider instance, not the declared string (E04-S088 follow-up)", () => {
+  it("★ reverse-verification: declared llama-server but actual constructed provider is deterministic (fake) — must refuse, naming the mismatch", () => {
+    // This is the EXACT bug the coordinator found: EmbeddingProviderChoice
+    // grew "llama-server" as a legal declared value, but nothing forced the
+    // thing actually constructed to match it. `actualProvider` here stands
+    // in for what a regressed `plugin.ts` (one that ignores config.
+    // embeddingProvider and always builds the deterministic placeholder)
+    // would hand this function.
+    let thrown: unknown;
+    try {
+      assertProviderUsable("development", "embedding", "llama-server", { name: "fake" });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ModelGatewayConfigError);
+    const message = (thrown as Error).message;
+    // Decisive on CONTENT: the message must name the MISMATCH itself
+    // (declared vs actual), not just "provider is fake" — a message that
+    // only said the latter would be indistinguishable from the (unrelated)
+    // production/fake guard below, and would not tell an operator that the
+    // config string and the running code disagree.
+    expect(message).toContain("llama-server");
+    expect(message).toContain("fake");
+    expect(message).toMatch(/宣告.*不符|不符.*宣告/);
+  });
+
+  it("refuses a declared/actual mismatch even OUTSIDE production (this is a wiring bug, not an environment choice)", () => {
+    expect(() =>
+      assertProviderUsable("test", "embedding", "llama-server", { name: "fake" }),
+    ).toThrowError(ModelGatewayConfigError);
+    expect(() =>
+      assertProviderUsable("development", "generation", "fake", { name: "canned" }),
+    ).toThrowError(ModelGatewayConfigError);
+  });
+
+  it("regression: matching declared/actual, non-fake, in production — allowed", () => {
+    expect(() =>
+      assertProviderUsable("production", "embedding", "llama-server", { name: "llama-server" }),
+    ).not.toThrow();
+  });
+
+  it("regression: matching declared/actual fake in development/test — allowed", () => {
+    expect(() =>
+      assertProviderUsable("development", "embedding", "fake", { name: "fake" }),
+    ).not.toThrow();
+    expect(() =>
+      assertProviderUsable("test", "generation", "fake", { name: "fake" }),
+    ).not.toThrow();
+  });
+
+  it("regression: matching declared/actual fake in production is STILL refused (the original guard's job)", () => {
+    expect(() =>
+      assertProviderUsable("production", "embedding", "fake", { name: "fake" }),
+    ).toThrowError(ModelGatewayConfigError);
   });
 });

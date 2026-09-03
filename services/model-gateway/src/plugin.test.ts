@@ -8,7 +8,7 @@
  */
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { modelGatewayPlugin } from "./plugin.js";
+import { modelGatewayPlugin, type ModelGatewayOptions } from "./plugin.js";
 
 let app: FastifyInstance | undefined;
 afterEach(async () => {
@@ -16,7 +16,10 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function build(specNames: string[]): Promise<FastifyInstance> {
+async function build(
+  specNames: string[],
+  overrides: Partial<ModelGatewayOptions> = {},
+): Promise<FastifyInstance> {
   const instance = Fastify({ logger: false });
   instance.decorate("requireSession", async function requireSession(request: FastifyRequest) {
     Object.assign(request, { auth: { userId: "u-test" } });
@@ -26,6 +29,7 @@ async function build(specNames: string[]): Promise<FastifyInstance> {
     nodeEnv: "test",
     asrProvider: "fake",
     asrServerUrl: "http://127.0.0.1:8080",
+    ...overrides,
   });
   await instance.ready();
   return instance;
@@ -77,5 +81,51 @@ describe("modelGatewayPlugin", () => {
     const res = await app.inject({ method: "POST", url: "/v1/transcriptions" });
     // 415 (not 404): the route exists and rejected the missing multipart body.
     expect(res.statusCode).toBe(415);
+  });
+
+  describe("AC-P6/P7 — embeddingProvider selection really constructs the declared provider (E04-S088 follow-up)", () => {
+    it("AC-P6 ★ embeddingProvider=\"llama-server\" actually constructs HttpEmbeddingProvider — not the deterministic placeholder (decisive on the REAL provider identity, not just \"boot succeeded\")", async () => {
+      app = await build(["embedding"], {
+        embeddingProvider: "llama-server",
+        embeddingServerUrl: "http://127.0.0.1:8181",
+      });
+      // `providers` is the gateway's own diagnostics surface (gateway.ts) —
+      // reading it here is exactly how a regression (declare llama-server,
+      // build deterministic) would have been caught BEFORE this follow-up:
+      // it exposes what was actually constructed, not what was configured.
+      const gateway = (app as unknown as {
+        modelGateway: { providers: { embedding: { name: string; model: string; fidelityCeiling: string } } };
+      }).modelGateway;
+      expect(gateway.providers.embedding.name).toBe("llama-server");
+      expect(gateway.providers.embedding.model).toBe("bge-m3");
+      expect(gateway.providers.embedding.fidelityCeiling).toBe("PF2");
+    });
+
+    it("AC-P6b regression: embeddingProvider unset (default \"fake\") still constructs the deterministic placeholder", async () => {
+      app = await build(["embedding"]);
+      const gateway = (app as unknown as {
+        modelGateway: { providers: { embedding: { name: string; model: string } } };
+      }).modelGateway;
+      expect(gateway.providers.embedding.name).toBe("fake");
+      expect(gateway.providers.embedding.model).toBe("embedding:deterministic");
+    });
+
+    it("AC-P7 refuses to boot when embeddingProvider=\"llama-server\" is declared without an embeddingServerUrl — never silently falls back to the placeholder", async () => {
+      const instance = Fastify({ logger: false });
+      instance.decorate("requireSession", async function requireSession(request: FastifyRequest) {
+        Object.assign(request, { auth: { userId: "u-test" } });
+      });
+      instance.decorate("contracts", { specNames: () => ["embedding"] });
+      await expect(
+        instance.register(modelGatewayPlugin, {
+          nodeEnv: "test",
+          asrProvider: "fake",
+          asrServerUrl: "http://127.0.0.1:8080",
+          embeddingProvider: "llama-server",
+          // embeddingServerUrl deliberately omitted
+        }),
+      ).rejects.toThrow();
+      await instance.close();
+    });
   });
 });

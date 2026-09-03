@@ -9,7 +9,12 @@
  */
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import { assertProviderUsable, resolveModelGatewayConfig, type ModelGatewayOptions } from "./config.js";
+import {
+  assertProviderUsable,
+  ModelGatewayConfigError,
+  resolveModelGatewayConfig,
+  type ModelGatewayOptions,
+} from "./config.js";
 import {
   FakeTranscriptionProvider,
   WhisperServerProvider,
@@ -17,6 +22,8 @@ import {
 } from "./asr/provider.js";
 import { registerTranscriptionRoutes, type TelemetryLogger } from "./routes/transcriptions.js";
 import { createDeterministicEmbeddingProvider } from "./embedding/deterministic.provider.js";
+import { HttpEmbeddingProvider } from "./embedding/http.provider.js";
+import type { EmbeddingProvider } from "./embedding/provider.js";
 import { createCannedGenerationProvider } from "./generation/canned.provider.js";
 import { createModelGateway, type ModelGateway } from "./gateway.js";
 import {
@@ -35,6 +42,35 @@ function buildProvider(config: ReturnType<typeof resolveModelGatewayConfig>): Tr
   return new WhisperServerProvider({ serverUrl: config.asrServerUrl });
 }
 
+/**
+ * E04-S088 follow-up (coordinator review, GHERKIN_WORKFLOW §5.5 — allowed-
+ * modify list widened to include this file): the ONLY place that decides
+ * which embedding provider gets CONSTRUCTED. `assertProviderUsable` below
+ * checks what this function actually returns, not the config string, so the
+ * two cannot silently drift the way they did before this follow-up (config
+ * said "llama-server" was a legal value; this file still always built the
+ * 256-dim deterministic placeholder; the guard only ever looked at the
+ * string and said OK).
+ */
+function buildEmbeddingProvider(config: ReturnType<typeof resolveModelGatewayConfig>): EmbeddingProvider {
+  if (config.embeddingProvider === "llama-server") {
+    // `resolveModelGatewayConfig` guarantees `embeddingServerUrl` is set
+    // whenever `embeddingProvider` resolves to `"llama-server"` (config.ts's
+    // own validation). This check documents that invariant rather than
+    // silently trusting it — if config.ts's guarantee is ever weakened, this
+    // fails loudly here instead of constructing an `HttpEmbeddingProvider`
+    // pointed at `undefined`.
+    if (!config.embeddingServerUrl) {
+      throw new ModelGatewayConfigError(
+        'embeddingProvider="llama-server" 但 embeddingServerUrl 未設定——這是 ' +
+          "resolveModelGatewayConfig 的不變量被打破,不是可修的執行期設定問題。",
+      );
+    }
+    return new HttpEmbeddingProvider({ serverUrl: config.embeddingServerUrl });
+  }
+  return createDeterministicEmbeddingProvider({ dimensions: config.embeddingDimensions });
+}
+
 const modelGatewayPluginImpl: FastifyPluginAsync<ModelGatewayOptions> = async (app, options) => {
   const config = resolveModelGatewayConfig(options);
   const provider = buildProvider(config);
@@ -43,9 +79,11 @@ const modelGatewayPluginImpl: FastifyPluginAsync<ModelGatewayOptions> = async (a
   // The in-process gateway is decorated BEFORE any route is registered.
   // E04-S049's defect was the opposite order: routes registered first, then
   // the decoration they depended on. Same trap, avoided by construction.
+  const embeddingProvider = buildEmbeddingProvider(config);
+  const generationProvider = createCannedGenerationProvider();
   const gateway: ModelGateway = createModelGateway({
-    embedding: createDeterministicEmbeddingProvider({ dimensions: config.embeddingDimensions }),
-    generation: createCannedGenerationProvider(),
+    embedding: embeddingProvider,
+    generation: generationProvider,
   });
   app.decorate("modelGateway", gateway);
 
@@ -54,13 +92,18 @@ const modelGatewayPluginImpl: FastifyPluginAsync<ModelGatewayOptions> = async (a
   // Conditional registration, matching `conversationPlugin` / `feedbackPlugin`
   // in `apps/api/src/server.ts`. See `hostSpecNames` for why the guard lives
   // here rather than at the call site: transcriptions must stay unconditional.
+  //
+  // `assertProviderUsable` is handed the ACTUAL provider instance
+  // (`embeddingProvider`/`generationProvider`), not just the declared config
+  // string — see that function's doc comment for why the string alone used
+  // to let "declared llama-server, built deterministic" pass silently.
   const specs = hostSpecNames(app);
   if (specs.includes("embedding")) {
-    assertProviderUsable(config.nodeEnv, "embedding", config.embeddingProvider);
+    assertProviderUsable(config.nodeEnv, "embedding", config.embeddingProvider, embeddingProvider);
     registerEmbeddingRoutes(app, { gateway, telemetry });
   }
   if (specs.includes("generation")) {
-    assertProviderUsable(config.nodeEnv, "generation", config.generationProvider);
+    assertProviderUsable(config.nodeEnv, "generation", config.generationProvider, generationProvider);
     registerGenerationRoutes(app, { gateway, telemetry });
   }
 };

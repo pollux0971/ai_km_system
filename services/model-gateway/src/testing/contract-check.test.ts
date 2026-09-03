@@ -78,6 +78,7 @@ describe("expectResponseMatchesContract — generation.yaml (relocated rag-skele
       citations: [
         { chunkId: "fabricated#0", documentId: "does-not-exist", startOffset: 0, endOffset: 5 },
       ],
+      model: "fake-canned",
     };
 
     expect(() =>

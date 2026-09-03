@@ -29,7 +29,7 @@ function fakeItem(overrides: Pick<FakeFeedbackItem, "id" | "verdict" | "submitte
 
 describe("listFeedback (E11-S016, E13-S021 real API)", () => {
   it("AC1: returns the real feedback queue from the server", async () => {
-    setFeedbackItems([fakeItem({ id: "f1", verdict: "ng", reason: "答案不正確", submittedAt: "2026-08-17T02:00:00.000Z" })]);
+    setFeedbackItems([fakeItem({ id: "f1", verdict: "ng", reason: "INCORRECT", submittedAt: "2026-08-17T02:00:00.000Z" })]);
 
     const result = await listFeedback();
 

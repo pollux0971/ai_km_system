@@ -231,7 +231,8 @@ export interface components {
         FeedbackItem: {
             id: string;
             verdict: components["schemas"]["FeedbackVerdict"];
-            reason?: string;
+            /** @enum {string} */
+            reason?: "INCORRECT" | "INCOMPLETE" | "OFF_TOPIC" | "OTHER";
             comment?: string;
             citationFeedback?: components["schemas"]["FeedbackCitationVerdict"][];
             /** Format: date-time */

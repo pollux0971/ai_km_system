@@ -10,8 +10,10 @@
  * `services/model-gateway` (`generation.yaml` §paths./generate), and its
  * types are `services/model-gateway/src/generation/provider.ts`'s
  * `Citation`/`GenerateResult`. `Citation` is structurally identical (both
- * checked below); `GenerateResult` is not — see `responseAssignable`'s own
- * comment for the one real divergence this repoint surfaced.
+ * checked below); `GenerateResult` is not, in a way this repoint surfaced —
+ * see `modelAssignable`'s own comment. E04-S071 closed that gap by
+ * tightening `generation.yaml` to match what the implementation always
+ * provides; `modelAssignable` is bidirectional as of that story.
  *
  * Evidence layer: **policy L0** (static — typecheck only). This file is never
  * executed and never bundled; it proves shape compatibility and nothing else.
@@ -59,25 +61,24 @@ export const citationExact: Exact<Schemas["Citation"], Citation> = true;
  * thing this seam actually needs proven without tripping over that
  * technicality.
  *
- * WHY FIELD BY FIELD (E04-S064 repoint finding #2, a REAL divergence): the
- * pre-repoint version checked `AssignableTo<Schemas["GenerationResponse"],
+ * WHY FIELD BY FIELD (E04-S064 repoint finding #2, RESOLVED by E04-S071):
+ * the pre-repoint version checked `AssignableTo<Schemas["GenerationResponse"],
  * GenerationResult>` against `@ai-km/rag-skeleton`'s `GenerationResult`,
  * which had no `model` field at all, so "a contract response is usable
- * everywhere a pipeline result is" held trivially in that direction. Model
- * Gateway's own `GenerateResult` requires `model: string`, while
- * `generation.yaml`'s `GenerationResponse.model` is OPTIONAL — a
- * schema-conformant body is PERMITTED to omit `model`, which would violate
- * `GenerateResult`'s required field. That is a genuine, pre-existing
- * looseness in the contract relative to what this seam's implementation
- * always provides (`model-gateway-routes.ts` forwards `gateway.generate()`'s
- * result verbatim, which always sets `model`) — not a bug introduced by this
- * repoint. Not loosening the contract and not loosening `GenerateResult`
- * here (both are outside this story's scope — 鐵律 #1, and `GenerateResult`
- * is Team B's type); `modelAssignable` below asserts the direction that IS
- * true and meaningful: whatever `GenerateResult` always provides for `model`
- * is a valid value for the contract's optional field. A domain-owner call on
- * tightening `generation.yaml`'s `model` to required is a follow-up, not
- * this file's job.
+ * everywhere a pipeline result is" held trivially in that direction. The
+ * E04-S064 repoint then surfaced a real divergence: Model Gateway's
+ * `GenerateResult` requires `model: string`, while `generation.yaml`'s
+ * `GenerationResponse.model` was OPTIONAL — a schema-conformant body was
+ * PERMITTED to omit `model`, which would have violated `GenerateResult`'s
+ * required field. E04-S071 closed that gap by tightening the CONTRACT
+ * (`generation.yaml`'s `GenerationResponse.model` is now `required`), not by
+ * loosening the implementation — `model-gateway-routes.ts` always forwards
+ * `gateway.generate()`'s result verbatim, which always sets `model`, so the
+ * contract now states a guarantee the implementation already upheld
+ * unconditionally. `modelAssignable` below therefore asserts BOTH
+ * directions: whatever `GenerateResult` always provides for `model` is a
+ * valid value for the contract's (now required) field, AND the contract no
+ * longer permits a value `GenerateResult` could not have produced.
  */
 export const answerAssignable: AssignableTo<
   GenerateResult["answer"],
@@ -87,10 +88,7 @@ export const citationsElementAssignable: AssignableTo<
   GenerateResult["citations"][number],
   Schemas["GenerationResponse"]["citations"][number]
 > = true;
-export const modelAssignable: AssignableTo<
-  GenerateResult["model"],
-  Schemas["GenerationResponse"]["model"]
-> = true;
+export const modelAssignable: Exact<GenerateResult["model"], Schemas["GenerationResponse"]["model"]> = true;
 
 /**
  * `citations` is REQUIRED, not optional. An answer that may legitimately omit

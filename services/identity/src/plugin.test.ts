@@ -1,4 +1,5 @@
 import type { Database } from "better-sqlite3";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookiePlugin from "@fastify/cookie";
@@ -14,6 +15,80 @@ import {
 } from "./sandbox-seeders.js";
 import { identityPlugin } from "./plugin.js";
 import { requireAnyRole } from "./require-session.js";
+
+// E04-S086: this file's ~51 `build()` calls each provision `seedDemoUsers`
+// (10 accounts, repository.ts) and every login pays crypto.ts's
+// `verifyPassword` — deliberately a real scrypt computation (N=2**14) even
+// for an unknown user (AC2's constant-time requirement; DUMMY_SALT/
+// dummyHash below). Measured directly on a real CI run (33776314632, a
+// throwaway probe branch, deleted after use — see docs/stories/PROGRESS.md's
+// E04-S086 row for the full numbers): a SINGLE `build()` + ONE login took
+// 3919ms + 352ms wall-clock on that runner (loadavg ~14 on 4 vCPUs — turbo
+// runs every workspace package's tests in parallel, so this is CPU
+// contention, not a slower scrypt) — enough on its own to sit on vitest's
+// 5000ms default. E02-S035 fixed the one test that was actually observed
+// failing (rewriting IT alone), but every other `build()` in this file pays
+// the identical fixed cost and was equally exposed to the same runner
+// variance — a class problem, not a single flaky test.
+//
+// FIX: replace crypto.ts's hashPassword/verifyPassword/dummyHash, for THIS
+// TEST FILE ONLY, with a cheap SHA-256-based stand-in that preserves the
+// exact same true/false semantics (correct password matches, wrong password
+// and unknown username do not) — nothing this file asserts on inspects hash
+// bytes or the scrypt algorithm itself (that coverage is crypto.test.ts,
+// untouched, still exercising the real scrypt path); every assertion here
+// is about the login ROUTE'S decision (status code, error code, cookie,
+// log line), which only depends on verifyPassword's boolean answer, not on
+// how expensively it is computed. `crypto.ts` itself, its N/r/p parameters,
+// and the constant-time PRODUCTION behaviour are untouched — this `vi.mock`
+// only changes what this file's own module graph resolves "./crypto.js" to;
+// other test files (crypto.test.ts, repository.test.ts, require-session.
+// test.ts) get their own isolated module registry per vitest's default
+// per-file isolation and are unaffected.
+//
+// vi.mock (not per-call vi.spyOn as the E02-S035 AC3 test used locally)
+// specifically so that AC3's own `vi.spyOn(crypto, "verifyPassword")
+// .mockResolvedValue(false)` / `.mockRestore()` pair — which predates this
+// fix and is left as-is below — restores to THIS fast stand-in afterward,
+// not to the real (slow) crypto.ts implementation: `vi.spyOn` on an
+// already-mocked export re-wraps the CURRENT value, and `.mockRestore()`
+// on that wrapper puts back whatever was current at spy-creation time, not
+// the module's original pre-`vi.mock` implementation.
+vi.mock("./crypto.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./crypto.js")>();
+
+  function fastHashHex(password: string, saltHex: string): string {
+    return createHash("sha256").update(`${saltHex}:${password}`, "utf8").digest("hex");
+  }
+
+  const fastDummyHash = fastHashHex(
+    "ai-km-constant-time-placeholder",
+    actual.DUMMY_SALT,
+  );
+
+  return {
+    ...actual,
+    async hashPassword(password: string) {
+      const salt = randomBytes(32).toString("hex");
+      return { hash: fastHashHex(password, salt), salt };
+    },
+    async verifyPassword(
+      password: string,
+      saltHex: string,
+      expectedHashHex: string,
+    ) {
+      const actualBuf = Buffer.from(fastHashHex(password, saltHex), "hex");
+      const expectedBuf = Buffer.from(expectedHashHex, "hex");
+      return (
+        actualBuf.length === expectedBuf.length &&
+        timingSafeEqual(actualBuf, expectedBuf)
+      );
+    },
+    async dummyHash() {
+      return fastDummyHash;
+    },
+  };
+});
 
 let harness: Awaited<ReturnType<typeof buildTestApp>> | undefined;
 

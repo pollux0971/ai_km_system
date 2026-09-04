@@ -24,6 +24,18 @@
   provider 的確定性回應,不是對真實 ASR 服務的量測(2026-09-04 獨立審核退回修正:原文寫
   「狀態值域」,但場景實際只驗了「落在值域裡」而非量測到的值,兩者不是同一件事)
 
+### 殼的預設擁有權(2026-09-05,顧問裁決 #25(b))
+
+同 `11-app-shell` 的那一段(理由與「預設可被更明確的宣稱取代」的規則一字不差):
+**`apps/admin/` 的殘餘預設歸本資料夾。** 具體是 `apps/admin/src/lib/` 底下沒有被別的能力
+明確點名的檔案(`feedback.ts`、`knowledge-bases.ts`、`users.ts`、`roles.ts`、`system-health.ts`、
+`system-settings.ts`、`usage-metrics.ts`、`latency-metrics.ts`、`models.ts`、`prompts.ts`、
+`permission-matrix.ts`、`document-failures.ts`、`admin-nav.ts`、`api.ts`、`auth.ts`)。
+
+**注意 `feedback.ts` 與 `knowledge-bases.ts` 直覺上像 `09` 與 `08`**——但那兩份 `FEATURE.md`
+都沒有點名它們,所以現在歸殼。這是**誠實的預設,不是判定**:`09`／`08` 認領時在自己的
+「範圍」點名,owners 表補一條更長前綴即可。
+
 ## 不在範圍
 
 - 回饋佇列、使用量／延遲儀表板(→ `09-feedback-analytics`)
@@ -73,7 +85,18 @@ pnpm --filter @ai-km/features accept --tags '@admin-console and @standalone and 
 
 | 項目 | 選擇 | 備註 |
 |---|---|---|
-| 語言 | TypeScript | `apps/admin/src`、`apps/api/src/health`、`services/identity/src` |
+| 語言 | TypeScript | `apps/admin/src`、`services/identity/src`。**`apps/api/src/health` 不在這裡**——見下 |
+
+> **2026-09-05 歸屬更正(顧問裁決 #23)**:本表原本把 `apps/api/src/health` 列進自己的路徑清單,
+> 而 `12-audit-observability` 的「範圍」也把 `apps/api/src/health/checks.ts` 列為來源
+> ——兩個資料夾宣稱同一個檔案。裁決:**健康檢查的語意與資料來源歸 `12-audit-observability`**;
+> `10-admin-console` 只透過 `GET /v1/admin/health` 的**契約**消費它,那是**依賴**不是範圍。
+> 本資料夾的回填對照表仍會引用 `apps/api/src/health/admin-health.test.ts` 的測試名
+> ——那是「用它的測試證明我的守門」,不是「我擁有那支檔案」,兩件事不同。
+>
+> 更上層的裁決:**整個 `apps/api` 是 composition root(glue),不屬於任何能力資料夾**
+> (ADR 0007 的 in-process 主路徑、ADR 0015 的 composition root 擁有 store)。
+> 逐檔指派會把接線碼分給被接的人,那是倒過來的。
 | 測試 | vitest(`admin-health.test.ts`、`admin-route-access.test.ts`、`departments/groups/connectors.test.ts`)+ cucumber `phase-1.feature` 14 場景 | |
 | 級別 | **嚴格** | 觸及 RBAC 與資料可見性;失敗模式靜默(守門放寬時沒有任何東西報錯,未授權者只是「多看到一些東西」) |
 

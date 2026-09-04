@@ -35,8 +35,19 @@
   `RetrievalScope` 沒有 HTTP 契約,它是 in-process 接縫(ADR 0007)。
 - 舊 story(素材,不是規格):E04-S009(blocked)、E04-S062(禁止過渡對應表)、
   E02-S032/S033(身分與最小 RBAC 切片)
-- 實作:`services/retrieval/src/authorization/scope.ts`、`packages/permissions/src/index.ts`(僅型別)、
-  `services/identity/src/`(登入與 session)
+- 實作:`services/retrieval/src/authorization/scope.ts`、`services/identity/src/`(登入與 session)
+
+> **2026-09-05 歸屬更正(顧問裁決 #24):`packages/permissions/` 不是本資料夾的地盤。**
+> 它是**共用詞彙層**——`index.ts` 只有 622 bytes,內容是 `Role` 型別與 `AuthorizationDecision`
+> 介面,**零決策邏輯**(本檔「開放問題」早就這樣寫了,只是「來源」那行還宣稱擁有它)。
+> 實測有 **6 個非本資料夾的能力**直接 import 它(`01`、`08`、`09`、`10`、`11`),
+> 那不是越界,那就是它的用途。設定上它與 `contracts/` 同列 `shared` 擁有者,任何人 import 都放行。
+>
+> **這條裁決自己的守門(不是註解,是規則)**:
+> **決策邏輯只在 `services/retrieval/src/authorization/`;`packages/permissions/` 只放型別。
+> 誰往裡面加 runtime 判斷,就是越界。** 型別可以全域共用,判斷不行——
+> 一旦 `permissions` 裡出現第二個會做決定的地方,Deny-Wins 就有兩個真相來源,
+> 而那是靜默失敗(§5.1):兩邊算得不一樣時沒有任何東西會報錯。
 
 ## 單獨執行
 

@@ -22,6 +22,31 @@
 - **跨視窗同步**:一個視窗做的事出現在另一個視窗(E03-S039 那條線的**外觀那一半**——
   header 的連線狀態列、側欄歷史對話列的重抓)。
 
+### 殼的預設擁有權(2026-09-05,顧問裁決 #25(b))
+
+`boundaries` 守門第一次真的跑起來,照出 **205 個檔案沒有任何 `FEATURE.md` 宣稱擁有**。
+那不是那些檔案有問題,是**回填的覆蓋缺口**:12 個 phase-1 證明了「能力現在會做什麼」,
+沒有證明「這些檔案屬於誰」。
+
+裁決:**`apps/web/` 的殘餘預設歸本資料夾(app 的殼)。** 具體是
+`apps/web/src/lib/` 底下沒有被別的能力明確點名的檔案(`messages.ts`、`conversations.ts`、
+`auth.ts`、`citations.ts`、`streaming.ts`、`telemetry.ts`、`feature-flags.ts`、`ai-models.ts`、
+`voice/**` 等),以及 `apps/web/src/app/(app)/_components/` 底下未被點名的元件
+(`app-shell.tsx`、`header.tsx`、`notification-center.tsx`、`recent-conversations.tsx`、
+`user-menu.tsx`)。
+
+**「預設」的意思是可以被更明確的宣稱取代,不是永久判定**:能明確歸到某個能力的子資料夾
+就切給那個能力(owners 表是最長前綴優先),切不出來的留在殼。
+往後有能力資料夾要認領其中某些檔案,在它自己的 `FEATURE.md`「範圍」點名即可,
+owners 表補一條更長的前綴,不必動這一段。
+
+**兩個不歸本資料夾的例外**:
+- `apps/web/src/lib/knowledge-*`、`app/(app)/knowledge/**` → `08-knowledge-management`(它自己點名過)
+- `apps/web/src/lib/erp-*`、`diagnostic-*` → 擁有者 `i8-pending`。這兩組**根本沒有對應的能力資料夾**
+  ——I8 的 `13-maintenance-assistant`／`14-erp-reporting` 依 ADR 0013 #3「後端資料來源未定前不建」。
+  它們不掛在本資料夾下;`11 → i8-pending` 的路由邊寫進 `boundaries.allow.json`,理由引 ADR 0013 #3。
+  I8 開資料夾那天,把 `i8-pending` 改名就是 owners 表的一次 diff,不用搬檔案。
+
 ## 不在範圍
 
 - 登入、session、CSRF、sandbox 身分(→ `01-identity`)

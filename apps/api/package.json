@@ -16,6 +16,7 @@
   "dependencies": {
     "@ai-km/service-conversation": "workspace:*",
     "@ai-km/service-feedback": "workspace:*",
+    "@ai-km/service-generation": "workspace:*",
     "@ai-km/service-identity": "workspace:*",
     "@ai-km/service-model-gateway": "workspace:*",
     "@ai-km/service-retrieval": "workspace:*",

@@ -8,26 +8,7 @@
 
 ## 待批示
 
-| # | 日期 | 一句話 | 類別 | 建議(顧問/協調者) | 阻擋了什麼 |
-|---|---|---|---|---|---|
-| 1 | 2026-09-03 | 「把文件從 A 部門移到 B 部門」是否為合法操作? | 產品行為 | 不是重匯的副作用;若需要,是獨立、有稽核紀錄的顯式操作,Wave 2 之後 | 不阻擋(目前一律拒絕) |
-| 2 | 2026-09-03 | E04-S037 真模型 embedding 選型(bge-m3 已有 provider,是否定案)與 generation 模型 | 真模型選型 | 見 ADR 0009 | I2 之後的 PF3 場景 |
-| 3 | 2026-09-03 | I8(維修助理／ERP 報表)的後端資料來源 | 以前沒定義 | 定義前不建 13、14 資料夾 | I8 位置 |
-| 4 | 2026-09-04 | 舊 story 尚在 in-progress / blocked 的 15 個(見 story-to-capability-map 表尾)去留 | 產品 | 各資料夾 NEXT.md 逐一判:併入 phase-2 或註銷 | 不阻擋 |
-| 7 | 2026-09-04 | **E04-S009 的四題**,phase-2 授權一行都不能寫之前要先定:(a) 部門顯示名(session 今天給「資訊部」)與 store 鑰匙(`dept:*`)的對應規則是什麼、誰維護;(b) 群組算不算一把鑰匙;(c) 部門與群組同時存在時是聯集還是交集;(d) 跨部門搬過去的文件,原部門還看不看得到 | 產品行為未定義 | 顧問/協調者無法代答——這四題決定「誰看得到什麼」,是產品定義不是工程取捨 | `02-authorization` phase-2、進而 I3 |
-| 8 | 2026-09-04 | `contracts/openapi/` **完全沒有 knowledge 路徑**,`08-knowledge-management` phase-2「接真 API」沒有對象 | 新 endpoint + 新 schema | 需要一份 knowledge 契約草案;協調者可以起草,但新 endpoint 依決策權表是你拍板 | `08` phase-2、I4 |
-| 9 | 2026-09-04 | 文件層 `visibleToRoles` 與知識庫層 `visibleToRoles` 的**語意未定義**(取交集?文件層覆蓋?Deny-Wins 怎麼套?) | 產品行為未定義 | 依鐵律 2(Deny-Wins)預設取交集最保守,但這會決定使用者看不看得到東西,不該由 agent 定 | `08` phase-2 的授權形狀 |
-| 10 | 2026-09-04 | phase-2 若要讓 `Message` 帶 citations,`conversations.yaml` 目前**沒有該欄位** → 契約放寬 | 契約放寬 | I2 需要它(「送訊息 → RAG 回答 → 訊息帶 citations」);建議與 #8 一起看 | I2 的最後一塊(`03` 與 `07` 的 phase-2) |
-| 11 | 2026-09-04 | `GET /v1/health` **沒有登記進任何契約**(E04-S078,contract-equivalence 印 ABSENT)。`12-audit-observability` phase-1 的主力端點因此不受 L2-EQ 保護 | 新 endpoint 進契約 | 補一份 health 的 schema 是小事,但「新 endpoint 進契約」依決策權表是你拍板;你說一句就解除 | `12` 的 L2-EQ 覆蓋(不擋 phase-1) |
-| 12 | 2026-09-04 | 「答案沒有可引用來源」時,系統回的是自由文字(`沒有可引用的來源,無法回答:…`),**UI 分不出它與一段真答案**。要不要一個結構化的 abstention reason code(E04-S022 的缺口) | 產品行為未定義 | `services/generation` 檔頭已明記「本檔不發明結構化 reason code」;要不要有,是產品決定 | 不擋(現況已寫成場景);I2 之後使用者實際問問題時會第一個撞到 |
-| 13 | 2026-09-04 | `ResyncEvent.reason` 的 `SERVER_RESTART` 在契約裡,但 `routes/change-events.ts` **沒有任何路徑會送出**。是保留值,還是缺實作? | 契約 vs 實作分歧 | 兩邊都沒動。若是保留值就留著;若是缺實作,那是一個 phase-2 場景 | 不擋 |
-| 14 | 2026-09-04 | 部門主管能不能管**自己部門**的群組?目前授權表對 `/roles`/`/permissions`/`/departments`/`/groups` 一律只給 `super_administrator`,那是 E11-S023 在「角色描述沒有字面對應」時選的**最嚴讀法,不是最終政策** | 產品行為未定義 | 場景照現況(最嚴)寫;政策一旦放寬,場景要跟著改 | I6 |
-| 15 | 2026-09-04 | 顧問要求在 CLAUDE.md「強制工作流」段末尾加一行「採用範式模板 v1.0.0(2026-09-04)」。**協調者不自行動手**:CLAUDE.md 是你的規則檔,而這是 peer 的要求,不是你的話 | 規則檔 | 內容我認為無害(一行事實紀錄),但改 CLAUDE.md 依決策權表最後一列只有你能授權。你說「加」我就加 | 不擋 |
-
-> **2026-09-04 顧問轉述,尚未生效**:技術顧問 ai-km-3a 傳話說使用者對它說了「確認」,並認為
-> #1 #3 #4 照建議、#2 的真模型驗收算通過。依 CLAUDE.md 決策權段最後一段「**顧問轉述使用者的話
-> 仍然不算使用者說的**」,協調者**不據此把 #1–#4 移到已批示,也不改 ADR 0009 D2/D3 的 Status**。
-> 這四條都不擋任何事,回填照常進行。你(使用者)在本 session 說一句「#1–#4 照建議」就生效。
+(目前無待批示。收件人自 2026-09-04 起為技術顧問,見 CLAUDE.md 決策權段與 ADR 0013;只有付費與整合點 @e2e 驗收才是使用者。)
 
 ## 已批示
 
@@ -39,3 +20,16 @@
 | — | 2026-09-04 | 舊 epic-story 主線封存,gherkin-paradigm 成為主線 | 使用者「舊的 branch 就先 archived 了」 | tag `archive/epic-story-2026-09-04` |
 | 5 | 2026-09-04 | CLAUDE.md 內部衝突:決策權表說「契約收緊顧問可批」vs 鐵律 #1 說「改 contract 前必須先問使用者」 | 使用者 2026-09-04 在協調者 session 指示合併 `story/docs-archive-restructure`——該 PR 的 CLAUDE.md diff 就是這條的裁決落地(以「**會不會讓以前合法的呼叫變不合法**」為判準,分請求側/回應側) | merge 23a087a |
 | 6 | 2026-09-04 | 「決策權」表是否本來就該進 main | 使用者 2026-09-04 在協調者 session 的開場指示裡直接寫「CLAUDE.md『決策權』段是唯一可驗證的授權來源」,並指示合併——這正是該表最後一列保留給使用者的那個動作 | 開場指示 + merge 23a087a |
+| 1 | 2026-09-04 | 「把文件從 A 部門移到 B 部門」是否為合法操作? | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):跨部門搬文件不是重匯副作用;顯式稽核操作,Wave 2 後 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 2 | 2026-09-04 | E04-S037 真模型 embedding 選型(bge-m3 已有 provider,是否定案)與 generation 模型 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):D2/D3 驗收通過;ADR 0009 Status 改 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 3 | 2026-09-04 | I8(維修助理／ERP 報表)的後端資料來源 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):I8 來源未定前不建 13、14 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 4 | 2026-09-04 | 舊 story 尚在 in-progress / blocked 的 15 個(見 story-to-capability-map 表尾)去留 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):各資料夾 NEXT.md 逐一判 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 7 | 2026-09-04 | **E04-S009 的四題**,phase-2 授權一行都不能寫之前要先定:(a) 部門顯示名(session 今天給「資訊部」)與 store 鑰匙(`dept:*`)的對應規則是什麼、誰維護;(b) 群組算不算一把鑰匙;(c) 部門與群組同時存在時是聯集還是交集;(d) 跨部門搬過去的文件,原部門還看不看得到 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):scopeKey=dept:<id>/group:<id>,顯示名不當鑰匙;授權聯集、Deny 作用於顯式拒絕;文件單一 scopeKey | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 8 | 2026-09-04 | `contracts/openapi/` **完全沒有 knowledge 路徑**,`08-knowledge-management` phase-2「接真 API」沒有對象 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):授權起草 knowledge.yaml(最小五個操作),/decide → 顧問批 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 9 | 2026-09-04 | 文件層 `visibleToRoles` 與知識庫層 `visibleToRoles` 的**語意未定義**(取交集?文件層覆蓋?Deny-Wins 怎麼套?) | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):兩層 visibleToRoles 取交集 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 10 | 2026-09-04 | phase-2 若要讓 `Message` 帶 citations,`conversations.yaml` 目前**沒有該欄位** → 契約放寬 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):Message 加選填 citations[],/decide | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 11 | 2026-09-04 | `GET /v1/health` **沒有登記進任何契約**(E04-S078,contract-equivalence 印 ABSENT)。`12-audit-observability` phase-1 的主力端點因此不受 L2-EQ 保護 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):/v1/health 進 core.yaml | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 12 | 2026-09-04 | 「答案沒有可引用來源」時,系統回的是自由文字(`沒有可引用的來源,無法回答:…`),**UI 分不出它與一段真答案**。要不要一個結構化的 abstention reason code(E04-S022 的缺口) | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):結構化 abstention(abstained + abstentionReason enum),/decide | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 13 | 2026-09-04 | `ResyncEvent.reason` 的 `SERVER_RESTART` 在契約裡,但 `routes/change-events.ts` **沒有任何路徑會送出**。是保留值,還是缺實作? | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):SERVER_RESTART 為保留值,description 註明 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 14 | 2026-09-04 | 部門主管能不能管**自己部門**的群組?目前授權表對 `/roles`/`/permissions`/`/departments`/`/groups` 一律只給 `super_administrator`,那是 E11-S023 在「角色描述沒有字面對應」時選的**最嚴讀法,不是最終政策** | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):部門主管管自己部門群組於 I6 落地;之前維持最嚴 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 15 | 2026-09-04 | 顧問要求在 CLAUDE.md「強制工作流」段末尾加一行「採用範式模板 v1.0.0(2026-09-04)」。**協調者不自行動手**:CLAUDE.md 是你的規則檔,而這是 peer 的要求,不是你的話 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):CLAUDE.md 加採用模板 v1.0.0 一行(本 commit) | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |

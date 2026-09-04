@@ -30,6 +30,19 @@ const specDocs: Record<string, unknown> = {
   // E03-S041
   "transcriptions.yaml": loadYaml("transcriptions"),
   "analytics.yaml": loadYaml("analytics"),
+  // ADR 0016 (2026-09-05) — `Message.citations[]` is `$ref`-ed straight at
+  // `generation.yaml`'s `Citation` rather than restating its four fields, so
+  // the two can never drift. The cost of that choice lands exactly here: this
+  // map is a HAND-MAINTAINED list of the docs `dereference()` is allowed to
+  // follow, so a cross-file `$ref` at a doc that is not listed does not
+  // degrade — it throws, and because `compile()` runs at module scope, it
+  // takes down EVERY test file in this package at load time (126 of them,
+  // "Tests: no tests"), not just the ones that touch citations. That failure
+  // mode is loud, which is the good half; the bad half is that it looks
+  // nothing like "a contract field was added", so the next person to add a
+  // cross-file `$ref` will spend a while on it unless they read this. Adding
+  // a `$ref` to a NEW doc means adding that doc here in the SAME commit.
+  "generation.yaml": loadYaml("generation"),
 };
 
 function resolvePointer(doc: unknown, pointer: string): unknown {

@@ -77,6 +77,29 @@ citations:
 換句話說 `check` 守的不是「產生器跑過了」,而是「**版本庫裡的生成檔與契約一致**」
 ——這比前者強,而且它讓「改了契約卻忘記重新產生」變成 CI 紅,不是靜默漂移。
 
+### 第二個量到的東西:D1 的跨檔 `$ref` 有一個具體代價,而且它的失敗方式會誤導人
+
+改完之後 `apps/web` 的**全部 126 個測試檔一起紅**,而且是 `Tests: no tests`
+——一個測試都沒跑到。根因不是斷言,是模組載入:
+
+```
+Error: [fake-api] could not resolve $ref "./generation.yaml#/components/schemas/Citation" from conversations.yaml
+```
+
+`apps/web/src/test/fake-api.ts` 的 `specDocs` 是一份**手工維護**的清單,列出
+`dereference()` 允許跟過去的文件。`generation.yaml` 不在裡面,於是跨檔 `$ref` **不是降級,是拋錯**;
+而 `compile()` 在 module scope 執行,所以它一次帶掉整個 package 的每一個測試檔。
+
+**這個失敗方式的問題不是它太安靜,是它太吵而且長得不像原因**:
+126 個檔案同時紅、`no tests`,看起來像環境壞了或依賴裝壞了,**完全不像「有人在契約裡加了一個欄位」**。
+我自己也是先去找 import 錯誤才找到真正那一行。
+
+修法是把 `generation.yaml` 加進那份清單,並在那裡留下註解說明**為什麼**
+(不是「加了一個 doc」,而是「加跨檔 `$ref` 到新 doc 時,必須在**同一個 commit** 裡把那個 doc 加進來」)。
+
+**這不推翻 D1**——`$ref` 防漂移的理由仍然成立,而且這個代價是一次性的、有明確修法的。
+但它是選 `$ref` 而不是重述時**要一併付的錢**,寫在這裡,下一個加跨檔 `$ref` 的人不用再查一次。
+
 ## Consequences
 
 **解鎖**:`03-conversation/phase-2`(I2 第四塊)的契約 gate 全滿足。
@@ -88,6 +111,7 @@ citations:
 | 順序被重排,`[N]` 與 `citations[N-1]` 悄悄對不上 | `03-conversation/phase-2` 必須有一個場景斷言順序對應,而且反向驗證要打在「把陣列反轉」上 |
 | 消費端把「缺席」與 `[]` 合併 | description 寫明兩者不同;`11-app-shell/phase-2`(引用可點)要分別處理 |
 | 契約改了但生成檔沒跟著進版 | `api-client` 的 `check` 已經是 CI gate,見上 |
+| 之後有人再加一個跨檔 `$ref` 到**新的** doc,`apps/web` 全部測試在 module load 就掛掉,而症狀不像契約問題 | `fake-api.ts` 的 `specDocs` 旁邊已經留下註解說明這件事;規則是「加跨檔 `$ref` 到新 doc 時,同一個 commit 把那個 doc 加進 `specDocs`」 |
 
 **這份 ADR 不授權**:在 `Message` 上加任何**其他**欄位;改 `generation.yaml` 的 `Citation`
 (它現在被兩個 spec 共用,改它就是兩邊一起改);讓 `citations` 變成必填

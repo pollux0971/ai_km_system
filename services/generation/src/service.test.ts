@@ -98,7 +98,27 @@ describe("createGenerationService().answer() — grounded generation", () => {
     };
 
     const service = createGenerationService({ generation: rogue });
-    await expect(service.answer("軸承", [HIT_A])).rejects.toBeInstanceOf(FabricatedCitationError);
+    // 技術顧問裁定的 DoD(07-generation/NEXT.md phase-2):原本的
+    // `.rejects.toBeInstanceOf(FabricatedCitationError)` 只證明「有拋錯」——反向驗證時
+    // 第一條炸的是 `promise resolved "{...}" instead of rejecting`,捏造的
+    // `doc-does-not-exist#0` 從未被比對過(vitest json reporter 把 toEqual 的物件 diff
+    // 截斷成 `…(1)`,決定性的值看不到)。GHERKIN_WORKFLOW §5.2:同一個測試裡第一條炸的
+    // 決定紅的意義,決定性比對要排最前面——所以這裡先用 try/catch 斷言訊息「字面」含著
+    // 捏造的 chunkId,再斷言型別。順序是重點:反向驗證要紅在「訊息裡沒有那個 chunkId」,
+    // 不是紅在「沒拋錯」。
+    try {
+      await service.answer("軸承", [HIT_A]);
+      // 刻意不在這裡直接 expect.fail()——那會被下面的 catch 吃掉,變成用一句「沒拋錯」的
+      // assertion 訊息去比對「訊息裡有沒有 chunkId」,製造出一個更難懂的假失敗。改用一個
+      // 帶哨兵值的 Error,讓下面的 catch 先辨識出「根本沒被拒絕」這個情況再單獨處理。
+      throw new Error("__EXPECTED_REJECTION_DID_NOT_HAPPEN__");
+    } catch (error) {
+      if ((error as Error).message === "__EXPECTED_REJECTION_DID_NOT_HAPPEN__") {
+        throw new Error("預期 answer() 因捏造引用而拒絕,但沒有拋出任何錯誤");
+      }
+      expect((error as Error).message).toContain("doc-does-not-exist#0");
+      expect(error).toBeInstanceOf(FabricatedCitationError);
+    }
   });
 
   it("AC3 scopeKey 永不抵達 gateway 或 provider——整個 hit 洩漏會讓這條測試變紅", async () => {

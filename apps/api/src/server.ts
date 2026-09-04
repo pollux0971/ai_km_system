@@ -35,6 +35,8 @@ import { identityPlugin, registerSandboxSeeder, requireAnyRole } from "@ai-km/se
 import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
 import { feedbackPlugin } from "@ai-km/service-feedback";
 import { retrievalPlugin } from "@ai-km/service-retrieval";
+import { generationPlugin } from "@ai-km/service-generation";
+import { ragPlugin } from "./rag-plugin.js";
 import { createHealthChecker, overallStatus } from "./health/checks.js";
 import "./types.js";
 
@@ -282,16 +284,26 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     await app.register(feedbackPlugin);
   }
   // 06-retrieval/phase-2 (I2, ADR 0014) — puts `app.retrieval` on the parent
-  // instance so 07-generation can call `retrieve()` once it exists. Unlike
+  // instance so 07-generation can call `retrieve()`. Unlike
   // conversationPlugin/feedbackPlugin above, there is no `contracts/openapi`
   // spec to gate on (06-retrieval FEATURE.md: "無直接 HTTP 契約(in-process
   // 接縫,ADR 0007)"), so this registers unconditionally, same as
-  // modelGatewayPlugin below. No route here calls `retrieve()` yet — that is
-  // 07-generation's job — so there is nothing in this composition root that
-  // needs to build ADR 0014's fixed `dept:eng` scope today; the fixed value
-  // is for whichever call site is first to actually invoke
-  // `app.retrieval.retrieve(...)`.
+  // modelGatewayPlugin below.
   await app.register(retrievalPlugin);
+  // 07-generation/phase-1 (回填) — puts `app.generation` on the parent
+  // instance. Same "no HTTP contract, unconditional registration" shape as
+  // retrievalPlugin above (FEATURE.md: in-process seam, ADR 0007).
+  await app.register(generationPlugin);
+  // 07-generation/phase-2 (I2, ADR 0014) — the first production call site
+  // that actually chains `app.retrieval.retrieve()` into
+  // `app.generation.answer()`, under ADR 0014's fixed `dept:eng` scope. See
+  // `./rag-plugin.ts`'s header for the full reasoning (phase-2.feature
+  // "design judgement A", and ADR 0014's "這份 ADR 的一個空保證"). Registered
+  // after both of the plugins above so `app.retrieval` / `app.generation`
+  // are already decorated when this plugin's own body runs (E04-S049's
+  // ordering rule), though `app.rag.ask()` only reads them lazily at call
+  // time, not at registration time.
+  await app.register(ragPlugin);
   // E12-S031 — POST /v1/transcriptions (ASR). config.ts is outside this
   // story's allowed-modify list, so the two fields it already reads
   // (E04-S039) are passed through here rather than re-read.

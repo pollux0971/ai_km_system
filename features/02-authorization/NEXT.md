@@ -41,9 +41,14 @@
   理由:那張表一旦存在就會被當成規則,而它的每一列都是**沒有人裁定過**的產品決策;
   之後真的裁定下來時,沒有人會記得哪幾列是猜的。
 - **不准讓 session 回傳看起來像 scope 的欄位**來「先接起來」。phase-1 的最後一個場景
-  (`the identity hands over no ready-made scope keys`)就是這條的守門:任何人在
-  `GET /v1/auth/session` 的回應裡加上 `scopeKeys` / `allowedScopeKeys` / `scope`,
-  那個場景會紅。它紅了不是壞事,是提醒:這個變更要走 E04-S009 與 ADR,不是順手加欄位。
+  (`the identity hands over no ready-made scope keys`,tag **`@design-constraint`**)
+  就是這條的守門:任何人在 `GET /v1/auth/session` 的回應裡加上
+  `scopeKeys` / `allowedScopeKeys` / `scope`,那個場景會紅。
+  **它紅了不是壞事,是提醒:這個變更要走 E04-S009 與 ADR,不是順手加欄位。**
+  看到紅該做的是 `/feature` + ADR,**不是拿掉那條斷言**。
+  E04-S009 真的落地(也就是 phase-2 開工)時,那個場景由 `/feature` 流程**改寫**成新的事實,
+  **不得直接刪除**——理由與出處寫在 `FEATURE.md` 的「設計約束場景(`@design-constraint`)」段,
+  以及 `phase-1.feature` 該場景正上方的註解。這是技術顧問 ai-km-3a 2026-09-04 的裁決。
 - 不准放寬 `toRetrievalScope()` 讓它接受缺 principal 的輸入,「因為呼叫端還沒接上」。
   那個拒絕正是用來抓「還沒接上」的。
 

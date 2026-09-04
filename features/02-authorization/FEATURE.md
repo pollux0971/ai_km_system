@@ -18,6 +18,7 @@
 - 授權轉成資料庫過濾條件 `buildScopeSql()`:零授權產生 `1 = 0`,永遠不產生空的 `IN ()`
 - 最後一道防線 `assertNoScopeLeak()`:越界時**拋錯並指名越界的部門**,不靜默過濾
 - 身分這一側今天給得出什麼:真實登入後的 session 帶部門與群組,且**不帶任何現成的 scope 鑰匙**
+  (`@design-constraint` 場景,見下方「設計約束場景」段)
 
 ## 不在範圍
 
@@ -84,6 +85,24 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 | The last line of defence names the department that leaked instead of dropping it quietly | `scope.test.ts`: PF0 洩漏偵測拋錯而非靜默過濾——靜默過濾會留下真正的缺陷 |
 | When nothing is out of scope the check hands back the very same records | `scope.test.ts`: PF0 全部合規時原樣回傳 |
 | A signed-in identity already names a department, and hands over no ready-made scope keys | `services/identity/src/plugin.test.ts`: 200s with the demo account's fields, field-for-field, and never a token;200s for a valid cookie and advances last_seen_at(登入取 cookie 的路徑同 `apps/api/src/health/admin-health.test.ts` 的 `loginAs`) |
+
+## 設計約束場景(`@design-constraint`)
+
+`phase-1.feature` 的最後一個場景
+`A signed-in identity already names a department, and hands over no ready-made scope keys`
+帶 **`@design-constraint`** tag。它不只是描述現況,它是一道守門:
+
+- **它紅的意思是**「有人把 scope 形狀的欄位塞進了 `GET /v1/auth/session` 的回應」——
+  也就是有人在**沒有裁定**的情況下,抄捷徑從身分推導授權。那個裁定是 **E04-S009**;
+  它禁止的那條捷徑(部門顯示名稱 → scopeKey 的過渡對應表)是 **E04-S062**。
+- **看到它紅該做的是** `/feature` + ADR,**不是拿掉這條斷言**。
+- **E04-S009 正式落地時**(phase-2),這個場景由 `/feature` 流程**改寫**成新的事實,
+  **不得直接刪除**。描述現況的規格有它的生命週期,走完生命週期被改寫,
+  跟「守門被靜默放寬」是兩回事——這是技術顧問 ai-km-3a 2026-09-04 的裁決
+  (它不屬於 `docs/PITFALLS.md` 坑 1:那條講的是**工具裡的數字門檻**在正常成長時假紅)。
+
+同一段說明以註解形式寫在 `phase-1.feature` 該場景正上方,`NEXT.md` 的「不可以先做的」
+也指向這裡——從任何一份檔進來都找得到。
 
 ## 驗收方式
 

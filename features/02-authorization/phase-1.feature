@@ -8,10 +8,12 @@ Feature: A person's grants become a scope that can only ever narrow what they ma
 
   This phase is a backfill and it is deliberately honest about the gap: nothing
   yet turns a signed-in identity into a scope (E04-S009 is still blocked), so the
-  last scenario records what identity does give us today and that it hands over
-  no ready-made scope keys. Every scenario is bound to the same entry points the
-  packages' own vitest tests use — see FEATURE.md 回填對照表. Filtering a store
-  WITH a scope belongs to 06-retrieval and is not repeated here.
+  last scenario — tagged @design-constraint — records what identity does give us
+  today and that it hands over no ready-made scope keys. Read the comment above
+  that scenario before touching it: it is meant to go red on the shortcut, and it
+  is rewritten through `/feature`, never deleted. Every scenario is bound to the
+  same entry points the packages' own vitest tests use — see FEATURE.md 回填對照表.
+  Filtering a store WITH a scope belongs to 06-retrieval and is not repeated here.
 
   Scenario: The capability runs on its own
     Given a person "person-maintenance" whose grants are exactly "dept:maintenance"
@@ -64,6 +66,19 @@ Feature: A person's grants become a scope that can only ever narrow what they ma
     And records labelled "dept:ops, dept:maintenance" are checked on their way out
     Then the authorization check hands back the very same records
 
+  # This last scenario is a DESIGN CONSTRAINT, not just a description of today.
+  # It goes red when someone puts a scope-shaped field into the session response —
+  # i.e. when someone takes the shortcut of deriving authorization from identity
+  # without the ruling that says how. That ruling is E04-S009, and the shortcut it
+  # forbids (a transitional department-name → scope-key mapping table) is E04-S062.
+  #
+  # So: seeing this red means "someone pushed scope into the session", and the way
+  # out is `/feature` + an ADR — NOT deleting the assertion. When 02-authorization
+  # phase-2 really lands (E04-S009 ruled, ADR accepted), this scenario is REWRITTEN
+  # through the `/feature` flow to say what the new truth is; it is never simply
+  # removed. A spec that describes the current state has a lifecycle; being rewritten
+  # at the end of it is not the same thing as a guard being quietly loosened.
+  @design-constraint
   Scenario: A signed-in identity already names a department, and hands over no ready-made scope keys
     Given a fresh server with fake providers
     When the authorization layer looks up the signed-in identity of "demo-user"

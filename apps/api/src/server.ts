@@ -37,6 +37,7 @@ import {
   createModelGateway,
   createDeterministicEmbeddingProvider,
   createCannedGenerationProvider,
+  type EmbeddingProvider,
 } from "@ai-km/service-model-gateway";
 import { feedbackPlugin } from "@ai-km/service-feedback";
 import {
@@ -134,6 +135,31 @@ export interface BuildServerOptions {
    * `undefined` in production; zero behaviour change when omitted.
    */
   testExtraPlugin?: FastifyPluginAsync;
+  /**
+   * TEST-ONLY — overrides the embedding provider `app.ingestion`'s own
+   * Model Gateway writes vectors with. Defaults to the same deterministic
+   * provider `app.retrieval` embeds queries with (below), so omitting this
+   * is today's behaviour, byte-for-byte, unchanged.
+   *
+   * ADR 0015 ("D2 的空守門怎麼補") already refused a `store` override here —
+   * that would let a test skip `app.ingestion.ingest()` entirely and poke
+   * data straight into the store, a path production never takes. This field
+   * cannot do that: whatever provider is supplied still runs behind the
+   * REAL `app.ingestion.ingest()` call, into the REAL, shared
+   * `retrievalStore` (D1, below) — nothing about the write path changes,
+   * only which embedding provider sits underneath it. The judgement call
+   * ADR 0015 draws the line on: whether a test seam lets a test bypass the
+   * production path, not whether the field is *labelled* test-only.
+   *
+   * It exists to simulate the passage of time — a chunk indexed under an
+   * embedding model that has since been swapped out — which is the ONLY
+   * reason `enforceEmbeddingVersion` (below) exists, and which no
+   * single-process production call can ever produce on its own: today's
+   * `IngestionService.ingest()` has no parameter to pick an embedding
+   * version, so index-time and query-time always share the one provider a
+   * process was built with.
+   */
+  ingestionEmbeddingProvider?: EmbeddingProvider;
 }
 
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
@@ -327,11 +353,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // 原文的「一條指令」就是一次明確的呼叫(demo script / 測試步驟 / 未來 CLI),
   // 不是開機或登入時偷偷發生的事。與 `retrievalPlugin` 共用同一個
   // `retrievalStore`(決策 1 不變),讓「索引寫到 A、查詢讀 B」不成立。
-  // embedding 用同一顆 deterministic provider(與 `createRetrievalService`
+  // embedding 預設用同一顆 deterministic provider(與 `createRetrievalService`
   // 的預設一致:"embedding:deterministic" / 256 維),確保 index-time 與
-  // query-time 的 embedding 身分相同。
+  // query-time 的 embedding 身分相同——除非 `options.ingestionEmbeddingProvider`
+  // 被覆寫(見 `BuildServerOptions` 的欄位文件:test-only,但資料仍走真實
+  // `app.ingestion.ingest()` 與這個共用的 `retrievalStore`,只換嵌入身分)。
   const ingestionModelGateway = createModelGateway({
-    embedding: createDeterministicEmbeddingProvider(),
+    embedding: options.ingestionEmbeddingProvider ?? createDeterministicEmbeddingProvider(),
     generation: createCannedGenerationProvider(),
   });
   const ingestionService: IngestionService = createIngestionService({

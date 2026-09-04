@@ -90,8 +90,13 @@ pnpm --filter @ai-km/features accept --tags '@app-shell and @standalone and not 
 | 後續 phase | 需要 | 原因 |
 |---|---|---|
 | phase-2(引用可點、開原文段落面板) | I2 的 `06-retrieval`/`07-generation`/`03-conversation` phase-2 | 沒有真的答案與引用就沒有面板可開 |
-| phase-2(跨視窗同步接進自動場景) | `features/tsconfig.json` 或 `packages/api-client` 其一調整(見「待協調」) | 現在綁 `conversation-events.ts` 會讓 `pnpm typecheck` 紅 |
-| phase-2(rail/drawer/modal 斷點、元件層 UI 狀態) | 一個能跑 DOM 的驗收環境(jsdom 或 Playwright) | `computeNavMode` 只在畫面存在時才有意義 |
+| phase-2(跨視窗同步接進自動場景) | ~~`features/tsconfig.json` 或 `packages/api-client` 其一調整~~ **已解除 2026-09-05**(`730183d`:`api-client` 補 `.js` 副檔名 + 兩個 Next app 補 `extensionAlias`;實測 9 條 TS2834/TS2835 → 0) | ~~現在綁 `conversation-events.ts` 會讓 `pnpm typecheck` 紅~~ |
+| **phase-3**(rail/drawer/modal 斷點、元件層 UI 狀態) | 一個能跑 DOM 的驗收環境(jsdom 或 Playwright) | `computeNavMode` 只在畫面存在時才有意義 |
+
+> **2026-09-05 標籤更正**:上面這一列原本也標成 `phase-2`,於是這張表出現**三列同名**。
+> 對照 Phase 表可知它其實是 **phase-3**(「斷點與元件層 UI 狀態(需要 DOM 環境)」)。
+> 這不是重新切 phase,是修一個會讓人讀錯範圍的標籤——三列同名時,讀者無法分辨
+> 「一個 phase 有三個 gate」與「有三個 phase 剛好都叫 phase-2」。
 
 ## 技術棧
 
@@ -135,7 +140,7 @@ AssertionError: 「/erp/new」應要求 sales_purchasing, super_administrator,�
 一條 `@e2e @manual`(跨視窗同步)加兩條 `@manual`。依 §5.4,自動斷言構不到「有人看過並接受」。
 原文已抄進 `docs/DECISIONS_NEEDED.md`,使用者確認後才改 `done`。
 
-| 2 | 引用可點、開原文段落面板;跨視窗同步進自動場景 | I2 | todo | |
+| 2 | **問完問題的人點一下答案裡的引用,就看得到它在原文的哪一段;答案沒有 `state` 時畫面保持中性、不假裝那是一個已回答的答案。** | I2 | in-progress(2026-09-05 派出) | |
 | 3 | 斷點與元件層 UI 狀態(需要 DOM 環境) | 待定 | todo | |
 
 ## 回填對照表(phase-1)

@@ -94,8 +94,54 @@ jobs:
           AI_KM_E2E_LOCK_FILE: ${{ runner.temp }}/.e2e.lock
           AI_KM_E2E_OWNER_FILE: ${{ runner.temp }}/.e2e.owner
 
+  accept:
+    # Deliberately its own job (PITFALLS 坑 4: one job per independent
+    # property, so one class of red never hides another). This job checks
+    # exactly one thing the other three do not: that the Gherkin
+    # specification actually EXECUTES. lint-typecheck-unit runs
+    # @ai-km/features:test, which is the three static scanners
+    # (gherkin:dup, steps:dup, doc-links) -- none of them runs a scenario.
+    #
+    # accept:coverage is the reason this job cannot be replaced by
+    # `pnpm accept:phase1` alone: cucumber exits 0 on `0 scenarios`, so a
+    # capability folder whose feature-file tag is misspelled -- or that
+    # cucumber.js's paths glob never reaches -- keeps accept:phase1 fully
+    # green while contributing nothing. Verified live on 2026-09-04 by
+    # mutating 06-retrieval/phase-1.feature's first line to @retrievel:
+    # accept:phase1 still printed "9 scenarios (9 passed)"; accept:coverage
+    # went red with "phase-1.feature 存在,但用它自己的 tag 「@retrieval」
+    # 選到 0 個場景". This matters most during the 11 parallel phase-1
+    # backfills, where no worker can see the other ten's tags.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Every capability folder that has a phase-1.feature contributes at
+      # least one passing scenario when selected by its own tag.
+      - run: pnpm accept:coverage
+
+      # All phase-1 scenarios together -- this is where a cross-folder
+      # duplicate/ambiguous step definition surfaces as a real failure.
+      - run: pnpm accept:phase1
+
+      # The integration points already accepted (I1). Deliberately NOT a
+      # bare `pnpm accept`: that also collects the not-yet-written
+      # integration points (I2..) and reports their undefined steps, which
+      # is "not built yet", not "broken" -- GHERKIN_WORKFLOW §7.6.
+      - run: pnpm accept:integration
+
   # This workflow covers the L0 gate (lint/typecheck/unit test), the
-  # contract gate, and E2E as three independently-readable jobs.
+  # contract gate, E2E, and the Gherkin acceptance run as four
+  # independently-readable jobs.
   # Integration and security-negative gates are added per-story as real
   # services/tests land — see
   # archive/AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md.

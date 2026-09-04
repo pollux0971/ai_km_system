@@ -230,3 +230,162 @@ Then("the two returned hits are not near-duplicates of each other", function (th
   const families = result.map((h) => h.documentId);
   assert.notEqual(families[0], families[1], `兩筆都來自 ${families[0]}——MMR 退化成純相似度排序`);
 });
+
+// ==================================================================
+// phase-2(紅)—— services/retrieval 接進 apps/api 的 composition root。
+// 每一步只呼叫今天已經存在的符號:KmWorld.startServer()(apps/api 真實
+// buildServer())、retrievalPlugin 會裝的 app.retrieval(services/retrieval,
+// 今天沒被 server.ts 註冊)、以及上面 phase-1 已經在用的 toRetrievalScope()。
+// 沒有 import 任何新的實作符號,紅只會發生在斷言,不會發生在編譯。細節見
+// phase-2.feature 開頭的說明與 FEATURE.md。
+//
+// 刻意不斷言「能不能拿到某部門的真 chunk」:retrievalPlugin 沒指定
+// service/store 時預設是全新的空記憶體 store(service.ts:238),而 apps/api
+// 今天沒有任何測試用的 seed 通道能把資料灌進 app.retrieval——即使 phase-2
+// 正確接上 retrievalPlugin,這類斷言也不會變綠。見 phase-2.feature 開頭
+// 的說明與 FEATURE.md「開放問題」。
+// ==================================================================
+
+interface CompositionRootOutcome {
+  seamPresent: boolean;
+  hits?: readonly RetrievalHit[];
+  errorName?: string;
+}
+
+interface CompositionRootState {
+  /** app.retrieval 在真實 buildServer() 父實例上是否存在(今天恆為 false) */
+  seamPresent?: boolean;
+  hits?: readonly RetrievalHit[];
+  /** scenario 4:兩個真部門不同的人各自的結果,拿來比較是否一致 */
+  outcomes?: Map<string, CompositionRootOutcome>;
+}
+
+function compositionState(world: KmWorld): CompositionRootState {
+  const s = world.bag["compositionRoot"] as CompositionRootState | undefined;
+  assert.ok(s, "When 尚未透過 composition root 的 retrieval seam 問過問題");
+  return s;
+}
+
+async function loginDemoPerson(app: Awaited<ReturnType<KmWorld["startServer"]>>, username: string): Promise<void> {
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    headers: { "x-requested-with": "XMLHttpRequest" },
+    payload: { username, password: "demo-pass-123" },
+  });
+  assert.equal(
+    login.statusCode,
+    200,
+    `登入 ${username} 應成功(這一步只是確認 identity/session 沒壞,缺口專在 retrieval 沒被接進來):實際 ${login.statusCode} ${login.body}`,
+  );
+}
+
+async function askThroughRealSeam(
+  app: Awaited<ReturnType<KmWorld["startServer"]>>,
+  principalId: string,
+  question: string,
+): Promise<CompositionRootOutcome> {
+  const seam = (app as unknown as { retrieval?: RetrievalService }).retrieval;
+  const outcome: CompositionRootOutcome = { seamPresent: Boolean(seam) };
+  if (seam) {
+    // ADR 0014 的固定值:composition root 一旦接好,每個人都應該用同一個
+    // dept:eng scope,不管這個人真正的部門是什麼。
+    const scope = toRetrievalScope({ principalId, allowedScopeKeys: ["dept:eng"] });
+    try {
+      outcome.hits = await seam.retrieve(question, scope, 3);
+    } catch (error) {
+      outcome.errorName = (error as Error).name;
+    }
+  }
+  return outcome;
+}
+
+// ---------------------------------------------------------------- When
+
+When(
+  "a signed-in demo person tries to ask {string} through the real API server's own retrieval seam",
+  { timeout: 60_000 },
+  async function (this: KmWorld, question: string) {
+    const app = await this.startServer();
+    await loginDemoPerson(app, "demo-user");
+    const outcome = await askThroughRealSeam(app, "demo-user", question);
+    this.bag["compositionRoot"] = { seamPresent: outcome.seamPresent, hits: outcome.hits } satisfies CompositionRootState;
+    if (outcome.errorName) this.bag["compositionRootErrorName"] = outcome.errorName;
+  },
+);
+
+When(
+  "two different demo people with different real departments each try to ask {string} through the real API server's own retrieval seam",
+  { timeout: 60_000 },
+  async function (this: KmWorld, question: string) {
+    const app = await this.startServer();
+    const outcomes = new Map<string, CompositionRootOutcome>();
+    // demo-user(資訊部)與 demo-maintenance(維修部)——services/identity 的 fixture,
+    // 兩個人的真部門顯示名稱不同(見 services/identity/src/repository.ts)。
+    for (const username of ["demo-user", "demo-maintenance"]) {
+      await loginDemoPerson(app, username);
+      outcomes.set(username, await askThroughRealSeam(app, username, question));
+    }
+    const seamPresent = [...outcomes.values()].every((o) => o.seamPresent);
+    this.bag["compositionRoot"] = { seamPresent, outcomes } satisfies CompositionRootState;
+  },
+);
+
+// ---------------------------------------------------------------- Then
+
+Then(
+  "the retrieval seam should be visible from the real server's parent instance, but it is not yet",
+  function (this: KmWorld) {
+    const s = compositionState(this);
+    assert.ok(
+      s.seamPresent,
+      "app.retrieval 在 apps/api 真實 buildServer() 的父實例上不存在——composition root 今天完全沒有把 " +
+        "services/retrieval 接進來(這一輪的產出,見 features/06-retrieval/NEXT.md phase-2)。後果:即使一個人 " +
+        "真的登入成功(上一步的 200 已經證明 session 本身沒壞),07-generation 也沒有任何東西可以呼叫—— " +
+        "I2「登入問問題拿到答案」在第一步就斷了。修法比照 apps/api/src/server.ts 既有的 " +
+        "conversationPlugin/feedbackPlugin 條件註冊樣式,加上 retrievalPlugin 的註冊即可讓這句變綠。",
+    );
+  },
+);
+
+Then("the empty question should be rejected with {string}, not silently answered", function (this: KmWorld, errorName: string) {
+  const errName = this.bag["compositionRootErrorName"] as string | undefined;
+  assert.ok(
+    errName,
+    "空問題應該被 services/retrieval 既有的守門拒絕,但沒有任何錯誤被記錄下來(seam 不存在時這一步不會被執行到)",
+  );
+  assert.equal(errName, errorName, `錯誤類型應為 ${errorName},實際 ${errName}`);
+});
+
+Then("the hits should come back empty, never an invented citation", function (this: KmWorld) {
+  const s = compositionState(this);
+  assert.ok(s.hits, "還沒有任何檢索結果(seam 不存在時這一步不會被執行到)");
+  assert.deepEqual(
+    s.hits.map((h) => h.chunkId),
+    [],
+    `今天還沒有任何資料被索引(05-ingestion/phase-2 是另一個資料夾的工作),seam 應該老實回報「沒有」,` +
+      `而不是命中 ${s.hits.map((h) => h.chunkId).join(", ")} 這種今天不該存在的資料——不索引不等於允許捏造`,
+  );
+});
+
+Then(
+  "both people should get the exact same outcome from the seam, because I2's scope is fixed for everyone alike, not derived from either person's real department",
+  function (this: KmWorld) {
+    const s = compositionState(this);
+    assert.ok(s.outcomes, "還沒有任何兩個人的比較結果");
+    const a = s.outcomes.get("demo-user");
+    const b = s.outcomes.get("demo-maintenance");
+    assert.ok(a && b, "應該有 demo-user 與 demo-maintenance 兩個人的結果可以比較");
+    assert.deepEqual(
+      { hits: a.hits?.map((h) => h.chunkId) ?? null, error: a.errorName ?? null },
+      { hits: b.hits?.map((h) => h.chunkId) ?? null, error: b.errorName ?? null },
+      `demo-user(真部門「資訊部」)與 demo-maintenance(真部門「維修部」)透過同一個 seam 問同一個問題,` +
+        `結果卻不一樣——ADR 0014 的固定值 dept:eng 應該讓每個人在 I2 期間得到完全相同的待遇,不管真部門是什麼。` +
+        `等 02-authorization phase-2(從身分推導真 scope)真的落地、composition root 把這個固定值換掉之後,` +
+        `不同部門的人理當開始得到不同的結果——這條「應該相同」的斷言屆時理應跟著紅,那正是這個場景故意設計成` +
+        `的移除條件(ADR 0014 Consequences)。看到它紅,代表有人動了固定值,該做的是照 ` +
+        `02-authorization/phase-1.feature 的 @design-constraint 場景先例,把這條場景改寫成新的事實,不是刪掉` +
+        `或放寬斷言。`,
+    );
+  },
+);

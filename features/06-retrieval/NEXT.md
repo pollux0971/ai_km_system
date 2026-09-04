@@ -8,8 +8,8 @@
 | 欄位 | 值 |
 |---|---|
 | 已完成 | phase-1(2026-09-03,回填) |
-| 進行中 | 無 |
-| 下一個 | phase-2 |
+| 進行中 | phase-2(2026-09-04,測試 agent 已交出紅的 `phase-2.feature` + steps,等協調者確認/merge,再進 IMPLEMENT) |
+| 下一個 | phase-2 IMPLEMENT |
 
 ## 下一個 phase 的 gate
 
@@ -33,6 +33,16 @@
 可以先做的:在 `apps/api/src/server.ts` 為 `retrievalPlugin` 寫條件註冊的 plugin.test(走真實
 `buildServer()`,比照 `conversationPlugin` 的樣式),scope 由 demo 使用者的 session 固定給 `dept:eng`,
 並在場景裡明寫這是 I2 的暫時限制。
+
+**2026-09-04 更新**:上面這件事的**規格**已經寫好(`phase-2.feature` 4 個場景,全部紅,見
+FEATURE.md「phase-2 提案」),等協調者確認/merge 才進 IMPLEMENT。IMPLEMENT 要做的就是：
+比照 `conversationPlugin`/`feedbackPlugin` 的條件註冊樣式,把 `retrievalPlugin` 接進
+`apps/api/src/server.ts`——這樣就能讓 `phase-2.feature` 的第一條 Then(`app.retrieval` 在父實例
+上可見)變綠;每個場景第二條 Then 也會跟著真的被跑到。**待協調的一件事**:IMPLEMENT 之前需要
+決定要不要順便替 `apps/api` 加一個測試用的 retrieval store/service 注入通道(比照
+`BuildServerOptions.dbPath`/`migrationsDir`)——沒有這個通道,`app.retrieval` 預設是空 store,
+「拿到的引用真的指回原文」「跨部門 Deny-Wins」這兩個性質沒有地方能在 06-retrieval 自己的 phase
+裡驗證(細節見 FEATURE.md 開放問題/待協調)。
 
 **phase-3 等 I2**:sqlite-vec 的 phase-1 場景可以先用 `Scenario Outline` 寫好(紅),不碰實作。
 

@@ -72,7 +72,30 @@ provider)、以及 `services/retrieval` 的 `RetrievalHit` **型別**(只有型�
 
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
-| 1 | (回填)context 組裝、引用回填、捏造引用拒絕、空 context 短路、空問題拒絕 | I1 | in-progress | |
+| 1 | (回填)context 組裝、引用回填、捏造引用拒絕、空 context 短路、空問題拒絕 | I1 | done | 2026-09-04 |
+
+**phase-1 驗收細節(2026-09-04,獨立 session)+ 一個要補的缺口**:四項核心全過
+(6 場景、單獨執行 exit 0、typecheck 45/45、lint 37/37、`vitest run` 直接跑不經 turbo
+12/12——刻意避開 §5.3 的熱快取假陰性)。兩組反向驗證都由驗收者親自重跑:
+
+1. **捏造引用守門**(`assertCitationsGrounded` 的 `fabricated.length > 0` → `< 0`):
+   `.feature` 層紅在 `common.steps.ts` 的訊息,原文含完整 `doc-does-not-exist#0` 與全部
+   citations——決定性、不截斷。sha256 還原一致(`e888d8…c310d`),回綠 6/6。
+2. **scopeKey 外洩守門**(`buildContext()` 的逐欄投影 → `hits.map(hit => ({...hit}))`):
+   紅在 `context chunk doc-maintenance-001#0 帶著部門標籤到達回答模型:{...,"scopeKey":"dept:maintenance"}`
+   ——含實際洩漏值。sha256 還原一致(`1c25d1…33ea`)。
+
+⚠️ **驗收者主動抓到、不擋本 phase 但要補的**:同一個突變在 **vitest 層**打 `service.test.ts`
+AC2 時,第一條失敗訊息是
+`Error: promise resolved "{ answer: '...', …(1) }" instead of rejecting`
+——**這正是 §5.2 與 PITFALLS 點名的存在性斷言**:只證明「有沒有拋錯」,捏造的
+`doc-does-not-exist#0` 被 vitest json reporter 截斷在 `…(1)` 裡看不到。根因是 AC2 只寫
+`.rejects.toBeInstanceOf(FabricatedCitationError)`,沒有內容檢查。
+
+驗收單位是 Gherkin 場景,而場景那層是決定性的,所以 phase-1 判 PASS;但這條 vitest 斷言
+本身不合格,**要在 phase-2 順手補一條對著捏造 chunkId 逐字比對的斷言**(§4:做 phase 時
+發現缺陷 → 在同一個 `.feature`／測試補,不開編號)。
+
 | 2 | `answer()` 從 `app.retrieval` 拿 hits,接進 apps/api composition root | I2 | todo | |
 | 3 | abstention:沒有來源時回結構化理由而非自由文字 | 待定 | todo | |
 

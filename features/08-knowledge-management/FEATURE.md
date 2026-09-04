@@ -100,12 +100,25 @@ pnpm --filter @ai-km/features accept --tags '@knowledge-management and @phase-1 
 
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
-| 1 | (回填)知識庫清單、文件清單與狀態、跨知識庫守門、feature flag(**目前對 mock**) | I1 | in-progress | |
+| 1 | (回填)知識庫清單、文件清單與狀態、跨知識庫守門、feature flag(**目前對 mock**) | I1 | in-progress(自動證據全綠;`@manual`/`@e2e` 待使用者)| |
 | 2 | 上傳與文件狀態接真 API(接上後本資料夾**重新分級為嚴格**) | I4 | todo | |
 | 3 | 頁面層的 Gherkin(需要 DOM 環境) | 待定 | todo | |
 
-**phase-1 狀態細節**:場景與實作已合併進 main,`/phase-done` 尚未跑完 → `in-progress`。
-本資料夾是**標準級**(理由見上),依 §5.1 可由協調者自審,不需要另一個 session。
+**phase-1 狀態細節(2026-09-04,獨立 session 覆核)**:自動那半**全過**——11 場景 46 步驟、
+單獨執行 exit 0、typecheck 45/45、lint 37/37、`--filter @ai-km/web` 126 檔 1804 條全過。
+反向驗證由驗收者獨立重做(不只信 FEATURE.md 的紀錄):拿掉
+`knowledge-documents.ts:382` 的 `&& document.knowledgeBaseId === knowledgeBaseId`,紅在
+
+```
+AssertionError [ERR_ASSERTION]: 知識庫 kb-sample-2 的文件應為 [設備故障排除手冊.pdf],實際是 [改名嘗試.pdf]
+```
+
+——別的知識庫的文件真的被改名了,是**逐字可比對的量**,不是存在性或拋錯。還原前後 sha256
+逐位元相同(`c31ee260…3f076`),回綠 11/11。mock 標示誠實,沒有任何地方宣稱已接上後端(鐵律 5)。
+
+**但 phase-1 不是 `done`**:`/phase-done` 的四項核心第二項是「`@manual` 人工確認」,
+而本資料夾有三個待使用者的場景(兩個 `@manual`、一個 `@e2e @manual`)。依 §5.4,
+自動斷言構不到「有人看過並接受」。原文已抄進 `docs/DECISIONS_NEEDED.md`,使用者確認後才改 `done`。
 
 **phase-2 的 gate(2026-09-04 更新)**:原本寫「需要一份 knowledge 契約,走 `/decide` + 使用者」。
 **ADR 0013 已把新 endpoint／新 schema 從使用者級改為技術顧問級**,並在其裁決表 #8 明白授權

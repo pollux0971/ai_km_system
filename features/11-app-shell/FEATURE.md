@@ -80,7 +80,36 @@ pnpm --filter @ai-km/features accept --tags '@app-shell and @standalone and not 
 
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
-| 1 | (回填)導覽可見性、首頁捷徑與時間、M3 token 不漂移與可讀性 | I1 | todo | |
+| 1 | (回填)導覽可見性、首頁捷徑與時間、M3 token 不漂移與可讀性 | I1 | in-progress(自動證據全綠;`@manual`/`@e2e` 待使用者)| |
+
+**phase-1 驗收細節(2026-09-04,獨立 session)**:自動那半**全過**——17 場景(9 個
+Scenario/Outline 展開後 17,與 FEATURE.md 宣稱一致)、單獨執行 exit 0、typecheck 45/45、
+lint 37/37、`--filter @ai-km/web` 1804 條、`design-tokens` 89 條全過。反向驗證獨立重做
+(不沿用既有紀錄):拿掉 `nav-items.ts:89` `rolesRequiredFor` 的巢狀前綴比對,紅在**身分**:
+
+```
+AssertionError: 「/maintenance/mc-1/session」應要求 maintenance_engineer, super_administrator,實際要求 nothing in particular
+AssertionError: 「/erp/new」應要求 sales_purchasing, super_administrator,實際要求 nothing in particular
+```
+
+還原前後 sha256 逐位元相同(`10c44eea…36abf`),回綠 17/17。
+
+**§5.3「機制要用量的不要用讀的」實測**:FEATURE.md 宣稱「把跨視窗同步綁進自動場景會讓
+`pnpm typecheck` 紅」。驗收者**真的去綁了一次**——臨時 step 檔 import
+`apps/web/src/lib/conversation-events.ts` → 跑出**恰好 9 條** TS2834/TS2835,與 FEATURE.md
+宣稱的數字完全吻合。這是實測不是照抄;臨時檔已刪、typecheck 回綠、worktree 乾淨。
+所以 phase-2 要協調者改 `features/tsconfig.json` 或 `packages/api-client` 這件事**成立**。
+
+**兩處文件落後於實況(協調者待補,不是功能缺口)**:
+1. 「待協調」第 1 條(standalone 指令是互動式的)**已解決**——`a0e8d80` 已把 11 改成非互動
+   且 `expect` 不釘數字。
+2. 回填對照表**漏列兩條 `@manual` 檔案競態場景**(E03-S028,檔頭註明是
+   `filelist-race-determinism` 工單的提案、等協調者確認)。它們不影響 17/17 的計數。
+
+**phase-1 不是 `done`**:`/phase-done` 四項核心第二項是「`@manual` 人工確認」,本資料夾有
+一條 `@e2e @manual`(跨視窗同步)加兩條 `@manual`。依 §5.4,自動斷言構不到「有人看過並接受」。
+原文已抄進 `docs/DECISIONS_NEEDED.md`,使用者確認後才改 `done`。
+
 | 2 | 引用可點、開原文段落面板;跨視窗同步進自動場景 | I2 | todo | |
 | 3 | 斷點與元件層 UI 狀態(需要 DOM 環境) | 待定 | todo | |
 

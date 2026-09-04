@@ -81,7 +81,33 @@ pnpm --filter @ai-km/features accept --tags '@admin-console and @standalone and 
 
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
-| 1 | (回填)誰看得到 admin、頁面授權表、部門／群組／連接器清單、系統健康 | I1 | todo | |
+| 1 | (回填)誰看得到 admin、頁面授權表、部門／群組／連接器清單、系統健康 | I1 | in-progress(自動證據全綠;`@e2e` 待使用者)| |
+
+**phase-1 狀態細節(2026-09-04,獨立驗收 session)**:四項核心的**自動那半全部誠實做完且綠**
+——14 場景全過(`--strict`,無 undefined/pending)、單獨執行 exit 0、`typecheck` 45/45、
+`lint` 37/37、`pnpm test --filter @ai-km/admin` 53 檔 409 條全過;反向驗證由驗收者**自選了
+FEATURE.md 三個既有突變點之外的第四個**——把 `apps/admin/src/lib/admin-route-access.ts` 的
+`/users` 角色清單追加 `general_user`(模擬守門放寬),紅在**角色身分陣列本身**:
+
+```
+AssertionError: expected [ 'it_administrator', …(2) ] to deeply equal [ 'it_administrator', …(1) ]
++   "general_user",
+```
+
+還原前後 sha256 逐位元相同(`22188af7…1ebb235984e2cec`),重跑 8 tests passed。
+斷言對著內容/身分,不是狀態碼或存在性,符合 §5.2。
+
+**但 phase-1 不是 `done`**,而且缺的那一半不能用測試補:本資料夾是 12 個回填資料夾裡
+**唯一**帶 `@e2e @manual` 場景的(01/02/03/04/06/09 都沒有),依 GHERKIN_WORKFLOW §5.4
+「驗收不是測試」,它要的是使用者親眼看過。場景原文已抄進 `docs/DECISIONS_NEEDED.md`。
+使用者確認後才改 `done`——不得用自動斷言冒充,也不得為了不冒充而抹掉上面驗過的東西。
+
+**驗收者另外提出、需要協調者走 `/feature` 的一件事**:`phase-1.feature` 的 Scenario Outline
+把 `/departments | super_administrator` 寫進 Examples,等於把 E11-S023 的**最嚴讀法**
+(當時「角色描述沒有字面對應」下選的保守解)提前凍結成已驗收規格。ADR 0013 裁決表 #14 已定
+「部門主管管自己部門群組於 I6 落地,在那之前維持最嚴讀法」——所以現況是對的,但那條 Examples
+在 I6 時必須跟著改,不是永久規格。已記在本節,I6 走 `/feature`。
+
 | 2 | 頁面層(元件渲染、route guard 實際擋人)、導覽與授權表對齊 | I6 | todo | |
 | 3 | 部門／群組接真後端 | I6 | todo | |
 

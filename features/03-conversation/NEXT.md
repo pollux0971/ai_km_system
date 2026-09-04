@@ -20,7 +20,27 @@
 - [ ] 自身:`01-identity` phase-1 `done` —— phase-2 要在真的 `buildServer()` 上用**兩個不同身分**
       跑擁有者拒絕的場景,目前 `_world.ts` 的 `startServer({ enableTestAuthProvider: true })`
       只有 demo 使用者一條登入路徑,換身分的方式還沒有回填成步驟
-- [ ] 整合:`06-retrieval` phase-2 與 `07-generation` phase-2 `done` —— 訊息要帶得出 citations
+- [x] 整合:`06-retrieval` phase-2(2026-09-04)與 `07-generation` phase-2(2026-09-05)
+      皆 `done` —— `app.rag.ask(question)` 已經是真的生產路徑,訊息帶得出 citations
+
+**phase-2 的 DoD 追加一條(2026-09-05,由 `07-generation/phase-2` 的獨立驗收 session 挖出)**
+
+- [ ] **`app.rag.ask()` 要長出 caller identity 參數,ADR 0014 的固定 `dept:eng` 從 seam 內部
+      搬到這裡的 HTTP 呼叫點。**
+
+      理由不是美觀,是**一個守門今天是死的**:驗收者實際把 `rag-plugin.ts` 改成「兩個人拿到
+      不同 scope」,`06`/`07` 的場景 4(ADR 0014 自稱的「移除條件」)**仍然全綠**。
+      兩個原因,第一個已經解掉、第二個沒有:
+
+      1. ~~store 永遠是空的~~ —— `05-ingestion/phase-2` 接上 `app.ingestion` 之後不成立了;
+      2. **`RagSeam.ask(question)` 沒有 caller identity 參數** —— 就算之後真的要依人推導 scope,
+         這個簽名也接不到「這是誰」。所以那條場景**不管固定值在不在,都會綠**。
+
+      `03-conversation/phase-2` 是**第一個手上真的有「登入的人」的呼叫點**,所以簽名變更的
+      落點在這裡。做完之後,`06`/`07` 的場景 4 才第一次有可能成為真的守門
+      ——**但改那兩個 `.feature` 的文字要走 `/feature`**(§6),不是這個 phase 順手改。
+
+      在此之前,ADR 0014 的「移除條件」信心一律標**「未證實」**,不得寫成「已驗證」。
 - [x] 契約:`contracts/openapi/conversations.yaml` 的 `Message` 加**選填** `citations[]`
       —— **gate 已解除(2026-09-04)**。
 

@@ -20,6 +20,21 @@ export type AnswerState =
 export type AnswerFeedbackVerdict = "OK" | "NG";
 export type FeedbackReason = "INCORRECT" | "INCOMPLETE" | "OFF_TOPIC" | "OTHER";
 
+/**
+ * Mirrors `contracts/openapi/generation.yaml`'s `Citation` verbatim (ADR
+ * 0016 D1 — `conversations.yaml`'s `Message.citations` items `$ref` that
+ * same schema so the two can never drift). Defined locally rather than
+ * imported from `@ai-km/service-generation`/`@ai-km/service-model-gateway`:
+ * this repository has no reason to depend on either package, and the shape
+ * is four primitive fields that are cheap to mirror.
+ */
+export interface MessageCitation {
+  readonly chunkId: string;
+  readonly documentId: string;
+  readonly startOffset: number;
+  readonly endOffset: number;
+}
+
 export interface MessageRow {
   readonly id: string;
   readonly conversationId: string;
@@ -33,6 +48,16 @@ export interface MessageRow {
   readonly feedbackReason?: FeedbackReason;
   readonly feedbackComment?: string;
   readonly citationFeedback?: Record<string, AnswerFeedbackVerdict>;
+  /**
+   * ADR 0016 D3 — absent (this key does not exist on the object at all) means
+   * this message was never produced by the RAG path; `[]` means the RAG path
+   * ran and found nothing to cite. `toMessage()` below only adds this key
+   * when the underlying column is non-NULL, so the two stay distinguishable
+   * all the way out to the JSON response (a `citations: undefined` property
+   * would already be dropped by `JSON.stringify`, but the row itself must
+   * not paper over the distinction earlier by defaulting to `[]`).
+   */
+  readonly citations?: MessageCitation[];
 }
 
 interface RawMessageRow {
@@ -48,12 +73,27 @@ interface RawMessageRow {
   feedback_reason: FeedbackReason | null;
   feedback_comment: string | null;
   citation_feedback: string | null;
+  citations: string | null;
   created_at: string;
   updated_at: string;
 }
 
+/**
+ * Unconditional — every `messages` table this repository is ever handed has
+ * `citations` (`db/migrations/202609050001_conversation_message_citations.sql`,
+ * 03-conversation/phase-2, ADR 0016). An earlier revision of this file
+ * detected the column at runtime (`PRAGMA table_info`) because
+ * `messages.repository.test.ts`'s hand-rolled `create table messages` DDL
+ * predated it — that detection was withdrawn (technical-advisor review):
+ * silently omitting `citations` when a deployment's migration has not run
+ * is exactly GHERKIN_WORKFLOW §5.1's "靜默給出錯誤結果" (a message comes back
+ * looking fine, just missing citations, and nothing errors) — the same
+ * failure mode this domain is graded **嚴格級** over. The test file's schema
+ * was fixed instead (see its own history), which is the correct fix for a
+ * schema drift, not a runtime fallback in production code.
+ */
 const SELECT_COLUMNS = `id, conversation_id, owner_key, role, content, attachment_names, state,
-       revisions, feedback, feedback_reason, feedback_comment, citation_feedback, created_at, updated_at`;
+       revisions, feedback, feedback_reason, feedback_comment, citation_feedback, citations, created_at, updated_at`;
 
 function toMessage(raw: RawMessageRow): MessageRow {
   return {
@@ -71,6 +111,7 @@ function toMessage(raw: RawMessageRow): MessageRow {
     ...(raw.citation_feedback === null
       ? {}
       : { citationFeedback: JSON.parse(raw.citation_feedback) as Record<string, AnswerFeedbackVerdict> }),
+    ...(raw.citations === null ? {} : { citations: JSON.parse(raw.citations) as MessageCitation[] }),
   };
 }
 
@@ -80,6 +121,13 @@ export interface CreateMessageInput {
   readonly content: string;
   readonly attachmentNames: string[];
   readonly state?: AnswerState;
+  /**
+   * Omit entirely for a message that never went through the RAG path (the
+   * asker's own question, or any pre-I2 message) — that is what keeps the
+   * column NULL and the response field absent (ADR 0016 D3). Pass `[]`
+   * explicitly for a RAG-path answer that found nothing to cite.
+   */
+  readonly citations?: readonly MessageCitation[];
   readonly now: string;
 }
 
@@ -103,6 +151,7 @@ export function createMessage(
     feedback_reason: null,
     feedback_comment: null,
     citation_feedback: null,
+    citations: input.citations === undefined ? null : JSON.stringify(input.citations),
     created_at: input.now,
     updated_at: input.now,
   };
@@ -110,8 +159,8 @@ export function createMessage(
   prepareOwnerScoped(
     db,
     `INSERT INTO messages
-       (id, conversation_id, owner_key, role, content, attachment_names, state, created_at, updated_at)
-     VALUES (@id, @conversation_id, @owner_key, @role, @content, @attachment_names, @state, @created_at, @updated_at)`,
+       (id, conversation_id, owner_key, role, content, attachment_names, state, citations, created_at, updated_at)
+     VALUES (@id, @conversation_id, @owner_key, @role, @content, @attachment_names, @state, @citations, @created_at, @updated_at)`,
   ).run(raw);
 
   return toMessage(raw);

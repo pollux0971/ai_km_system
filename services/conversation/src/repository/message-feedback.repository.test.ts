@@ -24,7 +24,7 @@ beforeEach(() => {
       id text primary key, conversation_id text not null references conversations(id) on delete cascade,
       owner_key text not null, role text not null, content text not null, attachment_names text not null default '[]',
       state text, revisions text, feedback text, feedback_reason text, feedback_comment text, citation_feedback text,
-      created_at text not null, updated_at text not null
+      created_at text not null, updated_at text not null, citations text
     );
   `);
   db.prepare(

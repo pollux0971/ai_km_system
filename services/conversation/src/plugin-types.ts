@@ -28,9 +28,18 @@ export interface ConversationContractSource {
   getSchema(specName: string, schemaName: string): Record<string, unknown>;
 }
 
-/** Mirrors `AuthContext` (apps/api/src/types.ts) — the one field this domain needs. */
+/** Mirrors `AuthContext` (apps/api/src/types.ts) — the fields this domain needs. */
 export interface ConversationAuthContext {
   readonly ownerKey: string;
+  /**
+   * Added for 03-conversation/phase-2 (I2, ADR 0014's "移除條件"): the one
+   * thing this route can hand `app.rag.ask()` as the asker's own identity
+   * (see `hostRag` below). Real `AuthContext` (apps/api/src/types.ts) and
+   * the bare `buildTestApp()` harness (`testing/build-test-app.ts`) both
+   * already set this field on `request.auth` — nothing upstream changes to
+   * add it here.
+   */
+  readonly userId: string;
 }
 
 export function hostDb(app: FastifyInstance): Database {
@@ -86,4 +95,48 @@ export function hostChangeEventBus(app: FastifyInstance): ChangeEventBus {
 /** Present only after `requireSession` has run and allowed the request. */
 export function requestAuth(request: FastifyRequest): ConversationAuthContext | undefined {
   return (request as unknown as { auth?: ConversationAuthContext }).auth;
+}
+
+/**
+ * Narrow, local mirror of `apps/api/src/rag-plugin.ts`'s `RagCaller` and
+ * `Citation` (`@ai-km/service-model-gateway`'s `generation/provider.ts`).
+ * Same reasoning as `ConversationContractSource`/`ConversationAuthContext`
+ * above: this package cannot import `apps/api` (ADR 0014 — the fixed I2
+ * scope, and the direction of dependency it lives behind, stay in `apps/
+ * api`'s composition root, never in `services/*`), so it reads `app.rag`
+ * back through a structural cast rather than importing `RagSeam`.
+ */
+export interface ConversationRagCaller {
+  readonly principalId: string;
+}
+
+export interface ConversationRagCitation {
+  readonly chunkId: string;
+  readonly documentId: string;
+  readonly startOffset: number;
+  readonly endOffset: number;
+}
+
+export interface ConversationRagAnswer {
+  readonly answer: string;
+  readonly citations: readonly ConversationRagCitation[];
+}
+
+export interface ConversationRagSeam {
+  ask(question: string, caller: ConversationRagCaller): Promise<ConversationRagAnswer>;
+}
+
+/**
+ * `app.rag` only exists on the real `apps/api` `buildServer()` instance
+ * (`ragPlugin`, registered after `retrievalPlugin`/`generationPlugin`) — the
+ * bare `buildTestApp()` harness this package's own vitest suite uses
+ * (`testing/build-test-app.ts`) never registers it. Returning `undefined`
+ * rather than throwing lets a route ask "is RAG wired up here?" and skip
+ * triggering it when it is not — which is exactly what keeps every phase-1
+ * vitest test (and phase-1's own cucumber scenarios) byte-for-byte
+ * unchanged: they exercise `POST .../messages` through the bare harness,
+ * where `hostRag(app)` is always `undefined` and no RAG call is ever made.
+ */
+export function hostRag(app: FastifyInstance): ConversationRagSeam | undefined {
+  return (app as unknown as { rag?: ConversationRagSeam }).rag;
 }

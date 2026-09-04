@@ -19,7 +19,7 @@
  * `registerRequestValidation` and `apps/api/src/errors.ts`'s
  * `registerErrorHandling` — same reasoning as `contract-check.ts`.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyError, type FastifyRequest } from "fastify";
@@ -72,16 +72,30 @@ function resolveRepoRoot(from: string = fileURLToPath(import.meta.url)): string 
   throw new Error(`找不到 db/migrations 目錄(從 ${from} 逐層往上找)。`);
 }
 
+/**
+ * 03-conversation/phase-2: was a single hardcoded filename
+ * (`202608280001_conversation_domain.sql`) back when that was the domain's
+ * only migration. `202609050001_conversation_message_citations.sql` (ADR
+ * 0016 — `messages.citations`) added a second one, so this now applies
+ * every `db/migrations/*.sql` file in filename order — the same "applied in
+ * filename order" rule `db/migrations/README.md` documents for the real
+ * runner (`apps/api/src/db/migrate.ts`, not importable here — direction of
+ * dependency, `plugin-types.ts`'s header). Harmless for this package's own
+ * tests that other domains' migrations (identity/analytics/login_attempts)
+ * also get applied to this in-memory db: they create their own
+ * self-contained tables with no foreign key into `conversations`/`messages`,
+ * and nothing here queries them.
+ */
 function openMigratedDatabase(): Database.Database {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
-  const migrationFile = path.join(
-    resolveRepoRoot(),
-    "db",
-    "migrations",
-    "202608280001_conversation_domain.sql",
-  );
-  db.exec(readFileSync(migrationFile, "utf8"));
+  const migrationsDir = path.join(resolveRepoRoot(), "db", "migrations");
+  const files = readdirSync(migrationsDir)
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
+  for (const file of files) {
+    db.exec(readFileSync(path.join(migrationsDir, file), "utf8"));
+  }
   return db;
 }
 

@@ -34,6 +34,7 @@ import { conversationPlugin, conversationSandboxSeeders, toOwnerKey } from "@ai-
 import { identityPlugin, registerSandboxSeeder, requireAnyRole } from "@ai-km/service-identity";
 import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
 import { feedbackPlugin } from "@ai-km/service-feedback";
+import { retrievalPlugin } from "@ai-km/service-retrieval";
 import { createHealthChecker, overallStatus } from "./health/checks.js";
 import "./types.js";
 
@@ -280,6 +281,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   if (contracts.specNames().includes("analytics")) {
     await app.register(feedbackPlugin);
   }
+  // 06-retrieval/phase-2 (I2, ADR 0014) — puts `app.retrieval` on the parent
+  // instance so 07-generation can call `retrieve()` once it exists. Unlike
+  // conversationPlugin/feedbackPlugin above, there is no `contracts/openapi`
+  // spec to gate on (06-retrieval FEATURE.md: "無直接 HTTP 契約(in-process
+  // 接縫,ADR 0007)"), so this registers unconditionally, same as
+  // modelGatewayPlugin below. No route here calls `retrieve()` yet — that is
+  // 07-generation's job — so there is nothing in this composition root that
+  // needs to build ADR 0014's fixed `dept:eng` scope today; the fixed value
+  // is for whichever call site is first to actually invoke
+  // `app.retrieval.retrieve(...)`.
+  await app.register(retrievalPlugin);
   // E12-S031 — POST /v1/transcriptions (ASR). config.ts is outside this
   // story's allowed-modify list, so the two fields it already reads
   // (E04-S039) are passed through here rather than re-read.

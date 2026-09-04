@@ -90,6 +90,17 @@ offset +1 → 紅在「切出的原文與引用文字不同」。
 **通過後立刻做**:使用者拿自己的一份真實文件問三個問題,把「答非所問」的紀錄下來——那是 E04-S037
 (真模型)的第一份需求,比繼續寫程式重要。
 
+**通過後也要做(守門升版,寫在這裡免得靠記憶)**:目前守門停在 template **v1.2.2**
+(`features/scripts/`,採用於 2026-09-04)。**v1.3.2(7eecc51)是第一個 `--check` 能進 CI 的版本**
+(檔頭 sha256 自比對,不需要模板 checkout),並修掉了 1.2.2 的六個問題——其中兩個在 1.2.2 上
+**是死的**:`features/scripts/gates.config.json` 讀不到(cucumber cwd 靠自動偵測),
+`verify-against.sh` 會把 exit 127 報成通過。細節見協調者的合併程序檔與各 commit。
+
+I2 通過那一輪的升版程序(不變):逐支 diff 確認「新版 ⊇ 我們」→ sync(**舊的 SOURCE 標頭要
+重跑一次 sync 才會過 `--check`,一次性過渡**)→ `verify-against`(這版才可信)→ `--check`
+進 CI **先照印一輪再 gate** → coverage 可以開 `--run`(**只跑 done/in-progress 的 phase**——
+`todo` 的 phase 刻意是紅的,對它要求 `--run` 通過是構造上就錯的)。
+
 ---
 
 ## I3 · 部門授權真的來自身分

@@ -17,9 +17,9 @@
 
 - [x] 自身:phase-1 `done`
 - [x] 整合:I1 已通過(2026-09-03)
-- [ ] 契約:`02-authorization` phase-1 至少能產出一個真的 `RetrievalScope`(E04-S009 目前 blocked-team-b;
-      在那之前 composition root 只能用 demo 使用者的固定 scope,這要在 ADR 記為 I2 的已知限制)
-- [ ] 契約:E06-S043 的「跨部門重匯 = 拒絕」裁定已由使用者在協調者 session 確認
+- [x] 契約:`02-authorization` 產出真 scope **今天做不到**(E04-S009 已由顧問裁定,但 2a 發現 `01-identity` 沒有 department id 欄位、`RetrievalScope` 沒有 deny 欄位,2a/2b 進行中)。
+      **依 `docs/adr/0014-i2-fixed-demo-scope.md`,I2 期間 composition root 用 demo 使用者的固定 `dept:eng`**,`retrieve()` 簽名不變、不建過渡對應表;場景要明寫這是 I2 的暫時限制。此 gate 因此**解除**。
+- [x] 契約:E06-S043 的「跨部門重匯 = 拒絕」裁定已由使用者確認(2026-09-03「我都批准了」,見 `docs/DECISIONS_NEEDED.md` 已批示表;此核取方塊 2026-09-04 補勾,先前是舊的)
 
 **phase-3(sqlite-vec 成為預設 store)** 需要:
 

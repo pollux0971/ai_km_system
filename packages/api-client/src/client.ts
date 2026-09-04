@@ -1,10 +1,10 @@
 import createFetchClient from "openapi-fetch";
 import type { Client } from "openapi-fetch";
-import type { paths as CorePaths } from "./generated/core";
-import type { paths as AuthPaths } from "./generated/auth";
-import type { paths as ConversationsPaths } from "./generated/conversations";
-import type { paths as TranscriptionsPaths } from "./generated/transcriptions";
-import type { paths as AnalyticsPaths } from "./generated/analytics";
+import type { paths as CorePaths } from "./generated/core.js";
+import type { paths as AuthPaths } from "./generated/auth.js";
+import type { paths as ConversationsPaths } from "./generated/conversations.js";
+import type { paths as TranscriptionsPaths } from "./generated/transcriptions.js";
+import type { paths as AnalyticsPaths } from "./generated/analytics.js";
 
 const CLIENT_ID_STORAGE_KEY = "ai-km:client-id";
 const CORRELATION_ID_HEADER = "x-correlation-id";

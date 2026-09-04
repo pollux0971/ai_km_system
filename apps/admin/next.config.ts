@@ -28,6 +28,25 @@ const nextConfig: NextConfig = {
     "@ai-km/logger",
     "@ai-km/validation",
   ],
+  // 2026-09-05(ADR 0017 那一輪的附帶修正,顧問裁決 #「共用檔改法 (a)」):
+  // `packages/api-client` 的相對 import 補上了 `.js` 副檔名,好讓 `features` 的
+  // NodeNext 解析能把 `apps/web/src/lib/conversation-events.ts` 綁進自動場景
+  // (在那之前恰好 9 條 TS2834/TS2835,實測過)。
+  //
+  // 代價落在這裡:Next 的 webpack 預設**不會**把 `./client.js` 對回 `./client.ts`,
+  // 於是 `transpilePackages` 底下的原始碼解不開,build 直接紅
+  // (`Module not found: Can't resolve './client.js'`)。
+  // `extensionAlias` 就是官方給這個情況的開關——它讓 TS 的「寫 .js、實際是 .ts」
+  // 這個 ESM 慣例在 bundler 這一側也成立。
+  //
+  // ⚠️ 這一段與 `packages/api-client` 的副檔名是**同一個決定的兩半**,拆開任何一半都會紅。
+  webpack(config: { resolve: { extensionAlias?: Record<string, string[]> } }) {
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      ".js": [".ts", ".tsx", ".js"],
+    };
+    return config;
+  },
   async headers() {
     return [
       {

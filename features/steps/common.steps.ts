@@ -37,11 +37,16 @@ When("the standalone command for this capability is run", { timeout: 300_000 }, 
 When(
   "the {string} plugin is registered on a bare server and the server becomes ready",
   { timeout: 30_000 },
-  async function (this: KmWorld) {
+  // `name` 只進錯誤訊息,註冊什麼由 this.bag["pluginUnderTest"] 決定。但**參數一定要收**:
+  // cucumber 比對 pattern 的參數個數與 handler 的 arity,pattern 有一個 {string} 而 handler
+  // 宣告 0 個參數時它直接判失敗(`function has 0 arguments, should have 1 …`),而且錯在
+  // 執行期、不是型別期,所以 typecheck 與 lint 都看不到。2026-09-04 由 07-generation 的
+  // worker 實測踩到——在那之前沒有任何場景用過這句,它從寫下來就是壞的。
+  async function (this: KmWorld, name: string) {
     const under = this.bag["pluginUnderTest"] as PluginUnderTest | undefined;
     assert.ok(
       under,
-      `能力步驟要先把要註冊的 plugin 放進 this.bag["pluginUnderTest"]({ register(app) { ... } }),這句通用步驟只負責 register()→ready()`,
+      `「${name}」的能力步驟要先把要註冊的 plugin 放進 this.bag["pluginUnderTest"]({ register(app) { ... } }),這句通用步驟只負責 register()→ready()`,
     );
     const instance = Fastify({ logger: false });
     await under.register(instance);

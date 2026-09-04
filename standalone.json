@@ -1,42 +1,42 @@
 {
-  "_doc": "ADR 0008 — 每個能力一行可以複製貼上的指令。/phase-done 會實際跑 interactive:false 的項目:退出碼 0 且輸出含 expect 字串才通過。跑不起來就不算 done,即使測試全綠。key 尾碼必須等於該能力 feature 檔第一行的 tag(@retrieval → 06-retrieval)。cucumber 的場景選取用 tag,不用路徑(cucumber 11 會把 CLI 路徑與設定檔 paths 合併)。",
+  "_doc": "ADR 0008 — 每個能力一行可以複製貼上的指令。/phase-done 會實際跑 interactive:false 的項目:退出碼 0 且輸出含 expect 字串才通過。跑不起來就不算 done,即使測試全綠。key 尾碼必須等於該能力 feature 檔第一行的 tag(@retrieval → 06-retrieval)。cucumber 的場景選取用 tag,不用路徑(cucumber 11 會把 CLI 路徑與設定檔 paths 合併)。 ★2026-09-04 修正:指令**不要**寫 `accept -- --tags`。pnpm 11.9.0 把 `--` 原樣轉給 cucumber-js,cucumber 從那裡停止解析選項、把 tag 運算式當成檔案路徑,ENOENT/exit 1。10 個非互動項目全中,也就是說在此之前 /phase-done 的「單獨執行 exit 0」從來沒有真的成立過。寫 `accept --tags` 才對。",
   "00-i1": {
     "cmd": "pnpm -s demo:w1-00",
     "interactive": false,
     "expect": "citation offset verified"
   },
   "01-identity": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@identity and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@identity and @standalone and not @manual'",
     "interactive": false,
     "expect": "scenarios ("
   },
   "02-authorization": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@authorization and @standalone and not @manual'",
     "interactive": false,
     "expect": "scenarios ("
   },
   "03-conversation": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@conversation and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@conversation and @standalone and not @manual'",
     "interactive": false,
     "expect": "scenarios ("
   },
   "04-model-gateway": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@model-gateway and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@model-gateway and @standalone and not @manual'",
     "interactive": false,
     "expect": "scenarios ("
   },
   "05-ingestion": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@ingestion and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@ingestion and @standalone and not @manual'",
     "interactive": false,
     "expect": "scenarios ("
   },
   "06-retrieval": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@retrieval and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@retrieval and @standalone and not @manual'",
     "interactive": false,
     "expect": "9 scenarios (9 passed)"
   },
   "07-generation": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@generation and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@generation and @standalone and not @manual'",
     "interactive": false,
     "expect": "scenarios ("
   },
@@ -45,7 +45,7 @@
     "interactive": true
   },
   "09-feedback-analytics": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@feedback-analytics and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@feedback-analytics and @standalone and not @manual'",
     "interactive": false,
     "expect": "scenarios ("
   },
@@ -58,7 +58,7 @@
     "interactive": true
   },
   "12-audit-observability": {
-    "cmd": "pnpm --filter @ai-km/features accept -- --tags '@audit-observability and @standalone and not @manual'",
+    "cmd": "pnpm --filter @ai-km/features accept --tags '@audit-observability and @standalone and not @manual'",
     "interactive": false,
     "expect": "scenarios ("
   }

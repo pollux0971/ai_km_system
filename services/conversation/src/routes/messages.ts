@@ -139,7 +139,6 @@ async function triggerRagReply(
   if (!rag) return;
 
   const answer = await rag.ask(question, { principalId: auth.userId });
-  const state: AnswerState = answer.citations.length > 0 ? "ANSWERED" : "NO_EVIDENCE";
   const preview = answer.answer.length > 0 ? answer.answer : `已傳送 0 個附件`;
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -150,10 +149,24 @@ async function triggerRagReply(
       role: "assistant",
       content: answer.answer,
       attachmentNames: [],
-      state,
-      // Straight from `app.rag.ask()`, in the order it returned them — this
-      // function must never reorder `citations` (ADR 0016 D2: array order
-      // IS the `[N]` marker mapping; a reorder here would silently break it).
+      // No `state` — deliberately (technical-advisor review). `state` must
+      // be driven by generation's own STRUCTURED result (≥1 citation →
+      // ANSWERED, a structured abstention → NO_EVIDENCE, a provider error →
+      // ERROR, scope-narrowed-to-empty → NO_EVIDENCE never
+      // PERMISSION_DENIED — 鐵律 #2, that would leak "something was
+      // denied"). `07-generation` has no structured-abstention signal today
+      // (that is its own phase-3, ADR 0013 #12 — decided, not yet landed),
+      // so ANSWERED vs. NO_EVIDENCE cannot actually be told apart from
+      // `answer.citations.length` alone — an earlier revision of this file
+      // guessed `citations.length > 0 ? "ANSWERED" : "NO_EVIDENCE"`, which is
+      // exactly the mistake this comment is here to not repeat: that guess
+      // treats a RESULT's side effect (whether citations happened to come
+      // back) as if it were the result itself. `state` is OPTIONAL in the
+      // contract (`Message.required` has no `state`), so omitting it here is
+      // honest — an absent `state` says "unknown", a guessed-right `state`
+      // would look identical in every test today while quietly telling the
+      // next reader there was a real basis for it. Fill this in once
+      // `07-generation` actually returns a structured verdict.
       citations: answer.citations,
       now,
     });

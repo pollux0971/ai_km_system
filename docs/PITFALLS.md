@@ -103,6 +103,58 @@ E06-S043 的 `.rejects` 排在資料比對之前所以資料比對從未執行�
 先綁整合點會不會讓回填的形狀被整合點的敘事帶偏(本 repo 的 `integration.steps.ts` 已經
 佔用了一批 PDF ingestion 的句子,05-ingestion 的 worker 要繞開它寫——這算是一個早期訊號)。
 
+### 坑 8:「預期輸出」寫的是推出來的數字,而那條指令從來沒被跑起來過
+
+`standalone.json` 是 `/phase-done` 的「單獨執行 exit 0」實際讀的那份清單,也是 `_world.ts`
+的 `runStandalone()` 讀的那份。它的十條 cucumber 指令寫成
+`pnpm --filter @ai-km/features accept -- --tags '…'`,而 pnpm 11.9.0 把 `--` 原樣轉給
+cucumber-js,cucumber 從那裡停止解析選項、把 tag 運算式當成**檔案路徑**開啟:
+
+    path: '…/features/@retrieval and @standalone and not @manual'
+    [ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] … Exit status 1
+
+**十條全錯,包含參考實作 06-retrieval 那條。** 也就是說在 2026-09-04 之前,
+「單獨執行」這一項驗收**沒有任何一次真的成立過**,而 `features/06-retrieval/FEATURE.md`
+的「單獨執行」段白紙黑字寫著預期輸出 `9 scenarios (9 passed)`。
+
+出處(技術顧問 ai-km-3a 自陳):當時只用 cucumber 直跑過 06,**換成 `accept -- --tags`
+形式之後沒有再經 pnpm 跑一次**,就把那個數字寫進 FEATURE.md 當「預期輸出」。
+
+這是 `GHERKIN_WORKFLOW.md` §5.3(**機制要用量的,不要用讀的**)在**同一個人寫下那條規則
+的隔天**再犯一次,而且犯在最不容易被發現的地方:一個從來沒被執行過的驗收指令,
+和一個通過的驗收指令,在紀錄上長得一模一樣(坑 3 的另一面)。
+
+**下次**:任何寫進文件當「預期輸出」的字串,必須是**從那條指令的實際輸出貼過來的**,
+不是從別的跑法推出來的。指令形式改變(換 runner、加 wrapper、改 pnpm 版本)= 那個
+預期輸出作廢,要重跑一次才能繼續宣稱。
+
+**連帶修掉的第二件事**:原本的 `expect` 有幾條是精確的 `"N scenarios (N passed)"`。
+那是坑 1 的形狀——每加一條場景就假紅一次,然後被靜默放寬。已一律改回寬鬆的
+`scenarios (`(它本身就排除掉零,因為 cucumber 印 `0 scenarios` 沒有括號那半),
+而「每個資料夾至少一條且全過」改由 `pnpm accept:coverage` **算出來**守。
+
+### 坑 9:一個沒有任何場景用過的通用步驟,壞了多久都不會有人知道
+
+`common.steps.ts` 的 `the {string} plugin is registered on a bare server and the server
+becomes ready`——cucumber expression 宣告一個 `{string}`,handler 卻寫成 0 個參數。
+cucumber 比對兩者的 arity,不合就判該步驟失敗:
+
+    function has 0 arguments, should have 1 (if synchronous or returning a promise) or 2 (if accepting a callback)
+
+錯在**執行期**,`typecheck` 與 `lint` 都看不到。而它是 ADR 0007 §5 要求的
+「走真實 `register()→ready()` 從父實例斷言 decoration」的通用入口——也就是說,
+**這個 repo 最想機械保證的一件事,它的通用入口是壞的**。
+
+它沒被發現的原因很簡單:**在此之前沒有任何 `.feature` 用過它**(唯一的參考實作
+06-retrieval 自訂了自己的版本)。11 個平行回填同時開工時,五個 worker 各自踩到、
+各自自訂同義句繞開、各自寫進「待協調」,才浮出水面。
+
+這是坑 2(守門「會不會紅」與守門「有沒有被接上」是兩件事)的極端形態:**這裡連接上都沒有**。
+
+**下次**:任何寫進 `common.steps.ts` 的通用步驟,**當場配一個最小場景真的去用它一次**
+(用完可以刪,但要跑過)。一個沒有任何呼叫端的共用工具,和一個壞掉的共用工具,
+從外面看一模一樣。
+
 ## 出處
 
 完整段落:`archive/ROADMAP_TEMP.md` 的 `5-pi`(CI 紅五天)、`5-rho`(L2-EQ 首次執行 2 條真分歧

@@ -19,6 +19,29 @@ Cucumber 的步驟定義。**先讀 `_world.ts` 再寫新的**——它定義了
   `buildServer()`…)。不繞、不 mock 掉接縫。
 - **Then 的斷言對著「壞掉時會變的量」**:分數、順序、內容、身分。「有結果」「沒拋錯」不算。
 
+## 一句步驟屬於哪個檔:三類,不是兩類
+
+2026-09-04 由技術顧問 ai-km-3a 裁定(原本只分「能力的」與「common 的」兩類,漏了第三類,
+差點因此把 I1 的組合步驟拆散):
+
+| 類別 | 住哪 | 判準 | 例 |
+|---|---|---|---|
+| **能力步驟** | `features/steps/<name>.steps.ts` | 「**這個能力自己單獨跑**」時會發生的事 | `a maintenance person asks {string}`(06) |
+| **整合組合步驟** | `features/steps/integration.steps.ts` | **跨能力的組合**——它建立或斷言的是好幾個能力串起來之後才存在的狀態 | `the real Chinese fixture PDF is ingested under department {string}`——它背後是 gateway + vector store + ingestion service 串好的 `I1State` |
+| **通用步驟** | `features/steps/common.steps.ts`(**只有協調者改**) | 措辭與語意跟能力無關,好幾個能力都會原樣用到 | `it is rejected with {string}`、`the response status is {int}` |
+
+**方向永遠是 integration → capability,不是反過來。** 一個能力的 phase-1 需要「已經索引好了」
+這種前置時,**重用整合檔裡的組合句**是對的,不要為了「句子該住在自己家」而搬家,更不要
+為了避開它而發明第二套措辭——同一件事有兩種講法,比撞名更難修。
+
+反過來也成立:整合點的 `.feature` 要用到某個能力自己就有的句子時,**重用該能力的**,
+不要在 `integration.steps.ts` 再定義一次。
+
+**這一段不是慣例是機械保證的**:`pnpm --filter @ai-km/features steps:dup` 數的是
+一句話在 `features/steps/*.steps.ts` 底下**被定義了幾次**——恰好一次就 PASS,
+不管住在上表哪一格;兩次以上 FAIL(cucumber 會炸,或更糟,綁到別人以為的另一個定義)。
+所以「住哪一格」是可讀性與歸屬的問題,「有幾個定義」才是正確性的問題,別把兩者搞混。
+
 ## 通用步驟:`common.steps.ts`(只有協調者改)
 
 | 句子 | 你的 When 要做什麼 |

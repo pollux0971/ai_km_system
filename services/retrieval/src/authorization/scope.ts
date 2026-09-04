@@ -37,6 +37,15 @@ export type RetrievalScope = {
   readonly principalId: string;
   /** Department/group keys the principal may read. Empty = deny everything. */
   readonly allowedScopeKeys: readonly string[];
+  /**
+   * Explicit ACL denials (ADR 0012 裁定 4) — Deny-Wins overrides a grant in
+   * `allowedScopeKeys` rather than merely narrowing it. Always present on a
+   * constructed scope (never `undefined`): every reader can rely on this
+   * field existing without an `?? []` guard. The ACL table that will supply
+   * real values is not built yet (left to phase-3 / I3) — every caller today
+   * passes `[]`, which is a no-op alongside `allowedScopeKeys`.
+   */
+  readonly deniedScopeKeys: readonly string[];
 } & { readonly [scopeBrand]: true };
 
 export class RetrievalScopeError extends Error {
@@ -56,6 +65,29 @@ export class RetrievalScopeError extends Error {
 export function toRetrievalScope(input: {
   principalId: string;
   allowedScopeKeys: readonly string[];
+  /**
+   * ADR 0012 裁定 4 的原意是「必填、無預設」,讓 typecheck 釘住每個呼叫端
+   * (E06-S026 的教訓:可選就會被靜默略過)。這裡沒有照字面做成必填——`?`
+   * 是刻意的、有記錄的偏離,不是漏改:`toRetrievalScope()` 今天被十幾個
+   * `*.test.ts` 與 `features/steps/**` 呼叫(見下方 CALLERS),這兩類是
+   * GHERKIN_WORKFLOW §6 明訂「開發 agent 不改」的檔案。把這個欄位設成必填
+   * 會讓那些呼叫端全數在 `pnpm typecheck` 炸掉——不是「少改幾個檔」的偷懶,
+   * 是字面上不存在合規的做法。所以退而求其次:輸入允許省略、省略時視為
+   * `[]`(語意上等於「這個呼叫端還沒接上 deny」,不是「這個人被拒絕一切」,
+   * 兩者不衝突);但輸出的 `RetrievalScope.deniedScopeKeys` 保持非 optional、
+   * 一律有值,讀者不需要 `?? []`。真正的「明寫 []」約束落在本檔案能改的
+   * 呼叫端上(見 `tools/w1-00-demo/run.ts`)。詳情見本輪回報。
+   *
+   * CALLERS without this field today (unedited by this change): every
+   * `*.test.ts` under `services/retrieval|generation|ingestion` that builds
+   * a scope, plus `features/steps/authorization|retrieval|integration|
+   * ingestion.steps.ts`. Two of `deny.test.ts`'s four assertions and two of
+   * `phase-2.feature`'s deny scenarios stay red because of this — their own
+   * `Given`/`When` steps capture a `denied` value locally but never pass it
+   * here, so no scope.ts implementation can make them pass without also
+   * editing those files.
+   */
+  deniedScopeKeys?: readonly string[];
 }): RetrievalScope {
   if (typeof input?.principalId !== "string" || input.principalId.trim() === "") {
     throw new RetrievalScopeError(
@@ -72,10 +104,22 @@ export function toRetrievalScope(input: {
       throw new RetrievalScopeError(`allowedScopeKeys 含有空白或非字串項目:${JSON.stringify(key)}`);
     }
   }
+  const deniedScopeKeys = input.deniedScopeKeys ?? [];
+  if (!Array.isArray(deniedScopeKeys)) {
+    throw new RetrievalScopeError(
+      "deniedScopeKeys 必須是陣列。省略時視為 [],但傳了非陣列的值代表呼叫端狀態有誤,不可靜默吞掉。",
+    );
+  }
+  for (const key of deniedScopeKeys) {
+    if (typeof key !== "string" || key.trim() === "") {
+      throw new RetrievalScopeError(`deniedScopeKeys 含有空白或非字串項目:${JSON.stringify(key)}`);
+    }
+  }
 
   return {
     principalId: input.principalId,
     allowedScopeKeys: Object.freeze([...input.allowedScopeKeys]),
+    deniedScopeKeys: Object.freeze([...deniedScopeKeys]),
   } as RetrievalScope;
 }
 
@@ -90,9 +134,10 @@ export interface ScopedRecord {
  */
 export function buildScopePredicate(scope: RetrievalScope): (record: ScopedRecord) => boolean {
   const allowed = new Set(scope.allowedScopeKeys);
+  const denied = new Set(scope.deniedScopeKeys);
   return (record) => {
     if (typeof record?.scopeKey !== "string" || record.scopeKey.trim() === "") return false;
-    return allowed.has(record.scopeKey);
+    return allowed.has(record.scopeKey) && !denied.has(record.scopeKey);
   };
 }
 
@@ -108,13 +153,18 @@ export function buildScopeSql(
   scope: RetrievalScope,
   column = "scope_key",
 ): { readonly sql: string; readonly params: readonly string[] } {
-  if (scope.allowedScopeKeys.length === 0) {
+  const denied = new Set(scope.deniedScopeKeys);
+  // Pre-filter: a denied key never reaches the IN list at all (ADR 0012 裁定
+  // 3) — closer to "authorization before retrieval" than filtering rows out
+  // after the query runs.
+  const effectiveKeys = scope.allowedScopeKeys.filter((key) => !denied.has(key));
+  if (effectiveKeys.length === 0) {
     return { sql: "1 = 0", params: [] };
   }
-  const placeholders = scope.allowedScopeKeys.map(() => "?").join(", ");
+  const placeholders = effectiveKeys.map(() => "?").join(", ");
   return {
     sql: `${column} IN (${placeholders})`,
-    params: [...scope.allowedScopeKeys],
+    params: [...effectiveKeys],
   };
 }
 
@@ -134,7 +184,8 @@ export function assertNoScopeLeak<T extends ScopedRecord>(
   records: readonly T[],
 ): readonly T[] {
   const allowed = new Set(scope.allowedScopeKeys);
-  const leaked = records.filter((r) => !allowed.has(r?.scopeKey));
+  const denied = new Set(scope.deniedScopeKeys);
+  const leaked = records.filter((r) => !allowed.has(r?.scopeKey) || denied.has(r?.scopeKey));
   if (leaked.length > 0) {
     const keys = [...new Set(leaked.map((r) => String(r?.scopeKey)))].join(", ");
     throw new ScopeLeakError(

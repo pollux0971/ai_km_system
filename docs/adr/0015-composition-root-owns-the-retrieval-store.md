@@ -153,6 +153,14 @@ D4(in-memory 限制寫進場景本文)不受本修正影響。
 (b) 承認場景 3 在本 phase 做不到,把它降級為 phase-3 的 gate,並在 `.feature` 動刀
    ——**但 `.feature` 只由使用者或 `/feature` 流程改**(§6),所以走 `/feature`,不是協調者直接改。
 
+> **✅ 已裁決並已落地(2026-09-05):走 (a)。** 詳細判準見下一節「D2 的空守門怎麼補」,
+> 實作是 `BuildServerOptions.ingestionEmbeddingProvider`(commit `7c62d06`),
+> 步驟接線是 `1119913`,結果場景 3 由紅轉綠、`@phase-2 and @ingestion` 4/4。
+> **這一段的存在本身是被 05 的測試 agent 指出來的**:它發現 ADR 上一節還停在「待裁決」,
+> 而裁決其實已經發生並落地了——ADR 只增不刪,所以補這個指標,而不是改寫上面那句話。
+> 一份說「還沒決定」而其實已經決定的紀錄,和坑 3(發現而未登記的缺陷,從紀錄外面看跟沒發現一樣)
+> 是同一個形狀的反面:**已決定而未登記,從紀錄外面看跟沒決定一樣。**
+
 ---
 
 ## 裁決:D2 的空守門怎麼補(2026-09-05,同日第三次修正)
@@ -205,3 +213,26 @@ provider——這正是 `createIngestionService({ modelGateway })` 這個相依�
   任何既有測試不受影響。
 - 欄位命名與註解要明說它是 test-only,並說明**為什麼這個 test-only 是合法的**
   (上表那一列:資料仍走真實 `ingest()`)。照 `dbPath`／`migrationsDir` 既有的樣式。
+
+### 補記:(a) 落地後的實測證據(2026-09-05)
+
+裁決要成立,得證明那條守門**現在真的走得到**。反向驗證(嚴格級,由測試 agent 做完、
+協調者收下,獨立驗收 session 會再重做一次):
+
+- 備份 `apps/api/src/server.ts`(sha256 `18b2f82…67c50`)→ 把 `enforceEmbeddingVersion`
+  由 `true` 改 `false` → 場景 3 **真的紅**,失敗訊息原文:
+
+  ```
+  AssertionError: 錯誤類型應為 EmbeddingVersionMismatchError,實際 EmbeddingError
+  ```
+
+- 還原後 sha256 逐位元相同,重跑回綠 4/4。
+
+**為什麼這條訊息是決定性的**:守門關掉後,`expectedIdentity` 不再傳進 `store.query()`,
+身分比對被跳過,於是 256 維的查詢向量與 64 維的索引向量直接進 `dot()` 計分,
+拋出的是**不同種類**的錯誤(`EmbeddingError`:維度不合)而不是
+`EmbeddingVersionMismatchError`(身分不符,拒絕檢索)。
+
+斷言比對的是**錯誤的 class identity**——守門要保證的性質本身——
+而不是「有沒有拋錯」這種存在性副作用。對照本 phase 之前的狀態(翻 `false` 場景結果
+**逐位元不變**),差別不是「紅得比較好看」,是**從沒有檢查點變成有檢查點**。

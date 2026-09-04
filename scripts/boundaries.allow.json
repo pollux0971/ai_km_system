@@ -27,7 +27,7 @@
   {
     "from": "06-retrieval",
     "to": "02-authorization",
-    "reason": "CLAUDE.md 鐵律 2(Authorization 先於 retrieval,Deny-Wins)與 ADR 0007(RetrievalScope 是 in-process 接縫):02-authorization 的決策邏輯(scope.ts)實體上放在 services/retrieval/src/authorization/ 底下,06-retrieval 的 service/index/vector store 必須呼叫它才能做到 fail-closed 過濾——這是設計的核心,不是越界。"
+    "reason": "CLAUDE.md 鐵律 2(Authorization 先於 retrieval,Deny-Wins)與 ADR 0007(RetrievalScope 是 in-process 接縫)。**這條邊是所有權線的後果,不是架構違規——兩種說法只能留一種,留這一種**:02-authorization 的決策邏輯(scope.ts)實體上住在 services/retrieval/src/authorization/ 底下,也就是同一個 npm 套件的目錄樹裡;owners 表以目錄前綴劃線,所以 06 對它的相對 import (./authorization/scope.js 等 11 處)在工具眼中就跨了擁有者。起草那一輪把這 11 條標成「我自己切線造成的人為產物」,這一輪把它寫成一條有理由的邊——**同一件事,不同層次**:是所有權線造成的沒錯(所以不是有人越界),但那條線本身是顧問裁定的(02 確實擁有那支檔案的行為),所以它是**一條要長期存在、有理由的例外**,不是一個等著被消掉的暫時產物。允許它的實質理由:06 必須呼叫 02 才能做到 fail-closed 過濾,那是鐵律 2 要求的方向。要消掉它只有一條路——把 scope.ts 搬出 services/retrieval,而那是獨立的重構決策,不是這條邊的問題。"
   },
   {
     "from": "09-feedback-analytics",
@@ -52,7 +52,7 @@
   {
     "from": "08-knowledge-management",
     "to": "i8-pending",
-    "reason": "apps/web/src/lib/knowledge-candidates.ts(E07-S023 Knowledge candidate submission)讀 maintenance-cases.ts,把一個維修診斷 session 提交為知識庫候選——同一份 SOURCE_BASELINE 把這兩個故事寫在一起(E07-S023 與 E08-S20)。i8-pending 域尚未有能力資料夾(ADR 0013 #3),先以此邊記錄這條既有橋接。**這條不在協調者給的預核清單裡,是本次實測冒出來的,建議顧問另行確認**(見回報)。"
+    "reason": "apps/web/src/lib/knowledge-candidates.ts(E07-S023 Knowledge candidate submission)讀 maintenance-cases.ts,把一個維修診斷 session 提交為知識庫候選。**這條邊是 I8 的輸入,不只是一條例外**——見 docs/01-roadmap.md 的 I8 段:I8 開資料夾時第一件事是決定這條邊要變成契約還是搬家。(顧問 ai-km-1b 2026-09-05 確認收下,並要求同時在 roadmap 留下那一行。)"
   },
   {
     "from": "11-app-shell",

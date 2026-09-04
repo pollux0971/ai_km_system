@@ -187,6 +187,16 @@ I2 通過那一輪的升版程序(不變):逐支 diff 確認「新版 ⊇ 我們
 **你做得到什麼**:E07／E09 的體驗跑在真資料上,或明確標為 mock 展示。**後端來源待使用者定義**;
 定義前不建 `13-maintenance-assistant`、`14-erp-reporting` 資料夾。
 
+**開資料夾那天的第一件事(2026-09-05,由 `check-boundaries` 第一次真的跑起來時發現)**:
+`08-knowledge-management` 的 `apps/web/src/lib/knowledge-candidates.ts`(E07-S023,
+「把一個維修診斷 session 提交為知識庫候選」)**已經 import 了 `maintenance-cases.ts`**
+——也就是說 **08 與這個還沒建的 domain 已經在相當深的層次接觸了**,不是未來式。
+
+那條邊目前記在 `scripts/boundaries.allow.json`(`08-knowledge-management → i8-pending`)。
+**I8 開資料夾時第一件事是決定它要變成契約還是搬家**,不是把 allow 邊改個擁有者名字就算數。
+在那之前 `erp-*`、`diagnostic-*`、`maintenance-cases`、`equipment`、`error-codes` 的擁有者
+是佔位名 `i8-pending`——改名就是 owners 表的一次 diff,不用搬檔案。
+
 ---
 
 ## I9 · on-prem 部署

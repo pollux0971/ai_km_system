@@ -34,7 +34,12 @@ import { conversationPlugin, conversationSandboxSeeders, toOwnerKey } from "@ai-
 import { identityPlugin, registerSandboxSeeder, requireAnyRole } from "@ai-km/service-identity";
 import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
 import { feedbackPlugin } from "@ai-km/service-feedback";
-import { retrievalPlugin } from "@ai-km/service-retrieval";
+import {
+  createInMemoryVectorStore,
+  createRetrievalService,
+  retrievalPlugin,
+  type RetrievalService,
+} from "@ai-km/service-retrieval";
 import { generationPlugin } from "@ai-km/service-generation";
 import { ragPlugin } from "./rag-plugin.js";
 import { createHealthChecker, overallStatus } from "./health/checks.js";
@@ -289,7 +294,25 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // spec to gate on (06-retrieval FEATURE.md: "無直接 HTTP 契約(in-process
   // 接縫,ADR 0007)"), so this registers unconditionally, same as
   // modelGatewayPlugin below.
-  await app.register(retrievalPlugin);
+  //
+  // ADR 0015 決策 1/2(05-ingestion/phase-2)— composition root 自己建 store 與
+  // `RetrievalService`,再把它交給 `retrievalPlugin`,而不是讓 plugin 自己在
+  // 內部生一個沒人拿得到的 store(`retrievalPlugin` 的 `store` option 是
+  // TEST-ONLY seam,E06-S026,ADR 0015 明文否決把它當生產路徑)。
+  // `enforceEmbeddingVersion: true` 顯式打開——`plugin.ts` 的文件寫明 caller
+  // 自供 `service` 時 plugin 不再替它決定這個值,漏掉就是 §5.1「靜默給出錯誤
+  // 結果」。
+  //
+  // `retrievalStore` 是 ADR 0015 決策 1 要 `app.ingestion` 共用寫入的同一個
+  // store。ADR 0015 的 D3(自動 seeder)已由 **D3′** 取代:`app.ingestion` 是
+  // on-demand 接縫,不掛任何自動 seeder——登入／開機觸發的自動 seed 會把
+  // phase-2 場景 4 的「第二個 server 是空的」弄假。
+  const retrievalStore = createInMemoryVectorStore();
+  const retrievalService: RetrievalService = createRetrievalService({
+    store: retrievalStore,
+    enforceEmbeddingVersion: true,
+  });
+  await app.register(retrievalPlugin, { service: retrievalService });
   // 07-generation/phase-1 (回填) — puts `app.generation` on the parent
   // instance. Same "no HTTP contract, unconditional registration" shape as
   // retrievalPlugin above (FEATURE.md: in-process seam, ADR 0007).

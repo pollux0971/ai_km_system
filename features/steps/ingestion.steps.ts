@@ -32,6 +32,7 @@ import Fastify from "fastify";
 import type { KmWorld } from "./_world.js";
 
 import type { EmbedResponse, GenerateResponse, ModelGateway } from "../../services/model-gateway/src/gateway.js";
+import { createDeterministicEmbeddingProvider } from "../../services/model-gateway/src/embedding/deterministic.provider.js";
 import type { RetrievalHit, VectorStore } from "../../services/retrieval/src/vector/store.js";
 import { toRetrievalScope } from "../../services/retrieval/src/authorization/scope.js";
 import type { RetrievalService } from "../../services/retrieval/src/service.js";
@@ -443,6 +444,47 @@ async function indexFixtureIntoRealServer(world: KmWorld, dept: string): Promise
   });
 }
 
+/**
+ * 場景 3 的前提——「index 時的 embedding 身分與現在配置的不同」——需要一個帶
+ * `ingestionEmbeddingProvider` 覆寫的 server(`apps/api/src/server.ts`
+ * `BuildServerOptions`,commit 7c62d06,ADR 0015「D2 的空守門怎麼補」)。
+ *
+ * 但 Background 的「a fresh server with fake providers」(common.steps.ts,
+ * 共用檔,不可改)已經在這個場景一開始就呼叫過一次 `startServer()` 不帶任何
+ * extra,而 `startServer()` 只要 `this.app` 已存在就直接回傳快取的實例
+ * (`_world.ts`:`if (this.app) return this.app;`)——這裡再傳 extra 也不會被
+ * 採用。這不是用讀的推斷:`admin-console.steps.ts` 的 `restartServerWithFakeAsr`
+ * 已經實測並記錄過同一個現象(GHERKIN_WORKFLOW §5.3),照它的作法把 Background
+ * 建的那個實例關掉、重建一個帶覆寫的,只動這個資料夾自己的檔。
+ *
+ * dimensions 換成 64(預設 256)就足以讓「不同 embedding 身分」成立——
+ * `assertEmbeddingIdentityMatches`(services/retrieval/src/vector/store.ts)比對
+ * 的是 `{ model, dimensions }` 這一對,維度本身就是身分的一部分,不需要另外編
+ * 一種 provider 形狀或换 model 字串。
+ */
+async function restartServerWithStaleIngestionEmbedding(world: KmWorld): Promise<Awaited<ReturnType<KmWorld["startServer"]>>> {
+  if (world.app) {
+    await world.app.close();
+    world.app = undefined;
+  }
+  return world.startServer({
+    ingestionEmbeddingProvider: createDeterministicEmbeddingProvider({ dimensions: 64 }),
+  });
+}
+
+/** 同 `indexFixtureIntoRealServer`,但先把 server 換成帶「舊 embedding 身分」的那個。 */
+async function indexFixtureIntoRealServerWithStaleEmbedding(world: KmWorld, dept: string): Promise<void> {
+  const app = await restartServerWithStaleIngestionEmbedding(world);
+  const seam = (app as unknown as { ingestion?: IngestionService }).ingestion;
+  world.bag["ingestionSeamPresent"] = Boolean(seam);
+  if (!seam) return;
+  await seam.ingest({
+    documentId: `${INGESTION05_BOOT_DOC_PREFIX}${dept}`,
+    scopeKey: `dept:${dept}`,
+    pdfBytes: fixtureBytes(world, CJK_PDF),
+  });
+}
+
 async function loginDemoPersonOnApp(app: Awaited<ReturnType<KmWorld["startServer"]>>, username: string): Promise<void> {
   const login = await app.inject({
     method: "POST",
@@ -467,17 +509,24 @@ When(
   },
 );
 
-// 「back when a different embedding model was configured」:今天無法在真資料上
-// 驗證這句話的前提——連 index 都還沒有落點,更沒有辦法從外部控制 composition
-// root 那個 seam 當時用的是哪個 embedding provider。這一步因此與上面那句做同一件
-// 事(檢查 app.ingestion 存不存在、記下來),把「用不同 embedding 身分索引」這個
-// 前提留在場景本文(D2 的第二條 Then),等 composition root 真的接上、且能控制
-// 索引當時的 embedding 身分之後,才會是一個真正驗證得到的前提。
+// 「back when a different embedding model was configured」:composition root
+// 現在真的接上了 app.ingestion(commit 8f1d137)並提供了一個 test-only 的接縫
+// (`BuildServerOptions.ingestionEmbeddingProvider`,commit 7c62d06,ADR 0015
+// 「D2 的空守門怎麼補」裁決 (a))——`IngestionService.ingest()` 本身仍然沒有參數
+// 可以指定 embedding 版本(單一 process 內任何生產呼叫都做不出「index 時與現在
+// 用不同模型」這個狀態,這正是 enforceEmbeddingVersion 存在的唯一理由),但
+// composition root 建構時可以換掉 `app.ingestion` 腳下的那顆 embedding provider,
+// 藉此模擬「這份資料是模型換版之前索引的」。
+//
+// 資料仍然照樣走真實 `app.ingestion.ingest()` → 真的、與 `app.retrieval` 共用的
+// `retrievalStore`(D1,場景 2 已經在驗那條路徑本身是通的)——只換 ingestion 腳下
+// 的 embedding provider,production 的寫入路徑一步都沒有被繞過,ADR 0015 否決的
+// 「用 store option 讓測試繞過 ingest()」沒有發生。
 When(
   "the real Chinese fixture PDF is indexed into the real API server's own store under department {string}, back when a different embedding model was configured",
   { timeout: 60_000 },
   async function (this: KmWorld, dept: string) {
-    await indexFixtureIntoRealServer(this, dept);
+    await indexFixtureIntoRealServerWithStaleEmbedding(this, dept);
   },
 );
 

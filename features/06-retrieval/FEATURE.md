@@ -64,8 +64,51 @@ pnpm --filter @ai-km/features accept -- --tags '@retrieval and @standalone and n
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)授權檢索、Deny-Wins、洩漏偵測、offsets、身分守門、MMR | I1 | done | 2026-09-03 |
-| 2 | 接進 apps/api composition root,供 07 與 03 呼叫 | I2 | todo | |
+| 2 | 接進 apps/api composition root,供 07 與 03 呼叫 | I2 | 提案(紅) | |
 | 3 | sqlite-vec 成為預設持久 store | I4 | todo | |
+
+**phase-2 狀態細節(2026-09-04)**:測試 agent 交出**紅**的 `phase-2.feature`(4 個場景)
++ `retrieval.steps.ts` 新增步驟。依 ADR 0014,composition root 這一輪只需要用 demo 使用者
+的固定 `dept:eng` scope,不必等 `02-authorization` phase-2。等協調者確認、merge,IMPLEMENT
+階段才把 `retrievalPlugin` 比照 `conversationPlugin`/`feedbackPlugin` 的條件註冊樣式接進
+`apps/api/src/server.ts`。
+
+## phase-2 提案(紅,2026-09-04)
+
+四個場景,全部卡在同一個根因斷言——`app.retrieval` 在真實 `buildServer()` 的父實例上不存在
+——這是刻意的設計(GHERKIN_WORKFLOW §5.2:第一條炸的斷言決定紅的意義)。每個場景的第二條
+`Then` 今天因此被 cucumber skip(不是 fail),等 IMPLEMENT 接上 retrievalPlugin 之後才會被
+真的跑到:
+
+| 場景 | 第二條 Then 驗證什麼(接上後才會跑到) |
+|---|---|
+| The retrieval seam has not been wired into the real API server yet | (只有一條 Then,就是根因本身) |
+| Once wired, the real server's seam must refuse an empty question instead of silently searching everything | 空問題經過真實 server 的 seam 仍被 `RetrievalServiceError` 拒絕 |
+| Once wired, the real server's seam must never invent a citation for data that has not been indexed yet | 沒有任何資料被索引時,seam 誠實回傳空陣列,不捏造命中 |
+| I2's scope is fixed to dept:eng for every signed-in person, not derived from their real department — 這是移除條件 | demo-user(資訊部)與 demo-maintenance(維修部)透過同一個 seam 問同一個問題,結果必須完全一樣——因為 I2 期間 scope 是寫死的,不看真部門 |
+
+**⚠️ 寫場景時發現的限制,誠實記錄**:`retrievalPlugin` 沒指定 `service`/`store` 時,預設會建
+一個全新的**空**記憶體 store(`services/retrieval/src/service.ts:238`)。也就是說,即使
+phase-2 用最簡單的方式(比照 `conversationPlugin`,不帶任何 options)把 `retrievalPlugin`
+接進 `server.ts`,`app.retrieval` 存在之後也**沒有任何機制**能讓它端出真的索引資料——
+`05-ingestion/phase-2`(把 fixture PDF 索引進 dev DB)是另一個資料夾的工作,而 `apps/api` 今天
+沒有任何測試用的 retrieval store 注入通道(不像 `dbPath`/`migrationsDir` 那樣有
+`BuildServerOptions` 覆寫欄位)。
+
+因此,場景刻意**不**斷言「能不能真的拿到某部門的 chunk」與「offsets 是否指回原文」——這兩個
+使用者語言層級的斷言(工單原文列出的「拿到的每一段都指得回原文」「拿不到別人部門的東西」)
+即使在 phase-2 正確實作之後也不會變綠,寫了就是一個永遠沒有「可變綠」路徑的檢查點。改用
+「不捏造」(空 store 誠實回空,不是隨便給一個命中)與「兩個真部門不同的人得到完全相同的待遇」
+(證明 scope 真的是寫死的,不是巧合地都對)這兩個在 phase-2 wiring 完成後就能真正變綠、且不
+依賴任何尚未存在的 seed 通道的斷言替代。**待協調**:要不要在 phase-2 或另開一個 phase 補一個
+`apps/api` 的測試用 retrieval store/service 注入欄位(比照 `dbPath`/`migrationsDir`),讓
+「拿到的每一段都指得回原文」「跨部門 Deny-Wins」這兩個更貼近使用者語言的斷言真的能在 06-retrieval
+自己的 phase 裡驗證,而不必等到 I2 整合點(`docs/integration/i2-ask-in-web.feature`)才第一次
+被涵蓋。
+
+**沒有發現 ADR 0014 說不通的裁定**:五條約束(簽名不變、不在內部推導、不建過渡對應表、固定值只
+活在 composition root、場景要明寫暫時限制)在今天的程式碼狀態下彼此不衝突——衝突反而是「要怎麼
+在沒有 seed 通道的情況下驗證資料層行為」這個 ADR 0014 沒有講到的實作細節,已記錄如上。
 
 ## 回填對照表(phase-1)
 
@@ -97,3 +140,18 @@ pnpm --filter @ai-km/features accept -- --tags '@retrieval and @standalone and n
 - phase-2 的 composition root 要不要對 `retrieve()` 加 topK 上限?契約沒定,見 `02-authorization` 落地後再議。
 - sqlite-vec 路徑的 phase-1 場景目前沒有回填(`tests/sqlite-vec-store.integration.test.ts` 11 條仍是 vitest),
   phase-3 時以 `Scenario Outline` 兩種 store 各跑一次。
+- **(2026-09-04,phase-2 提案新增)`apps/api` 沒有測試用的 retrieval 資料注入通道**:見上方
+  「phase-2 提案(紅)」段的完整說明。IMPLEMENT 階段接上 `retrievalPlugin` 之後,`app.retrieval`
+  預設仍是空 store;要驗證「拿到的引用真的指回原文」「跨部門 Deny-Wins」這兩個更貼近使用者語言的
+  性質,需要協調者決定是否比照 `BuildServerOptions.dbPath`/`migrationsDir` 的模式,加一個測試用
+  的 retrieval store/service 覆寫欄位,還是把這兩個性質留給 I2 整合點
+  (`docs/integration/i2-ask-in-web.feature`,屆時 05-ingestion/phase-2 已經有真資料可用)去涵蓋。
+
+## 待協調
+
+- **(2026-09-04,phase-2 提案)`apps/api` 的測試用 retrieval 資料注入通道**:見上「開放問題」——
+  這是 IMPLEMENT phase-2 之前需要協調者拍板的一件事,牽涉 `apps/api/src/server.ts` 與
+  `BuildServerOptions` 的形狀,不是測試 agent(本輪只寫規格)能單方面決定的。
+- 其餘沒有需要協調者修改共用檔的事項:本資料夾這一輪只新增 `phase-2.feature` 與
+  `features/steps/retrieval.steps.ts` 裡新增的步驟(既有步驟未動),沒有動
+  `common.steps.ts`、`standalone.json`、`package.json`。

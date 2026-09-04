@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageComposer } from "./message-composer";
 import { trackEvent } from "@/lib/telemetry";
@@ -40,6 +41,32 @@ function makeFile(name: string, sizeBytes: number): File {
   const file = new File(["x".repeat(Math.min(sizeBytes, 1))], name);
   Object.defineProperty(file, "size", { value: sizeBytes });
   return file;
+}
+
+/**
+ * E03-S028 determinism (2026-09-04), same shape as new-file/page.test.tsx's
+ * own helper — see that file's comment for why a single fireEvent.change
+ * can't expose this race (React 19's useState dispatch eagerly evaluates
+ * the updater synchronously whenever the fiber has no update already
+ * pending, which happens to run Array.from(fileList) at the same instant
+ * whether it's inside the updater or captured before it). Firing an
+ * ordinary selection first, inside the same act() batch, gives the fiber
+ * a pending lane so the second, self-clearing selection's updater
+ * genuinely runs after the whole synchronous change event — including the
+ * picker's own input.value reset — has completed.
+ */
+function selectFileWithLiveListClearedRightAfter(input: HTMLInputElement, firstFile: File, secondFile: File) {
+  fireEvent.change(input, { target: { files: [firstFile] } });
+
+  const selfClearingList = [secondFile];
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get: () => "",
+    set: () => {
+      selfClearingList.length = 0;
+    },
+  });
+  fireEvent.change(input, { target: { files: selfClearingList } });
 }
 
 describe("MessageComposer (E03-S006/S007/S008/S009)", () => {
@@ -149,6 +176,21 @@ describe("MessageComposer (E03-S006/S007/S008/S009)", () => {
     fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("報表.pdf", 10)] } });
 
     expect(screen.getByRole("listitem")).toHaveTextContent("報表.pdf");
+  });
+
+  it("E03-S028 (determinism): keeps an attachment even when the browser clears its live FileList right after handing it off", () => {
+    render(<MessageComposer conversationId="c1" />);
+    const input = screen.getByLabelText("附件") as HTMLInputElement;
+
+    act(() => {
+      selectFileWithLiveListClearedRightAfter(input, makeFile("a.txt", 10), makeFile("b.txt", 10));
+    });
+
+    // The decisive quantity: how many attachments actually ended up
+    // selected. A regression loses "b.txt" (the one whose live FileList
+    // got cleared right after being handed to handleFilesSelected).
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "移除 b.txt" })).toBeInTheDocument();
   });
 
   it("E03-S008: submitting an attachment-only draft clears the attachment and reports attachmentCount, without any filename", () => {

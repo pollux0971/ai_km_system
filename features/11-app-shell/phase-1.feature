@@ -83,6 +83,37 @@ Feature: The shell a person lands in — where they can go, what home shows, and
     Then the home tile does not say "天前"
     And the home tile shows a calendar date containing "2026"
 
+  # --- 提案(2026-09-04,filelist-race-determinism 工單):等協調者確認後才算收進規格。
+  # 這兩條刻意標 @manual,不是 @e2e——擋住的不是「需要真瀏覽器」,是這個資料夾的
+  # cucumber runner 本身沒有 jsdom/React 可以掛(見檔頭「沒有 jsdom」與
+  # 08-knowledge-management 對應提案的同一段說明)。決定性的自動證據已經在
+  # apps/web 的 vitest 裡:message-composer.test.tsx 與
+  # conversations/new-file/page.test.tsx 各自的「E03-S028 (determinism)」案例——
+  # 單次跑、不靠併發,把 Array.from(live FileList) 移回 state updater 裡就確定性地紅
+  # (見這兩個測試檔所在 commit 的 body)。這兩條場景只是把同一件事寫成使用者看得懂的話,
+  # 等待人工在瀏覽器裡重新confirm一次。
+  @manual
+  Scenario: Selecting a file for a chat message keeps it on the pending list, even if the browser clears the picker's file list the instant it hands it off (E03-S028)
+    A file-picker input's underlying file list can be cleared by the browser at essentially
+    the same instant the app reads it — FileAttachmentPicker resets the input right after
+    firing its change event. The app must copy the selection out synchronously before that
+    happens, or the file silently vanishes and 送出 never lights up.
+
+    Given a person opens a conversation and picks a file to attach
+    When the browser clears the file input's live file list the instant the picker hands it off
+    Then the file is still shown on the pending attachment list
+    And 送出 becomes enabled
+
+  @manual
+  Scenario: Selecting a file to start a new file-first conversation keeps it on the pending list under the same live-clearing race (E03-S028)
+    Same race as the chat composer's own picker above, in the 上傳檔案開始對話 entry page's
+    handleFilesSelected instead — same fix, same shape of coverage.
+
+    Given a person opens 上傳檔案開始對話 and picks a file
+    When the browser clears the file input's live file list the instant the picker hands it off
+    Then the file is still shown on the pending list
+    And 開始對話 becomes enabled
+
   @e2e @manual
   Scenario: A conversation started in one window turns up in the other window
     Given the same person has the app shell open in two browser windows

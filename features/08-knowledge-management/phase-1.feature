@@ -80,6 +80,23 @@ Feature: A person keeps knowledge bases and the documents that sit inside them
     Then the knowledge library refuses it with "VALIDATION_ERROR"
     And the knowledge library's refusal message is "這份文件目前不是處理失敗狀態，不需要重試。"
 
+  # --- 提案(2026-09-04,filelist-race-determinism 工單):等協調者確認後才算收進規格。
+  # @manual 而非 @e2e——這個資料夾的 cucumber 場景本來就只掛一個假 window.sessionStorage
+  # 直接呼叫 mock 層(見檔頭與 knowledge-management.steps.ts 開頭那段),沒有 jsdom、
+  # 沒有 React,無法渲染 KnowledgeDocumentUpload 去重現這個競態，也不准為了這一條加依賴。
+  # 決定性的自動證據在 apps/web 的 vitest 裡:
+  # knowledge-document-upload.test.tsx 的「E03-S028 (determinism)」案例——單次跑、
+  # 不靠併發,把 Array.from(live FileList) 移回 state updater 裡就確定性地紅
+  # (見該測試檔所在 commit 的 body)。這條場景只是把同一件事寫成使用者看得懂的話。
+  @manual
+  Scenario: Selecting a file to upload to a knowledge base keeps it on the pending list under the same live-clearing race (E03-S028)
+    Same race as the chat composer's file picker (11-app-shell 的兩條提案場景),這裡發生在
+    knowledge base 文件頁自己的 上傳文件 input。
+
+    Given a person opens a knowledge base's document page and picks a file to upload
+    When the browser clears the file input's live file list the instant it hands the file off
+    Then the file is still shown on the pending upload list
+
   @manual
   Scenario: The knowledge library page comes up from the one dev-server command
     When a person runs the web dev server and opens the knowledge library page

@@ -237,7 +237,15 @@ export default function KnowledgeDocumentUpload({
 
   function handleFilesSelected(files: FileList | null) {
     if (!files || files.length === 0) return;
-    setSelectedFiles((previous) => [...previous, ...Array.from(files)]);
+    // Snapshot synchronously, before scheduling the state update — same
+    // race as 99d9bc2/E03-S028 (new-file/page.tsx): `files` is the same
+    // live FileList the input owns, and this component's own onChange
+    // resets `event.target.value = ""` right after calling this handler,
+    // clearing that live list in place. The early-return length check
+    // above still reads it before that reset — only Array.from's timing
+    // needed to move.
+    const selectedFiles = Array.from(files);
+    setSelectedFiles((previous) => [...previous, ...selectedFiles]);
     setFailedCount(0);
   }
 

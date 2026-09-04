@@ -171,7 +171,15 @@ export function MessageComposer({
   }
 
   function handleFilesSelected(fileList: FileList) {
-    setAttachments((previous) => [...previous, ...Array.from(fileList)]);
+    // Snapshot synchronously, before scheduling the state update — see
+    // 99d9bc2/E03-S028 (new-file/page.tsx's handleFilesSelected) for the
+    // race this avoids: fileList is the same live FileList the input
+    // element owns, and FileAttachmentPicker resets `input.value = ""`
+    // right after this callback returns, clearing that live list in
+    // place. Reading it lazily inside the updater risked observing it
+    // already empty.
+    const selectedFiles = Array.from(fileList);
+    setAttachments((previous) => [...previous, ...selectedFiles]);
   }
 
   function handleRemoveAttachment(index: number) {

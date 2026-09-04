@@ -129,3 +129,31 @@ export function classifyAnswerState(userQuestion: string): AnswerState {
   }
   return "ANSWERED";
 }
+
+/**
+ * ADR 0018 Decision 2, condition 2 ("11-app-shell/phase-2 的 UI 對 state
+ * 缺席必須渲染為中性(無徽章),不得當 ANSWERED"). `03-conversation/phase-2`
+ * deliberately omits `state` on an auto-generated assistant reply rather
+ * than guessing it (ADR 0018 Decision 2's main text: "一個沒設的 state 是
+ * 誠實的不知道;一個猜對的 state 會讓下一個人以為那裡有根據") — this function
+ * is this file's half of keeping that honesty visible all the way to the
+ * screen. It replaces message-thread.tsx's previous inline
+ * `entry.message.state ?? "ANSWERED"`, which silently turned that honest
+ * absence back into the ANSWERED label ADR 0018 exists to forbid.
+ *
+ * "UNSET" is a deliberately distinct value from every real `AnswerState`
+ * — not reachable by anything real classifying a reply, so a caller can
+ * tell "we were never told" apart from "we were told ANSWERED" (phase-2.
+ * feature's own two scenarios pin exactly this: absent state -> "UNSET",
+ * explicit "ANSWERED" -> still "ANSWERED", not the same neutral value for
+ * both — this is not a permissive default that also happens to satisfy
+ * the absent-state case). Whether "UNSET" paints as a visible badge is a
+ * DOM/rendering-layer decision left to the caller (and to phase-3's DOM
+ * environment); this function only owns the decision itself, not its
+ * pixels.
+ */
+export type AnswerStateDisplay = AnswerState | "UNSET";
+
+export function resolveAnswerStateDisplay(state: AnswerState | undefined): AnswerStateDisplay {
+  return state ?? "UNSET";
+}

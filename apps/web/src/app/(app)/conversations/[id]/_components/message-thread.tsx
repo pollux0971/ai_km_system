@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createLogger } from "@ai-km/logger";
 import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
-import { ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, classifyAnswerState, type AnswerState } from "@/lib/answer-state";
+import {
+  ANSWER_STATE_FALLBACK_CONTENT,
+  ANSWER_STATE_LABELS,
+  classifyAnswerState,
+  resolveAnswerStateDisplay,
+  type AnswerState,
+  type AnswerStateDisplay,
+} from "@/lib/answer-state";
 import { isOwnClientEvent, useConversationEvents } from "@/lib/conversation-events-context";
 import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
@@ -1161,7 +1168,12 @@ export function MessageThread({
             const attachmentNames =
               entry.kind === "sent" ? entry.message.attachmentNames : entry.kind === "streaming" || entry.kind === "stream-disconnected" ? [] : entry.attachmentNames;
             const revisions = entry.kind === "sent" ? (entry.message.revisions ?? []) : [];
-            const answerState: AnswerState = entry.kind === "sent" ? (entry.message.state ?? "ANSWERED") : "ANSWERED";
+            // ADR 0018 Decision 2 條件 2:一則 03-conversation/phase-2 自動產生、
+            // 沒有 state 欄位的助理訊息,不得被這裡的顯示層猜成 "ANSWERED"——
+            // resolveAnswerStateDisplay(undefined) 回傳 "UNSET",是與任何真實
+            // AnswerState 都不同的中性值(見 answer-state.ts 的文件)。這裡不再用
+            // 內聯的 `?? "ANSWERED"`,那正是條件 2 要擋的那個猜測。
+            const answerState: AnswerStateDisplay = entry.kind === "sent" ? resolveAnswerStateDisplay(entry.message.state) : "ANSWERED";
 
             return (
               <li key={key} data-role={role}>
@@ -1188,7 +1200,13 @@ export function MessageThread({
                     // collision.
                     <span role="alert">{ANSWER_STATE_LABELS[answerState]}</span>
                   ) : (
-                    answerState !== "ANSWERED" && <span>{ANSWER_STATE_LABELS[answerState]}</span>
+                    // "UNSET"(state 缺席)與 "ANSWERED" 都不畫徽章——ADR 0018
+                    // 條件 2 要求的「中性」就是這裡:沒有徽章,不是一個叫
+                    // 「UNSET」的徽章。ANSWER_STATE_LABELS 本來就沒有這個鍵
+                    // (它只涵蓋真實的 6 個 AnswerState),中性因此是「不查表」,
+                    // 不是「查到 undefined 還硬渲染」。
+                    answerState !== "ANSWERED" &&
+                    answerState !== "UNSET" && <span>{ANSWER_STATE_LABELS[answerState]}</span>
                   ))}
                 {attachmentNames.length > 0 && <span>（附件：{attachmentNames.join("、")}）</span>}
                 {entry.kind === "sent" && role === "assistant" && (

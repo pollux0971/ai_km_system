@@ -1,7 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MessageThread } from "./message-thread";
 import { ANSWER_STATES, ANSWER_STATE_FALLBACK_CONTENT, ANSWER_STATE_LABELS, MOCK_ANSWER_STATE_TRIGGERS } from "@/lib/answer-state";
+// Namespace import, kept separate from the named import above and NOT
+// mocked (this module already isn't mocked anywhere in this file — see
+// the plain-named import right above), purely so vi.spyOn can wrap its
+// real resolveAnswerStateDisplay export. See the "resolveAnswerStateDisplay
+// wiring" describe block below for why a spy is necessary here at all.
+import * as answerStateModule from "@/lib/answer-state";
 import { apiClient } from "@/lib/api";
 import { ConversationEventsProvider, type ConversationEventSourceLike } from "@/lib/conversation-events-context";
 import type { ConnectionStatus, ConversationEvent } from "@/lib/conversation-events";
@@ -1562,6 +1568,138 @@ describe("MessageThread answer state rendering (E03-S021)", () => {
       expect(mockedReceiveAssistantReply.mock.calls[0]?.[1]).toBe(fallbackContent);
     },
   );
+
+  // 11-app-shell/phase-2, ADR 0018 Decision 2 條件 2: this file's own
+  // message-thread.tsx used to compute the badge's `answerState` as
+  // `entry.message.state ?? "ANSWERED"` inline — silently guessing
+  // ANSWERED for a message an upstream feature (03-conversation/phase-2)
+  // deliberately left `state`-less. That line now instead calls
+  // `resolveAnswerStateDisplay(entry.message.state)` (see
+  // lib/answer-state.ts), which returns the distinct "UNSET" for an
+  // absent state rather than silently reusing "ANSWERED".
+  //
+  // Naively you'd guard that fix with "an assistant reply with no
+  // `state` renders no badge" (already covered above, at this describe
+  // block's very first test). That guard is real but WEAKER than it
+  // looks: it was verified empirically (not assumed) that it does
+  // nothing to catch a regression back to the inline `?? "ANSWERED"` —
+  // reverting message-thread.tsx to exactly that inline expression and
+  // re-running this entire file (all 160 pre-existing tests, this
+  // describe block's own included) left every test green, because the
+  // JSX guard right after that line is
+  // `answerState !== "ANSWERED" && answerState !== "UNSET"`: "ANSWERED"
+  // and "UNSET" are BOTH excluded, so they render byte-for-byte
+  // identical output (no badge, no alert, nothing) for every possible
+  // input. There is no DOM-only assertion that can tell them apart as
+  // currently rendered — the divergence is real at the data-flow level
+  // but is not (today) observable in rendered text/role/attributes.
+  //
+  // The only way to actually pin the fix, therefore, is to assert that
+  // the component calls the shared resolver at all — i.e. that the
+  // guessing has genuinely moved out of message-thread.tsx and into
+  // lib/answer-state.ts, not just that the two states happen to look
+  // the same today. Each test below pairs that spy assertion with its
+  // own DOM assertion so a reader can see both what's rendered and that
+  // rendering got there via the real delegation, not an inline guess.
+  describe("resolveAnswerStateDisplay wiring — DOM-invisible regression guard", () => {
+    let resolveAnswerStateDisplaySpy: MockInstance<typeof answerStateModule.resolveAnswerStateDisplay>;
+
+    beforeEach(() => {
+      resolveAnswerStateDisplaySpy = vi.spyOn(answerStateModule, "resolveAnswerStateDisplay");
+    });
+
+    afterEach(() => {
+      resolveAnswerStateDisplaySpy.mockRestore();
+    });
+
+    it("an assistant reply with no `state` field renders no badge, reached by calling resolveAnswerStateDisplay(undefined) — not an inline `?? \"ANSWERED\"` guess", async () => {
+      mockedListMessages.mockResolvedValue({
+        ok: true,
+        value: [
+          SENT_USER_MESSAGE,
+          {
+            id: "a1",
+            conversationId: "c1",
+            role: "assistant",
+            content: "已完成的回覆",
+            attachmentNames: [],
+            createdAt: "2026-08-14T00:00:01.000Z",
+            // state deliberately omitted — the ADR 0018 case.
+          },
+        ],
+      });
+
+      render(<MessageThread conversationId="c1" />);
+      await screen.findByText("已完成的回覆");
+
+      for (const state of ANSWER_STATES) {
+        expect(screen.queryByText(ANSWER_STATE_LABELS[state])).not.toBeInTheDocument();
+      }
+      expect(resolveAnswerStateDisplaySpy).toHaveBeenCalledWith(undefined);
+    });
+
+    it("an assistant reply with an EXPLICIT state of \"ANSWERED\" also renders no badge — anti-cheat: rules out an implementation that maps every input, real or absent, to one fixed neutral value", async () => {
+      mockedListMessages.mockResolvedValue({
+        ok: true,
+        value: [
+          SENT_USER_MESSAGE,
+          {
+            id: "a1",
+            conversationId: "c1",
+            role: "assistant",
+            content: "已完成的回覆",
+            attachmentNames: [],
+            createdAt: "2026-08-14T00:00:01.000Z",
+            state: "ANSWERED",
+          },
+        ],
+      });
+
+      render(<MessageThread conversationId="c1" />);
+      await screen.findByText("已完成的回覆");
+
+      for (const state of ANSWER_STATES) {
+        expect(screen.queryByText(ANSWER_STATE_LABELS[state])).not.toBeInTheDocument();
+      }
+      // Distinct call argument from the previous test (the real string
+      // "ANSWERED", not undefined) — proves this test exercises the
+      // explicit-ANSWERED path through the resolver, not a copy-pasted
+      // assertion left over from the absent-state test above.
+      expect(resolveAnswerStateDisplaySpy).toHaveBeenCalledWith("ANSWERED");
+    });
+
+    it("an assistant reply whose state actually IS NO_EVIDENCE renders that badge with its real label — proves badge-showing states aren't swallowed into the same neutral path as the two tests above", async () => {
+      mockedListMessages.mockResolvedValue({
+        ok: true,
+        value: [
+          SENT_USER_MESSAGE,
+          {
+            id: "a1",
+            conversationId: "c1",
+            role: "assistant",
+            content: "查無依據的回覆",
+            attachmentNames: [],
+            createdAt: "2026-08-14T00:00:01.000Z",
+            state: "NO_EVIDENCE",
+          },
+        ],
+      });
+
+      render(<MessageThread conversationId="c1" />);
+      await screen.findByText("查無依據的回覆");
+
+      const badge = await screen.findByText(ANSWER_STATE_LABELS.NO_EVIDENCE);
+      // NO_EVIDENCE is a plain badge, not role="alert" (that's reserved
+      // for ERROR/PERMISSION_DENIED — see this describe block's earlier
+      // it.each covering that split).
+      expect(badge).not.toHaveAttribute("role");
+      for (const state of ANSWER_STATES) {
+        if (state === "NO_EVIDENCE") continue;
+        expect(screen.queryByText(ANSWER_STATE_LABELS[state])).not.toBeInTheDocument();
+      }
+      expect(resolveAnswerStateDisplaySpy).toHaveBeenCalledWith("NO_EVIDENCE");
+    });
+  });
 });
 
 describe("MessageThread copy answer action (E03-S027)", () => {

@@ -123,3 +123,51 @@ export async function getCitationSource(id: string): Promise<Result<CitationSour
   }
   return { ok: true, value: source };
 }
+
+/**
+ * 11-app-shell/phase-2, scenarios A ("A citation's document id and offsets
+ * resolve to the exact original passage" / "A citation naming a document
+ * nobody has supplied the original text for is refused"). ADR 0016 shaped
+ * this repo's real citation ($ref generation.yaml#Citation: documentId +
+ * startOffset/endOffset), which is a different shape from this file's older
+ * E03-S014 mock above (a bare `id` key resolving to file/page/snippet) —
+ * this function is the ADR 0016 counterpart, added alongside rather than
+ * replacing getCitationSource (every existing caller above still resolves
+ * through the by-id mock; nothing about their behavior changes here).
+ *
+ * This is deliberately scoped to "the shell already holds the document's
+ * full original text" — per phase-2.feature's header, there is no contract
+ * endpoint today that lets this shell fetch a document's full text by
+ * documentId (that gap is an honest open question in FEATURE.md, not a
+ * fixable-in-this-phase contract omission), so this function takes the
+ * full text as a caller-supplied lookup table rather than inventing a way
+ * to fetch it. A real caller (a citation-preview UI wired to whatever
+ * eventually answers "get this document's text") would build that table;
+ * this function only owns the part that doesn't need a contract: slicing
+ * a known offsets pair out of text the shell already has.
+ *
+ * Fails closed with `{ ok: false, error: { code: "NOT_FOUND" } }` — not an
+ * invented passage — when `documentId` isn't a key in `documentTexts` at
+ * all, matching this file's existing getCitationSource fail-closed
+ * convention above (and CLAUDE.md's "not進 context/citation" fail-closed
+ * discipline: no text supplied means no text shown, never a guess).
+ */
+export interface CitationLocator {
+  documentId: string;
+  startOffset: number;
+  endOffset: number;
+}
+
+export interface CitationPassageResult {
+  ok: boolean;
+  value?: string;
+  error?: { code: string; message?: string };
+}
+
+export function resolveCitationPassage(citation: CitationLocator, documentTexts: Record<string, string>): CitationPassageResult {
+  const text = documentTexts[citation.documentId];
+  if (text === undefined) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "找不到這份文件的原文。" } };
+  }
+  return { ok: true, value: text.slice(citation.startOffset, citation.endOffset) };
+}

@@ -303,3 +303,167 @@ Then("the answer says there is nothing to cite and carries no citation", functio
     `空 context 的答案文字漂移了:實際「${result.answer}」,應以「${NOTHING_TO_CITE_PREFIX}」開頭`,
   );
 });
+
+// ==================================================================
+// phase-2(紅)—— services/generation 接進 apps/api composition root,
+// answer() 真的從 app.retrieval 拿 hits(ADR 0014、07-generation/NEXT.md phase-2
+// gate)。設計判斷 A/B 的完整推理寫在 phase-2.feature 檔頭,這裡只放實作。
+//
+// 每一步只呼叫今天已經存在的符號:KmWorld.startServer()(apps/api 真實
+// buildServer())、GenerationAnswer(services/generation,phase-1 已在用的型別)。
+// 沒有 import 任何新的實作符號——`app.rag` 是動態讀出來的(讀法 1 選的介面名字,
+// 見 phase-2.feature 檔頭「設計判斷 A」),不是 import 的型別;`RetrievalServiceError`
+// 只以字串比對錯誤名稱(不 import class 本身)。所以紅只會發生在斷言,不會發生在編譯。
+// ==================================================================
+
+interface RagSeamOutcome {
+  seamPresent: boolean;
+  answer?: GenerationAnswer;
+  errorName?: string;
+}
+
+interface RagSeamState {
+  outcome?: RagSeamOutcome;
+  /** scenario 4:兩個真部門不同的人各自的結果,拿來比較是否一致 */
+  outcomes?: Map<string, RagSeamOutcome>;
+}
+
+function ragSeamState(world: KmWorld): RagSeamState {
+  const s = world.bag["ragSeam"] as RagSeamState | undefined;
+  assert.ok(s, "When 尚未透過 composition root 的組合 seam 問過問題");
+  return s;
+}
+
+/** 與 features/steps/retrieval.steps.ts 的 loginDemoPerson() 同一套登入流程,
+ * 本檔獨立一份——NEXT.md「Gate 未滿足時」明講「不要 import 別的能力資料夾的
+ * steps」,跨資料夾共用的登入流程是共用步驟的訊號,留給協調者搬進
+ * common.steps.ts(見回報「待協調」)。 */
+async function loginDemoPerson(app: Awaited<ReturnType<KmWorld["startServer"]>>, username: string): Promise<void> {
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    headers: { "x-requested-with": "XMLHttpRequest" },
+    payload: { username, password: "demo-pass-123" },
+  });
+  assert.equal(
+    login.statusCode,
+    200,
+    `登入 ${username} 應成功(這一步只是確認 identity/session 沒壞,缺口專在 generation 沒被組合起來):實際 ${login.statusCode} ${login.body}`,
+  );
+}
+
+/**
+ * 讀法 1(見 phase-2.feature 檔頭):組合過的 seam 自己帶 ADR 0014 的固定
+ * dept:eng,不對外收 scope 參數——這裡只呼叫它,不建它。今天 `app.rag` 在
+ * 真實 buildServer() 上不存在,`seamPresent` 恆為 false。
+ */
+async function askThroughCombinedSeam(
+  app: Awaited<ReturnType<KmWorld["startServer"]>>,
+  question: string,
+): Promise<RagSeamOutcome> {
+  const seam = (app as unknown as { rag?: { ask?: (question: string) => Promise<GenerationAnswer> } }).rag;
+  const outcome: RagSeamOutcome = { seamPresent: Boolean(seam?.ask) };
+  if (seam?.ask) {
+    try {
+      outcome.answer = await seam.ask(question);
+    } catch (error) {
+      outcome.errorName = (error as Error).name;
+    }
+  }
+  return outcome;
+}
+
+// ---------------------------------------------------------------- When
+
+When(
+  "a signed-in demo person tries to get a grounded answer to {string} through the real API server's own combined RAG seam",
+  { timeout: 60_000 },
+  async function (this: KmWorld, question: string) {
+    const app = await this.startServer();
+    await loginDemoPerson(app, "demo-user");
+    const outcome = await askThroughCombinedSeam(app, question);
+    this.bag["ragSeam"] = { outcome } satisfies RagSeamState;
+  },
+);
+
+When(
+  "two different demo people with different real departments each try to get a grounded answer to {string} through the real API server's own combined RAG seam",
+  { timeout: 60_000 },
+  async function (this: KmWorld, question: string) {
+    const app = await this.startServer();
+    const outcomes = new Map<string, RagSeamOutcome>();
+    // demo-user(資訊部)與 demo-maintenance(維修部)——services/identity 的 fixture,
+    // 與 06-retrieval/phase-2 的場景 4 同一組人。
+    for (const username of ["demo-user", "demo-maintenance"]) {
+      await loginDemoPerson(app, username);
+      outcomes.set(username, await askThroughCombinedSeam(app, question));
+    }
+    const seamPresent = [...outcomes.values()].every((o) => o.seamPresent);
+    this.bag["ragSeam"] = { outcome: { seamPresent }, outcomes } satisfies RagSeamState;
+  },
+);
+
+// ---------------------------------------------------------------- Then
+
+Then(
+  "the combined RAG seam should be visible from the real server's parent instance, but it is not yet",
+  function (this: KmWorld) {
+    const s = ragSeamState(this);
+    assert.ok(
+      s.outcome?.seamPresent,
+      "app.rag 在 apps/api 真實 buildServer() 的父實例上不存在——composition root 今天完全沒有把 " +
+        "services/generation 組合進 retrieve() 之後(這一輪的產出,見 features/07-generation/NEXT.md " +
+        "phase-2 與 phase-2.feature 檔頭「設計判斷 A」)。後果:即使一個人真的登入成功、" +
+        "app.retrieval 與(接上後的)app.generation 各自都存在,也沒有任何生產碼把兩者接在一起—— " +
+        "I2「登入問問題拿到答案」仍然斷在檢索與生成之間。修法:在 apps/api/src/server.ts 註冊 " +
+        "generationPlugin(比照 retrievalPlugin 既有的無條件註冊樣式),並新增一個組合過的 " +
+        "in-process 接縫,內部用 ADR 0014 的固定 dept:eng scope 呼叫 " +
+        "app.retrieval.retrieve() 再把 hits 交給 app.generation.answer()。",
+    );
+  },
+);
+
+Then("the empty question should be rejected by the combined seam with {string}, not silently answered", function (this: KmWorld, errorName: string) {
+  const s = ragSeamState(this);
+  assert.ok(
+    s.outcome?.errorName,
+    "空問題應該在組合 seam 裡先被 retrieve() 既有的守門拒絕,但沒有任何錯誤被記錄下來(seam 不存在時這一步不會被執行到)",
+  );
+  assert.equal(s.outcome.errorName, errorName, `錯誤類型應為 ${errorName},實際 ${s.outcome.errorName}`);
+});
+
+Then("the answer should carry no citations, because nothing has been indexed yet", function (this: KmWorld) {
+  const s = ragSeamState(this);
+  assert.ok(s.outcome?.answer, "還沒有任何回答(seam 不存在時這一步不會被執行到)");
+  assert.deepEqual(
+    s.outcome.answer.citations,
+    [],
+    `今天還沒有任何資料被索引到 app.retrieval(05-ingestion/phase-2 是另一個資料夾的工作),組合 seam ` +
+      `應該老實回報「沒有可引用的來源」,而不是帶著 ${JSON.stringify(s.outcome.answer.citations)} 這種` +
+      `今天不該存在的引用——不索引不等於允許捏造。`,
+  );
+});
+
+Then(
+  "both people should get the exact same outcome from the combined seam, because I2's scope is fixed for everyone alike, not derived from either person's real department",
+  function (this: KmWorld) {
+    const s = ragSeamState(this);
+    assert.ok(s.outcomes, "還沒有任何兩個人的比較結果");
+    const a = s.outcomes.get("demo-user");
+    const b = s.outcomes.get("demo-maintenance");
+    assert.ok(a && b, "應該有 demo-user 與 demo-maintenance 兩個人的結果可以比較");
+    assert.deepEqual(
+      { citations: a.answer?.citations ?? null, answer: a.answer?.answer ?? null, error: a.errorName ?? null },
+      { citations: b.answer?.citations ?? null, answer: b.answer?.answer ?? null, error: b.errorName ?? null },
+      `demo-user(真部門「資訊部」)與 demo-maintenance(真部門「維修部」)透過同一個組合 seam 問同一個 ` +
+        `問題,結果卻不一樣——ADR 0014 的固定值 dept:eng 應該讓每個人在 I2 期間得到完全相同的待遇, ` +
+        `不管真部門是什麼。⚠️ 這條斷言在 apps/api 今天沒有 seed 通道時是弱斷言(store 永遠是空的,` +
+        `兩人結果天生相同,見 phase-2.feature 檔頭「設計判斷 B」),但它仍然是 NEXT.md 明列的搬遷落點—— ` +
+        `固定值必須真的活在生產碼裡,不能繼續只活在 step 檔。等 02-authorization phase-2(從身分推導 ` +
+        `真 scope)真的落地、composition root 把這個固定值換掉之後,這條「應該相同」的斷言理當跟著紅, ` +
+        `那正是這個場景故意設計成的移除條件(ADR 0014 Consequences)。看到它紅,代表有人動了固定值, ` +
+        `該做的是照 02-authorization/phase-1.feature 的 @design-constraint 場景先例,把這條場景改寫成 ` +
+        `新的事實,不是刪掉或放寬斷言。`,
+    );
+  },
+);

@@ -27,10 +27,12 @@
       4. Deny-Wins 作用在顯式 ACL deny 上,不是「取交集」的窄化。
       5. 一份文件只有單一 `scopeKey`;搬部門後原部門即不可見。
       **但**:裁定 1 假設的 `department.id`/`group.id` 今天在 01-identity 完全不存在
-      (`users` 表只有顯示名稱兩欄,repo 內無任何 id 對照表);裁定 4 需要的「顯式 deny」
-      這個型別維度今天 `RetrievalScope` 也沒有。這兩點是 phase-2 提案(紅測試)寫完之後
-      發現的**結構性依賴**,不是裁定本身說不通——細節見 `FEATURE.md`「phase-2 提案」段
-      與「待協調」。
+      (`users` 表只有顯示名稱兩欄,repo 內無任何 id 對照表)——**這點仍未解除,見下方
+      「待協調」**。裁定 4(顯式 deny)需要的型別維度上一輪只定了方向,技術顧問
+      2026-09-04 已補齊**完整形狀**(`deniedScopeKeys` 必填、謂詞與 SQL 的合成規則、
+      deny 來源留到 phase-3)——見 `FEATURE.md`「phase-2b 提案」段,測試 agent 已據此
+      把 deny 場景從 1 條拆成 4 條(2 紅 2 綠)+ `deny.test.ts` 4 條 vitest(2 紅 2 綠)。
+      這不代表 gate 已滿足:型別擴充本身仍是 IMPLEMENT 階段的工作。
 
 **phase-3(群組 → scopeKeys 的變更即時生效)** 需要:
 

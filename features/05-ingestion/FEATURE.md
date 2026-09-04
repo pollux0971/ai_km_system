@@ -82,7 +82,30 @@ store、repo 內的三份 fixture PDF,不需要 DB、不需要模型、不開 po
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)PDF 抽取(offsets、golden hash、空檔／加密拒絕)、chunk、embed、store、重匯拒絕 | I1 | done | 2026-09-04 |
-| 2 | 一條把 fixture PDF 索引進 dev DB 的指令,讓 I2 有東西可問 | I2 | in-progress(2026-09-05 派出;形狀由 ADR 0015 定)| |
+| 2 | 一條把 fixture PDF 索引進 dev DB 的指令,讓 I2 有東西可問 | I2 | done | 2026-09-05 |
+
+**phase-2 驗收細節(2026-09-05,獨立 session,嚴格級)**:四項核心全部另外重跑
+(`@phase-2 and @ingestion` 4/4、`@retrieval` 4/4、`@generation` 4/4、`@phase-1` 136/136、
+contract-gate PASS、四個套件 vitest `--force` 重跑 0 cached 全綠)。形狀由
+[ADR 0015](../../docs/adr/0015-composition-root-owns-the-retrieval-store.md) 定,
+該 ADR 當天被改了三次(D3→D3′、D2 空守門的裁決、(a) 落地補記),三次都是 agent
+在實作途中撞到並停下來回報,不是事後審出來的。
+
+**這個 phase 最有價值的一件事:一條死掉的守門變成活的。** 在它之前,把
+`enforceEmbeddingVersion` 從 `true` 翻成 `false`,場景結果**逐位元不變**——守門沒壞,
+是沒有任何場景走到它守的路徑。現在同一個突變會紅在:
+
+```
+AssertionError: 錯誤類型應為 EmbeddingVersionMismatchError,實際 EmbeddingError
+```
+
+比對的是**錯誤的 class identity**(守門要保證的性質本身),不是「有沒有拋錯」。
+差別不是紅得比較好看,是**從沒有檢查點變成有檢查點**(§5.2:一組從未紅過的測試不算規格)。
+
+**三件已知收尾(要動 `.feature`,依 §6 走 `/feature`)**:
+1. `phase-2.feature` 缺 `@standalone` tag → 單獨執行指令目前對 phase-2 的四個場景**沒有覆蓋**,停在 10 passed
+2. 檔頭有一段已過時(仍寫「索引步驟今天什麼都不做」,但場景 2/3 現在真的會索引與查詢)
+3. FEATURE.md 的「單獨執行」段落要跟著 1 更新
 | 3 | 非同步、`apps/worker-ingestion`、失敗原因落庫 | I4 | todo | |
 
 ## 回填對照表(phase-1)

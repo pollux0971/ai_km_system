@@ -394,6 +394,8 @@ export interface components {
             feedback?: components["schemas"]["AnswerFeedbackVerdict"];
             feedbackReason?: components["schemas"]["FeedbackReason"];
             feedbackComment?: string;
+            /** @description Grounded citations for an assistant message, in marker order: `citations[0]` is the `[1]` marker in `content`, `citations[1]` is `[2]`, and so on — the same numbering `citationFeedback` keys on. OPTIONAL and response-side only: a message that predates I2, or one whose answer had no authorised source, simply omits it. Absent is NOT the same as an empty array; `[]` means "the answer claimed no sources", absent means "this message was never produced by the RAG path". Shape is `generation.yaml`'s `Citation` verbatim (ADR 0013 decision table #10 — "schema 對齊 generation.yaml 的 Citation"), referenced rather than restated so the two can never drift. */
+            citations?: components["schemas"]["Citation"][];
             /** @description Map of citation marker id (`"1"`, `"2"`, … as they appear in `content`) to its verdict. */
             citationFeedback?: {
                 [key: string]: components["schemas"]["AnswerFeedbackVerdict"];
@@ -605,6 +607,13 @@ export interface components {
             details?: {
                 [key: string]: unknown;
             };
+        };
+        /** @description chunkId MUST appear in the request's `context`. Offsets are character offsets into the ORIGINAL document, carried unchanged from chunking, so the UI can highlight the exact span. */
+        Citation: {
+            chunkId: string;
+            documentId: string;
+            startOffset: number;
+            endOffset: number;
         };
     };
     responses: {

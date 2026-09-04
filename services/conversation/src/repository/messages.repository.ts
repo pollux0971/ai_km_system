@@ -73,47 +73,27 @@ interface RawMessageRow {
   feedback_reason: FeedbackReason | null;
   feedback_comment: string | null;
   citation_feedback: string | null;
-  /** Absent entirely (not even `null`) when `hasCitationsColumn(db)` is false — see its doc comment. */
-  citations?: string | null;
+  citations: string | null;
   created_at: string;
   updated_at: string;
 }
 
-const BASE_SELECT_COLUMNS = `id, conversation_id, owner_key, role, content, attachment_names, state,
-       revisions, feedback, feedback_reason, feedback_comment, citation_feedback, created_at, updated_at`;
-
 /**
- * Whether THIS `db` instance's `messages` table has the `citations` column
- * added by `db/migrations/202609050001_conversation_message_citations.sql`
- * (03-conversation/phase-2, ADR 0016). Checked at runtime, per instance,
- * rather than assumed — `services/conversation/src/repository/
- * messages.repository.test.ts` (a `*.test.ts` file this phase's role may not
- * modify — GHERKIN_WORKFLOW §6) hand-rolls its OWN `create table messages`
- * DDL rather than reading `db/migrations/*.sql`, and that hand-rolled DDL
- * predates this column. Every one of that test file's own `createMessage`
- * calls omits `citations`, so treating an absent column as "this message
- * simply never carries citations" (rather than throwing, or silently
- * requiring every caller everywhere to know which schema vintage its `db`
- * is) is byte-for-byte the same behaviour that file already asserts on.
- * Every REAL schema this repository is ever handed in production or in
- * `testing/build-test-app.ts`'s harness (which now applies every `db/
- * migrations/*.sql` file, this one included) has the column.
+ * Unconditional — every `messages` table this repository is ever handed has
+ * `citations` (`db/migrations/202609050001_conversation_message_citations.sql`,
+ * 03-conversation/phase-2, ADR 0016). An earlier revision of this file
+ * detected the column at runtime (`PRAGMA table_info`) because
+ * `messages.repository.test.ts`'s hand-rolled `create table messages` DDL
+ * predated it — that detection was withdrawn (technical-advisor review):
+ * silently omitting `citations` when a deployment's migration has not run
+ * is exactly GHERKIN_WORKFLOW §5.1's "靜默給出錯誤結果" (a message comes back
+ * looking fine, just missing citations, and nothing errors) — the same
+ * failure mode this domain is graded **嚴格級** over. The test file's schema
+ * was fixed instead (see its own history), which is the correct fix for a
+ * schema drift, not a runtime fallback in production code.
  */
-const citationsColumnByDb = new WeakMap<Database, boolean>();
-
-function hasCitationsColumn(db: Database): boolean {
-  let has = citationsColumnByDb.get(db);
-  if (has === undefined) {
-    const columns = db.prepare(`PRAGMA table_info(messages)`).all() as { name: string }[];
-    has = columns.some((column) => column.name === "citations");
-    citationsColumnByDb.set(db, has);
-  }
-  return has;
-}
-
-function selectColumns(db: Database): string {
-  return hasCitationsColumn(db) ? `${BASE_SELECT_COLUMNS}, citations` : BASE_SELECT_COLUMNS;
-}
+const SELECT_COLUMNS = `id, conversation_id, owner_key, role, content, attachment_names, state,
+       revisions, feedback, feedback_reason, feedback_comment, citation_feedback, citations, created_at, updated_at`;
 
 function toMessage(raw: RawMessageRow): MessageRow {
   return {
@@ -131,9 +111,7 @@ function toMessage(raw: RawMessageRow): MessageRow {
     ...(raw.citation_feedback === null
       ? {}
       : { citationFeedback: JSON.parse(raw.citation_feedback) as Record<string, AnswerFeedbackVerdict> }),
-    ...(raw.citations === null || raw.citations === undefined
-      ? {}
-      : { citations: JSON.parse(raw.citations) as MessageCitation[] }),
+    ...(raw.citations === null ? {} : { citations: JSON.parse(raw.citations) as MessageCitation[] }),
   };
 }
 
@@ -160,7 +138,6 @@ export function createMessage(
   input: CreateMessageInput,
 ): MessageRow {
   const owner = toOwnerKey(ownerKey);
-  const withCitationsColumn = hasCitationsColumn(db);
   const raw: RawMessageRow = {
     id: input.id,
     conversation_id: conversationId,
@@ -174,26 +151,16 @@ export function createMessage(
     feedback_reason: null,
     feedback_comment: null,
     citation_feedback: null,
-    ...(withCitationsColumn
-      ? { citations: input.citations === undefined ? null : JSON.stringify(input.citations) }
-      : {}),
+    citations: input.citations === undefined ? null : JSON.stringify(input.citations),
     created_at: input.now,
     updated_at: input.now,
   };
 
-  // The `citations` column/placeholder is only added to this statement when
-  // `db`'s `messages` table actually has it — see `hasCitationsColumn`'s doc
-  // comment. A caller that supplies `input.citations` against a `db` without
-  // the column loses that data silently rather than throwing; today's only
-  // such `db` is `messages.repository.test.ts`'s hand-rolled fixture, and
-  // none of its own test cases ever pass `citations`.
-  const citationsColumn = withCitationsColumn ? ", citations" : "";
-  const citationsPlaceholder = withCitationsColumn ? ", @citations" : "";
   prepareOwnerScoped(
     db,
     `INSERT INTO messages
-       (id, conversation_id, owner_key, role, content, attachment_names, state${citationsColumn}, created_at, updated_at)
-     VALUES (@id, @conversation_id, @owner_key, @role, @content, @attachment_names, @state${citationsPlaceholder}, @created_at, @updated_at)`,
+       (id, conversation_id, owner_key, role, content, attachment_names, state, citations, created_at, updated_at)
+     VALUES (@id, @conversation_id, @owner_key, @role, @content, @attachment_names, @state, @citations, @created_at, @updated_at)`,
   ).run(raw);
 
   return toMessage(raw);
@@ -204,7 +171,7 @@ export function listMessages(db: Database, ownerKey: OwnerKey, conversationId: s
   const owner = toOwnerKey(ownerKey);
   const rows = prepareOwnerScoped(
     db,
-    `SELECT ${selectColumns(db)} FROM messages
+    `SELECT ${SELECT_COLUMNS} FROM messages
       WHERE conversation_id = ? AND owner_key = ?
       ORDER BY created_at ASC`,
   ).all(conversationId, owner) as RawMessageRow[];
@@ -226,7 +193,7 @@ export function getMessage(
   const owner = toOwnerKey(ownerKey);
   const raw = prepareOwnerScoped(
     db,
-    `SELECT ${selectColumns(db)} FROM messages
+    `SELECT ${SELECT_COLUMNS} FROM messages
       WHERE id = ? AND conversation_id = ? AND owner_key = ?`,
   ).get(messageId, conversationId, owner) as RawMessageRow | undefined;
   return raw ? toMessage(raw) : undefined;
@@ -244,7 +211,7 @@ export function getMessageByOwner(db: Database, ownerKey: OwnerKey, messageId: s
   const owner = toOwnerKey(ownerKey);
   const raw = prepareOwnerScoped(
     db,
-    `SELECT ${selectColumns(db)} FROM messages WHERE id = ? AND owner_key = ?`,
+    `SELECT ${SELECT_COLUMNS} FROM messages WHERE id = ? AND owner_key = ?`,
   ).get(messageId, owner) as RawMessageRow | undefined;
   return raw ? toMessage(raw) : undefined;
 }
@@ -289,7 +256,7 @@ export function createRevision(
   const owner = toOwnerKey(ownerKey);
   const current = prepareOwnerScoped(
     db,
-    `SELECT ${selectColumns(db)} FROM messages WHERE id = ? AND owner_key = ?`,
+    `SELECT ${SELECT_COLUMNS} FROM messages WHERE id = ? AND owner_key = ?`,
   ).get(messageId, owner) as RawMessageRow;
 
   const revisions = [...(current.revisions === null ? [] : (JSON.parse(current.revisions) as string[])), current.content];
@@ -310,7 +277,7 @@ export function createRevision(
 
   const raw = prepareOwnerScoped(
     db,
-    `SELECT ${selectColumns(db)} FROM messages WHERE id = ? AND owner_key = ?`,
+    `SELECT ${SELECT_COLUMNS} FROM messages WHERE id = ? AND owner_key = ?`,
   ).get(messageId, owner) as RawMessageRow;
   return toMessage(raw);
 }

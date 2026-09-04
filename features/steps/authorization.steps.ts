@@ -314,14 +314,6 @@ Given(
   },
 );
 
-// phase-2b(提案,紅/綠混合):明寫「明確拒絕清單是空的」,而不是單純不呼叫
-// 上面那個 Given——這樣才對得上工單裁定 4「呼叫端此刻全部傳 []」的字面意思
-// (一個明寫的空陣列,不是「沒接上」)。
-Given("that person has explicitly denied nothing", function (this: KmWorld) {
-  const s = state(this);
-  s.deniedKeys = [];
-});
-
 // ---------------------------------------------------------------- Then
 
 Then(
@@ -356,27 +348,6 @@ Then(
         `沒有任何欄位能表達「即使在允許清單裡,這把鑰匙仍然要被擋下」—— ` +
         `ADR 0012 裁定 4(顯式 ACL deny 蓋過 allow,不是「取交集」的窄化)今天沒有對應機制承接, ` +
         `這正是 phase-2 要補的洞:算太寬,靜默放行了本該被擋下的資料。`,
-    );
-  },
-);
-
-// phase-2b(提案,紅):SQL 這一層的裁定 3——denied 應該直接不進 IN 清單
-// (前置過濾),不是「查完再濾」。今天 buildScopeSql() 只讀 allowedScopeKeys,
-// 沒有任何欄位可以表達顯式拒絕,所以被 deny 的鑰匙仍然出現在參數列表裡。
-Then(
-  "the filter must not include {string} in its parameter list because of the explicit denial, but it does",
-  function (this: KmWorld, deniedKey: string) {
-    const s = state(this);
-    assert.ok(s.filter, `還沒產生任何資料庫過濾條件(可能被拒絕:${this.lastError?.message})`);
-    const included = s.filter.params.includes(deniedKey);
-    assert.equal(
-      included,
-      false,
-      `「${deniedKey}」已被「${s.principalId}」明確拒絕(明確拒絕清單:${(s.deniedKeys ?? []).join(", ") || "(空)"}),` +
-        `依 ADR 0012 裁定 3,denied 應該直接不進 IN 清單(前置過濾,比「查完再濾」更接近` +
-        `「授權在檢索之前」)。但 buildScopeSql() 今天只讀 allowedScopeKeys,產生的 SQL 是` +
-        `「${s.filter.sql}」、參數列表是 [${s.filter.params.join(", ")}]——「${deniedKey}」仍在其中,` +
-        `代表被擋下的部門的資料仍然會被送進資料庫查詢、讀回 process。`,
     );
   },
 );

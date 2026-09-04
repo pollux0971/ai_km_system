@@ -152,3 +152,56 @@ D4(in-memory 限制寫進場景本文)不受本修正影響。
 (a) 給 `ingest()` 一個明確的 embedding 身分注入點(那是實作變更,要評估是不是超出本 phase);
 (b) 承認場景 3 在本 phase 做不到,把它降級為 phase-3 的 gate,並在 `.feature` 動刀
    ——**但 `.feature` 只由使用者或 `/feature` 流程改**(§6),所以走 `/feature`,不是協調者直接改。
+
+---
+
+## 裁決:D2 的空守門怎麼補(2026-09-05,同日第三次修正)
+
+上一節留了一個「由協調者在收到開發回報後裁決」的問題。開發 agent 已回報並實測確認:
+把 `enforceEmbeddingVersion` 從 `true` 翻成 `false`,`@phase-2 and (@retrieval or @ingestion)`
+的結果**逐位元不變**——不是守門壞了,是**沒有任何場景走到它守的那條路徑**。
+場景 3 的前提(「索引時的 embedding 身分與查詢時不同」)今天構造不出來:
+`ingest()` 沒有任何參數可以選 embedding 版本,index-time 與 query-time 用的是同一顆
+deterministic provider。
+
+依 §5.2「沒有可失敗檢查點的工作項不得標 done」,這一項必須解決才能 `/phase-done`。
+
+### 裁決:給 `BuildServerOptions` 一個 **test-only 的 ingestion embedding provider 覆寫**
+
+不是覆寫 store,是覆寫**ingestion 那一側的 embedding provider**。
+
+### 這跟本 ADR 一開始否決的 (c) 差在哪(必須講清楚,否則就是把否決掉的東西改個名字放回來)
+
+本 ADR 上面的表格否決了 (c)「給 `BuildServerOptions` 加一個 retrieval store 覆寫欄位」,
+理由寫的是「那是**測試通道被拿來當生產路徑**」。那個否決現在仍然成立,而且沒有被繞過:
+
+| | 被否決的 (c) | 這次裁決的 |
+|---|---|---|
+| 資料**怎麼進去** | 測試直接把記錄塞進 store,**production 完全沒有進入路徑** | 走**真的** `app.ingestion.ingest()` → 真的 `retrievalStore`(D1),production 路徑已經存在且場景 2 已經在驗它 |
+| 覆寫的東西 | store 本身(整個資料層) | 只有 ingestion 側的 **embedding provider** 一個相依 |
+| 它模擬的是什麼 | 沒有對應的真實情境——它只是「跳過索引」 | **時間的流逝**:一份資料是用舊模型索引的,之後模型換版了。這是真實會發生、而且是 `enforceEmbeddingVersion` 存在的**唯一理由**,但**單一 process 內任何生產呼叫都做不出來** |
+
+判準:**一個測試接縫合不合法,看它是否讓測試繞過生產路徑,而不是看它叫不叫 test-only。**
+(c) 讓資料繞過 `ingest()`;這次的覆寫讓資料**照樣走** `ingest()`,只是換掉它腳下的一顆
+provider——這正是 `createIngestionService({ modelGateway })` 這個相依注入點存在的意思。
+
+### 這一個接縫同時解掉三個死掉的守門
+
+1. **05 的場景 3**(本 phase 的嚴格級目標):embedding 身分不符的資料被拒絕。
+2. **D2 的反向驗證**:場景 3 一旦走得到,把 `enforceEmbeddingVersion` 翻成 `false` 就會讓它變綠
+   ——那才是一個真的可失敗檢查點。
+3. **間接**:`06-retrieval`／`07-generation` 的場景 4(ADR 0014 的「移除條件」)之所以恆真,
+   驗收者查出的原因是「store 永遠是空的」+「`ask(question)` 沒有 caller identity 參數」。
+   前者在 `app.ingestion` 接上之後**已經不成立了**(場景 2 證明索引得進去);後者要等
+   `03-conversation/phase-2` 的簽名變更。所以場景 4 的修復落點是那個 phase,
+   **不是這裡**——這裡只負責不再讓「store 是空的」當藉口。
+   ⚠️ 場景 4 的文字要改要走 `/feature`(§6:`.feature` 只由使用者或 `/feature` 流程改),
+   協調者不直接動。
+
+### 範圍限制
+
+- 覆寫欄位**只**接受 embedding provider,**不**接受 store、不接受整個 service。
+- 預設值必須是「與 retrieval 側同一顆 deterministic provider」——**不設它就等於今天的行為**,
+  任何既有測試不受影響。
+- 欄位命名與註解要明說它是 test-only,並說明**為什麼這個 test-only 是合法的**
+  (上表那一列:資料仍走真實 `ingest()`)。照 `dbPath`／`migrationsDir` 既有的樣式。

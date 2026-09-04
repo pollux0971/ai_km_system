@@ -82,7 +82,7 @@ pnpm --filter @ai-km/features accept --tags '@conversation and @standalone and n
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)掛載、對話預設值、訊息連動、修訂順序、擁有者拒絕、SSE 即時／重播／resync、回捲不外洩 | I1 | done | 2026-09-04 |
-| 2 | 組裝後的 apps/api(真 session、真錯誤信封)+ 送訊息 → RAG 回答帶 citations | I2 | todo | |
+| 2 | **登入的人在 web 送出一個問題,收到的是一則帶引用的助理訊息,引用點得回原文;系統這時知道「是誰在問」——scope 仍是 ADR 0014 的固定 `dept:eng`,但它是從那個人身上取得的,不再寫死在接縫裡。** | I2 | in-progress(2026-09-05 派出) | |
 | 3 | 回饋寫入面與 admin 讀取模型回填 | I5 | todo | |
 
 ## 回填對照表(phase-1)

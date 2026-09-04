@@ -7,21 +7,24 @@
 
 | 欄位 | 值 |
 |---|---|
-| 已完成 | 無 |
-| 進行中 | phase-1(回填,2026-09-04 交付待 `/phase-done`) |
-| 下一個 | phase-2 |
+| 已完成 | phase-1(2026-09-04,獨立驗收 PASS) |
+| 進行中 | phase-2(2026-09-05 派出,測試 agent 先寫紅) |
+| 下一個 | phase-3 |
 
 ## 下一個 phase 的 gate
 
 **phase-2(一條把 fixture PDF 索引進 dev DB 的指令,讓 I2 有東西可問)** 需要全部滿足:
 
-- [ ] 自身:phase-1 `done`
+- [x] 自身:phase-1 `done`(2026-09-04)
 - [x] 整合:I1 已通過(2026-09-03)
-- [ ] 整合:`06-retrieval` phase-2 已把 `retrievalPlugin` 接進 `apps/api` 的 composition root
-      ——索引要寫進 **apps/api 實際查詢的那個 store**,否則索引了也問不到
-- [ ] 契約:store 的持久化路徑定案(in-memory 重開就沒了;`06-retrieval` phase-3 才把
-      sqlite-vec 變成預設)。在那之前 phase-2 的指令只能在同一個 process 裡索引 + 查詢,
-      這個限制要寫進場景本文,不能默默帶過
+- [x] 整合:`06-retrieval` phase-2 已把 `retrievalPlugin` 接進 `apps/api` 的 composition root
+      (2026-09-04)——索引要寫進 **apps/api 實際查詢的那個 store**,否則索引了也問不到
+- [x] 契約:store 的持久化路徑定案 —— **[ADR 0015](../../docs/adr/0015-composition-root-owns-the-retrieval-store.md)
+      (2026-09-05,協調者裁,顧問不在)**:composition root 自己持有 store 並交給
+      `retrievalPlugin`,用既有的 `registerSandboxSeeder` 樣式餵它;`enforceEmbeddingVersion`
+      由 composition root **顯式打開**(E06-S026 明文:plugin 不替 injected service 決定這個值);
+      **in-memory 重開就沒了這個限制要寫進場景本文,不是只寫在註解裡**;持久化留給
+      `06-retrieval` phase-3(I4)。**四條 gate 全滿足,已派出。**
 
 **phase-3(非同步、失敗原因落庫)** 需要:
 

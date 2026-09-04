@@ -96,7 +96,7 @@ AC2 時,第一條失敗訊息是
 本身不合格,**要在 phase-2 順手補一條對著捏造 chunkId 逐字比對的斷言**(§4:做 phase 時
 發現缺陷 → 在同一個 `.feature`／測試補,不開編號)。
 
-| 2 | `answer()` 從 `app.retrieval` 拿 hits,接進 apps/api composition root | I2 | todo | |
+| 2 | `answer()` 從 `app.retrieval` 拿 hits,接進 apps/api composition root | I2 | in-progress(2026-09-05 派出,測試 agent 先寫紅)| |
 | 3 | abstention:沒有來源時回結構化理由而非自由文字 | 待定 | todo | |
 
 ## 回填對照表(phase-1)

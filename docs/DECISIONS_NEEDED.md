@@ -14,6 +14,15 @@
 | 2 | 2026-09-03 | E04-S037 真模型 embedding 選型(bge-m3 已有 provider,是否定案)與 generation 模型 | 真模型選型 | 見 ADR 0009 | I2 之後的 PF3 場景 |
 | 3 | 2026-09-03 | I8(維修助理／ERP 報表)的後端資料來源 | 以前沒定義 | 定義前不建 13、14 資料夾 | I8 位置 |
 | 4 | 2026-09-04 | 舊 story 尚在 in-progress / blocked 的 15 個(見 story-to-capability-map 表尾)去留 | 產品 | 各資料夾 NEXT.md 逐一判:併入 phase-2 或註銷 | 不阻擋 |
+| 7 | 2026-09-04 | **E04-S009 的四題**,phase-2 授權一行都不能寫之前要先定:(a) 部門顯示名(session 今天給「資訊部」)與 store 鑰匙(`dept:*`)的對應規則是什麼、誰維護;(b) 群組算不算一把鑰匙;(c) 部門與群組同時存在時是聯集還是交集;(d) 跨部門搬過去的文件,原部門還看不看得到 | 產品行為未定義 | 顧問/協調者無法代答——這四題決定「誰看得到什麼」,是產品定義不是工程取捨 | `02-authorization` phase-2、進而 I3 |
+| 8 | 2026-09-04 | `contracts/openapi/` **完全沒有 knowledge 路徑**,`08-knowledge-management` phase-2「接真 API」沒有對象 | 新 endpoint + 新 schema | 需要一份 knowledge 契約草案;協調者可以起草,但新 endpoint 依決策權表是你拍板 | `08` phase-2、I4 |
+| 9 | 2026-09-04 | 文件層 `visibleToRoles` 與知識庫層 `visibleToRoles` 的**語意未定義**(取交集?文件層覆蓋?Deny-Wins 怎麼套?) | 產品行為未定義 | 依鐵律 2(Deny-Wins)預設取交集最保守,但這會決定使用者看不看得到東西,不該由 agent 定 | `08` phase-2 的授權形狀 |
+| 10 | 2026-09-04 | phase-2 若要讓 `Message` 帶 citations,`conversations.yaml` 目前**沒有該欄位** → 契約放寬 | 契約放寬 | I2 需要它(「送訊息 → RAG 回答 → 訊息帶 citations」);建議與 #8 一起看 | I2 的最後一塊(`03` 與 `07` 的 phase-2) |
+| 11 | 2026-09-04 | `GET /v1/health` **沒有登記進任何契約**(E04-S078,contract-equivalence 印 ABSENT)。`12-audit-observability` phase-1 的主力端點因此不受 L2-EQ 保護 | 新 endpoint 進契約 | 補一份 health 的 schema 是小事,但「新 endpoint 進契約」依決策權表是你拍板;你說一句就解除 | `12` 的 L2-EQ 覆蓋(不擋 phase-1) |
+| 12 | 2026-09-04 | 「答案沒有可引用來源」時,系統回的是自由文字(`沒有可引用的來源,無法回答:…`),**UI 分不出它與一段真答案**。要不要一個結構化的 abstention reason code(E04-S022 的缺口) | 產品行為未定義 | `services/generation` 檔頭已明記「本檔不發明結構化 reason code」;要不要有,是產品決定 | 不擋(現況已寫成場景);I2 之後使用者實際問問題時會第一個撞到 |
+| 13 | 2026-09-04 | `ResyncEvent.reason` 的 `SERVER_RESTART` 在契約裡,但 `routes/change-events.ts` **沒有任何路徑會送出**。是保留值,還是缺實作? | 契約 vs 實作分歧 | 兩邊都沒動。若是保留值就留著;若是缺實作,那是一個 phase-2 場景 | 不擋 |
+| 14 | 2026-09-04 | 部門主管能不能管**自己部門**的群組?目前授權表對 `/roles`/`/permissions`/`/departments`/`/groups` 一律只給 `super_administrator`,那是 E11-S023 在「角色描述沒有字面對應」時選的**最嚴讀法,不是最終政策** | 產品行為未定義 | 場景照現況(最嚴)寫;政策一旦放寬,場景要跟著改 | I6 |
+| 15 | 2026-09-04 | 顧問要求在 CLAUDE.md「強制工作流」段末尾加一行「採用範式模板 v1.0.0(2026-09-04)」。**協調者不自行動手**:CLAUDE.md 是你的規則檔,而這是 peer 的要求,不是你的話 | 規則檔 | 內容我認為無害(一行事實紀錄),但改 CLAUDE.md 依決策權表最後一列只有你能授權。你說「加」我就加 | 不擋 |
 
 > **2026-09-04 顧問轉述,尚未生效**:技術顧問 ai-km-3a 傳話說使用者對它說了「確認」,並認為
 > #1 #3 #4 照建議、#2 的真模型驗收算通過。依 CLAUDE.md 決策權段最後一段「**顧問轉述使用者的話

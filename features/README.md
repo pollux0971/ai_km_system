@@ -91,6 +91,13 @@ NN-name/
   這條從 STORY_WORKFLOW 原封搬來,是本 repo 用血換的
 - `pnpm --filter @ai-km/features gherkin:dup` 會抓跨資料夾逐字相同的場景本體,CI 紅——
   這條直接對著舊規格 E04 那 36 條相同內文的病
+- `pnpm --filter @ai-km/features steps:dup` 抓的是另一種病:兩個能力資料夾**各自定義了
+  同一句** Given/When/Then(參數位置正規化後比較,`"alice"`/`"bob"` 這種算同一句)。
+  cucumber 對重複的步驟定義直接報錯,或更糟——綁到別人以為的另一個定義;這個檢查在合併點
+  機械抓出來,不靠 11 個平行 worker 互相猜。跟 `gherkin:dup` 是**兩個不同的檢查**:
+  一個抓「場景抄成模板」,一個抓「步驟撞名」,兩者都要留。同一資料夾內重複不算(那是複用);
+  已經在 `steps/common.steps.ts` 定義過的跨資料夾句子也不算(那是共用,是這個機制要保護的
+  正常狀態,不是它要擋的東西)。
 
 ## 步驟定義
 

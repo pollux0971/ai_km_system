@@ -95,15 +95,32 @@ offset +1 → 紅在「切出的原文與引用文字不同」。
 (真模型)的第一份需求,比繼續寫程式重要。
 
 **通過後也要做(守門升版,寫在這裡免得靠記憶)**:目前守門停在 template **v1.2.2**
-(`features/scripts/`,採用於 2026-09-04)。**v1.3.2(7eecc51)是第一個 `--check` 能進 CI 的版本**
-(檔頭 sha256 自比對,不需要模板 checkout),並修掉了 1.2.2 的六個問題——其中兩個在 1.2.2 上
-**是死的**:`features/scripts/gates.config.json` 讀不到(cucumber cwd 靠自動偵測),
-`verify-against.sh` 會把 exit 127 報成通過。細節見協調者的合併程序檔與各 commit。
+(`features/scripts/`,採用於 2026-09-04)。
+
+**升版目標:v1.3.4(tag `template/v1.3.4`)。** ※ 2026-09-04 更新:本段原本寫 v1.3.2,
+技術顧問 ai-km-3a 同日回報模板已收工在 1.3.4,目標改為它。v1.3.2(7eecc51)仍是
+**第一個 `--check` 能進 CI 的版本**(檔頭 sha256 自比對,不需要模板 checkout),
+並修掉 1.2.2 的六個問題——其中兩個在 1.2.2 上**是死的**:
+`features/scripts/gates.config.json` 讀不到(cucumber cwd 靠自動偵測)、
+`verify-against.sh` 會把 exit 127 報成通過。1.3.4 在其上再加:
+
+| 1.3.4 帶來的 | 對我們的意義 |
+|---|---|
+| 設定檔搜尋順序:`env GATES_CONFIG_DIR` > 腳本自身目錄 > `ROOT/scripts` | 這條就是修掉「`gates.config.json` 讀不到」那個死問題的機制;`GATES_CONFIG_DIR` 讓 worktree／CI 各自指路,不再靠 cucumber 的 cwd 自動偵測 |
+| `verify-against` 的 exit 127 修復 + 標記行 | §5.3 的同一個教訓:命令不存在被報成通過,是「從讀推斷」在腳本裡的形態 |
+| `--check` 的 sha256 可進 CI | 守門自己被改掉時會被抓到 |
+| `sync` 的語言選集與 `--prune` | 只同步我們用得到的,不吃整包 |
+| `gherkin-dup` allowlist(**要填 reason**) | 逐字重複偶爾是對的(例如兩個能力真的共用一句),但必須寫明理由才准豁免——形式可以被鑽,理由不行 |
+| `coverage --run` 只跑 `done`/`in-progress` + `runTimeoutMs` | 正是下一段本來就寫的那條:`todo` 的 phase 刻意是紅的,對它要求 `--run` 通過是構造上就錯的。1.3.4 把它變成模板的機制,不再是我們自己記得 |
 
 I2 通過那一輪的升版程序(不變):逐支 diff 確認「新版 ⊇ 我們」→ sync(**舊的 SOURCE 標頭要
 重跑一次 sync 才會過 `--check`,一次性過渡**)→ `verify-against`(這版才可信)→ `--check`
 進 CI **先照印一輪再 gate** → coverage 可以開 `--run`(**只跑 done/in-progress 的 phase**——
-`todo` 的 phase 刻意是紅的,對它要求 `--run` 通過是構造上就錯的)。
+`todo` 的 phase 刻意是紅的,對它要求 `--run` 通過是構造上就錯的——1.3.4 起這條由模板自己保證)。
+
+**聯合 retro(顧問提議,已接受)**:`AI_KM` 通過 I2、或 09-07 到期,**先到者**觸發,
+由模板作者主持。我們這邊的輸入是 `docs/PITFALLS.md` 的「尚未寫進規則檔」那一節
+——那些是踩出來但還沒變成機械守門的坑,正好是模板該不該長出新檢查的原始材料。
 
 ---
 

@@ -13,7 +13,7 @@ import yaml from "js-yaml";
  * real contract, the drift itself fails a test — never silently rendered "close enough".
  *
  * NOT integration evidence for a real server (Testing Boundary / Anti-hallucination
- * Guard) — see docs/stories/E03-S036.md for the separate L3 smoke against the real API.
+ * Guard) — see archive/stories/E03-S036.md for the separate L3 smoke against the real API.
  */
 
 // ---- Load + dereference the schemas this fake actually needs -------------------------
@@ -640,7 +640,7 @@ function transcriptionErrorResponse(status: number, code: string, message: strin
  * E03-S041. Multipart request → contract-validated `Transcription`
  * response. Not real ASR — `nextTranscriptionText`/`nextTranscriptionError`
  * (or a plain default) drive what comes back; never integration evidence
- * for a real whisper-server (see docs/stories/E12-S031.md for that).
+ * for a real whisper-server (see archive/stories/E12-S031.md for that).
  */
 async function handleCreateTranscription(request: Request): Promise<Response> {
   const contentType = request.headers.get("content-type") ?? "";

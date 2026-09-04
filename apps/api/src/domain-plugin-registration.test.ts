@@ -6,7 +6,7 @@
  * `app.contracts.getSchema("conversations", ...)` at registration time threw
  * under `apps/api`'s own fixture-only bootstrap tests (`server.test.ts`,
  * `db/migrate.test.ts` — they build against `src/testing/fixtures`, which
- * only defines "sample"). See `docs/stories/E04-S050.md`.
+ * only defines "sample"). See `archive/stories/E04-S050.md`.
  */
 import { fileURLToPath } from "node:url";
 import path from "node:path";

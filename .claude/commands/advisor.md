@@ -17,12 +17,12 @@ argument-hint: <問題描述;留空則從目前卡住的 context 推斷問題>
 
 ### Step 2 — 查權威(多數「不清楚」規格早有答案)
 依序查,找到即止:
-1. `AI_KM_BMAD_High_Granularity/policies/`(三份 policy)
-2. `AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`(§5 的 40 條 pinned 決策
+1. `archive/AI_KM_BMAD_High_Granularity/policies/`(三份 policy)
+2. `archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`(§5 的 40 條 pinned 決策
    、§10 架構原則)
 3. 該 story 在 epic 檔中的開發邊界與 AC
-4. `docs/adr/`(既有決策)與 `docs/stories/`(過往 EVIDENCE 的類似處理)
-5. `AI_KM_BMAD_High_Granularity/readme_zh.md`(團隊分工與流程)
+4. `docs/adr/`(既有決策)與 `archive/stories/`(過往 EVIDENCE 的類似處理)
+5. `archive/AI_KM_BMAD_High_Granularity/readme_zh.md`(團隊分工與流程)
 
 **規格有答案** → 引用確切出處,直接採用,記入 story EVIDENCE 的
 assumptions,結束。
@@ -46,7 +46,7 @@ assumptions,結束。
 ### Step 5 — 自主模式(被 /keep-working-till-end 呼叫時)
 若正處於自主連續開發、且 Step 4 判定「必須問使用者」:
 不中斷等待回答,改為 (a) 把問題+選項+推薦解完整寫入
-`docs/stories/PENDING_DECISIONS.md`(無則建立) (b) 該 story 標
+`archive/stories/PENDING_DECISIONS.md`(無則建立) (b) 該 story 標
 `blocked` 並在備註指向該檔 (c) 跳到下一個 story。使用者回來後統一批示。
 
 ### Step 6 — 落檔

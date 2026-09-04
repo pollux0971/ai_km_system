@@ -20,7 +20,7 @@
 
 - 契約:`contracts/openapi/<x>.yaml`
 - 舊 story(素材,不是規格):EXX-SYYY, …
-- 規格庫有內容的段落:`AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` §N(若有)
+- 規格庫有內容的段落:`archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` §N(若有)
 
 ## 單獨執行
 

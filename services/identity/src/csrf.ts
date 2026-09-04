@@ -3,7 +3,7 @@
  *
  * Fused into `buildRealRequireSession` (`require-session.ts`) rather than
  * mounted as a separate `preHandler` on each domain's own route
- * definitions — see that file's docstring and `docs/stories/E04-S048.md`
+ * definitions — see that file's docstring and `archive/stories/E04-S048.md`
  * for the full reasoning (short version: the literal "mount a preHandler in
  * each of the four plugins' route files" mechanism the spec describes
  * collides with those plugins' own isolated unit-test harnesses, which
@@ -29,7 +29,7 @@ export const CSRF_ERROR_MESSAGE = "此請求缺少必要的防護標頭,已拒�
  * GET/HEAD/OPTIONS never change state, so they are never checked — this is
  * a hard requirement, not an optimisation: `EventSource` (E04-S044's SSE
  * stream) cannot set custom headers at all, and gating this on method is
- * what keeps that endpoint usable. See docs/stories/E04-S048.md's red-line
+ * what keeps that endpoint usable. See archive/stories/E04-S048.md's red-line
  * note.
  */
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -92,7 +92,7 @@ export interface CsrfCheckResult {
  * a plain form navigation, so a request with neither header is either a
  * misbehaving/ancient client or an actual attack; failing closed does not
  * cost a legitimate caller anything. Documented per the spec's own "此組合
- * 決策寫進 EVIDENCE" instruction — see docs/stories/E04-S048.md.
+ * 決策寫進 EVIDENCE" instruction — see archive/stories/E04-S048.md.
  */
 export function checkCsrf(
   request: FastifyRequest,

@@ -46,7 +46,7 @@ test("E13-S017: navigating through every current admin home entry link — inclu
 }) => {
   // E01-S027: measured flaky under full-suite CPU contention (this test
   // walks all 16 admin entries in one session, so it accumulates more
-  // navigation time than any other single test — docs/stories/E01-S027.md's
+  // navigation time than any other single test — archive/stories/E01-S027.md's
   // EVIDENCE has the repeat-each=3 breakdown). `test.slow()` triples this
   // test's own timeout budget so it survives contention without slowing
   // the whole suite via a lower global `workers` count.

@@ -4,7 +4,7 @@ import type { AuthClient, AuthErrorCode, AuthSession } from "./index";
 /**
  * Contract-compatible test double for AuthClient (E01-S002), used until the
  * E02 (Identity, RBAC & Authorization) contract exists — see
- * docs/stories/E01-S002.md for the proposed (non-binding) request/response
+ * archive/stories/E01-S002.md for the proposed (non-binding) request/response
  * shape this mirrors. Per DEVELOPMENT_POLICY.md #8, this mock unblocks
  * frontend work but is never itself production integration evidence.
  *

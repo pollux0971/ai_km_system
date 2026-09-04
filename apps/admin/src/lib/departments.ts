@@ -5,7 +5,7 @@ import type { ApiError, Result } from "@ai-km/types";
  * local entity, the same "self-contained frontend mock, not blocked on
  * Team B" treatment `users.ts`'s own `AdminUser`/`createUser` already
  * establishes for a concept nominally owned by another domain
- * (`AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`'s own
+ * (`archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`'s own
  * "E02-S03 Department Entity" names this as Team B's schema to define;
  * `contracts/` has no department schema at all, same "not yet
  * populated" situation `contracts/permissions/README.md` already

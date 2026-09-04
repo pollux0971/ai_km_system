@@ -14,7 +14,7 @@ import yaml from "js-yaml";
  * size (5 read-only routes, no mutation/ownership model to port).
  *
  * NOT integration evidence for a real server (Testing Boundary /
- * Anti-hallucination Guard) — see docs/stories/E13-S021.md for the
+ * Anti-hallucination Guard) — see archive/stories/E13-S021.md for the
  * separate real-backend E2E (`admin-analytics-real.spec.ts`).
  */
 

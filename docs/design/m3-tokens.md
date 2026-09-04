@@ -17,7 +17,7 @@ builds on; it changes no component DOM.
 ## Seed color
 
 **`#1e56a0`** (existing brand blue) — **confirmed by the user 2026-08-28**
-(see `docs/stories/PENDING_DECISIONS.md`), no longer an assumption.
+(see `archive/stories/PENDING_DECISIONS.md`), no longer an assumption.
 
 ## How to change the seed color (< 5 minutes)
 

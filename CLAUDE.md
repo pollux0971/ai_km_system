@@ -1,7 +1,10 @@
 # ai-km — Claude 開發規範(每個 session 必須遵守)
 
-本 repo 是 AI KM 企業知識管理平台的 monorepo(Team A 視角)。規格基準在
-`AI_KM_BMAD_High_Granularity/`(唯讀,禁止修改)。
+本 repo 是 AI KM 企業知識管理平台的 monorepo(Team A 視角)。原始規格基準
+`AI_KM_BMAD_High_Granularity/` 已於 2026-09-04(ADR 0008)封存至
+`archive/AI_KM_BMAD_High_Granularity/`(唯讀,禁止修改,tag `baseline-bmad`);
+現在生效的規格背景是 `docs/00-design.md`(凍結快照)與 `docs/policies/`(三份最高權威,
+逐字複製自封存前的規格庫)。
 
 ## 強制工作流(2026-09-03 起:分階段 Gherkin,ADR 0008)
 
@@ -9,7 +12,7 @@
 (`STORY_WORKFLOW.md`)已退場,只保留給尚未收尾的舊 story;其用血換來的規則
 全數搬進 GHERKIN_WORKFLOW §5,一條不丟。開工前先讀:
 
-1. `docs/roadmap.md` 的「現況」表——現在在哪個整合點、回填到哪
+1. `docs/01-roadmap.md` 的「現況」表——現在在哪個整合點、回填到哪
 2. 你要做的 `features/NN-name/FEATURE.md` 與 `NEXT.md`
 3. 對應的 `phase-N.feature`(**測試就是規格**)
 4. 相關的 `contracts/openapi/*.yaml` 與 `docs/adr/`
@@ -22,7 +25,7 @@
 - `/decide <描述>` — 記 ADR(先評估契約影響;硬約定要使用者拍板)
 - `/sprint [週]` — 讀所有 `NEXT.md` 算 ready,WIP ≤ 2
 
-**狀態唯一來源**:各 `features/*/FEATURE.md` 的 phase 表。`docs/stories/PROGRESS.md`
+**狀態唯一來源**:各 `features/*/FEATURE.md` 的 phase 表。`archive/stories/PROGRESS.md`
 與 `PENDING_DECISIONS.md` 自 2026-09-03 凍結為唯讀歷史。新的待決事項是 `docs/adr/`
 的 Proposed ADR。
 
@@ -45,8 +48,8 @@
 | 類別 | 誰定 | 例子 | 怎麼留痕 |
 |---|---|---|---|
 | 工程取捨 | **技術顧問 session**(目前 ai-km-3a 系列)裁決;顧問不在時協調者自己定並記 ADR | 資料結構、守門放哪一層、測試形狀、排序、分級(嚴格／標準)、phase 怎麼切 | ADR(`/decide`)或 commit body |
-| 契約**收緊**(回應欄位變嚴:optional→required、string→enum、加 default) | 技術顧問可批 | `GenerationResponse.model` 改 required、`FeedbackReason` 改 enum | ADR Accepted,commit 引用 |
-| 契約**放寬**、新 endpoint、新 schema、刪欄位 | **使用者** | | ADR Proposed → 使用者 |
+| 契約**回應側收緊**(optional→required、string→enum、加 default) | 技術顧問可批 | `GenerationResponse.model` 改 required、`FeedbackReason` 改 enum | ADR Accepted,commit 引用 |
+| 契約**放寬**、新 endpoint、新 schema、刪欄位,以及契約**請求側收緊**(必填化、值域縮小、移除既有 enum 值、加更嚴的 pattern) | **使用者** | 判準:**會不會讓以前合法的呼叫變不合法**——例如把 `ResyncEvent.reason` 的 enum 從三個值縮成兩個,字面上是「收緊 enum」,但移除的是保留值 `SERVER_RESTART`,對呼叫端是破壞性的,不通過此判準 | ADR Proposed → 使用者 |
 | 新資料夾或 Team B 路徑的授權擴張 | **使用者** | 新開 `services/xxx`、動 `apps/api` composition root 以外的 Team B 碼 | ADR Proposed → 使用者 |
 | 付費或外部服務、真模型選型、部署目標 | **使用者** | E04-S037 的 embedding 模型、雲端 provider、on-prem 機器規格 | ADR Proposed → 使用者 |
 | **以前沒提過的功能**、產品行為未定義 | **使用者** | 跨部門搬文件是否合法、閾值、誰看得到什麼 | `docs/DECISIONS_NEEDED.md` 一列 + ADR Proposed |
@@ -67,7 +70,15 @@
 ## 鐵律(違反即停止並回報)
 
 1. **不發明 contract**:endpoint / schema / permission 不存在 → 回報 BLOCKED,
-   不猜測。`contracts/` 是唯一真相來源,改 contract 前必須先問使用者。
+   不猜測。`contracts/` 是唯一真相來源。**契約放寬、新 endpoint、新 schema、刪欄位,
+   以及契約請求側收緊(必填化、值域縮小、移除既有 enum 值、加更嚴的 pattern)→ 先問
+   使用者;契約回應側收緊(optional→required、string→enum、加 default)依上面「決策權」
+   段由技術顧問批,ADR 留痕。判準:會不會讓以前合法的呼叫變不合法。**
+   (此段措辭為 `DECISIONS_NEEDED.md` #5 的裁決落地:技術顧問裁決「回應側收緊技術顧問可批」,
+   協調者補上請求／回應側別的區分,技術顧問再補上「會不會讓以前合法的呼叫變不合法」的判準
+   並定稿——判準比清單重要,清單是形式,形式可以被鑽;例如把 `ResyncEvent.reason` 的 enum
+   從三個值縮成兩個,字面上符合「收緊 enum」,但移除的是保留值 `SERVER_RESTART`,對呼叫端
+   是破壞性的,判準下不通過,仍須使用者拍板。)
    (例外:使用者 2026-08-28 已批准的 contract story——E02-S031、E04-S038、
    E12-S029、E13-S018——可依其 story 規格新增對應 yaml;其他 story 仍不得
    改 contract。)
@@ -77,9 +88,15 @@
 4. **不造假綠燈**:禁止 skip 測試、passWithNoTests、放寬 assertion、`|| true`。
    紅就是紅,誠實回報。
 5. **Mock 不算整合證據**;mock 只用於解除平行開發阻塞。
-6. **範圍紀律**:只改 story 允許清單內的檔案;Team B 資料夾
-   (`apps/api`、`apps/worker-*`、`services/*`、`db/*`)與
-   `AI_KM_BMAD_High_Granularity/` 一律不動。
+6. **範圍紀律**:只改該 phase(或尚未收尾的舊 story)允許修改清單內的檔案;跨資料夾的
+   改動走 `/feature` 分流。ADR 0008 之後,邊界不再是 Team A／Team B 的路徑劃分,改為
+   各能力資料夾 `FEATURE.md` 的 owner 欄——owner 之外的資料夾不動。
+   `archive/AI_KM_BMAD_High_Granularity/`(唯讀規格庫,2026-09-04 已封存,tag `baseline-bmad`)
+   一律不動。
+   下列例外清單寫於 owner 制之前,用的是舊範式的「Team B 資料夾」
+   (`apps/api`、`apps/worker-*`、`services/*`、`db/*`)一詞——**原樣保留,不改寫**,
+   因為那是各條例外當時實際核准的範圍邊界,讀例外時仍照原文的 Team A／Team B 定義理解,
+   不代表現在的邊界仍照這個分法運作。
    (例外:使用者 2026-08-28 明示授權並指派 Team A 開發的增補 story——
    E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021——可在**該 story 允許修改清單內**修改 `apps/api`、`services/*`、
    `db/*`、`infra/*`;導讀見 `docs/architecture/voice-persistence-sync-m3.md`
@@ -114,7 +131,7 @@
    ※ 本段 2026-09-02 更正:初次登記誤寫為「僅限 g1–g4」,漏掉使用者原話裡的
    g5。由 E12-S032 的獨立審核者發現本檔的 Team A 例外清單只列 E12-S029～S031、
    未涵蓋 S032 而提出。更正方向是讓紀錄符合使用者實際授權的文字,不是擴權。)
-7. **證據落檔**:story 沒有 `docs/stories/EXX-SYYY.md` 就不是 DONE。
+7. **證據落檔**:story 沒有 `archive/stories/EXX-SYYY.md` 就不是 DONE。
 
 ## Team A 範圍
 
@@ -135,7 +152,8 @@ PROGRESS.md 各 epic 章節。
 
 ## 參考順位(衝突時由高到低)
 
-1. `AI_KM_BMAD_High_Granularity/policies/`(三份 policy)
+1. `docs/policies/`(三份 policy,逐字複製自 `archive/AI_KM_BMAD_High_Granularity/policies/`,
+   tag `baseline-bmad`)
 2. `.claude/rules/STORY_WORKFLOW.md`
 3. epic 檔中該 story 的開發邊界
 4. 本檔其餘內容

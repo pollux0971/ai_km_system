@@ -87,4 +87,4 @@ identity／conversation／feedback／model-gateway 四個 plugin 各自的 route
 conversation／model-gateway 的每個受保護 route 早就透過 `app.requireSession`
 使用它，真實組裝的 apps/api server 因此自動獲得保護，而各自的隔離測試（用
 假版本）完全不受影響。完整理由與紅燈證據見
-`docs/stories/PENDING_DECISIONS.md` 與 `docs/stories/E04-S048.md`。
+`archive/stories/PENDING_DECISIONS.md` 與 `archive/stories/E04-S048.md`。

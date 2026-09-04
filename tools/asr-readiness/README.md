@@ -66,6 +66,6 @@ mocked-`fetch`) HTTP server in `src/testing/fake-sidecar.ts`, proving
 **None of that is integration evidence for the real ASR pipeline.**
 The story's actual L3 requirement — real `whisper-server`, real model,
 real recorded audio, on the real target machine(s) — is recorded in
-`docs/stories/E12-S030.md`, not fabricated by pointing at the fake
+`archive/stories/E12-S030.md`, not fabricated by pointing at the fake
 sidecar tests (Testing Boundary / Anti-hallucination Guard: "不得宣稱
 ASR 已驗證而實際只跑過 fake 或只檢查檔案存在").

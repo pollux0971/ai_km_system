@@ -5,7 +5,7 @@
  * ── NAMING, AND WHY IT CHANGED (2026-09-02) ─────────────────────────────────
  *
  * This scale used to be called L0–L3, which collided head-on with
- * `AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md`, the repo's #1
+ * `archive/AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md`, the repo's #1
  * authority, whose L0–L6 mean something else entirely. The worst collision was
  * L3: the policy's L3 is "integration — DB/object/vector/queue boundaries",
  * this scale's L3 was "a real model". Two documents, the same token, opposite

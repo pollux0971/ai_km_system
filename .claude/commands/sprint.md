@@ -12,7 +12,7 @@ description: 規劃本週要做哪幾個 phase(ADR 0008)。讀所有 NEXT.md 算
 
 ## 第二步:收集狀態
 
-- `docs/roadmap.md` 現況表:目前整合點、回填進度
+- `docs/01-roadmap.md` 現況表:目前整合點、回填進度
 - 每個 `features/*/FEATURE.md` 的 phase 表(唯一狀態來源)
 - 每個 `features/*/NEXT.md` 的三類 gate
 - 上一週的 sprint 檔,看哪些沒變成 done

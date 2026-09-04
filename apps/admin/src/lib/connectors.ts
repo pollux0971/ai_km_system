@@ -4,7 +4,7 @@ import type { ApiError, Result } from "@ai-km/types";
  * E11-S014 "Connector admin". Same treatment `models.ts`'s own E11-S013
  * doc comment already establishes for a sibling Team-B-owned concept:
  * the 9 connector types are grounded in
- * `AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`'s own "24. E10 —
+ * `archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`'s own "24. E10 —
  * Enterprise Data Integration" story list (E10-S05 ERP Connector
  * through E10-S13 Database View Connector), not invented vendor/system
  * names. The real Connector Framework/Registry/Credential/Health Check

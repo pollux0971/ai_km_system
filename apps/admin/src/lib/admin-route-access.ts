@@ -35,7 +35,7 @@ import type { Role } from "@ai-km/permissions";
  * `ROLE_DESCRIPTIONS` — added by E11-S026 (this file previously never
  * listed it at all, a pre-existing gap invisible until this story
  * actually wired `AdminRouteGuard` into a real layout; see
- * docs/stories/E11-S026.md).
+ * archive/stories/E11-S026.md).
  *
  * `general_user`/`department_manager`/`maintenance_engineer`/
  * `sales_purchasing` never appear in this table at all — none of their

@@ -9,7 +9,7 @@
  * counted as a zero. This is exactly the mistake the route-schema side of
  * this same tool already made and had to correct: an early report read
  * "MATCH=9 DIVERGES=2" without ever printing that ABSENT=15 routes were not
- * judged at all (see README.md's "Current DIVERGES" / ROADMAP_TEMP.md
+ * judged at all (see README.md's "Current DIVERGES" / archive/ROADMAP_TEMP.md
  * 5-rho). This module exists so the response-shape report cannot repeat
  * that mistake: it independently enumerates every operation any loaded
  * contract declares a JSON 2xx response for, so a caller can compute

@@ -139,7 +139,7 @@ will recur.
 Two real, explained divergences existed from `check.live.test.ts`'s first
 run until E04-S081 — not normalisation gaps, not bugs in this tool. The
 user's technical advisor authorized adding the defaults to
-`analytics.yaml` (`docs/stories/PENDING_DECISIONS.md`'s now-resolved
+`analytics.yaml` (`archive/stories/PENDING_DECISIONS.md`'s now-resolved
 entry), and E04-S081 landed that on 2026-09-03; `pnpm --filter
 @ai-km/contract-equivalence exec vitest run src/check.live.test.ts` now
 reports `SUMMARY: 26 total — MATCH=11 DIVERGES=0 ABSENT=15`. Kept below for
@@ -256,7 +256,7 @@ pnpm --filter @ai-km/contract-equivalence exec vitest run src/check-response-sha
 ```
 
 **Result as of E04-S079 (2026-09-03): 21 of 21 exercised routes clean** — no
-extra fields, no missing fields. See `docs/stories/specs/E04-S079.spec.md`
+extra fields, no missing fields. See `archive/stories/specs/E04-S079.spec.md`
 for the full per-route table, which four routes were not exercised and why,
 and whether an existing test would already catch a regression here (for 20
 of the 21, yes — an existing `expectResponseMatchesContract`/
@@ -280,7 +280,7 @@ reached — a route it never called is invisible to that fraction, not
 counted as a zero. That is the same shape of mistake the route-schema side
 of this tool made first and had to correct (an early report read
 "MATCH=9 DIVERGES=2" without printing that 15 more routes were ABSENT —
-see "Historical DIVERGES" above and ROADMAP_TEMP.md 5-rho). This tool does
+see "Historical DIVERGES" above and archive/ROADMAP_TEMP.md 5-rho). This tool does
 not get to make that mistake twice.
 
 `check-response-shapes.live.test.ts`'s `beforeAll` now prints, every run,

@@ -9,7 +9,7 @@ afterEach(() => {
  * E03-S035 AC6. The actual proxying behavior (does Next.js honor this config against a
  * real upstream) was verified live: `apps/web` dev server on a throwaway port with
  * `API_INTERNAL_URL` pointed at a throwaway fake `/v1/health` server, `curl
- * /api/v1/health` through it — see docs/stories/E03-S035.md. This test guards the
+ * /api/v1/health` through it — see archive/stories/E03-S035.md. This test guards the
  * *configuration* itself against regressing (wrong path, dropped `API_INTERNAL_URL`
  * override, wrong default) without needing a live server on every test run.
  */

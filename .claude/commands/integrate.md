@@ -10,7 +10,7 @@ description: 驗收一個整合點(ADR 0008)。核心是把 @e2e 場景原文貼
 
 ## 第一步:定位
 
-從 `docs/roadmap.md` 找到該整合點的段落:「你做得到什麼」(這是驗收的真正標準)、需要的 phase 清單、
+從 `docs/01-roadmap.md` 找到該整合點的段落:「你做得到什麼」(這是驗收的真正標準)、需要的 phase 清單、
 已知限制。讀 `docs/integration/<in>-*.feature`。
 
 ## 第二步:前置檢查
@@ -73,12 +73,12 @@ roadmap 說 <IN> 之後你做得到:「<你做得到什麼>」
 
 ### 若完成
 
-1. `docs/roadmap.md` 現況表:目前階段改成下一個整合點;該整合點標題後加 `✓ <日期>`
+1. `docs/01-roadmap.md` 現況表:目前階段改成下一個整合點;該整合點標題後加 `✓ <日期>`
 2. `docs/integration/README.md` 表格狀態更新;`features/package.json` 的 `accept:integration` tags 加入 `@<in>`
 3. 掃所有 `NEXT.md`,把整合 gate 是這個整合點的 phase 打勾;列出新解鎖的 phase
 4. 建議 `git tag <IN>`
 5. 回報並加一句:roadmap 的「通過後立刻做」寫了什麼——**提醒使用者去做,那比繼續寫程式重要**
-6. 回顧三題寫進 `docs/roadmap.md` 該整合點段落:哪個 gate 沒抓到東西、哪條規則多餘、哪條缺。
+6. 回顧三題寫進 `docs/01-roadmap.md` 該整合點段落:哪個 gate 沒抓到東西、哪條規則多餘、哪條缺。
    整合層規則在範式來源尚未實戰(ADR 0008 §7),摩擦記下來回饋範式作者。
 
 ### 若未完成

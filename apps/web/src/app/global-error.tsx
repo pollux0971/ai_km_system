@@ -19,7 +19,7 @@ const logger = createLogger("web:global-error-boundary");
  * absent (Functional AC 8). Not exercised by an automated test: forcing
  * the root layout to throw on demand would mean adding test-only
  * conditional logic to a file that should stay minimal and stable
- * (see docs/stories/E01-S018.md Assumptions for the full reasoning).
+ * (see archive/stories/E01-S018.md Assumptions for the full reasoning).
  */
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {

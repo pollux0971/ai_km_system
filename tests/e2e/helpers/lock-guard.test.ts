@@ -12,7 +12,7 @@ import { assertNotBlockingLockHolder } from "./lock-guard";
  * `flock` probe so these tests are deterministic and don't depend on
  * actually spawning `flock` (that behavior has its own coverage in the
  * end-to-end check against the real `e2e-locked.sh` wrapper — see
- * docs/stories/E04-S057.md's EVIDENCE).
+ * archive/stories/E04-S057.md's EVIDENCE).
  */
 describe("assertNotBlockingLockHolder", () => {
   let dir: string;

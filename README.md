@@ -5,12 +5,15 @@ platform integrating enterprise documents, knowledge base, ERP, MES, HR,
 CRM, SCM, PLM, IoT and maintenance records via RAG, RBAC, source citation,
 model governance and full audit trails.
 
-The authoritative product/architecture baseline lives in
-[`AI_KM_BMAD_High_Granularity/`](./AI_KM_BMAD_High_Granularity) — start with
-[`readme_zh.md`](./AI_KM_BMAD_High_Granularity/readme_zh.md) (primary,
-Traditional Chinese) or [`README.md`](./AI_KM_BMAD_High_Granularity/README.md)
-(English summary). This root README only covers the engineering monorepo
-built on top of that baseline.
+**2026-09-04 (ADR 0008):** the original BMAD spec library is superseded by a staged-Gherkin
+paradigm and has been archived (rename, history preserved) to
+[`archive/AI_KM_BMAD_High_Granularity/`](./archive/AI_KM_BMAD_High_Granularity) — frozen at
+tag `baseline-bmad`, background reading only, not a source of truth for any current work.
+Start instead with [`docs/00-design.md`](./docs/00-design.md) (frozen product-design snapshot)
+and [`docs/README.md`](./docs/README.md) (reading map for everything else: roadmap, ADRs,
+glossary, integration points). The three non-negotiable policies below are copied verbatim
+into [`docs/policies/`](./docs/policies/), which is the canonical place to read them now.
+This root README only covers the engineering monorepo built on top of that baseline.
 
 ## Team split
 
@@ -90,7 +93,7 @@ reviewer reading the exception list rather than the conversation.)
 
 🚩 **Not yet wired into `apps/api`.** None of the three plugins is registered in
 the composition root, and E06-S043 (re-ingest scope guard) is a hard precondition
-before any of them may be. See `docs/stories/PROGRESS.md`.
+before any of them may be. See `archive/stories/PROGRESS.md`.
 
 (`services/rag-skeleton/` was retired by E04-S064 on 2026-09-02 and the directory no longer exists. This paragraph is retained as a record of what was authorized; it no longer grants permission to modify any path.)
 
@@ -138,9 +141,9 @@ Contract once it exists.
 
 Every story (human- or agent-implemented) must follow:
 
-- [`policies/DEVELOPMENT_POLICY.md`](./AI_KM_BMAD_High_Granularity/policies/DEVELOPMENT_POLICY.md)
-- [`policies/ATOMIC_STORY_BOUNDARIES.md`](./AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md)
-- [`policies/TESTING_POLICY.md`](./AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md)
+- [`policies/DEVELOPMENT_POLICY.md`](./docs/policies/DEVELOPMENT_POLICY.md)
+- [`policies/ATOMIC_STORY_BOUNDARIES.md`](./docs/policies/ATOMIC_STORY_BOUNDARIES.md)
+- [`policies/TESTING_POLICY.md`](./docs/policies/TESTING_POLICY.md)
 
 Highlights: Authorization Before Retrieval, Deny-Wins, unauthorized data
 must never reach retrieval/LLM context/citation/export/logs, frontend never

@@ -7,7 +7,7 @@ Status: Proposed（使用者 2026-09-02 拍板：baseline §5 rule 28「Model �
 
 ## Context
 
-`AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` §5 第 28 條要求「Model 呼叫
+`archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` §5 第 28 條要求「Model 呼叫
 必須經過 Model Gateway」，§10 Principle 2 把 Model Gateway 畫成 RAG 管線裡的
 一段。**兩處都沒有說它是一個網路跳點。**
 

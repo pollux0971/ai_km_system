@@ -1,7 +1,7 @@
 # E01-S028 — on-prem reverse proxy.
 #
 # `{$AI_KM_PUBLIC_HOST}` (ASSUMPTION, see docs/runbooks/deploy-on-prem.md and
-# docs/stories/PENDING_DECISIONS.md — the user has not yet supplied a real
+# archive/stories/PENDING_DECISIONS.md — the user has not yet supplied a real
 # host name/cert as of this story): a Caddyfile env-var placeholder, read
 # from the `caddy` container's own environment (docker-compose.yml sets it,
 # defaulting to `localhost`). `tls internal` is Caddy's own self-signed CA —

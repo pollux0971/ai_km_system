@@ -238,7 +238,7 @@ export async function listKnowledgeBaseDocuments(
  * renameConversation, even though a real browser File's `.name` is
  * very unlikely to ever be empty in practice. No size or file-type
  * validation — same reasoning FileAttachmentPicker's own doc comment
- * already gives for declining to invent a limit AI_KM_BMAD_High_Granularity/
+ * already gives for declining to invent a limit archive/AI_KM_BMAD_High_Granularity/
  * never specifies (the one concrete format list in the whole spec
  * belongs to E06's own parser stories, Team B, not this story).
  *

@@ -112,7 +112,7 @@ export default defineConfig({
   globalSetup: "./global-setup.ts",
   fullyParallel: true,
   // E01-S027: measured via `--repeat-each=3` on the full suite across
-  // multiple rounds (docs/stories/E01-S027.md's EVIDENCE has the full
+  // multiple rounds (archive/stories/E01-S027.md's EVIDENCE has the full
   // breakdown) — Round 0 (unmodified config, baseline): 813 test instances,
   // only 2 flaky failures, both `page.waitForURL` timeouts under full-suite
   // load, not a webServer-readiness or cold-compile symptom (those are
@@ -140,7 +140,7 @@ export default defineConfig({
   // repo's control. Per ai-km-e4's ruling (2026-08-29): AC1's "N→0" must
   // be measured under quiet-machine conditions with load average recorded
   // in EVIDENCE, not loosened — a clean re-run once machine load is normal
-  // is still pending (see docs/stories/E01-S027.md's EVIDENCE).
+  // is still pending (see archive/stories/E01-S027.md's EVIDENCE).
   workers: process.env.CI ? 2 : Math.max(1, Math.floor(cpus().length / 2)),
   webServer: [
     {

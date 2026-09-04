@@ -58,7 +58,7 @@ level (the approach spec's technical decision describes as the default
 lever) would have leaked onto the excluded chat page. Every change in
 this story is therefore either a new, page-scoped class (`.m3-*`) or,
 for `<table>`, a direct element-level change verified to have exactly
-one consumer app-wide. See `docs/stories/E01-S025.md` for the full
+one consumer app-wide. See `archive/stories/E01-S025.md` for the full
 reasoning.
 
 ## Axe

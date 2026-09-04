@@ -5,7 +5,7 @@ import type { ApiError, Result } from "@ai-km/types";
  * `apps/web`'s own `lib/ai-models.ts` (`AI_MODELS`/`AiModelOption`,
  * E03-S005) already establishes — same identity, not a coincidentally-
  * similar fictional set — grounded in
- * `AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`'s own numbered
+ * `archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`'s own numbered
  * baseline decisions (#28 Model 呼叫必須經過 Model Gateway、#29 外部
  * Cloud LLM 預設關閉、#30 第一優先部署策略為地端), not invented vendor
  * names. `ai-models.ts`'s own doc comment explicitly names this exact

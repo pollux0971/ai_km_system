@@ -74,7 +74,7 @@ type State =
  * "查詢已確認,準備執行。" resting message transient rather than a state a
  * user could ever actually observe held still, so it's removed — S005's
  * own two tests that asserted it are updated/removed accordingly (full
- * reasoning in docs/stories/E09-S006.md, self-adopted as a single-story,
+ * reasoning in archive/stories/E09-S006.md, self-adopted as a single-story,
  * low-risk, fully reversible UX decision per STORY_WORKFLOW's own
  * "advisor Step 4" self-adoption criteria).
  *
@@ -118,7 +118,7 @@ type State =
  * once" — a later story's new capability legitimately making an earlier
  * approved test's precondition stale, same category of change S005→S006
  * already established precedent for in this same file, documented in
- * docs/stories/E09-S009.md.
+ * archive/stories/E09-S009.md.
  *
  * E09-S010 "KPI card" adds getErpResultKpi(erpQuery.selectedScenarioId)
  * between the summary and the table — a single derived headline number

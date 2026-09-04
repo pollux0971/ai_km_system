@@ -14,7 +14,7 @@
 | 狀態 | `FEATURE.md` 的 phase 表 | **唯一狀態來源**:`todo / ready / in-progress / done / blocked` |
 | 下一步 | `NEXT.md` | 目前 phase、下一個 phase 的三類 gate(自身／整合／契約)、gate 未滿足時該做什麼 |
 | 整合點 | `docs/integration/iN-*.feature` | 每個必有一個 `@e2e` 場景寫「一個人做得到什麼」;由使用者親手確認 |
-| 現況 | `docs/roadmap.md` | 目前整合點、回填進度、未排程 |
+| 現況 | `docs/01-roadmap.md` | 目前整合點、回填進度、未排程 |
 | 契約 | `contracts/openapi/*.yaml` | 凍結層;compat gate + L2-EQ + binding coverage 機械保證;改它走 `/decide` + 使用者 |
 | 決策 | `docs/adr/` | ADR 只增不刪;`proposed` = 待使用者;`NEXT.md` 的契約 gate 指向它 |
 | 單獨執行 | `standalone.json` | 每個能力一行指令,`/phase-done` 真的跑 |

@@ -2964,7 +2964,7 @@ describe("MessageThread no-evidence/abstention UX (E03-S030)", () => {
   // that correction, E03-S021 already delivers this story's named
   // capability end-to-end (classification, fallback content, badge,
   // dedicated E2E coverage). Per
-  // AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md's
+  // archive/AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md's
   // Scope Freeze section's explicit, unconditional prohibition on
   // "Developer 自己腦補需求 → 擴大 scope" (the AI Agent Rule's "不知道
   // 產品行為 → BLOCKED/ASSUMPTION" is related but actually permits a
@@ -2978,7 +2978,7 @@ describe("MessageThread no-evidence/abstention UX (E03-S030)", () => {
   // between S21's abstention states and LATER features that didn't
   // exist yet when S21 shipped and were never cross-tested: citation
   // rendering (S13, predates S21) and Copy Answer (S27, postdates
-  // S21). Full reasoning recorded via /advisor in docs/stories/E03-S030.md.
+  // S21). Full reasoning recorded via /advisor in archive/stories/E03-S030.md.
   const mockedWriteText = vi.fn();
   let originalClipboardDescriptor: PropertyDescriptor | undefined;
 

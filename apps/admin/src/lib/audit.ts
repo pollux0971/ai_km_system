@@ -6,11 +6,11 @@ import type { ApiError, Result } from "@ai-km/types";
  * `prompts.ts`/`models.ts`/`connectors.ts`), an audit event is not
  * something Team A can honestly seed OR let an admin create: an audit
  * trail's entire value is being a truthful record of things that
- * actually happened, and `AI_KM_BMAD_High_Granularity/epics/
+ * actually happened, and `archive/AI_KM_BMAD_High_Granularity/epics/
  * E14_Audit,_Security_&_Observability.md`'s own "E14-S001 Audit event
  * schema"/"E14-S002 Audit append API" (Team B, not built) are the real
  * pipeline that would ever produce one. `contracts/` has zero audit
- * content, and `AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` itself
+ * content, and `archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md` itself
  * never reaches the E14 section body (the file ends at line 1929,
  * mid-word, well before it). Fabricating sample audit entries here
  * would misrepresent real historical events that never happened — a

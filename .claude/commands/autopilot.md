@@ -14,7 +14,7 @@ description: 協調者的連續自主循環(ADR 0008 + CLAUDE.md 決策權段)�
 ### 0. 讀規則,不憑記憶
 
 每輪開始重讀:`CLAUDE.md`「決策權」與「鐵律」、`.claude/rules/GHERKIN_WORKFLOW.md` §4–§7、
-`docs/roadmap.md` 現況表、`docs/DECISIONS_NEEDED.md`、範式作者的 PITFALLS.md(路徑見交接)。
+`docs/01-roadmap.md` 現況表、`docs/DECISIONS_NEEDED.md`、`docs/PITFALLS.md`。
 
 ### 1. 同步
 
@@ -65,7 +65,7 @@ worker 回報「需要使用者」→ 判斷是不是真的使用者級(對照�
 ### 7. 合併
 
 過了就 `--ff-only` 或 merge 進 main、推送;其他 in-progress worktree `git rebase main`。
-PROGRESS 不更新(已凍結);`FEATURE.md` 狀態、`NEXT.md`、`docs/roadmap.md` 回填表由 `/phase-done` 更新。
+PROGRESS 不更新(已凍結);`FEATURE.md` 狀態、`NEXT.md`、`docs/01-roadmap.md` 回填表由 `/phase-done` 更新。
 一行回報給使用者(不是問題,是事實):`✓ <NN-name>/phase-<N> 合併 <hash>;下一個:…;待你:DECISIONS_NEEDED #k`。
 
 ### 8. 回到 1

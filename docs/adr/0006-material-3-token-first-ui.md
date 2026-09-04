@@ -2,7 +2,7 @@
 
 Status: Proposed（使用者 2026-08-28 要求 UI 改為 Google Material 3 style、
 善用 tiles 與 M3 pattern、並產生 ASR 聆聽動畫等素材；本 ADR 的視覺假設
-列於 `docs/stories/PENDING_DECISIONS.md`，使用者可推翻）
+列於 `archive/stories/PENDING_DECISIONS.md`，使用者可推翻）
 
 ## Context
 

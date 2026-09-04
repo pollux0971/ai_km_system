@@ -15,7 +15,7 @@ import { loginAs } from "../helpers/auth";
 // make this test UNDER-cover, never falsely pass. Includes /latency
 // (E13-S013) — this story's own gate run found it missing from
 // ADMIN_ROUTES entirely (a pre-existing gap, fixed alongside; see
-// docs/stories/E11-S026.md), so it belongs here too.
+// archive/stories/E11-S026.md), so it belongs here too.
 const ALL_ADMIN_ENTRIES = [
   "/",
   "/users",
@@ -86,7 +86,7 @@ test.describe("demo-super (super_administrator)", () => {
     // storageState-derived session token for the whole run — invalidating
     // it here would 401 every test that happens to run afterward. Caught
     // by exactly that failure mode during this story's own E2E run; see
-    // docs/stories/E11-S026.md.
+    // archive/stories/E11-S026.md.
     await loginAs(page, { username: "demo-super" });
     await page.getByRole("button", { name: "登出" }).click();
     await page.waitForURL((url) => url.pathname === "/login");

@@ -105,4 +105,4 @@ pnpm --filter @ai-km/tool-asr-readiness verify-asr
     很緊,`check-asr` 的門檻設計已將此納入考量。
 - 部署機:**RTX 4070,12 GB VRAM**——**使用者 2026-08-28 已確認目前沒有
   這台機器**,依 spec 記為 `BLOCKED_DEPENDENCY`(見
-  `docs/stories/E12-S030.md`),不得因此降低驗收標準改成單機通過。
+  `archive/stories/E12-S030.md`),不得因此降低驗收標準改成單機通過。

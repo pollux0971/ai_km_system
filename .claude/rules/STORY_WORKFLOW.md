@@ -10,7 +10,7 @@
 (`E01-S001` 格式)時,必須逐字遵守此流程。與本文件衝突的臨時指示,除非使用者
 明確說「本次覆蓋 STORY_WORKFLOW」,一律以本文件為準。
 
-本文件是 `AI_KM_BMAD_High_Granularity/prompts/STORY_EXECUTION_PROMPT.md` 與三份
+本文件是 `archive/AI_KM_BMAD_High_Granularity/prompts/STORY_EXECUTION_PROMPT.md` 與三份
 policies 的執行層落地,不取代它們;若發現衝突,以 policies 為最高權威並回報。
 
 ---
@@ -30,7 +30,7 @@ INIT → PLAN → IMPLEMENT → VERIFY ⇄ FIX → SELF-REVIEW → EVIDENCE → 
 
 ## Phase 0 — INIT(讀取,不寫程式)
 
-0. **Progress Tracker 檢查**:開啟 `docs/stories/PROGRESS.md`(進度唯一真相
+0. **Progress Tracker 檢查**:開啟 `archive/stories/PROGRESS.md`(進度唯一真相
    來源),確認該 story 目前狀態:
    - `todo` → 改為 `in-progress`,填入 branch 名,立即提交 tracker 變更。
    - `in-progress`(前次 session 中斷)→ 檢查既有 branch 與 diff,從中斷點續作,
@@ -38,7 +38,7 @@ INIT → PLAN → IMPLEMENT → VERIFY ⇄ FIX → SELF-REVIEW → EVIDENCE → 
    - `done` / `approved` → 停止並回報「此 story 已完成」,不重做。
    - `blocked` / `blocked-team-b` → 先驗證備註中的阻塞是否已解除;未解除
      → 停止並回報,不硬做。
-1. 從 `AI_KM_BMAD_High_Granularity/epics/` 對應檔案完整讀取該 story 的所有小節:
+1. 從 `archive/AI_KM_BMAD_High_Granularity/epics/` 對應檔案完整讀取該 story 的所有小節:
    Metadata、Scope In/Out、Preconditions、四類 Acceptance Criteria
    (Functional / Security-Authorization / Data-Contract / UX)、開發邊界
    (允許修改/禁止修改)。
@@ -134,7 +134,7 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
 
 ## Phase 6 — EVIDENCE(證據落檔)
 
-在 `docs/stories/EXX-SYYY.md` 寫入(模板見 `docs/stories/README.md`):
+在 `archive/stories/EXX-SYYY.md` 寫入(模板見 `archive/stories/README.md`):
 
 - Story ID、branch、日期、最終狀態(DONE / BLOCKED)
 - 變更檔案清單、contract/migration 差異(無則寫 None)
@@ -143,7 +143,7 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
 - Assumptions / 計畫外變更 / 未解疑問
 - Rollback 方式(通常:revert 該 branch 的 commits)
 
-同時更新 `docs/stories/PROGRESS.md` 該 story 列(狀態、Branch、Evidence 連結、
+同時更新 `archive/stories/PROGRESS.md` 該 story 列(狀態、Branch、Evidence 連結、
 備註)與總覽表計數,和 EVIDENCE 檔一起提交。
 
 ## Phase 7 — DONE / BLOCKED 收尾
@@ -182,7 +182,7 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
 | **適用** | 觸及 RBAC／授權範圍／稽核／資料可見性,**或**失敗模式是「靜默給出錯誤結果」 | 其餘所有工作 |
 | **流程** | 完整狀態機:INIT → PLAN → IMPLEMENT → VERIFY ⇄ FIX → SELF-REVIEW → EVIDENCE | 先寫測試 → 綠 → 反向驗證 → PROGRESS.md 一行 + 一段話 |
 | **spec 檔** | 需要 | **不寫** |
-| **EVIDENCE 檔** | 需要 `docs/stories/EXX-SYYY.md` | **不寫**,PROGRESS.md 備註欄一段話即可 |
+| **EVIDENCE 檔** | 需要 `archive/stories/EXX-SYYY.md` | **不寫**,PROGRESS.md 備註欄一段話即可 |
 | **獨立 review** | 需要(`/story-review`) | **不需要** |
 | **規格來源** | epic／spec 檔 | **測試本身就是規格** |
 
@@ -304,7 +304,7 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
 3. **契約優先**:`contracts/` 是唯一真相來源。改 contract = 跨組事件,
    必須先問使用者,不得單方面改。(使用者 2026-08-28 已批准 E02-S031、
    E04-S038、E12-S029、E13-S018 四個 contract story 依其規格新增 yaml。)
-4. **禁止修改**:`AI_KM_BMAD_High_Granularity/`(規格庫,唯讀)、
+4. **禁止修改**:`archive/AI_KM_BMAD_High_Granularity/`(規格庫,唯讀)、
    Team B 佔位資料夾(`apps/api`、`apps/worker-*`、`services/*`、`db/*`)。
    (例外:使用者 2026-08-28 明示授權並指派 Team A 的增補 story——
    E01-S021～S028、E02-S031～S033、E03-S034～S046、E04-S038～S044/S047、E11-S026、E12-S029～S031、E13-S018～S021——限該 story 允許修改清單內的路徑,含 `infra/*`。)
@@ -314,7 +314,7 @@ SELF-REVIEW 仍過不了同一項 → BLOCKED。
    見 README.md 的 2026-09-02 Wave 1 段落。
    （`services/rag-skeleton/` 已於 2026-09-02 由 E04-S064 退場，目錄不再存在；本段保留為授權紀錄，不再構成對任何路徑的修改許可。）)
 5. **失敗誠實回報**:紅就是紅。任何 gate 未跑或未過,不得宣稱 DONE。
-6. **進度唯一真相**:`docs/stories/PROGRESS.md` 是進度追蹤的唯一來源。
+6. **進度唯一真相**:`archive/stories/PROGRESS.md` 是進度追蹤的唯一來源。
    每次狀態轉換立即更新並隨 commit 提交;不得只更新 tracker 而未實際完成
    對應工作(tracker 造假視同 gate 造假)。session 重啟後一律先讀 tracker
    還原進度,不憑記憶。

@@ -83,7 +83,7 @@ test("E03-S009: sending a message updates the conversation list's preview", asyn
   // not the sidebar's. Unscoped, this used to be a race — it passed only
   // when the sidebar's own preview hadn't updated yet (1 match instead of
   // 2), which is backwards from what the test claims to verify; see
-  // docs/stories/E03-S047.md.
+  // archive/stories/E03-S047.md.
   await expect(page.getByRole("main").getByText("這則會成為新的預覽文字")).toBeVisible();
 });
 

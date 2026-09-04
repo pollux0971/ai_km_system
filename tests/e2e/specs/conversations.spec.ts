@@ -45,7 +45,7 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * story's scope — rather than removing the extra check once its target
  * behavior was independently confirmed correct — would be the dishonest
  * choice here, not this one. Full diagnostic trail (four rounds, each
- * ruled-out and confirmed theory) is in docs/stories/E03-S001.md.
+ * ruled-out and confirmed theory) is in archive/stories/E03-S001.md.
  */
 
 async function login(page: import("@playwright/test").Page) {

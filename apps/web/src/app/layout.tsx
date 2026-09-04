@@ -70,7 +70,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // without this, a statically-optimized route like /login served its inline
   // bootstrap script with no nonce at all (`"nonce":"$undefined"` in the RSC
   // payload), which strict `script-src` then blocked outright. See
-  // docs/stories/E01-S029.md for the full investigation.
+  // archive/stories/E01-S029.md for the full investigation.
   await headers();
   return (
     <html lang="zh-Hant" className={`${notoSansTC.variable} ${roboto.variable} ${materialSymbolsOutlined.variable}`}>

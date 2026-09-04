@@ -21,7 +21,7 @@ implemented slice so far) ships:
 - SSRF guard: `AI_KM_ASR_SERVER_URL` must resolve to a loopback or
   private-network host, checked at plugin registration.
 
-See `docs/stories/E12-S031.md` for full EVIDENCE (gate output, AC
+See `archive/stories/E12-S031.md` for full EVIDENCE (gate output, AC
 coverage, and the assumptions this implementation had to make where the
 contract/spec left a gap — notably: `apps/api/src/errors.ts` and
 `apps/api/src/config.ts` were outside this story's allowed-modify list,

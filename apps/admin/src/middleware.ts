@@ -14,7 +14,7 @@ export const CORRELATION_ID_HEADER = "x-correlation-id";
  * E01-S029 CSP nonce. Same mechanism and same reasoning as
  * `apps/web/src/middleware.ts` — see that file's doc comment for the full
  * investigation (curl + CSP-violation-survey evidence in
- * docs/stories/E01-S029.md) behind why a nonce, not `'unsafe-inline'`, is
+ * archive/stories/E01-S029.md) behind why a nonce, not `'unsafe-inline'`, is
  * required for Next.js App Router's own inline RSC bootstrap script.
  */
 function buildCsp(nonce: string): string {

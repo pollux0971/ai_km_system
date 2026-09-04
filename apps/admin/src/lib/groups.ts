@@ -4,7 +4,7 @@ import type { ApiError, Result } from "@ai-km/types";
  * E11-S010 "Group management" — same treatment `departments.ts`'s own
  * E11-S009 doc comment already establishes for a sibling concept:
  * `Group` is this file's own local entity, not blocked on Team B
- * (`AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`'s own "E02-S04
+ * (`archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`'s own "E02-S04
  * Group Entity" names this as Team B's schema to define; `contracts/`
  * has no group schema at all, same "not yet populated" situation as
  * the sibling Role/Permission/Department concepts already document).

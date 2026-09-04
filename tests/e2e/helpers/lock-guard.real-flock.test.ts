@@ -8,7 +8,7 @@ import { assertNotBlockingLockHolder, LockPathUnusableError } from "./lock-guard
 /**
  * E04-S068. `lock-guard.test.ts` injects `isLockFileContendedOverride` in
  * every single case -- the production code path that actually shells out
- * to `flock` (the one that broke CI, see ROADMAP_TEMP.md 5-pi) is walked
+ * to `flock` (the one that broke CI, see archive/ROADMAP_TEMP.md 5-pi) is walked
  * by NO test at all. This file closes exactly that gap: every test below
  * calls `assertNotBlockingLockHolder` with NO override, so the real
  * `isLockFileContended` -> real `execFileSync("flock", ...)` path runs.

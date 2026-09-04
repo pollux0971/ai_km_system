@@ -3,7 +3,7 @@
  *
  * E04-S037("check-specs")是本 story 的 SOFT 依賴,重用其偵測邏輯——spec
  * 明文的 fallback:「未合併時複製最小偵測並註明待合併後去重」。
- * `docs/stories/PROGRESS.md` 顯示 E04-S037 目前仍是 `todo`,所以這裡是
+ * `archive/stories/PROGRESS.md` 顯示 E04-S037 目前仍是 `todo`,所以這裡是
  * 那份最小複製版,不是 import——完整實作、完整測試,不是佔位符。等
  * E04-S037 合併後,可以另外開一個小改動把這個檔案的內容換成 import 它的
  * 偵測模組(spec 自己說的「待合併後去重」);那個去重動作不在本 story

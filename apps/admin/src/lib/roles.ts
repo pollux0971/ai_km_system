@@ -8,7 +8,7 @@ import { ALL_ROLES } from "./users";
  * (also reused directly as `AdminUser.roles[number]`), not an opaque
  * generated id a display name happens to be attached to.
  *
- * `description` is NOT invented — it's `AI_KM_BMAD_High_Granularity/
+ * `description` is NOT invented — it's `archive/AI_KM_BMAD_High_Granularity/
  * SOURCE_BASELINE.md` §7's own per-role "manages/uses/views X"
  * responsibility text, reformatted from a bullet list into one
  * sentence per role, same content and scope, not new claims about what

@@ -31,7 +31,7 @@ entry also targeted :4000 with `reuseExistingServer: true`, Playwright would
 silently reuse that shared instance instead of starting its own, quietly
 defeating every isolation property this story exists to provide (own tmp
 SQLite, own test-sandbox/fake-ASR env) — this actually happened once during
-this story's own development, see `docs/stories/E03-S038.md`'s EVIDENCE. A
+this story's own development, see `archive/stories/E03-S038.md`'s EVIDENCE. A
 brand-new webServer entry doesn't need to wait on E01-S030's CI-conditional
 fix to get this right: if port 4100 is ever unexpectedly occupied, this
 config fails loudly instead of silently adopting whatever is there.
@@ -46,7 +46,7 @@ pipeline runs `@ai-km/e2e:test` = plain `playwright test`) would silently
 **adopt** another lane's already-running `:3000`/`:3001` dev servers
 instead of failing to bind, corrupting both runs' results with no error at
 all. This is exactly what happened to a real E2E rerun on 2026-08-29 (see
-`docs/stories/E04-S057.md`).
+`archive/stories/E04-S057.md`).
 
 **If you're on a shared machine with other lanes, always go through the
 lock:**
@@ -169,7 +169,7 @@ Per-owner starting data (seeded sample conversations/messages) is
 **not yet wired in** as of this story — that is E04-S052 (owned by another
 lane), tracked separately. Specs that depend on seeded conversations being
 present are the ones listed as deferred in this story's own EVIDENCE
-(`docs/stories/E03-S038.md`).
+(`archive/stories/E03-S038.md`).
 
 ## Fake microphone
 
@@ -212,7 +212,7 @@ request 要素等編譯，可能超過 `expect.timeout`。
 （session 只存在 `sessionStorage`，硬重整即遺失）；E03-S035 換成真實
 session cookie 後，行為變成硬重整仍保留登入狀態 —— 新行為才是對的，是舊測試
 前提過時，不是回歸。逐支列表與每支的 doc-comment 引用見
-`docs/stories/E03-S038.md`（AC1 小節）；是否要為這 12 支開一個「更新舊測試
+`archive/stories/E03-S038.md`（AC1 小節）；是否要為這 12 支開一個「更新舊測試
 前提」的新 story，待使用者/coordinator 裁示，不在 E01-S027 允許修改清單內
 （本 story 禁止修改 spec 斷言）。
 
@@ -220,7 +220,7 @@ session cookie 後，行為變成硬重整仍保留登入狀態 —— 新行為
 
 **症狀**：`page.waitForURL` 或 `page.goto` 逾時，不固定發生在哪支 spec，
 且逾時前該操作本身邏輯正確（單獨重跑會過）。
-**根因量測**（`docs/stories/E01-S027.md` EVIDENCE 有完整 3 輪原始數據）：
+**根因量測**（`archive/stories/E01-S027.md` EVIDENCE 有完整 3 輪原始數據）：
 - **Round 1**（`workers: process.env.CI ? 2 : cpus/2` = 本機 4）：39 failed
   / 18.7m。扣掉上述 12 支結構性失敗（36 個 instance），剩 `knowledge-ui-e2e.
   spec.ts:62:5`（`page.waitForURL` 逾時）與 `smoke.spec.ts:50:5`
@@ -248,7 +248,7 @@ timeout 預算，只影響這 2 支，不拖慢其餘 811 個 instance）。
 記錄當時的 `uptime` load average —— 這不是放寬標準，是定義量測條件：flaky
 的性質是「測試本身不穩定」，在 3x 超載下量到的是「CPU 飢餓造成的逾時」，
 是另一個變數，任何 CI 也都在專用 runner 上量。已寫入
-`ROADMAP_TEMP.md`（commit b9cc02c）兩條新規則：(1) 持有 `.e2e.lock` 期間，
+`archive/ROADMAP_TEMP.md`（commit b9cc02c）兩條新規則：(1) 持有 `.e2e.lock` 期間，
 本 fleet 其他 lane 暫停 build/`pnpm test`/全量 typecheck；(2)
 任何 flaky/效能相關 AC 的量測都要記錄 load average，只有安靜時的數字算數。
 **Round 4（安靜環境乾淨確認，2026-08-29）**：取鎖時 load average 24.11 →
@@ -258,7 +258,7 @@ settled 設定下，本 story 鎖定的 2 支測試（`knowledge-ui-e2e.spec.ts:
 baseline，在 AC4 的 ≤1.3x 內）。殘留 4 個失敗（`smoke.spec.ts:50:5` ×2 已知
 locator bug、`knowledge-ui-e2e.spec.ts:267:5` ×1 與
 `maintenance-history.spec.ts:68:5` ×1，後兩者精準落在同一個 `repeat2`，對應
-取鎖初期尚未完全降溫的窗口）詳見 `docs/stories/E01-S027.md`「AC1 最終
+取鎖初期尚未完全降溫的窗口）詳見 `archive/stories/E01-S027.md`「AC1 最終
 解讀」。
 
 ### 延伸發現：`smoke.spec.ts:50:5` 的潛在 locator bug（未修，非本 story 範圍）

@@ -219,7 +219,7 @@ export class VectorStoreError extends Error {
  * ingested under `dept:finance` silently gave maintenance a document it was
  * never authorised for AND silently removed it from finance — two
  * authorization failures, zero errors, measured directly against both
- * stores on 2026-09-02 (see `docs/stories/specs/E06-S043.spec.md`).
+ * stores on 2026-09-02 (see `archive/stories/specs/E06-S043.spec.md`).
  *
  * "Move a document from department A to B" MAY be a legitimate product
  * operation, but that is a decision for the user, not this store — see the

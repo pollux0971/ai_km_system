@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Per `AI_KM_BMAD_High_Granularity/policies/DEVELOPMENT_POLICY.md` #12 and
+Per `archive/AI_KM_BMAD_High_Granularity/policies/DEVELOPMENT_POLICY.md` #12 and
 `SOURCE_BASELINE.md` decision #40 ("所有跨 Domain 決策需 ADR"), every
 cross-domain or cross-team architectural decision must be recorded here.
 

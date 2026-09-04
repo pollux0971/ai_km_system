@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
  * `src/middleware.ts`, not here — it needs a fresh per-request nonce for
  * `script-src`, which `next.config.ts`'s static `headers()` cannot produce.
  * See that file's doc comment for the full CSP rationale (including why a
- * nonce, not `'unsafe-inline'`, is required — docs/stories/E01-S029.md has
+ * nonce, not `'unsafe-inline'`, is required — archive/stories/E01-S029.md has
  * the investigation).
  *
  * The 5 headers below have no per-request state, so they stay here.

@@ -2,7 +2,7 @@
 
 > **原始版本,保留作為決策起點,凍結後不改。** 修正與差異記錄在 `02-decision-map.md`(「已知不同之處」表);
 > 待決在 `DECISIONS_NEEDED.md`;會變的東西(契約、範圍、phase、技術棧)分別在 `contracts/`、各 `FEATURE.md`、
-> `roadmap.md`。這份不用每次讀;遇到「為什麼這樣設計」來查。
+> `01-roadmap.md`。這份不用每次讀;遇到「為什麼這樣設計」來查。
 > 功能清單、epic、story 模板**刻意不放**——在 `archive/AI_KM_BMAD_High_Granularity/`(tag `baseline-bmad`)。
 
 ## 1. 這是什麼產品

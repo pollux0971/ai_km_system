@@ -16,7 +16,7 @@ import { MOCK_MAINTENANCE_USER_ID, MOCK_MAINTENANCE_USERNAME, MOCK_VALID_PASSWOR
  * zero links, and STORY_WORKFLOW's test-freeze rule's only exception
  * (add interaction steps, keep assertions byte-for-byte unchanged) does
  * not cover flipping an assertion's truth value (0 links -> 1 link).
- * See docs/stories/E07-S021.md's own Assumptions section for the full
+ * See archive/stories/E07-S021.md's own Assumptions section for the full
  * reasoning and the deliberate choice to self-adopt the conservative
  * option rather than stretch that exception. So this route is reached
  * here the same way maintenance-session.spec.ts's own tests reach a

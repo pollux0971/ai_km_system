@@ -37,6 +37,12 @@ test-results/
 # 使用者指示的 story 註冊 zip(內容已解壓進 repo,archive 本身不入 git)
 /AI_KM_story_register_*.zip
 
+# 使用者根目錄的私人素材(一篇論文、他本人的錄音)——絕不進 git。只鎖根目錄
+# (前面的 "/" 必要),不影響 services/ingestion 的 fixture PDF 或既有的
+# tools/asr-readiness fixture wav。2026-09-04 docs 封存工單新增。
+/*.pdf
+/*.wav
+
 # SQLite 資料檔(E04-S040,ADR 0003 §2)
 data/
 

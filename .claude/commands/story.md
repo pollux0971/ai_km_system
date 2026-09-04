@@ -8,7 +8,7 @@ argument-hint: <Story ID,例如 E01-S001;留空則依垂直切片順序自動挑
 
 執行 story 自主開發循環,目標 story:`$ARGUMENTS`(若為空,依
 `.claude/rules/STORY_WORKFLOW.md` 全域規則第 2 條的順序,從
-`AI_KM_BMAD_High_Granularity/planning/TRACEABILITY.md` 與 `docs/stories/`
+`archive/AI_KM_BMAD_High_Granularity/planning/TRACEABILITY.md` 與 `archive/stories/`
 的已完成紀錄推算下一個未完成的 Team A story,並先向使用者確認再開始)。
 
 步驟:
@@ -16,8 +16,8 @@ argument-hint: <Story ID,例如 E01-S001;留空則依垂直切片順序自動挑
 1. 完整讀取 `.claude/rules/STORY_WORKFLOW.md`,之後嚴格依其狀態機執行
    INIT → PLAN → IMPLEMENT → VERIFY ⇄ FIX → SELF-REVIEW → EVIDENCE → DONE/BLOCKED。
 2. INIT 前先讀:
-   - `AI_KM_BMAD_High_Granularity/prompts/STORY_EXECUTION_PROMPT.md`
-   - `AI_KM_BMAD_High_Granularity/policies/`(三份全部)
+   - `archive/AI_KM_BMAD_High_Granularity/prompts/STORY_EXECUTION_PROMPT.md`
+   - `archive/AI_KM_BMAD_High_Granularity/policies/`(三份全部)
    - 該 story 所屬 epic 檔中此 story 的完整章節
 3. 全程遵守:不發明 contract、fail closed、mock 不算整合證據、
    禁止以任何方式讓紅燈假綠。

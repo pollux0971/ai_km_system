@@ -10,7 +10,7 @@
  * tested against a fake sidecar (`testing/fake-sidecar.ts`) — that is
  * NOT integration evidence for a real whisper-server (Testing Boundary /
  * Anti-hallucination Guard: "不得宣稱 ASR 已驗證而實際只跑過 fake"). The
- * real L3 run is recorded in docs/stories/E12-S030.md.
+ * real L3 run is recorded in archive/stories/E12-S030.md.
  */
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";

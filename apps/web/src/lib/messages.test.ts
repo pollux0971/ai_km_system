@@ -20,7 +20,7 @@ import {
  * `submit*` which resolve `messageId` against a local cache and never touch the network
  * for an unresolved id. A non-UUID sentinel like the old `"does-not-exist"` now fails
  * with 400 VALIDATION_ERROR before the server's own not-found check runs — see
- * docs/stories/E03-S037.md for the full accounting. This constant replaces it wherever
+ * archive/stories/E03-S037.md for the full accounting. This constant replaces it wherever
  * that distinction actually matters.
  */
 const NONEXISTENT_CONVERSATION_ID = "00000000-0000-4000-8000-000000000000";
@@ -1318,7 +1318,7 @@ describe("submitCitationFeedback (E13-S005)", () => {
  * success) regardless of the specific ApiError.code — so re-deriving
  * that same proof with a hypothetical DEPENDENCY_ERROR code here would
  * be repackaging already-completed S001-S005 coverage as new work, not
- * a distinct capability (see docs/stories/E13-S006.md for the full
+ * a distinct capability (see archive/stories/E13-S006.md for the full
  * inventory this conclusion is based on).
  *
  * What is NOT yet proven anywhere: whether the four independent

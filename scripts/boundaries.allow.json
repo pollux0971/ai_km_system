@@ -1,0 +1,62 @@
+[
+  {
+    "from": "07-generation",
+    "to": "06-retrieval",
+    "reason": "ADR 0007(model-gateway in-process 主路徑)與 ADR 0015(composition root 擁有 retrieval store):07-generation phase-1 依賴 06-retrieval 的 RetrievalHit 型別與 in-process 呼叫,見 07-generation/FEATURE.md『依賴』段。"
+  },
+  {
+    "from": "07-generation",
+    "to": "04-model-gateway",
+    "reason": "ADR 0007:generation 透過 model-gateway 呼叫 embedding/generation provider,同一行程內的呼叫,非網路跳點。"
+  },
+  {
+    "from": "05-ingestion",
+    "to": "04-model-gateway",
+    "reason": "ADR 0007:ingestion 呼叫 model-gateway 的 embedding provider 產生向量,見 05-ingestion/FEATURE.md『依賴』段。"
+  },
+  {
+    "from": "05-ingestion",
+    "to": "06-retrieval",
+    "reason": "ADR 0015:ingestion 把切塊結果寫進 06-retrieval 擁有的 VectorRecord / in-memory store,composition root 擁有 store,ingestion 是它的呼叫端。"
+  },
+  {
+    "from": "06-retrieval",
+    "to": "04-model-gateway",
+    "reason": "ADR 0007:retrieval 呼叫 model-gateway 的 embedding provider 做查詢向量化。"
+  },
+  {
+    "from": "06-retrieval",
+    "to": "02-authorization",
+    "reason": "CLAUDE.md 鐵律 2(Authorization 先於 retrieval,Deny-Wins)與 ADR 0007(RetrievalScope 是 in-process 接縫):02-authorization 的決策邏輯(scope.ts)實體上放在 services/retrieval/src/authorization/ 底下,06-retrieval 的 service/index/vector store 必須呼叫它才能做到 fail-closed 過濾——這是設計的核心,不是越界。"
+  },
+  {
+    "from": "09-feedback-analytics",
+    "to": "01-identity",
+    "reason": "09 的 admin 路由(admin-feedback.ts、admin-metrics.ts)需要 @ai-km/service-identity 的 requireAnyRole 做角色守門,同檔案 docstring 記載。"
+  },
+  {
+    "from": "09-feedback-analytics",
+    "to": "03-conversation",
+    "reason": "09-feedback-analytics/FEATURE.md『依賴』段明列 services/conversation;cross-owner read model(adminListMessagesWithFeedback / adminGetMessage)只有 admin-feedback.ts 這一個呼叫點,由 admin-read-callers.test.ts 的 grep 測試守住,docstring 明寫『this route file is the ONLY place in the repo allowed to call them』。"
+  },
+  {
+    "from": "11-app-shell",
+    "to": "08-knowledge-management",
+    "reason": "apps/web/src/lib/conversations.ts 讀 08 的 KnowledgeScope 型別做知識範圍顯示(純型別依賴,無執行期呼叫);apps/web/src/lib/mock-triggers-runbook.test.ts 引用 knowledge-documents.ts 驗證 E03-S045 mock_triggers 旗標在各能力的行為一致,是共用測試對多個能力的唯讀引用。"
+  },
+  {
+    "from": "08-knowledge-management",
+    "to": "11-app-shell",
+    "reason": "08-knowledge-management/FEATURE.md『依賴』段明列 feature-flags.ts(mock_triggers 旗標);knowledge-bases.ts 讀 ai-models.ts 的 AiModel 全域列舉(E03-S005)做 KB model 選擇,兩者都是殼提供的共用詞彙,非新執行期耦合。"
+  },
+  {
+    "from": "08-knowledge-management",
+    "to": "i8-pending",
+    "reason": "apps/web/src/lib/knowledge-candidates.ts(E07-S023 Knowledge candidate submission)讀 maintenance-cases.ts,把一個維修診斷 session 提交為知識庫候選——同一份 SOURCE_BASELINE 把這兩個故事寫在一起(E07-S023 與 E08-S20)。i8-pending 域尚未有能力資料夾(ADR 0013 #3),先以此邊記錄這條既有橋接。**這條不在協調者給的預核清單裡,是本次實測冒出來的,建議顧問另行確認**(見回報)。"
+  },
+  {
+    "from": "11-app-shell",
+    "to": "i8-pending",
+    "reason": "ADR 0013 #3:I8(維修助理／ERP 報表)的後端資料來源未定前不建 13-maintenance-assistant／14-erp-reporting 資料夾,相關 mock 檔案(maintenance-cases.ts、equipment.ts、error-codes.ts、erp-*.ts、diagnostic-*.ts)先掛在 i8-pending;apps/web/src/app/(app)/maintenance/**、apps/web/src/app/(app)/erp/** 目前殘留在殼(11-app-shell)底下,讀取這些 i8-pending 檔案。"
+  }
+]

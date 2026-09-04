@@ -139,6 +139,15 @@ jobs:
       # is "not built yet", not "broken" -- GHERKIN_WORKFLOW §7.6.
       - run: pnpm accept:integration
 
+      # Import-boundary gate (scripts/boundaries.owners.json +
+      # scripts/boundaries.allow.json at the repo root, consumed by
+      # features/scripts/check-boundaries.ts). It already runs inside
+      # `@ai-km/features`'s own `test` script via `pnpm turbo run test` in
+      # lint-typecheck-unit above, alongside gherkin:dup/steps:dup/
+      # docs:links -- this line just gives it its own visible line here
+      # too, same one-job-one-property spirit as accept:coverage.
+      - run: pnpm --filter @ai-km/features boundaries
+
   # This workflow covers the L0 gate (lint/typecheck/unit test), the
   # contract gate, E2E, and the Gherkin acceptance run as four
   # independently-readable jobs.

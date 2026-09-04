@@ -13,9 +13,10 @@
     "gherkin:dup": "tsx scripts/check-gherkin-dup.ts",
     "steps:dup": "tsx scripts/check-step-dup.ts",
     "docs:links": "tsx scripts/check-doc-links.ts",
+    "boundaries": "tsx scripts/check-boundaries.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint steps scripts --ext .ts",
-    "test": "tsx scripts/check-gherkin-dup.ts && tsx scripts/check-step-dup.ts && tsx scripts/check-doc-links.ts"
+    "test": "tsx scripts/check-gherkin-dup.ts && tsx scripts/check-step-dup.ts && tsx scripts/check-doc-links.ts && tsx scripts/check-boundaries.ts"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.3.0",

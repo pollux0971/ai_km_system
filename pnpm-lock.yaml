@@ -129,6 +129,9 @@ importers:
       '@ai-km/service-identity':
         specifier: workspace:*
         version: link:../../services/identity
+      '@ai-km/service-ingestion':
+        specifier: workspace:*
+        version: link:../../services/ingestion
       '@ai-km/service-model-gateway':
         specifier: workspace:*
         version: link:../../services/model-gateway

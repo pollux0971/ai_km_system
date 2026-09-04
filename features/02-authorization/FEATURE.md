@@ -70,8 +70,15 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)scope 的建構、Deny-Wins、空授權 vs 缺授權、SQL 過濾、洩漏拋錯、身分今天給得出什麼 | I1 | done | 2026-09-04 |
-| 2 | 從 identity 的 session 產出 `RetrievalScope` | I3 | blocked | |
+| 2 | 從 identity 的 session 產出 `RetrievalScope` | I3 | blocked(見下) | |
 | 3 | 群組 → scopeKeys 的對應與變更即時生效 | I6 | todo | |
+
+**phase-2 狀態細節(2026-09-04)**:契約 gate(E04-S009)已由技術顧問依 ADR 0012 裁定解除
+——見下方「phase-2 提案(紅,2026-09-04)」。整合 gate(I2,`06-retrieval` phase-2 把
+`retrievalPlugin` 接進 `apps/api` composition root)**仍是 todo**,所以本 phase 整體
+仍標 blocked,只是卡的原因從「兩個 gate 都沒過」變成「只剩 I2」。測試 agent
+(branch `pollux0971/authz-phase2`)已交出**紅**的 `phase-2.feature` 提案 + steps,
+等協調者送技術顧問確認、merge,並等 I2 完成後才能進 IMPLEMENT。
 
 ## 回填對照表(phase-1)
 
@@ -104,6 +111,51 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 同一段說明以註解形式寫在 `phase-1.feature` 該場景正上方,`NEXT.md` 的「不可以先做的」
 也指向這裡——從任何一份檔進來都找得到。
 
+**這個場景會怎麼被改寫(2026-09-04,測試 agent 的提案,尚未執行)**:phase-2 真的落地
+(有人實作了從身分推導 scope 的函式,通過審核)時,這個場景**不會被刪除**,而是改寫成
+斷言一件更窄但仍然成立的事——即使推導函式存在,`GET /v1/auth/session` 的回應**仍然**
+不該帶任何 `scope` / `scopeKeys` / `allowedScopeKeys` 形狀的欄位,因為推導本來就該留在
+server 內部(retrieval/authorization 層),不透過 HTTP 交給呼叫端,呼叫端拿到手上等於
+可以偽造(違反鐵律 #2 的 fail-closed 精神)。換句話說,場景的**斷言本體不變**(仍是
+「session 回應裡沒有像 scope 的欄位」),改的是**場景說明文字與 Feature 文件的敘事**——
+從「這是因為 E04-S009 還沒裁定」變成「這是刻意的架構決定,推導永遠留在 in-process」。
+這個計畫寫在 `phase-2.feature` 開頭的註解裡,`phase-1.feature` 本身沒有被動過。
+
+## phase-2 提案(紅,2026-09-04,branch `pollux0971/authz-phase2`)
+
+測試 agent 依 ADR 0012(技術顧問 2026-09-04 對 E04-S009 五題的裁定)寫的**提案**
+(`phase-2.feature`)。**尚未合併**,等協調者送技術顧問確認。五個場景全部預期紅——
+細節與每條紅的訊息原文見該次工單的回報,這裡只記結構性的發現。
+
+**發現:ADR 0012 裁定 1 假設的資料今天不存在**。裁定 1 說 scopeKey 形狀是
+`dept:<department.id>` / `group:<group.id>`,但 `db/migrations/202608280002_identity.sql`
+的 `users` 表只有 `department TEXT` 與 `group_name TEXT` 兩個自由格式的**顯示名稱**欄位
+——沒有 `department.id`、沒有 `group.id`,repo 裡任何地方都沒有部門/群組的 id 對照表
+(用 grep 查過,不是用讀的猜的)。`apps/admin/src/lib/departments.ts` 是 admin console
+自己的 sessionStorage mock,不是這個系統真正的部門資料來源。這代表:
+- 裁定 1 定的是**鑰匙的形狀**,不是**鑰匙的值**——「資訊部」該對到什麼 id(`it`?
+  一組 UUID?)仍然沒有人決定過,也不是本回合的範圍。
+- 01-identity(裁定 2:「對應由 01-identity 單一維護」)要先加 id 欄位或一張
+  部門/群組表,phase-2 的推導函式才有東西可讀。這可能是一次跨資料夾的 `/feature`
+  (`01-identity` 的 schema 變更),需要協調者判斷要不要現在開,或先讓 phase-2
+  的推導函式簽名假設「identity 給得出 id」,等 01-identity 補齊再串起來。
+  寫進下面「待協調」。
+
+**發現:裁定 4(顯式 ACL deny 蓋過 allow)今天的型別完全沒有承接的地方**。
+`RetrievalScope` 只有 `allowedScopeKeys` 一個欄位,`toRetrievalScope()` 沒有任何
+參數可以表達「這把鑰匙即使在允許清單裡也要被擋下」。`phase-2.feature` 的最後一個場景
+就是在證明這個洞——今天用僅有的機制(grants 的聯集)去建 scope,一個被明確擋下的部門
+仍然會被放行。這不是「哪裡寫錯了」,是型別本來就沒有這個維度,phase-2 的實作需要
+擴充 `RetrievalScope` 的形狀(例如加 `deniedScopeKeys`)。
+
+**沒有發現說不通的裁定**:裁定 3(聯集不是交集)在 `allowedScopeKeys` 這一層本來就是
+純陣列/`Set`,沒有任何交集的程式碼路徑,所以只要未來的推導函式把 department 與
+group 的鑰匙**攤平串接**餵給既有的 `toRetrievalScope()`,聯集語意就自動成立,不需要
+新機制。裁定 5(單一 scopeKey,搬部門後原部門不可見)也**已經被 phase-1 的
+`buildScopePredicate`/`assertNoScopeLeak` 完整涵蓋**(一份紀錄只有一個 `scopeKey`
+欄位,換部門就是換這個值,既有的精確比對 Deny-Wins 已經處理)——phase-2 在這兩點上
+不需要新場景,`phase-2.feature` 也沒有為它們寫紅場景(寫了也只會是綠的,不誠實)。
+
 ## 驗收方式
 
 - 自動:`pnpm --filter @ai-km/features accept -- --tags '@authorization and @phase-1 and not @manual and not @e2e'` → 9/9。
@@ -134,3 +186,20 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
   `features/steps/authorization.steps.ts`,沒有動 `common.steps.ts`、`standalone.json`、
   `package.json`;`standalone.json` 的 `02-authorization` 條目已存在且指令正確,
   `expect` 是 `"scenarios ("`,不必改成硬編碼的 `9 scenarios`。)
+- **(2026-09-04,phase-2 提案新增)01-identity 需要真的加入部門/群組的 id**:
+  ADR 0012 裁定 1 的鑰匙形狀 `dept:<department.id>` / `group:<group.id>` 假設
+  identity 那邊有 id 可讀,但今天 `users` 表只有顯示名稱兩欄,repo 裡沒有任何
+  部門/群組 id 對照表。這是 phase-2 實作前必須先解決的依賴,而且很可能落在
+  `01-identity` 的資料夾(schema migration + `AuthSessionBody`/`UserRow` 擴充或
+  一個新的內部查詢函式給 02-authorization 讀),不是 `02-authorization` 能單方面
+  做完的。協調者判斷:(a) 開一個對 `01-identity` 的 `/feature`,還是 (b) 讓
+  phase-2 的推導函式先假設輸入已經是 id、把「identity 怎麼把 id 生出來」留成
+  IMPLEMENT 階段的一個明確待辦(記在 IMPLEMENT 的 EVIDENCE/commit 而非再開一輪
+  `/feature`)。兩條路都不违反鐵律 6(跨資料夾要走 owner 或 `/feature`),差別只是
+  現在開還是留到 dev agent 動手時開。
+- **(2026-09-04)`RetrievalScope` 需要擴充才能承接裁定 4(顯式 deny 蓋過 allow)**:
+  今天的型別只有 `allowedScopeKeys`,沒有任何欄位可以表達「即使在允許清單裡,這把
+  鑰匙仍然要被擋下」。dev agent 實作 phase-2 時大概率要改 `services/retrieval/src/
+  authorization/scope.ts` 的 `RetrievalScope`/`toRetrievalScope()` 形狀(例如加
+  `deniedScopeKeys`),這是「實作碼」,不在測試 agent 的允許修改範圍內,寫在這裡
+  留給 dev agent 與審核者對照 `phase-2.feature` 最後一個場景。

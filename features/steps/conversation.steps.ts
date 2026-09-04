@@ -26,6 +26,14 @@ import { createConversation } from "../../services/conversation/src/repository/c
 import { toOwnerKey } from "../../services/conversation/src/repository/owner-scope.js";
 import type { ChangeEventBus } from "../../services/conversation/src/events/change-event-bus.js";
 
+// phase-2 專用的額外 import(見檔尾「phase-2」那一段的檔頭註解)。這裡不 import
+// 任何新的實作符號——`extractPdfText`/`chunkDocument`/`toRetrievalScope` 都是
+// 05-ingestion/06-retrieval 自己既有測試已經在用的產品碼,不是為了這次新寫的。
+import { SESSION_COOKIE_NAME } from "../../services/identity/src/require-session.js";
+import { extractPdfText } from "../../services/ingestion/src/extraction/pdf-extract.js";
+import { chunkDocument } from "../../services/ingestion/src/chunking/chunk.js";
+import { toRetrievalScope, type RetrievalScope } from "../../services/retrieval/src/authorization/scope.js";
+
 /**
  * `services/conversation/src/testing/build-test-app.ts` 是這個能力的 vitest
  * harness,也是這裡要走的同一個入口——但它**不能用字面路徑 import**。
@@ -557,3 +565,449 @@ After({ tags: "@conversation" }, function (this: KmWorld) {
   for (const socket of s.sockets.splice(0)) socket.destroy();
   s.db.close();
 });
+
+// ==================================================================
+// phase-2(紅)—— 送出問題真的觸發 RAG、回答帶得回原文的引用、身分真的進到
+// 檢索接縫(ADR 0014、ADR 0016、NEXT.md phase-2 gate/DoD)。完整推理見
+// `features/03-conversation/phase-2.feature` 檔頭的「設計判斷 A–D」。
+//
+// 這一段走的是真實 `apps/api` composition root(`KmWorld.startServer()` →
+// `buildServer()`),不是上面 phase-1 用的 `buildTestApp()` bare harness——
+// 只有真實 server 上才有 `app.rag`/`app.retrieval`/`app.ingestion`
+// (06-retrieval、07-generation、05-ingestion 的 phase-2 都接在那裡,不是
+// `services/conversation` 自己的 harness)。因此這裡的登入走真的 session
+// cookie(`SESSION_COOKIE_NAME`),不是 phase-1 的 `TEST_USER_HEADER` 假標頭。
+//
+// `loginDemoPerson()` 與其他能力資料夾(generation.steps.ts、
+// retrieval.steps.ts、ingestion.steps.ts)裡同名的函式做的是同一件事——
+// NEXT.md「Gate 未滿足時」與各檔自己的註解都講過「不要 import 別的能力資料夾的
+// steps」,所以這裡照樣獨立一份,不是忘記共用。
+// ==================================================================
+
+const PHASE2_FIXTURE_PDF = "services/ingestion/src/extraction/fixtures/cjk-non-embedded.pdf";
+const PHASE2_DEMO_PASSWORD = "demo-pass-123";
+
+interface Phase2Person {
+  readonly username: string;
+  readonly cookie: string;
+  conversationId?: string;
+}
+
+/** 一次被攔到的 `app.retrieval.retrieve()` 呼叫——場景 4 專用,見設計判斷 D。 */
+interface CapturedRetrieveCall {
+  readonly principalId: string;
+  readonly allowedScopeKeys: readonly string[];
+  readonly deniedScopeKeys: readonly string[];
+}
+
+interface Phase2State {
+  app: FastifyInstance;
+  people: Map<string, Phase2Person>;
+  /** 場景 4 的 Given 裝上包裝之後才會存在;其餘場景恆為 undefined。 */
+  capturedRetrieveCalls?: CapturedRetrieveCall[];
+  /** 最近一次「送出問題」動作裡,使用者自己那則(role: user)訊息的原始回應本體。 */
+  lastQuestionMessage?: Record<string, unknown>;
+  /** 最近一次「送出問題」動作是哪個人做的,給後面的 Then 找回她的對話與訊息。 */
+  lastUsername?: string;
+}
+
+function phase2State(world: KmWorld): Phase2State {
+  const s = world.bag["phase2Conversation"] as Phase2State | undefined;
+  assert.ok(s, "Background 尚未起一個真實 server(a fresh server with fake providers)");
+  return s;
+}
+
+/** 惰性初始化,讀寫 `world.bag["phase2Conversation"]`。`world.startServer()` 在
+ * Background 已經呼叫過一次時直接回傳快取的 `this.app`(`_world.ts` 自己的行
+ * 為),所以這裡再呼叫一次不會建出第二個 server。 */
+async function ensurePhase2State(world: KmWorld): Promise<Phase2State> {
+  let s = world.bag["phase2Conversation"] as Phase2State | undefined;
+  if (!s) {
+    const app = await world.startServer();
+    s = { app, people: new Map() };
+    world.bag["phase2Conversation"] = s;
+  }
+  return s;
+}
+
+async function loginDemoPerson(app: FastifyInstance, username: string): Promise<string> {
+  const res = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    headers: { "x-requested-with": "XMLHttpRequest" },
+    payload: { username, password: PHASE2_DEMO_PASSWORD },
+  });
+  assert.equal(
+    res.statusCode,
+    200,
+    `登入 ${username} 應成功(這一步只是確認 identity/session 沒壞,缺口專在訊息路由沒接 RAG):實際 ${res.statusCode} ${res.body}`,
+  );
+  const raw = res.headers["set-cookie"];
+  const header = Array.isArray(raw) ? raw.join("\n") : String(raw ?? "");
+  const match = new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`).exec(header);
+  assert.ok(match?.[1], `登入 ${username} 的回應沒有帶 ${SESSION_COOKIE_NAME} cookie:${header || "(沒有 Set-Cookie)"}`);
+  return match[1] as string;
+}
+
+async function personOf(world: KmWorld, username: string): Promise<Phase2Person> {
+  const s = await ensurePhase2State(world);
+  let person = s.people.get(username);
+  if (!person) {
+    const cookie = await loginDemoPerson(s.app, username);
+    person = { username, cookie };
+    s.people.set(username, person);
+  }
+  return person;
+}
+
+/** 場景 1/2 用:把真的中文 fixture PDF 索引進真實 server 共用的那個 store
+ * (ADR 0015——`app.ingestion`/`app.retrieval` 共用同一個 in-memory store)。 */
+async function indexFixtureUnderDept(world: KmWorld, dept: string, documentId: string): Promise<void> {
+  const s = await ensurePhase2State(world);
+  const seam = (
+    s.app as unknown as {
+      ingestion?: {
+        ingest(input: { documentId: string; scopeKey: string; pdfBytes: Uint8Array }): Promise<unknown>;
+      };
+    }
+  ).ingestion;
+  assert.ok(seam, "app.ingestion 在真實 buildServer() 上不存在(05-ingestion/phase-2 應該已經接上)");
+  await seam.ingest({
+    documentId,
+    scopeKey: `dept:${dept}`,
+    pdfBytes: world.readRepoBytes(PHASE2_FIXTURE_PDF),
+  });
+}
+
+/** 場景 4 專用(設計判斷 D):在真實 server 的 `app.retrieval` 上包一層方法,
+ * 把每次呼叫收到的 scope 記下來,再原封不動轉呼叫真正的 `retrieve()`。只mutate
+ * 這個 process 裡、這個 scenario 專屬的 server 實例上的物件方法,不改任何一行
+ * 生產碼,scenario 結束隨 server 一起關掉消失。 */
+function installRetrieveSpy(s: Phase2State): void {
+  if (s.capturedRetrieveCalls) return;
+  const captured: CapturedRetrieveCall[] = [];
+  s.capturedRetrieveCalls = captured;
+  const retrieval = (
+    s.app as unknown as {
+      retrieval?: {
+        retrieve(question: string, scope: RetrievalScope, topK?: number): Promise<readonly { chunkId: string }[]>;
+      };
+    }
+  ).retrieval;
+  assert.ok(retrieval, "app.retrieval 在真實 buildServer() 上不存在(06-retrieval/phase-2 應該已經接上)");
+  const original = retrieval.retrieve.bind(retrieval);
+  retrieval.retrieve = async (question, scope, topK) => {
+    captured.push({
+      principalId: scope.principalId,
+      allowedScopeKeys: scope.allowedScopeKeys,
+      deniedScopeKeys: scope.deniedScopeKeys,
+    });
+    return original(question, scope, topK);
+  };
+}
+
+/** 場景 1/2/3/4 共用:登入(第一次)、開一個新對話、送出一句 `role: user` 的
+ * 問題。回傳的是使用者自己那則訊息的回應本體——助理的回答(如果有)要另外用
+ * `waitForAssistantReply` 去讀對話的訊息列表。 */
+async function askAsPerson(world: KmWorld, username: string, question: string): Promise<Record<string, unknown>> {
+  const s = await ensurePhase2State(world);
+  const person = await personOf(world, username);
+
+  const createRes = await s.app.inject({
+    method: "POST",
+    url: "/v1/conversations",
+    headers: { "x-requested-with": "XMLHttpRequest" },
+    cookies: { [SESSION_COOKIE_NAME]: person.cookie },
+    payload: {},
+  });
+  assert.equal(createRes.statusCode, 201, `${username} 建立對話應為 201,實際 ${createRes.statusCode}:${createRes.body}`);
+  person.conversationId = (createRes.json() as { id: string }).id;
+
+  const messageRes = await s.app.inject({
+    method: "POST",
+    url: `/v1/conversations/${person.conversationId}/messages`,
+    headers: { "x-requested-with": "XMLHttpRequest" },
+    cookies: { [SESSION_COOKIE_NAME]: person.cookie },
+    payload: { role: "user", content: question },
+  });
+  assert.equal(
+    messageRes.statusCode,
+    201,
+    `${username} 送出問題應為 201,實際 ${messageRes.statusCode}:${messageRes.body}`,
+  );
+  const questionMessage = messageRes.json() as Record<string, unknown>;
+
+  s.lastQuestionMessage = questionMessage;
+  s.lastUsername = username;
+  return questionMessage;
+}
+
+async function listMessagesFor(world: KmWorld, username: string): Promise<Record<string, unknown>[]> {
+  const s = await ensurePhase2State(world);
+  const person = s.people.get(username);
+  assert.ok(person?.conversationId, `${username} 還沒有任何對話`);
+  const res = await s.app.inject({
+    method: "GET",
+    url: `/v1/conversations/${person!.conversationId}/messages`,
+    cookies: { [SESSION_COOKIE_NAME]: person!.cookie },
+  });
+  assert.equal(res.statusCode, 200, `讀取 ${username} 的訊息列表應為 200,實際 ${res.statusCode}:${res.body}`);
+  return res.json() as Record<string, unknown>[];
+}
+
+/** 輪詢對話的訊息列表,直到出現一則 `role: assistant` 的訊息或逾時。設計判斷
+ * A:自動生成助理回答是同步做完還是非同步做完,是開發 agent 的選擇,這裡兩種
+ * 都接得住,不逾時就回傳最後一則 assistant 訊息;逾時回傳 `undefined`(今天的
+ * 現況——訊息路由完全沒接 RAG,永遠不會有 assistant 訊息出現)。 */
+async function waitForAssistantReply(
+  world: KmWorld,
+  username: string,
+  tries = 20,
+  intervalMs = 50,
+): Promise<Record<string, unknown> | undefined> {
+  for (let i = 0; i < tries; i++) {
+    const messages = await listMessagesFor(world, username);
+    const assistant = messages.filter((m) => m["role"] === "assistant").at(-1);
+    if (assistant) return assistant;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------- Given(phase-2)
+
+Given(
+  "the real Chinese fixture document has been indexed under department {string}",
+  { timeout: 30_000 },
+  async function (this: KmWorld, dept: string) {
+    await indexFixtureUnderDept(this, dept, `conv-phase2-fixture-${dept}`);
+  },
+);
+
+Given(
+  "the real Chinese fixture document has been indexed twice under department {string}, as two separate documents",
+  { timeout: 30_000 },
+  async function (this: KmWorld, dept: string) {
+    await indexFixtureUnderDept(this, dept, `conv-phase2-fixture-${dept}-a`);
+    await indexFixtureUnderDept(this, dept, `conv-phase2-fixture-${dept}-b`);
+  },
+);
+
+Given("the retrieval scope used for each request in this scenario is being recorded", async function (this: KmWorld) {
+  const s = await ensurePhase2State(this);
+  installRetrieveSpy(s);
+});
+
+// ---------------------------------------------------------------- When(phase-2)
+
+When(
+  "{string} asks {string} in a fresh conversation of their own",
+  { timeout: 30_000 },
+  async function (this: KmWorld, username: string, question: string) {
+    await askAsPerson(this, username, question);
+  },
+);
+
+// ---------------------------------------------------------------- Then(phase-2)
+
+Then(
+  "the asker should receive an assistant reply whose citations slice the original document back to the exact chunk that was indexed",
+  { timeout: 10_000 },
+  async function (this: KmWorld) {
+    const s = phase2State(this);
+    const username = s.lastUsername;
+    assert.ok(username, "還沒有任何人送出過問題");
+    const reply = await waitForAssistantReply(this, username!);
+    assert.ok(
+      reply,
+      `${username} 應該收到一則帶引用的 assistant 回答,但這個對話裡完全沒有出現任何 assistant 訊息—— ` +
+        `送出 role: user 的問題今天不會觸發任何 RAG 呼叫(routes/messages.ts 沒有呼叫 app.rag)。`,
+    );
+    const citations =
+      (reply!["citations"] as { chunkId: string; documentId: string; startOffset: number; endOffset: number }[] | undefined) ?? [];
+    assert.ok(
+      citations.length > 0,
+      `assistant 回答應該至少帶一個引用(已經索引過真的文件),實際 citations=${JSON.stringify(citations)}`,
+    );
+
+    const extraction = await extractPdfText(this.readRepoBytes(PHASE2_FIXTURE_PDF));
+    for (const citation of citations) {
+      const expectedChunks = chunkDocument(citation.documentId, extraction.text);
+      const expected = expectedChunks.find(
+        (c) => c.startOffset === citation.startOffset && c.endOffset === citation.endOffset,
+      );
+      assert.ok(
+        expected,
+        `引用 ${JSON.stringify(citation)} 的 offsets 對不上任何一個從原文重新切出來的 chunk 邊界 ` +
+          `(文件 ${citation.documentId} 重新跑 chunkDocument() 之後的邊界:` +
+          `${JSON.stringify(expectedChunks.map((c) => [c.startOffset, c.endOffset]))})`,
+      );
+      const sliced = extraction.text.slice(citation.startOffset, citation.endOffset);
+      assert.equal(
+        sliced,
+        expected!.text,
+        `offsets ${citation.startOffset}–${citation.endOffset} 切出的是「${sliced}」,` +
+          `應該逐字等於原文那個 chunk 的「${expected!.text}」`,
+      );
+    }
+  },
+);
+
+Then(
+  "the reply's content should carry ascending numbered citation markers, one for each citation",
+  { timeout: 10_000 },
+  async function (this: KmWorld) {
+    const s = phase2State(this);
+    const username = s.lastUsername;
+    assert.ok(username, "還沒有任何人送出過問題");
+    const reply = await waitForAssistantReply(this, username!);
+    assert.ok(
+      reply,
+      `${username} 應該收到一則 assistant 回答,但這個對話裡完全沒有出現任何 assistant 訊息—— ` +
+        `送出 role: user 的問題今天不會觸發任何 RAG 呼叫。`,
+    );
+    const citations = (reply!["citations"] as unknown[] | undefined) ?? [];
+    assert.ok(
+      citations.length >= 2,
+      `這個場景索引了兩份文件,應該至少有兩個引用可以驗證順序,實際 citations.length=${citations.length}`,
+    );
+    const content = String(reply!["content"] ?? "");
+    const positions = citations.map((_, i) => content.indexOf(`[${i + 1}]`));
+    assert.ok(
+      positions.every((p) => p >= 0),
+      `content 應該依序含有 [1]…[${citations.length}] 這幾個 marker(ADR 0016 D2),實際 content=「${content}」,` +
+        `各 marker 找到的位置=${JSON.stringify(positions)}(-1 代表沒找到——canned generation provider 的預設 ` +
+        `answerTemplate 今天完全不會印出 marker,composition root 需要帶一個會印 marker 的 template)`,
+    );
+    for (let i = 1; i < positions.length; i++) {
+      assert.ok(
+        (positions[i] as number) > (positions[i - 1] as number),
+        `marker 應該依序出現在文字裡([${i}] 要早於 [${i + 1}]),實際各 marker 位置=${JSON.stringify(positions)},` +
+          `content=「${content}」`,
+      );
+    }
+  },
+);
+
+Then(
+  "citations should be listed in the same order the retrieval seam itself ranks them for that question, not reshuffled afterwards",
+  { timeout: 10_000 },
+  async function (this: KmWorld) {
+    const s = phase2State(this);
+    const username = s.lastUsername;
+    assert.ok(username, "還沒有任何人送出過問題");
+    const reply = await waitForAssistantReply(this, username!);
+    assert.ok(reply, `${username} 應該收到一則 assistant 回答,但這個對話裡完全沒有出現任何 assistant 訊息`);
+    const citations = (reply!["citations"] as { chunkId: string }[] | undefined) ?? [];
+
+    // 設計判斷 C:同一個 store、同一個 scope、同一個問題,retrieve() 是確定性
+    // 函式——再呼叫一次應該排出跟訊息裡 citations 逐一相同的順序。這個
+    // principalId 只是探針本身的標籤,不影響排序(排序只看 allowedScopeKeys/
+    // deniedScopeKeys 篩出的候選與各自的相似度)。
+    const probeScope = toRetrievalScope({
+      principalId: "conv-phase2-order-probe",
+      allowedScopeKeys: ["dept:eng"],
+      deniedScopeKeys: [],
+    });
+    const retrieval = (
+      s.app as unknown as {
+        retrieval: {
+          retrieve(question: string, scope: RetrievalScope, topK?: number): Promise<readonly { chunkId: string }[]>;
+        };
+      }
+    ).retrieval;
+    const repeated = await retrieval.retrieve("知識管理系統設計文件", probeScope, 4);
+
+    assert.deepEqual(
+      citations.map((c) => c.chunkId),
+      repeated.map((h) => h.chunkId),
+      `citations 的順序應該與 retrieve() 自己排出來的順序逐一相同(同一個 store/scope/問題應該是確定性的),` +
+        `實際訊息裡 citations 依序=${JSON.stringify(citations.map((c) => c.chunkId))},` +
+        `retrieve() 現在排出來的依序=${JSON.stringify(repeated.map((h) => h.chunkId))}——` +
+        `如果有人在存進 Message 之前重排過 citations 陣列,這裡就會對不上`,
+    );
+  },
+);
+
+Then(
+  "the assistant's reply should carry citations as an empty list, not a missing field, because nothing was found to cite",
+  { timeout: 10_000 },
+  async function (this: KmWorld) {
+    const s = phase2State(this);
+    const username = s.lastUsername;
+    assert.ok(username, "還沒有任何人送出過問題");
+    const reply = await waitForAssistantReply(this, username!);
+    assert.ok(
+      reply,
+      `${username} 應該收到一則 assistant 回答(即使沒有引用,也應該是「找不到來源」的回答,不是完全沒有回答)—— ` +
+        `送出 role: user 的問題今天不會觸發任何 RAG 呼叫。`,
+    );
+    assert.ok(
+      "citations" in reply!,
+      `assistant 訊息應該帶有 citations 欄位(即使是空陣列)——這則訊息確實走過 RAG 路徑,只是沒有可引用的 ` +
+        `來源,跟「這則訊息根本沒有走 RAG 路徑」不是同一件事(ADR 0016 D3),實際訊息=${JSON.stringify(reply)}`,
+    );
+    assert.deepEqual(
+      reply!["citations"],
+      [],
+      `沒有索引任何資料時,RAG 路徑應該老實回報「沒有引用」的空陣列,不是塞進不存在的引用,` +
+        `實際 citations=${JSON.stringify(reply!["citations"])}`,
+    );
+  },
+);
+
+Then("the asker's own question should carry no {string} field at all", function (this: KmWorld, field: string) {
+  const s = phase2State(this);
+  assert.ok(s.lastQuestionMessage, "還沒有任何人送出過問題");
+  assert.ok(
+    !(field in s.lastQuestionMessage!),
+    `使用者自己送出的問題不應該帶有「${field}」這個欄位(那是 RAG 產生的助理訊息才有的東西,ADR 0016 D3: ` +
+      `缺席不是空陣列),實際訊息=${JSON.stringify(s.lastQuestionMessage)}`,
+  );
+});
+
+Then(
+  "the two recorded retrieval scopes should carry two different people's own identity",
+  function (this: KmWorld) {
+    const s = phase2State(this);
+    const calls = s.capturedRetrieveCalls ?? [];
+    assert.ok(
+      calls.length >= 2,
+      `應該至少攔到兩次 retrieve() 呼叫(demo-user 問一次、demo-maintenance 問一次),實際攔到 ${calls.length} 次—— ` +
+        `送出 role: user 的問題今天不會觸發任何 app.rag.ask() 呼叫,身分根本沒有機會進到檢索接縫`,
+    );
+    const first = calls[0]!;
+    const second = calls[1]!;
+    assert.notEqual(
+      first.principalId,
+      second.principalId,
+      `兩個不同的人問問題,檢索接縫收到的 scope principalId 應該不一樣(反映各自真正的身分),` +
+        `實際兩次都是「${first.principalId}」——身分被丟在半路,接縫拿到的是同一個固定值,不是這個人自己的身分。` +
+        `demo-user 的 scope key(principalId)=「${first.principalId}」,` +
+        `demo-maintenance 的 scope key(principalId)=「${second.principalId}」`,
+    );
+  },
+);
+
+Then(
+  "both should still carry the exact same fixed {string} permission, because I2 has not changed that yet",
+  function (this: KmWorld, scopeKey: string) {
+    const s = phase2State(this);
+    const calls = s.capturedRetrieveCalls ?? [];
+    assert.ok(calls.length >= 2, "應該已經有兩次攔到的 retrieve() 呼叫可以比較");
+    for (const call of calls) {
+      assert.deepEqual(
+        [...call.allowedScopeKeys],
+        [scopeKey],
+        `ADR 0014 的固定值在 I2 期間不應該變——allowedScopeKeys 應該仍然是 ["${scopeKey}"],` +
+          `實際 ${JSON.stringify(call.allowedScopeKeys)}(這次呼叫的 principalId=「${call.principalId}」)`,
+      );
+      assert.deepEqual(
+        [...call.deniedScopeKeys],
+        [],
+        `deniedScopeKeys 在 I2 期間應該仍是空陣列,實際 ${JSON.stringify(call.deniedScopeKeys)}` +
+          `(這次呼叫的 principalId=「${call.principalId}」)`,
+      );
+    }
+  },
+);

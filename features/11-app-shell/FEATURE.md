@@ -140,7 +140,32 @@ AssertionError: 「/erp/new」應要求 sales_purchasing, super_administrator,�
 一條 `@e2e @manual`(跨視窗同步)加兩條 `@manual`。依 §5.4,自動斷言構不到「有人看過並接受」。
 原文已抄進 `docs/DECISIONS_NEEDED.md`,使用者確認後才改 `done`。
 
-| 2 | **問完問題的人點一下答案裡的引用,就看得到它在原文的哪一段;答案沒有 `state` 時畫面保持中性、不假裝那是一個已回答的答案。** | I2 | in-progress(2026-09-05 派出) | |
+| 2 | **問完問題的人點一下答案裡的引用,就看得到它在原文的哪一段;答案沒有 `state` 時畫面保持中性、不假裝那是一個已回答的答案。** | I2 | done | 2026-09-05 |
+
+**phase-2 帶進 main 的一個限制,要說清楚不靠記憶(2026-09-05)**:
+ADR 0018 條件 2 要求「`state` 缺席時渲染中性(無徽章)」。實作照做了
+(`resolveAnswerStateDisplay(undefined)` → `"UNSET"`,而 `"UNSET"` 不畫徽章)。
+
+**但 `ANSWERED` 本來就不畫徽章**——所以條件 2 在**渲染層今天是一個 no-op**:
+它要的**語意**區分存在,**視覺**區分不存在。實測證據:把修正改回
+`?? "ANSWERED"`,既有 163 條元件測試(含既有的「no state → no badge」那條)
+**全部維持綠燈,0 條會紅**。不是測試沒寫好,是**元件讓兩個值語意上不同、視覺上相同**。
+
+因此新補的守門是**「委派」層級,不是「行為」層級**:它用
+`vi.spyOn(resolveAnswerStateDisplay)` 證明「顯示層有問過那個共用函式」,
+不是「使用者看到的東西不一樣」。兩個後果:
+
+1. 有人把 resolver 內聯回去、**但邏輯寫對**,這條守門會誤報紅——它守結構不守結果;
+2. 真正的**行為**守門要等 `"UNSET"` 有了與 `ANSWERED` 不同的視覺處理,
+   或 I3 讓棄答訊息真的出現。
+
+已回報技術顧問:條件 2 是否該長出可見的區分?那是產品決定(**使用者在系統「不知道」
+時該看到什麼**),不是協調者能代的。
+
+**一個沒修但講出來的同形狀缺陷**:`message-thread.tsx` 約 811 行
+`answerState: result.value.state ?? "ANSWERED"`(`recordUsageEvent("rag_answer_outcome")`)
+——**telemetry 不是渲染**,在條件 2 字面範圍外。後果:I3 時代一個 `state` 缺席的棄答訊息
+仍會被記進分析當成 `"ANSWERED"`。同一類缺陷、不同出口,登記為後續項。
 | 3 | 斷點與元件層 UI 狀態(需要 DOM 環境) | 待定 | todo | |
 
 ## 回填對照表(phase-1)

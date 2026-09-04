@@ -8,7 +8,7 @@
 
 | 欄位 | 值 |
 |---|---|
-| 目前階段 | I2 · web 提問(I1 已通過 2026-09-03)。**I2 五塊已完成 4 塊**:`06-retrieval/phase-2`(09-04)、`07-generation`、`05-ingestion`、`03-conversation`(09-05)。**只剩 `11-app-shell/phase-2`(引用可點、開原文段落面板)** |
+| 目前階段 | I2 · web 提問(I1 已通過 2026-09-03)。**I2 的五塊全部 `done`**(`06-retrieval` 09-04;`07-generation`、`05-ingestion`、`03-conversation`、`11-app-shell` 09-05)。**下一步是 `/integrate I2`——`@e2e` 場景要使用者親手確認,任何自動檢查都代替不了(§5.4)** |
 | 回填進度 | **9 / 12 資料夾的 phase-1 已 `done`**(01、02、03、04、05、06、07、09、12——每一個都由另一個 session 依 §5.1 獨立驗收,反向驗證的失敗訊息原文都進了 FEATURE.md 或 commit body)。剩下 3 個(08、10、11)**自動那半全綠且各自做過對著決定性量的反向驗證,卡在 `@manual`／`@e2e` 人工確認**——`/phase-done` 四項核心第二項,§5.4 說任何檢查都構不到「有人看過並接受」。合併成 `DECISIONS_NEEDED` #17 一列,附跑法與場景原文。`accept:phase1` 136 場景全過、`accept:coverage` 12/12 PASS、`gherkin:dup` PASS、`contract-gate` PASS。 |
 | 契約版本 | `contracts/openapi/*.yaml` 七份,凍結;變更走 `/decide` + 使用者 |
 | 舊 story | 253 approved 封存於 `archive/stories/PROGRESS.md`(唯讀歷史);對照表 `docs/architecture/story-to-capability-map.md` |
@@ -84,7 +84,7 @@ offset +1 → 紅在「切出的原文與引用文字不同」。
 | 06-retrieval/phase-2 | ~~接進 apps/api composition root~~ **done 2026-09-04** |
 | 07-generation/phase-2 | ~~`answer()` 從 app.retrieval 拿 hits,回填引用~~ **done 2026-09-05**(`app.rag.ask()`) |
 | 03-conversation/phase-2 | ~~送訊息 → RAG 回答 → 訊息帶 citations~~ **done 2026-09-05**(契約 gate 由 ADR 0016 落地) |
-| 11-app-shell/phase-2 | 引用可點、開原文段落面板 |
+| 11-app-shell/phase-2 | ~~引用可點、開原文段落面板~~ **done 2026-09-05** |
 | 05-ingestion/phase-2 | ~~一條「把 fixture PDF 索引進 dev DB」的指令~~ **done 2026-09-05**(ADR 0015) |
 
 **已知限制(要進 ADR)**:`02-authorization` 未落地前,scope 由 demo 使用者的 session 固定給 `dept:eng`。

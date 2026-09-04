@@ -112,13 +112,14 @@ SQLite 是每個 scenario 自己的暫存檔,語音 sidecar 用 `AI_KM_ASR_PROVI
 
 ## 待協調(要協調者改共用檔的)
 
-- `standalone.json`(**12 個 key 全部**):`pnpm --filter @ai-km/features accept -- --tags '…'`
+- ~~`standalone.json`(**12 個 key 全部**):`pnpm --filter @ai-km/features accept -- --tags '…'`
   在 pnpm 11.9.0 下會把 `--` 原樣傳給 cucumber-js,cucumber 11 接著把 tag 運算式當成路徑
   `features/@retrieval and @standalone and not @manual` 開啟,`ENOENT` 退出 1。
   實測:帶 `--` 失敗、拿掉 `--` 的同一條指令 `9 scenarios (9 passed)`。
   建議措辭:把每一列的 `accept -- --tags` 改成 `accept --tags`。
   影響面:`/phase-done` 會實際跑 `standalone.json`,現況下**每個資料夾都會假紅**;
-  `_world.ts` 的 `runStandalone()` 同理(本資料夾沒有場景用到它)。
+  `_world.ts` 的 `runStandalone()` 同理(本資料夾沒有場景用到它)。~~
+  **已修好(`a0e8d80`)**:`standalone.json` 的 `--` 已拿掉。
 - `features/steps/common.steps.ts`:無新增需求(本資料夾用了 `a {string} request is sent to
   {string}`、`the response status is {int}`,都已存在)。
 
@@ -126,8 +127,9 @@ SQLite 是每個 scenario 自己的暫存檔,語音 sidecar 用 `AI_KM_ASR_PROVI
 
 - **`services/audit/` 不存在**。2026-09-04 實際 `ls services/` 只有 `conversation`、`feedback`、
   `generation`、`identity`、`ingestion`、`model-gateway`、`retrieval` 七個。`docs/01-roadmap.md`
-  寫的「`services/audit` 0 行」是舊敘述,目錄已在文件重整時清掉。本 phase **沒有**新建它
-  (新資料夾是使用者級授權)。roadmap 那一列的措辭要不要改,留給協調者。
+  寫的「`services/audit` 0 行」措辭不準——審核者查證:該目錄是在 `7691ca6`(文件整理)時
+  **連目錄一起刪掉**,不是「存在但是空的 0 行」,正確說法是**目錄不存在**。本 phase
+  **沒有**新建它(新資料夾是使用者級授權)。roadmap 那一列的措辭要不要改,留給協調者。
 - **`GET /v1/health` 沒有登記進任何契約**(E04-S078 抓到的偏離,`tools/contract-equivalence`
   會印 ABSENT)。場景照現況寫,**沒有**補契約(改契約 = 使用者級)。這也表示本資料夾
   phase-1 的主力端點目前不受 L2-EQ 保護。
@@ -139,3 +141,14 @@ SQLite 是每個 scenario 自己的暫存檔,語音 sidecar 用 `AI_KM_ASR_PROVI
 - 本資料夾在 `docs/architecture/story-to-capability-map.md` 裡**一列 story 都沒有**。
   素材全部來自被歸給別的資料夾的平台 story。這不是遺漏,是「稽核這個能力還沒被做過」的
   誠實形狀——I7 才是它真正落地的地方。
+- **審核者補充的兩條觀察**(2026-09-04):
+  - log 衛生那條場景(「Signing in with a password never leaves the password, the cookie or
+    the bearer token in the log」)測的是 `apps/api/src/server.ts:157` 的 `redact` 與
+    `:166` 的 `serializers.req` **兩層的合取**,不是單一守門。審核者實測:只放寬
+    `serializers.req` 時該場景**仍綠**,是 `redact` 那一層接住了洩漏。這是好的縱深防禦,
+    但單層破壞抓不到,值得記明——要不要拆成兩條分別打各自的突變,留給 owner 判斷。
+  - 「A trace id shaped to forge a log line is thrown away」這條場景守的**不只是**
+    `SAFE_CORRELATION_ID` 本身:放寬 `serializers.req` 也會讓原始 `x-correlation-id`
+    header 進 log,這條場景因此**同樣會紅**——它比本檔「回填對照表」宣稱的價值更高
+    (不只是第一次替 `SAFE_CORRELATION_ID` 建立機器證據,也是 `serializers.req` 這一層的
+    另一個守門入口),更不該被拿掉或簡化。

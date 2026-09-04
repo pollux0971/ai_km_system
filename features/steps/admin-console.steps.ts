@@ -32,6 +32,36 @@ import type { LightMyRequestResponse } from "fastify";
 import type { KmWorld } from "./_world.js";
 
 import { rolesRequiredForAdminRoute } from "../../apps/admin/src/lib/admin-route-access.js";
+import { loadConfig } from "../../apps/api/src/config.js";
+
+/**
+ * `startServer()`(`_world.ts`)只傳 `enableTestAuthProvider`,不傳 config,
+ * 所以不寫這個就會落到預設 `asrProvider: "whisper-server"` +
+ * `AI_KM_ASR_SERVER_URL: http://127.0.0.1:8178`——每個健康場景對本機發一次真實
+ * fetch(2s timeout),結果依機器上有沒有跑著 whisper-server 而定(2026-09-04
+ * 獨立審核實測:同一份測試在兩台機器上驗的東西不同)。與這個資料夾回填對照的
+ * `admin-health.test.ts` 一樣明確傳 `AI_KM_ASR_PROVIDER: "fake"`,這裡跟著做,
+ * 讓 asr 讀數變成確定的 `ok`,不再是環境依賴的量測。
+ */
+const ADMIN_HEALTH_SERVER_CONFIG = loadConfig({ NODE_ENV: "test", AI_KM_LOG_LEVEL: "silent", AI_KM_ASR_PROVIDER: "fake" });
+
+/**
+ * `phase-1.feature` 的 Given 步驟文字是共用的「a fresh server with fake providers」
+ * (`common.steps.ts:23`,不可改——共用檔),它呼叫 `this.startServer()` **不傳 config**,
+ * 而 `startServer()` 只要 `this.app` 已存在就直接回傳快取的實例(見 `_world.ts` 的
+ * `if (this.app) return this.app;`)。所以等這個資料夾自己的 When 步驟跑到時,server
+ * 早就用預設(真的 whisper-server)config 建好了,再傳 `extra` 也不會被採用——這是
+ * 實測抓到的,不是用讀的推出來的(GHERKIN_WORKFLOW §5.3)。修法:在這裡的 When 步驟裡
+ * 把 Given 步驟建的那個實例關掉、重建一個帶正確 config 的,只動這個資料夾自己的檔,
+ * 不改 `common.steps.ts` 的共用 Given。
+ */
+async function restartServerWithFakeAsr(world: KmWorld): Promise<import("fastify").FastifyInstance> {
+  if (world.app) {
+    await world.app.close();
+    world.app = undefined;
+  }
+  return world.startServer({ config: ADMIN_HEALTH_SERVER_CONFIG });
+}
 
 // ------------------------------------------------- apps/admin 的三個 in-app store
 
@@ -67,7 +97,16 @@ const ADMIN_HEALTH_PATH = "/v1/admin/health";
 const DEMO_PASSWORD = "demo-pass-123";
 /** contracts/openapi/analytics.yaml `/admin/health` 的 x-required-roles,原文照抄 */
 const ROLES_THAT_WOULD_BE_LET_IN = ["it_administrator", "ai_administrator", "auditor", "super_administrator"];
-const DISPLAYABLE_STATUSES = ["ok", "degraded", "down", "unknown"];
+/**
+ * 修好(1)之後(server 一律以 `AI_KM_ASR_PROVIDER: "fake"` 啟動),四個子系統在這個
+ * throwaway、剛跑完 migration 的 SQLite 上是確定的:`api` 恆 ok(能跑到這行程式碼
+ * 本身就代表 up)、`database` 對真實檔案(非 :memory:)的 WAL journal 是 ok、
+ * `migrations` 因 `autoMigrate` 預設 true 而無 pending 是 ok、`asr` 因 fake provider
+ * 恆 ok(`checkAsr`)。釘住這四個值,而不是只驗「落在 admin console 認得的值域裡」
+ * ——後者對「checkAsr 無條件回 ok」這種靜默錯誤(健康檢查說謊)測不出來
+ * (2026-09-04 獨立審核實測:14 scenarios 全過,一條都沒紅)。
+ */
+const EXPECTED_SUBSYSTEM_STATUSES: Record<string, string> = { api: "ok", database: "ok", migrations: "ok", asr: "ok" };
 
 interface SubsystemReading {
   name: string;
@@ -126,7 +165,7 @@ When(
   "{string} signs in to the admin console and opens the system health page",
   { timeout: 60_000 },
   async function (this: KmWorld, username: string) {
-    const app = await this.startServer();
+    const app = await restartServerWithFakeAsr(this);
     this.bag["adminConsoleIdentity"] = username;
     const login = await app.inject({
       method: "POST",
@@ -144,7 +183,7 @@ When(
   "nobody signs in to the admin console and the system health page is opened",
   { timeout: 60_000 },
   async function (this: KmWorld) {
-    const app = await this.startServer();
+    const app = await restartServerWithFakeAsr(this);
     this.bag["adminConsoleIdentity"] = "(沒有登入的人)";
     this.lastResponse = await app.inject({ method: "GET", url: ADMIN_HEALTH_PATH });
   },
@@ -189,11 +228,11 @@ Then("every subsystem reading carries a status the admin console can display", f
   const res = response(this);
   const readings = subsystemReadings(res);
   assert.ok(readings.length > 0, `沒有任何子系統讀數可以檢查(HTTP ${res.statusCode}):${res.body.slice(0, 300)}`);
-  const undisplayable = readings.filter((reading) => !DISPLAYABLE_STATUSES.includes(reading.status));
+  const actual = Object.fromEntries(readings.map((reading) => [reading.name, reading.status]));
   assert.deepEqual(
-    undisplayable.map((reading) => `${reading.name}=${reading.status}`),
-    [],
-    `子系統狀態必須是 admin console 認得的 [${DISPLAYABLE_STATUSES.join(", ")}] 之一`,
+    actual,
+    EXPECTED_SUBSYSTEM_STATUSES,
+    `子系統狀態應為 ${JSON.stringify(EXPECTED_SUBSYSTEM_STATUSES)},實際 ${JSON.stringify(actual)}(HTTP ${res.statusCode}):${res.body.slice(0, 300)}`,
   );
 });
 

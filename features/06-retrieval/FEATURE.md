@@ -64,7 +64,7 @@ pnpm --filter @ai-km/features accept -- --tags '@retrieval and @standalone and n
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)授權檢索、Deny-Wins、洩漏偵測、offsets、身分守門、MMR | I1 | done | 2026-09-03 |
-| 2 | 接進 apps/api composition root,供 07 與 03 呼叫 | I2 | done | 2026-09-04 |
+| 2 | **登入的人從 web 問問題時,檢索走 `apps/api` 的生產路徑而不是測試直接呼叫 library;scope 暫為固定 `dept:eng`(ADR 0014,I3 移除)。** | I2 | done | 2026-09-04 |
 
 **⚠️ phase-2 雖然 done,但它的場景 4 目前不算一個守門(2026-09-04,顧問覆核後確認)**:
 場景 4 自稱是 ADR 0014 固定 `dept:eng` 的「移除條件」,但那個固定值寫在

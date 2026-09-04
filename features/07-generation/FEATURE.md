@@ -96,7 +96,7 @@ AC2 時,第一條失敗訊息是
 本身不合格,**要在 phase-2 順手補一條對著捏造 chunkId 逐字比對的斷言**(§4:做 phase 時
 發現缺陷 → 在同一個 `.feature`／測試補,不開編號)。
 
-| 2 | `answer()` 從 `app.retrieval` 拿 hits,接進 apps/api composition root | I2 | done | 2026-09-05 |
+| 2 | **登入的人問一個問題,經 `apps/api` 同一條路徑拿到帶引用的答案,或明確的「找不到」,不會拿到沒有引用的答案。** | I2 | done | 2026-09-05 |
 
 **phase-2 驗收細節(2026-09-05,獨立 session,嚴格級)**:四項核心全過
 (`@phase-2 and @generation` 4/4、`@phase-1` 136/136、`@phase-2 and @retrieval` 4/4、

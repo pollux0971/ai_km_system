@@ -82,7 +82,7 @@ store、repo 內的三份 fixture PDF,不需要 DB、不需要模型、不開 po
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)PDF 抽取(offsets、golden hash、空檔／加密拒絕)、chunk、embed、store、重匯拒絕 | I1 | done | 2026-09-04 |
-| 2 | 一條把 fixture PDF 索引進 dev DB 的指令,讓 I2 有東西可問 | I2 | done | 2026-09-05 |
+| 2 | **開發者用一條指令把 fixture PDF 索引進 `apps/api` 實際用的那個 DB,之後從 web 問問題能命中它。** | I2 | done | 2026-09-05 |
 
 **phase-2 驗收細節(2026-09-05,獨立 session,嚴格級)**:四項核心全部另外重跑
 (`@phase-2 and @ingestion` 4/4、`@retrieval` 4/4、`@generation` 4/4、`@phase-1` 136/136、

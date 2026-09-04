@@ -133,7 +133,12 @@
    未涵蓋 S032 而提出。更正方向是讓紀錄符合使用者實際授權的文字,不是擴權。)
 7. **證據落檔**:story 沒有 `archive/stories/EXX-SYYY.md` 就不是 DONE。
 
-## Team A 範圍
+## Team A 範圍(舊範式的分工紀錄——只對尚未收尾的舊 story 適用)
+
+ADR 0008 之後,新工作的邊界是各能力資料夾 `FEATURE.md` 的 owner 欄(見鐵律 6),不是下面
+這節的 Team A／Team B 路徑分工。下文原樣保留、不改寫,因為那 40 個增補 story 與 Wave 1 的
+指派是使用者實際說過的話,是授權紀錄;`archive/stories/PROGRESS.md`(下文提到的 PROGRESS.md)
+也已隨舊範式一起封存為唯讀歷史。讀舊 story 時仍照原文的 Team A／Team B 定義理解。
 
 只實作 E01/E03/E05/E07/E09/E11/E13 的 story。依賴 Team B(E02/E04/E06/E08/
 E10/E12/E14)時:對 contract 草案 + mock 開發,並在 EVIDENCE 記錄。
@@ -154,6 +159,11 @@ PROGRESS.md 各 epic 章節。
 
 1. `docs/policies/`(三份 policy,逐字複製自 `archive/AI_KM_BMAD_High_Granularity/policies/`,
    tag `baseline-bmad`)
-2. `.claude/rules/STORY_WORKFLOW.md`
-3. epic 檔中該 story 的開發邊界
+2. `.claude/rules/GHERKIN_WORKFLOW.md`(現行強制生效的開發演算法,見本檔開頭「強制工作流」)
+3. 該 phase 的 `features/NN-name/FEATURE.md` 與對應 `phase-N.feature` 的開發邊界
 4. 本檔其餘內容
+
+`.claude/rules/STORY_WORKFLOW.md` 與 `archive/AI_KM_BMAD_High_Granularity/` 內的 epic 檔
+**已隨規格庫封存,不在上面的順位裡**——它們只對尚未收尾的舊 story(見 `archive/stories/PROGRESS.md`
+仍標 in-progress/blocked 的那些)適用,新工作一律照上面 1–4。STORY_WORKFLOW.md 自己開頭已寫明
+「Superseded by GHERKIN_WORKFLOW.md」;這裡重申,避免這份檔案內部出現「叫你聽退休的那份」的矛盾。

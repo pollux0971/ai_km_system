@@ -83,7 +83,7 @@ describe("IngestionService.ingest (E06-S042)", () => {
     expect(await vectorStore.count()).toBe(result.chunkCount);
 
     // Query built DIRECTLY via toRetrievalScope — not derived from anything.
-    const scope = toRetrievalScope({ principalId: "user-1", allowedScopeKeys: ["dept:eng"] });
+    const scope = toRetrievalScope({ principalId: "user-1", allowedScopeKeys: ["dept:eng"], deniedScopeKeys: [] });
     const queryEmbedResponse = await modelGateway.embed({ input: ["知識管理系統設計文件"] }, "w1-00-query");
     const queryEmbedding = Float32Array.from(queryEmbedResponse.data[0]!.embedding);
 
@@ -151,10 +151,11 @@ describe("IngestionService.ingest (E06-S042)", () => {
       });
       expect(first.chunkCount).toBeGreaterThan(0);
 
-      const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+      const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"], deniedScopeKeys: [] });
       const maintenanceScope = toRetrievalScope({
         principalId: "u-maint",
         allowedScopeKeys: ["dept:maintenance"],
+        deniedScopeKeys: [],
       });
       const queryEmbedResponse = await modelGateway.embed({ input: ["知識管理系統設計文件"] }, "reingest-query");
       const queryEmbedding = Float32Array.from(queryEmbedResponse.data[0]!.embedding);

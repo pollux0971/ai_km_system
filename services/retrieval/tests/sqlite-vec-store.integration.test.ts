@@ -130,6 +130,7 @@ describe("sqlite-vec store — PF2", () => {
     const scope = toRetrievalScope({
       principalId: "u-fin",
       allowedScopeKeys: ["dept:finance"],
+      deniedScopeKeys: [],
     });
     const hits = await second.query(QUERY, scope, 3);
     expect(hits.map((h) => h.chunkId)).toEqual(["f1", "f2", "f3"]);
@@ -148,7 +149,7 @@ describe("sqlite-vec store — PF2", () => {
 
     const hits = await store.query(
       QUERY,
-      toRetrievalScope({ principalId: "u-m", allowedScopeKeys: ["dept:maintenance"] }),
+      toRetrievalScope({ principalId: "u-m", allowedScopeKeys: ["dept:maintenance"], deniedScopeKeys: [] }),
       10,
     );
     expect(hits.map((h) => h.scopeKey)).toEqual(["dept:maintenance", "dept:maintenance"]);
@@ -177,7 +178,7 @@ describe("sqlite-vec store — PF2", () => {
 
     const hits = await counted.query(
       QUERY,
-      toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [] }),
+      toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [], deniedScopeKeys: [] }),
       5,
     );
     expect(hits).toEqual([]);
@@ -197,7 +198,7 @@ describe("sqlite-vec store — PF2", () => {
 
     const hits = await store.query(
       QUERY,
-      toRetrievalScope({ principalId: "u-mh", allowedScopeKeys: ["dept:maintenance", "dept:hr"] }),
+      toRetrievalScope({ principalId: "u-mh", allowedScopeKeys: ["dept:maintenance", "dept:hr"], deniedScopeKeys: [] }),
       4,
     );
     // Exactly k rows — a per-partition-k concatenation would return 8.
@@ -220,6 +221,7 @@ describe("sqlite-vec store — PF2", () => {
       toRetrievalScope({
         principalId: "u-dup",
         allowedScopeKeys: ["dept:maintenance", "dept:maintenance"],
+        deniedScopeKeys: [],
       }),
       5,
     );
@@ -236,6 +238,7 @@ describe("sqlite-vec store — PF2", () => {
     const scope = toRetrievalScope({
       principalId: "u-m",
       allowedScopeKeys: ["dept:maintenance"],
+      deniedScopeKeys: [],
     });
 
     const memory = createInMemoryVectorStore();
@@ -264,6 +267,7 @@ describe("sqlite-vec store — PF2", () => {
     const scope = toRetrievalScope({
       principalId: "u-m",
       allowedScopeKeys: ["dept:maintenance"],
+      deniedScopeKeys: [],
     });
 
     // (a) The shape this store used before 2026-09-02, rebuilt verbatim: scope
@@ -340,7 +344,7 @@ describe("sqlite-vec store — PF2", () => {
 
     const hits = await store.query(
       QUERY,
-      toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] }),
+      toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"], deniedScopeKeys: [] }),
       1,
     );
 
@@ -373,7 +377,7 @@ describe("sqlite-vec store — PF2", () => {
       record("mmr-b", "dept:mmr", [0.59, 0.81]),
       record("mmr-c", "dept:mmr", [0.55, -0.8]),
     ]);
-    const scope = toRetrievalScope({ principalId: "u-mmr", allowedScopeKeys: ["dept:mmr"] });
+    const scope = toRetrievalScope({ principalId: "u-mmr", allowedScopeKeys: ["dept:mmr"], deniedScopeKeys: [] });
     const hits = await store.query(QUERY, scope, 3);
 
     // Sanity check on the geometry itself before trusting the rerank
@@ -467,10 +471,11 @@ describe("sqlite-vec store — E06-S043 re-ingest scope guard (PF2)", () => {
     const docId = "doc-conflict";
     await store.upsert(financeDocV1(docId));
 
-    const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+    const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"], deniedScopeKeys: [] });
     const maintenanceScope = toRetrievalScope({
       principalId: "u-maint",
       allowedScopeKeys: ["dept:maintenance"],
+      deniedScopeKeys: [],
     });
     const before = await store.query(QUERY, financeScope, 10);
     expect(before).toHaveLength(2);
@@ -582,7 +587,7 @@ describe("sqlite-vec store — E06-S043 re-ingest scope guard (PF2)", () => {
       .all(docId) as Array<{ chunkId: string }>;
     expect(metaRows.map((r) => r.chunkId)).toEqual([`${docId}#0`]);
 
-    const scope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+    const scope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"], deniedScopeKeys: [] });
     const hits = await store.query(QUERY, scope, 10);
     expect(hits.map((h) => h.chunkId)).toEqual([`${docId}#0`]);
     expect(hits[0]?.text).toBe("合併後的單一段落");
@@ -679,10 +684,11 @@ describe("sqlite-vec store — E06-S043 re-ingest scope guard (PF2)", () => {
       scopeKey: "dept:maintenance",
       embedding: vec([1, 0]),
     };
-    const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+    const financeScope = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"], deniedScopeKeys: [] });
     const maintenanceScope = toRetrievalScope({
       principalId: "u-maint",
       allowedScopeKeys: ["dept:maintenance"],
+      deniedScopeKeys: [],
     });
 
     const memory = createInMemoryVectorStore();

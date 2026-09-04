@@ -30,7 +30,7 @@ function hit(chunkId: string, score: number, embedding: readonly number[]): Retr
   };
 }
 
-const scope = toRetrievalScope({ principalId: "u-test", allowedScopeKeys: ["dept:x"] });
+const scope = toRetrievalScope({ principalId: "u-test", allowedScopeKeys: ["dept:x"], deniedScopeKeys: [] });
 
 /**
  * A `RetrievalService` fake that records the `topK` it was asked for and
@@ -187,6 +187,7 @@ describe("retrieveWithReranking — end-to-end against the real service and stor
     const maintenanceScope = toRetrievalScope({
       principalId: "u-alice",
       allowedScopeKeys: ["dept:maintenance"],
+      deniedScopeKeys: [],
     });
 
     // Ground truth: what the REAL retrieve() itself considers the authorised

@@ -46,7 +46,7 @@ import type { EmbeddingProvider } from "../embedding/provider.js";
 
 const DIM = 2;
 const QUERY = Float32Array.from([1, 0]);
-const SCOPE = toRetrievalScope({ principalId: "u-1", allowedScopeKeys: ["dept:eng"] });
+const SCOPE = toRetrievalScope({ principalId: "u-1", allowedScopeKeys: ["dept:eng"], deniedScopeKeys: [] });
 
 function record(
   chunkId: string,

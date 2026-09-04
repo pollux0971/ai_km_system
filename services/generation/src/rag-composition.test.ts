@@ -103,7 +103,7 @@ describe("retrieve() → answer() composition (E04-S064 relocation of rag-skelet
       // honest value, not a silently-inherited default.
       const retrieval = createRetrievalService({ store, embedding, enforceEmbeddingVersion: false });
       const generation = createGenerationService();
-      const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"] });
+      const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"], deniedScopeKeys: [] });
 
       // A query whose best lexical match is deliberately in the finance doc —
       // same adversarial shape as rag-skeleton's AC3.

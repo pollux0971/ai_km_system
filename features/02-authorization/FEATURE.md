@@ -62,7 +62,7 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 | 項目 | 選擇 | 備註 |
 |---|---|---|
 | 語言 | TypeScript | `services/retrieval/src/authorization/`、`services/identity/src/` |
-| 測試 | vitest(`scope.test.ts` 8 條、`deny.test.ts` 4 條——phase-2b 提案,2 紅 2 綠、`plugin.test.ts`)+ cucumber `phase-1.feature` 9 個場景、`phase-2.feature` 8 個場景(提案,6 紅 2 綠) | |
+| 測試 | vitest(`scope.test.ts` 8 條、`deny.test.ts` 4 條——phase-2b,4/4 綠、`plugin.test.ts`)+ cucumber `phase-1.feature` 9 個場景、`phase-2.feature` 8 個場景(4 紅——2a 的 identity 轉換,blocked-team-a 待 01-identity 補 id;4 綠——phase-2b 的 deny) | |
 | 級別 | **嚴格** | 定義上就是授權:RBAC／授權範圍／資料可見性;失敗模式是靜默(算太寬 = 看到別人的資料,算太窄 = 使用者只看到「查無資料」) |
 
 ## Phase
@@ -73,16 +73,22 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 | 2 | 從 identity 的 session 產出 `RetrievalScope` | I3 | blocked(見下) | |
 | 3 | 群組 → scopeKeys 的對應與變更即時生效 | I6 | todo | |
 
-**phase-2 狀態細節(2026-09-04,含 phase-2b 更新)**:契約 gate(E04-S009)已由技術顧問
+**phase-2 狀態細節(2026-09-04,含 phase-2b 完成)**:契約 gate(E04-S009)已由技術顧問
 依 ADR 0012 裁定解除——見下方「phase-2 提案(紅,2026-09-04)」與「phase-2b 提案
 (deny,2026-09-04)」。裁定 4(顯式 deny)當時只定了「要蓋過 allow」這個方向,型別
-形狀留白;技術顧問同日再裁定了完整形狀(`deniedScopeKeys` 必填、謂詞與 SQL 的合成
-規則、deny 來源留到 phase-3),測試 agent(branch `pollux0971/authz-2b-deny`)據此把
-原本一條 deny 場景拆成四條(2 紅 2 綠),見「phase-2b 提案」段。整合 gate(I2,
-`06-retrieval` phase-2 把 `retrievalPlugin` 接進 `apps/api` composition root)**仍是
-todo**,所以本 phase 整體仍標 blocked,只是卡的原因從「兩個 gate 都沒過」變成「只剩
-I2」。`phase-2.feature` 提案(現在 8 個場景,6 紅 2 綠)+ steps 等協調者送技術顧問
-確認、merge,並等 I2 完成後才能進 IMPLEMENT。
+形狀留白;技術顧問同日再裁定了完整形狀(`deniedScopeKeys`、謂詞與 SQL 的合成規則、
+deny 來源留到 phase-3)。三輪接力做完 phase-2b:第一輪(測試 agent)把原本一條 deny
+場景拆成四條(2 紅 2 綠,denied 清單刻意留在區域變數裡);第二輪(開發 agent)把
+`scope.ts` 實作出來(`deniedScopeKeys` 輸出必填、輸入 optional——理由見 `scope.ts`
+注解;predicate/SQL/`assertNoScopeLeak` 都認得它);第三輪(測試 agent,同日)把
+denied 清單真的接進 `toRetrievalScope()`,並把兩條原本描述缺口的場景改寫成描述行為,
+四條全綠(`pnpm turbo run test` 40/40)。IDENTITY 轉換那 4 條(Scenario Outline,
+`dept:it`/`group:general`/`dept:maintenance`/`group:maintenance-eng`)不屬於 phase-2b,
+仍是紅——2a(從身分推導 scopeKey)還沒做,見下方「發現:ADR 0012 裁定 1 假設的資料
+今天不存在」。整合 gate(I2,`06-retrieval` phase-2 把 `retrievalPlugin` 接進
+`apps/api` composition root)**仍是 todo**,所以本 phase 整體仍標 blocked。
+`phase-2.feature`(8 個場景,4 紅 4 綠)+ steps 等協調者送技術顧問確認、merge,並等
+I2、2a 完成後才能進 IMPLEMENT 收尾。
 
 ## 回填對照表(phase-1)
 
@@ -207,6 +213,40 @@ denial on an allowed department …」),紅的訊息應該點名被錯誤放行�
 訊息應點名被錯誤放進 `IN` 清單參數的 `scopeKey`。兩段都要記還原後的 sha256/場景
 全綠佐證,四段輸出進 commit body(`.feature` 層手動,見 `GHERKIN_WORKFLOW.md` §5.2)。
 
+## phase-2b 完成(2026-09-04,第二、三輪)
+
+第二輪(開發 agent)實作 `scope.ts`;第三輪(測試 agent,同日)接線。兩輪各自的發現:
+
+**裁定 1(必填、無預設)實測行不通,已記錄的偏離**:開發 agent 把 `deniedScopeKeys`
+做成字面上的必填(input 也不給 `?`)之後,`pnpm typecheck` 在 12+ 個 `*.test.ts` /
+`features/steps/**` 檔案炸「缺少必要屬性」——`toRetrievalScope()` 當時在這些檔案裡
+被呼叫 30+ 次,沒有一次帶這個欄位,而這些檔案依 GHERKIN_WORKFLOW §6 是開發 agent
+不能改的。處理方式:`deniedScopeKeys` 在**輸入**上保留 `?`(省略視為 `[]`),**輸出**
+的 `RetrievalScope.deniedScopeKeys` 保持非 optional、一律有值。理由與完整清單記在
+`scope.ts` 的 `toRetrievalScope` 輸入型別上方注解與該輪 commit body。
+
+**deny.test.ts / phase-2.feature 的兩條紅,不是實作的洞,是接線的洞**:第一輪(測試
+agent)寫下這四條時,把 denied 清單留在區域變數裡,從未真正傳進 `toRetrievalScope()`
+——這是刻意的(避免撞當時還沒加欄位的 excess-property-check)。開發 agent 做完
+`scope.ts` 後,這個「留在區域變數裡」的技巧變成了阻擋兩條場景轉綠的真正原因:無論
+`scope.ts` 怎麼實作,`buildScopePredicate(scope)` 拿到的 scope 一律是
+`deniedScopeKeys: []`。第三輪(測試 agent)把 `features/steps/authorization.steps.ts`
+第 91-111 行的兩個 `When` 步驟改成 `deniedScopeKeys: s.deniedKeys ?? []`,並把
+`deny.test.ts` 的四次呼叫都改成傳真正的 `denied` 值,兩條紅才轉綠。同時把這兩條場景
+與對應的 `Then` 步驟措辭從「描述缺口」(`but it does not` / `but it does`)改成「描述
+行為」(`the scope refuses …` / `the filter does not include …`)。
+
+**呼叫端補完**:`toRetrievalScope()` 當時在 12 個檔案、30+ 處呼叫,沒有一次帶
+`deniedScopeKeys`。第三輪把它們(`*.test.ts` 與 `features/steps/{authorization,
+ingestion,retrieval}.steps.ts`)全部明寫 `deniedScopeKeys: []`。`features/steps/
+integration.steps.ts` 是共用檔(協調者的),裡面也有一處(`ask()` 函式),沒有改,
+見下方「待協調」。
+
+**結果**:`phase-2.feature` 的 8 個場景現在 4 紅 4 綠——4 紅是 2a 的 identity 轉換
+Scenario Outline(不屬於 phase-2b,見上面「發現:ADR 0012 裁定 1 假設的資料今天不
+存在」,繼續紅到 2a 做完),4 綠是 phase-2b 的 deny 場景全部轉綠;`deny.test.ts` 4/4
+綠;`pnpm turbo run test --filter='!@ai-km/e2e'` 40/40。
+
 ## 驗收方式
 
 - 自動:`pnpm --filter @ai-km/features accept -- --tags '@authorization and @phase-1 and not @manual and not @e2e'` → 9/9。
@@ -233,11 +273,17 @@ denial on an allowed department …」),紅的訊息應該點名被錯誤放行�
 
 ## 待協調
 
-- 無需要協調者修改共用檔的事項。(phase-2b 這一輪只改了 `phase-2.feature`、
-  `authorization.steps.ts`,新增 `deny.test.ts` 與更新本檔案／`NEXT.md`,沒有動
-  `common.steps.ts`、`standalone.json`、`package.json`;`standalone.json` 的
-  `02-authorization` 條目已存在且指令正確,`expect` 是 `"scenarios ("`,不必改成
-  硬編碼的場景數。)
+- **(2026-09-04,第三輪新增)`features/steps/integration.steps.ts:87` 是共用檔裡唯一
+  漏掉 `deniedScopeKeys` 的呼叫端**:`ask()` 函式裡 `toRetrievalScope({ principalId:
+  "i1-person", allowedScopeKeys })`。這是 I1 整合點的共用 steps,依 GHERKIN_WORKFLOW
+  §6「共用檔只有協調者改」,測試 agent 沒有動它。行為不受影響(省略視為 `[]`,typecheck
+  也過),純粹是為了「每個呼叫端明寫 `[]` 是誠實的」這個一致性,不是阻塞性問題,留給
+  協調者判斷要不要補。
+- phase-2b 這一輪改了 `phase-2.feature`、`authorization.steps.ts`、`ingestion.steps.ts`、
+  `retrieval.steps.ts`、9 個 `*.test.ts`,新增/改 `deny.test.ts`,更新本檔案／`NEXT.md`,
+  沒有動 `common.steps.ts`、`_world.steps.ts`、`standalone.json`、`package.json`、
+  `cucumber.js`;`standalone.json` 的 `02-authorization` 條目已存在且指令正確,`expect`
+  是 `"scenarios ("`,不必改成硬編碼的場景數。
 - **(2026-09-04,phase-2 提案新增)01-identity 需要真的加入部門/群組的 id**:
   ADR 0012 裁定 1 的鑰匙形狀 `dept:<department.id>` / `group:<group.id>` 假設
   identity 那邊有 id 可讀,但今天 `users` 表只有顯示名稱兩欄,repo 裡沒有任何

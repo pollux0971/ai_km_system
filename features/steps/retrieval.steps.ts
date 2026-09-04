@@ -47,7 +47,11 @@ function state(world: KmWorld): RetrievalState {
 }
 
 function scopeFor(dept: string): RetrievalScope {
-  return toRetrievalScope({ principalId: `person-${dept || "none"}`, allowedScopeKeys: dept ? [`dept:${dept}`] : [] });
+  return toRetrievalScope({
+    principalId: `person-${dept || "none"}`,
+    allowedScopeKeys: dept ? [`dept:${dept}`] : [],
+    deniedScopeKeys: [],
+  });
 }
 
 async function seed(store: VectorStore, embedding: EmbeddingProvider, docs: Map<string, string>, rows: { chunkId: string; documentId: string; text: string; doc: string; scopeKey: string }[], identity?: { model: string; dimensions: number }): Promise<void> {
@@ -87,7 +91,11 @@ Given("a retrieval store seeded with one maintenance chunk and one engineering c
 Given("the store's scope filter is switched off", function (this: KmWorld) {
   const s = state(this);
   // 與 service.test.ts AC-R3 同一種破壞:store 忽略傳入的 scope,用一個放行所有部門的 scope 查。
-  const everything = toRetrievalScope({ principalId: "leaky-store", allowedScopeKeys: ["dept:maintenance", "dept:eng"] });
+  const everything = toRetrievalScope({
+    principalId: "leaky-store",
+    allowedScopeKeys: ["dept:maintenance", "dept:eng"],
+    deniedScopeKeys: [],
+  });
   const leaky: VectorStore = { ...s.store, query: (vector, _scope, topK, expected) => s.store.query(vector, everything, topK, expected) };
   s.service = createRetrievalService({ store: leaky, embedding: s.embedding, enforceEmbeddingVersion: false });
 });

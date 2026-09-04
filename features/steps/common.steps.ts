@@ -6,7 +6,17 @@
  */
 import { Given, Then, When } from "@cucumber/cucumber";
 import { strict as assert } from "node:assert";
+import Fastify, { type FastifyInstance } from "fastify";
 import type { KmWorld } from "./_world.js";
+
+/**
+ * 一個能力步驟檔要註冊「自己的」plugin 進通用的 register→ready 通用步驟時,
+ * 把這個放進 `this.bag["pluginUnderTest"]`(見下面 `the "{string}" plugin is
+ * registered on a bare server and the server becomes ready`)。
+ */
+interface PluginUnderTest {
+  register: (app: FastifyInstance) => Promise<void> | void;
+}
 
 // ---------------------------------------------------------------- Given
 
@@ -22,6 +32,30 @@ Given("a temporary working directory", function (this: KmWorld) {
 
 When("the standalone command for this capability is run", { timeout: 300_000 }, function (this: KmWorld) {
   this.runStandalone();
+});
+
+When(
+  "the {string} plugin is registered on a bare server and the server becomes ready",
+  { timeout: 30_000 },
+  async function (this: KmWorld) {
+    const under = this.bag["pluginUnderTest"] as PluginUnderTest | undefined;
+    assert.ok(
+      under,
+      `能力步驟要先把要註冊的 plugin 放進 this.bag["pluginUnderTest"]({ register(app) { ... } }),這句通用步驟只負責 register()→ready()`,
+    );
+    const instance = Fastify({ logger: false });
+    await under.register(instance);
+    await instance.ready();
+    this.bag["registeredApp"] = instance;
+  },
+);
+
+When("a {string} request is sent to {string}", async function (this: KmWorld, method: string, path: string) {
+  const app = await this.startServer();
+  // fastify 匯出的 HTTPMethods 與 light-my-request 自己的 InjectOptions.method 型別不完全同源
+  // (TRACE/QUERY 只在前者出現),這裡只轉大寫、原樣傳給 inject,型別交給呼叫端保證。
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  this.lastResponse = await app.inject({ method: method.toUpperCase(), url: path } as any);
 });
 
 // ---------------------------------------------------------------- Then
@@ -57,7 +91,13 @@ Then("it is rejected with {string}", function (this: KmWorld, errorName: string)
   assert.equal(this.lastError.name, errorName, `錯誤類型應為 ${errorName},實際 ${this.lastError.name}: ${this.lastError.message}`);
 });
 
-Then("the generation provider is never called", function (this: KmWorld) {
-  const calls = this.providerCalls.filter((c) => c.component.startsWith("generation"));
-  assert.deepEqual(calls, [], `generation provider 不該被呼叫:${JSON.stringify(calls)}`);
+Then("the {string} plugin is visible on the parent server instance", function (this: KmWorld, name: string) {
+  const app = this.bag["registeredApp"] as Record<string, unknown> | undefined;
+  assert.ok(app, "還沒有透過「the {string} plugin is registered…」註冊過任何 plugin");
+  assert.ok(app[name], `app.${name} 在父實例上不可見——plugin 可能沒用 fp() 包裝(ADR 0007 §5)`);
+});
+
+Then("the {string} provider is never called", function (this: KmWorld, component: string) {
+  const calls = this.providerCalls.filter((c) => c.component.startsWith(component));
+  assert.deepEqual(calls, [], `${component} provider 不該被呼叫:${JSON.stringify(calls)}`);
 });

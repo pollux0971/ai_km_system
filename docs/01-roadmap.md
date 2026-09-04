@@ -9,10 +9,10 @@
 | 欄位 | 值 |
 |---|---|
 | 目前階段 | I2 · web 提問(I1 已通過 2026-09-03,使用者親眼確認引用) |
-| 回填進度 | 1 / 12 資料夾(06-retrieval 完成,作為參考實作) |
+| 回填進度 | 1 / 12 資料夾完成(06-retrieval);其餘 11 個 phase-1 於 2026-09-04 一次全開,各一個 worktree(ADR 0011) |
 | 契約版本 | `contracts/openapi/*.yaml` 七份,凍結;變更走 `/decide` + 使用者 |
 | 舊 story | 253 approved 封存於 `archive/stories/PROGRESS.md`(唯讀歷史);對照表 `docs/architecture/story-to-capability-map.md` |
-| 最後更新 | 2026-09-03 |
+| 最後更新 | 2026-09-04 |
 
 ## 全貌
 
@@ -42,17 +42,17 @@ graph TD
 | Phase | 交付 | 狀態 | 參考 |
 |---|---|---|---|
 | 06-retrieval/phase-1 | 授權檢索、Deny-Wins、洩漏偵測、offsets、身分守門、MMR | done 2026-09-03 | **參考實作**,其他資料夾照它的形狀 |
-| 05-ingestion/phase-1 | PDF 抽取(offsets、golden hash、空檔／加密拒絕)、chunk、embed、store、重匯拒絕 | todo | |
-| 07-generation/phase-1 | context 組裝、引用回填、捏造引用拒絕、空 context 短路 | todo | |
-| 04-model-gateway/phase-1 | embed/generate in-process 主路徑、兩條薄路由、契約驗證、fidelity 守門、ASR | todo | |
-| 01-identity/phase-1 | 登入、session cookie、sandbox seeder、CSRF | todo | |
-| 03-conversation/phase-1 | 對話 CRUD、訊息、修訂、SSE change events、resync | todo | |
-| 09-feedback-analytics/phase-1 | OK/NG、reason enum、usage events、admin 指標聚合、403 | todo | |
-| 10-admin-console/phase-1 | admin 頁面(部門、群組、connector、health)`@e2e` | todo | |
-| 11-app-shell/phase-1 | 導覽、首頁、M3、跨視窗同步 `@e2e` | todo | |
-| 08-knowledge-management/phase-1 | 知識庫頁面(目前對 mock)`@e2e`,標明 mock | todo | |
-| 02-authorization/phase-1 | 空殼單獨跑起來(`services/identity` 薄切片能產出 scope 的證明) | todo | E04-S009 blocked-team-b |
-| 12-audit-observability/phase-1 | 空殼單獨跑起來(`services/audit` 0 行)+ health 路由 | todo | |
+| 05-ingestion/phase-1 | PDF 抽取(offsets、golden hash、空檔／加密拒絕)、chunk、embed、store、重匯拒絕 | in-progress 2026-09-04 | |
+| 07-generation/phase-1 | context 組裝、引用回填、捏造引用拒絕、空 context 短路 | in-progress 2026-09-04 | |
+| 04-model-gateway/phase-1 | embed/generate in-process 主路徑、兩條薄路由、契約驗證、fidelity 守門、ASR | in-progress 2026-09-04 | |
+| 01-identity/phase-1 | 登入、session cookie、sandbox seeder、CSRF | in-progress 2026-09-04 | |
+| 03-conversation/phase-1 | 對話 CRUD、訊息、修訂、SSE change events、resync | in-progress 2026-09-04 | |
+| 09-feedback-analytics/phase-1 | OK/NG、reason enum、usage events、admin 指標聚合、403 | in-progress 2026-09-04 | |
+| 10-admin-console/phase-1 | admin 頁面(部門、群組、connector、health)`@e2e` | in-progress 2026-09-04 | |
+| 11-app-shell/phase-1 | 導覽、首頁、M3、跨視窗同步 `@e2e` | in-progress 2026-09-04 | |
+| 08-knowledge-management/phase-1 | 知識庫頁面(目前對 mock)`@e2e`,標明 mock | in-progress 2026-09-04 | |
+| 02-authorization/phase-1 | 空殼單獨跑起來(`services/identity` 薄切片能產出 scope 的證明) | in-progress 2026-09-04 | E04-S009 blocked-team-b |
+| 12-audit-observability/phase-1 | 空殼單獨跑起來(`services/audit` 0 行)+ health 路由 | in-progress 2026-09-04 | |
 
 **回填完成定義**:12 個 phase-1 全 `done`,`pnpm accept:phase1` 全綠,`pnpm gherkin:dup` PASS。
 

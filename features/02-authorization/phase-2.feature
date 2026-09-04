@@ -1,3 +1,4 @@
+@i3 @authorization @phase-2
 # PROPOSAL — this file is a test agent's proposal on branch
 # pollux0971/authz-phase2. Per GHERKIN_WORKFLOW §6 a `.feature` is only
 # changed by the user or through a confirmed `/feature` flow; this is that
@@ -20,7 +21,6 @@
 # (the canonical `dept:<id>` / `group:<id>` key is admitted). It never is,
 # today, because there is no translation layer. That gap — not a made-up
 # assertion — IS the red.
-@i3 @authorization @phase-2
 Feature: A person's department and group become a retrieval scope, derived from their signed-in identity alone
   ADR 0012 (2026-09-04) ruled the five open questions E04-S009 was blocked
   on: scope keys are shaped `dept:<department.id>` / `group:<group.id>` and

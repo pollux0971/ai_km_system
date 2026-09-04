@@ -116,27 +116,30 @@ worktree 的 pnpm 11.9.0 上那個 `--` 會原樣傳給 cucumber,cucumber 把後
   (`e5d5f4dda57e541f214b452aa6a9e599aea15aae8f8ff54c6199edca9e4d3528`),重跑 14/14 綠。
 - `@manual`:無。畫面的人眼驗收留到 phase-3。
 
-## 待協調(要協調者改共用檔)
+## 待協調(要協調者改共用檔)——**兩條已過期,保留為歷史紀錄**
 
-1. **`standalone.json` 的 cucumber 指令在本環境跑不起來**(不只本資料夾,`06-retrieval`
+1. ~~**`standalone.json` 的 cucumber 指令在本環境跑不起來**(不只本資料夾,`06-retrieval`
    同樣)。現寫法 `pnpm --filter @ai-km/features accept -- --tags '...'`,pnpm 11.9.0 把
    `--` 原樣往下傳,cucumber 遇到 `--` 就停止解析選項、把 tag 運算式當成檔案路徑,
    exit 1(`ENOENT ... features/@feedback-analytics and @standalone and not @manual`)。
    拿掉那個 `--` 即可,實測 `14 scenarios (14 passed)`。建議措辭:
    `"cmd": "pnpm --filter @ai-km/features accept --tags '@feedback-analytics and @standalone and not @manual'"`,
    並把 `expect` 收緊成 `"14 scenarios (14 passed)"`(比照 06-retrieval 的寫法)。
-   `features/README.md` 索引表與 `.claude` 的回填指示裡的同型指令也一起改。
-2. **`features/09-feedback-analytics` 需要進 `features/README.md` 的索引**(該表目前把本
-   資料夾列為「尚未回填」)。協調者合併時更新。
+   `features/README.md` 索引表與 `.claude` 的回填指示裡的同型指令也一起改。~~
+   **已修好(`a0e8d80`)**:`standalone.json` 的 `--` 已拿掉(`expect` 維持寬鬆的
+   `"scenarios ("`,見 07-generation 的協調者反向裁決)。
+2. ~~**`features/09-feedback-analytics` 需要進 `features/README.md` 的索引**(該表目前把本
+   資料夾列為「尚未回填」)。協調者合併時更新。~~
+   **已完成**:`features/README.md` 索引表已列出本資料夾。
 
 ## 開放問題
 
-- **roadmap 記的「admin 原樣渲染 `INCORRECT`」這個缺陷已經不存在了。**
-  `docs/01-roadmap.md` 的 I5 段把「reason code → 繁中標籤」列為 phase-2 待辦,但
+- **已完成**:roadmap 記的「admin 原樣渲染 `INCORRECT`」這個缺陷已經不存在了。
   `packages/api-client/src/feedback-reason.ts`(E01-S035,commit `f758968`)已經提供
   `getFeedbackReasonLabel`,而 `apps/admin` 的清單與詳情兩個元件都已經呼叫它。
   本 phase 依「照實寫現況」把它寫成一個會紅的場景並實跑:`INCORRECT` → `答案不正確`,
-  未知碼原樣輸出。**建議協調者把 roadmap 那一條劃掉**(那是紀錄落後,不是新修的實作)。
+  未知碼原樣輸出。**協調者已在 `docs/01-roadmap.md` 的 I5 段把那一條劃掉**,註明
+  「是紀錄落後,不是新修的實作」。
 - `computeUsageMetrics` 的 `questionsAsked` **不受 `date` 限制**——它數的是整張表的
   `conversation_message_sent`,只有 DAU 受日期限制。這是 E13-S019 的明示技術決定,
   phase-1 照現況寫成一個場景。但「使用量儀表板上兩個數字用不同的時間範圍」對看儀表板的人
@@ -145,3 +148,13 @@ worktree 的 pnpm 11.9.0 上那個 `--` 會原樣傳給 cucumber,cucumber 把後
   之後若要做「這週的回饋」統計,這個借用會失準——屬 phase-2 的資料模型問題。
 - 本 phase 的 assistant 訊息是直接以 `role: "assistant"` 建立的字串,不是 RAG 產生的答案;
   「對真答案按 NG」要等 I2/`07-generation` phase-2。
+- **這是審核者最重要的發現,待補**:場景 "the reply carries none of the rated answers"
+  (`features/steps/feedback-analytics.steps.ts:380`)比對的是 `state.secrets`,而 `secrets`
+  由 Given 推入(`:142`),**沒有 vacuity 守門**。審核者診斷:同時 (a) 拿掉 secrets 的推入、
+  (b) 放行未授權角色 → 資料真的洩漏,但那條內容斷言在**空集合**下會**通過**,場景改成紅在
+  「狀態碼應為 403,實際 200」——正是 GHERKIN_WORKFLOW §5.2 禁止的副作用斷言(存在性斷言不算
+  反向驗證)。同檔另一條 "no queued answer carries the whole original answer" **有**守門
+  (`:412` `assert.ok(whole.length > 0, "這個場景沒有任何長到會被截斷的答案,斷言會落空")`),
+  形成對照。**待補**:`the reply carries none of the rated answers` 需要一行同型的 vacuity
+  守門(例如 `assert.ok(secrets.length > 0, …)`)。**注意:那一行在 `features/steps/`,本工單
+  不能改**,登記在此交給下一個測試 agent。

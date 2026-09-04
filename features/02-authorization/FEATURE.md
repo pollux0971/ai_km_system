@@ -84,7 +84,7 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 | Grants become a database filter that can only narrow, never widen | `scope.test.ts`: PF0 零授權時產生 1 = 0,不得產生空的 IN ();PF0 SQL 使用參數佔位,不做字串拼接 |
 | The last line of defence names the department that leaked instead of dropping it quietly | `scope.test.ts`: PF0 洩漏偵測拋錯而非靜默過濾——靜默過濾會留下真正的缺陷 |
 | When nothing is out of scope the check hands back the very same records | `scope.test.ts`: PF0 全部合規時原樣回傳 |
-| A signed-in identity already names a department, and hands over no ready-made scope keys | `services/identity/src/plugin.test.ts`: 200s with the demo account's fields, field-for-field, and never a token;200s for a valid cookie and advances last_seen_at(登入取 cookie 的路徑同 `apps/api/src/health/admin-health.test.ts` 的 `loginAs`) |
+| A signed-in identity already names a department, and hands over no ready-made scope keys | `services/identity/src/plugin.test.ts`: "200s with the demo account's fields, field-for-field, and never a token"(`:148`,測的是 **`POST /v1/auth/login`** 的 body,裡面逐欄位斷言了 `department: "資訊部"` / `group: "一般使用者群組"`);"200s for a valid cookie and advances last_seen_at"(`:462`,測的是 **`GET /v1/auth/session`**,但只斷言 `userId`)。**場景走的是 session 路徑,不是 login 路徑**——「session 回應帶部門與群組」這個具體斷言,既有 vitest 沒有逐欄位測過;逐欄位的證據來自 login 那條,不是這條。(登入取 cookie 的路徑同 `apps/api/src/health/admin-health.test.ts` 的 `loginAs`) |
 
 ## 設計約束場景(`@design-constraint`)
 
@@ -109,8 +109,8 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 - 自動:`pnpm --filter @ai-km/features accept -- --tags '@authorization and @phase-1 and not @manual and not @e2e'` → 9/9。
 - 反向驗證(2026-09-04,回填時做,手動——`tools/mutate.mjs` 只驅動 vitest,這一層是 cucumber):
   `services/retrieval/src/authorization/scope.ts` 的 `buildScopePredicate` 把最後一行
-  `return allowed.has(record.scopeKey);` 改成 `return true;` → 3 個場景紅,第一條炸的是
-  「The capability runs on its own」的
+  `return allowed.has(record.scopeKey);` 改成 `return true;` → 2 個場景紅(`9 scenarios
+  (2 failed, 7 passed)`),第一條炸的是「The capability runs on its own」的
   `授權範圍 [dept:maintenance] 不含「dept:finance」,卻接受了標記為「dept:finance」的資料——Deny-Wins 失效`。
   還原後 sha256 逐位元相同、9/9 綠。證據四段在 commit body。
 - `@manual`:無。

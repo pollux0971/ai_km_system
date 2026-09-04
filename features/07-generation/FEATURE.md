@@ -47,8 +47,8 @@ pnpm --filter @ai-km/features accept --tags '@generation and @standalone and not
 不需要模型、不開 port。
 
 **權威來源是根目錄的 [`standalone.json`](../../standalone.json) 的 `07-generation`**,這裡只是說明。
-⚠️ 目前 `standalone.json` 裡那行多了一個 `--`,在 pnpm 11.9.0 下會把 tag 運算式當成路徑而失敗——
-見下方「待協調」。
+`standalone.json` 那行原本多一個 `--`,在 pnpm 11.9.0 下會把 tag 運算式當成路徑而失敗;
+**已由協調者修好(`a0e8d80`)**,現在的指令與上面這段一致,直接跑就是 `6 scenarios (6 passed)`。
 
 ## 依賴
 
@@ -93,8 +93,12 @@ provider)、以及 `services/retrieval` 的 `RetrievalHit` **型別**(只有型�
 - 反向驗證(2026-09-04,手動,兩組,證據原文在 commit body):
   1. `services/model-gateway/src/generation/provider.ts` 的 `assertCitationsGrounded` 把
      `if (fabricated.length > 0)` 改成 `if (fabricated.length < 0)`(即「永不拒絕」)→
-     「One fabricated source…」場景紅在第一條斷言 `it is rejected with "FabricatedCitationError"`,
-     訊息「預期會被拒絕,但沒有任何錯誤被拋出」——證明捏造的來源會被放行且看起來像正常答案。
+     「One fabricated source…」場景紅在第一條斷言 `it is rejected with "FabricatedCitationError"`。
+     **這段訊息已於 `66f8de1` 更新**:原本記的是「預期會被拒絕,但沒有任何錯誤被拋出」——那是純
+     存在性斷言(只證明「有沒有拋錯」),正是審核者的退回理由。協調者修好 `common.steps.ts` 後,
+     現在同一個突變的紅訊息是:
+     `AssertionError [ERR_ASSERTION]: 預期會被拒絕,但沒有任何錯誤被拋出;實際交回了:{"answer":"看起來正常的回答,其實引用被捏造","citations":[{"chunkId":"doc-maintenance-001#0",...},{"chunkId":"doc-does-not-exist#0","documentId":"doc-does-not-exist","startOffset":0,"endOffset":1}]}`
+     決定性的 `doc-does-not-exist#0` 現在**進了訊息本身**,不再是純粹的「有沒有拋錯」。
   2. `services/generation/src/service.ts` 的 `buildContext()` 改成 `hits.map((hit) => ({ ...hit }))`
      (檔頭第 2 點明文警告、TypeScript 不會攔的那個寫法)→「The department label never travels…」
      場景紅在第一條斷言,訊息逐字指出洩漏的值:
@@ -102,9 +106,9 @@ provider)、以及 `services/retrieval` 的 `RetrievalHit` **型別**(只有型�
   兩次都以 `sha256sum` 逐位元證明還原,還原後 6/6 回綠。
 - `@manual`:無。
 
-## 待協調(要協調者改共用檔的)
+## 待協調(要協調者改共用檔的)——**三條全部過期,保留為歷史紀錄**
 
-1. **`features/steps/common.steps.ts` 的 register 步驟 arity 壞掉**——
+1. ~~**`features/steps/common.steps.ts` 的 register 步驟 arity 壞掉**——
    `When("the {string} plugin is registered on a bare server and the server becomes ready", …, async function (this: KmWorld) {…})`
    的 cucumber expression 有一個 `{string}`,但 handler 宣告 0 個參數,cucumber 直接判失敗:
    `function has 0 arguments, should have 1 (if synchronous or returning a promise) or 2 (if accepting a callback)`
@@ -114,17 +118,22 @@ provider)、以及 `services/retrieval` 的 `RetrievalHit` **型別**(只有型�
    本工單的因應:比照 `06-retrieval` 自己定義 `When the generation plugin is registered on a fresh server
    and the server becomes ready`,仍走真實 `register()→ready()` 並把父實例放進 `this.bag["registeredApp"]`,
    所以通用的 `Then the "generation" plugin is visible on the parent server instance` 照常適用。
-   共用步驟修好之後,這一句可以換回通用版。
+   共用步驟修好之後,這一句可以換回通用版。~~ **已修好(`f903291`)**:`common.steps.ts` 的通用步驟
+   已補上參數。
 
-2. **`standalone.json` 的指令多了一個 `--`**——`pnpm --filter @ai-km/features accept -- --tags '…'`
+2. ~~**`standalone.json` 的指令多了一個 `--`**——`pnpm --filter @ai-km/features accept -- --tags '…'`
    在 pnpm 11.9.0 下會把 `--` 原樣轉給 cucumber-js,cucumber 因此停止解析選項、把 tag 運算式當成
    檔案路徑,ENOENT 退出 1(實測:`06-retrieval` 那一行同樣失敗,拿掉 `--` 後 `9 scenarios (9 passed)`)。
    這影響 `07-generation` 在內的**所有** 10 個非互動項目,`/phase-done` 的「單獨執行 exit 0」會全部假紅。
    建議措辭:把每一項的 `cmd` 從 `accept -- --tags` 改成 `accept --tags`。
-   本工單不動 `standalone.json`(共用檔),FEATURE.md 的「單獨執行」段寫的是可用的形式。
+   本工單不動 `standalone.json`(共用檔),FEATURE.md 的「單獨執行」段寫的是可用的形式。~~
+   **已修好(`a0e8d80`)**:`standalone.json` 的 `--` 已拿掉。
 
-3. `07-generation` 的 `standalone.json` `expect` 目前是寬鬆的 `"scenarios ("`;比照 `06-retrieval`
-   可以收緊成 `"6 scenarios (6 passed)"`。建議在 phase-1 收尾合併時一併改。
+3. ~~`07-generation` 的 `standalone.json` `expect` 目前是寬鬆的 `"scenarios ("`;比照 `06-retrieval`
+   可以收緊成 `"6 scenarios (6 passed)"`。建議在 phase-1 收尾合併時一併改。~~
+   **已被協調者反向裁決(`a0e8d80`)**:`expect` 一律**不**釘數字,因為釘死的計數觸犯
+   `docs/PITFALLS.md` 坑 1(守門對著會隨正常演化改變的計數)。`06-retrieval` 當時收緊的那條也已
+   改回寬鬆。「每個資料夾至少一條且全過」改由 `pnpm accept:coverage` 算出來守。
 
 ## 開放問題
 
@@ -138,3 +147,7 @@ provider)、以及 `services/retrieval` 的 `RetrievalHit` **型別**(只有型�
 - 空 context 短路只在 `answer()` 這一層;`gateway.generate()` 對空 context 仍拋
   `GenerationNoContextError`。兩條規則並存是刻意的(`service.ts` 檔頭),但目前沒有場景釘住
   「繞過 service 直接打 gateway 會拿到 422」——那屬 `04-model-gateway`。
+- `plugin.test.ts` 的 **AC-GS4**(可注入替代實作)與 **AC-GS5**(注入 vs 預設雙來源交叉檢查)
+  **沒有回填成場景,也沒被列為刻意省略**。它們是接線層(plugin 組裝)不是使用者可見行為,
+  本 phase 不主張補場景,但記一筆——免得下一個人以為 `plugin.test.ts` 12 條 vitest 全被
+  phase-1 的場景蓋住了(實際只有 AC-GS1/AC-GS2/AC-GS3 綁進了回填對照表)。

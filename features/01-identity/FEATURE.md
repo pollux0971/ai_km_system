@@ -18,8 +18,7 @@ cookie 決定「這是誰」;被拒絕的時候對方問不出多餘的東西,�
 - `GET /v1/auth/session`:cookie → 這個人是誰、有哪些 role、session 何時到期;
   竄改／過期／閒置過久／期間被停用一律 401 並清掉 cookie
 - `POST /v1/auth/logout`:刪掉 session 資料列(不只是清瀏覽器那份),冪等
-- `requireSession` 這個接縫本身:`fp()` 包裝,父實例可見(ADR 0007 §5),
-  疊在 `apps/api` 既有的 E04-S039 decorator 之前而不是取代它
+- `requireSession` 這個接縫本身的 **`fp()` 包裝與父實例可見性**(ADR 0007 §5)
 - CSRF(E04-S048):所有會改狀態的方法要帶 `x-requested-with`,**在讀密碼之前**檢查;
   GET/HEAD/OPTIONS 永遠不檢查(紅線:`EventSource` 帶不了自訂標頭)
 - sandbox seeder registry(E02-S032 AC7):`AI_KM_TEST_SANDBOX=true` 時每次登入一個新的
@@ -114,7 +113,7 @@ pnpm --filter @ai-km/features accept --tags '@identity and @standalone and not @
 
 ## 待協調(要協調者改共用檔)
 
-1. **`features/steps/common.steps.ts` 的 `When("the {string} plugin is registered on a bare server and the server becomes ready")`
+1. ~~**`features/steps/common.steps.ts` 的 `When("the {string} plugin is registered on a bare server and the server becomes ready")`
    目前跑不起來**:pattern 有一個 `{string}`,但 handler 宣告的是
    `async function (this: KmWorld)`(0 個參數),cucumber 直接判紅:
    `function has 0 arguments, should have 1 (if synchronous or returning a promise) or 2 (if accepting a callback)`
@@ -124,7 +123,8 @@ pnpm --filter @ai-km/features accept --tags '@identity and @standalone and not @
    `When the identity plugin is registered on a bare server and that server becomes ready`,
    但仍把結果放進 `this.bag["registeredApp"]`,所以父實例可見性用的還是通用的
    `Then the {string} plugin is visible on the parent server instance`。
-   共用步驟修好之後,本資料夾這一句可以刪掉換回通用的。
+   共用步驟修好之後,本資料夾這一句可以刪掉換回通用的。~~
+   **已修好(`f903291`)**:`common.steps.ts` 的通用步驟已補上 `_pluginName` 參數。
 2. **`features/package.json` 缺 `@fastify/cookie`**:第一個場景要在裸 server 上重現
    `services/identity/src/testing/app.ts` 的組裝(cookie → db → identityPlugin),
    而 `@fastify/cookie` 只是 `@ai-km/service-identity` 的 devDependency。本資料夾用
@@ -132,16 +132,26 @@ pnpm --filter @ai-km/features accept --tags '@identity and @standalone and not @
    從 identity 套件自己的解析根載入,不改共用的 package.json。建議合併時把
    `"@fastify/cookie": "^11.0.2"` 加進 `features/package.json` 的 devDependencies,
    步驟檔即可改回一行 `import cookie from "@fastify/cookie"`。
-3. **`standalone.json` 每一條 `pnpm --filter @ai-km/features accept -- --tags …` 在
+3. ~~**`standalone.json` 每一條 `pnpm --filter @ai-km/features accept -- --tags …` 在
    pnpm 11.9.0 下都是紅的**(含 `06-retrieval` 那條;實測輸出見本檔最後一節)。
    建議把 12 條裡的 `--` 一律拿掉。`/phase-done` 會真的跑這些指令,所以這條會擋到
-   每一個資料夾的驗收,不只本資料夾。
+   每一個資料夾的驗收,不只本資料夾。~~
+   **已修好(`a0e8d80`)**:`standalone.json` 的 `--` 已拿掉。
 
 ## 沒寫進 phase-1 的行為(綁得到既有測試,但這個 phase 塞不下 / 需要別的環境)
 
 「一個 phase 少於 3 或多於 15 個場景都要懷疑」——13 個已接近上限,下列全部**仍由
 `services/identity` 的 vitest 守著**(沒有失去覆蓋),排進 phase-2 的 Gherkin:
 
+- **守門的身分輸出**(session 竄改 / 過期 / 停用 → 401):phase-1 的「A hand-edited
+  session cookie is refused and wiped」等場景斷言的 401,審核者實測是 `GET /v1/auth/session`
+  handler 自己又查了一次 DB、在 `!row` 時回 401 的 **defence-in-depth** 在滿足,不是
+  `requireSession` 這個接縫本身守住的——把 `buildRealRequireSession` 改成「偽造 cookie 也放行」,
+  phase-1 13 條仍全綠;再把每個請求的 `request.auth` 換成 `"attacker"`,也是 13/13 全綠。
+  這個行為**仍有測試守著**:`require-session.test.ts` + `plugin.test.ts` AC9 在同一個突變下
+  **會紅**(審核者實測),只是 phase-1 的 `.feature` 沒有釘住它,repo 整體並非沒有守門。
+- **`composeRequireSession` 的 fallback 分支**(疊在 `apps/api` 既有的 E04-S039 decorator
+  之前而不是取代它):phase-1 沒有任何場景涵蓋這條路徑。
 - 登入節流與帳號鎖定(E02-S034,`plugin.test.ts` 17 條):鎖定後的回應與一般錯密碼
   **逐位元相同**、per-IP 與 per-username 兩把鎖、視窗滑出後恢復、`LOGIN_RATE_LIMITED`
   telemetry 只記 hash 不記原文。這是嚴格級的重點題,值得自己一個 phase。
@@ -164,8 +174,12 @@ pnpm --filter @ai-km/features accept --tags '@identity and @standalone and not @
   `02-authorization` 的 phase-1 同時在寫,兩邊都可能宣稱它。建議在兩個資料夾都 done
   之後用 `/feature` 分流一次,不要各寫各的。
 - **反向驗證只證了 CSRF 這一層**:session 本身的守門(竄改 / 過期 / 停用 → 401)這次
-  沒有被突變證明過。下一次(或 phase-2)用窄突變打 `buildRealRequireSession` 的
-  `if (!row)` 那一段,證明「舊 cookie 不再有效」不是靠副作用綠的。
+  是**審核者量到的事實,不是「沒做過」**——把 `buildRealRequireSession` 改成「偽造 cookie
+  也放行」,phase-1 13 條**仍全綠**;把每個請求的 `request.auth` 換成 `"attacker"`,
+  也是 13/13 全綠(見「沒寫進 phase-1 的行為」的說明)。同一個突變下,`services/identity`
+  的 vitest 有 2 條紅(`require-session.test.ts` + `plugin.test.ts` AC9),所以 repo 整體
+  有守,只是 phase-1 的 `.feature` 沒釘住。下一次(或 phase-2)用窄突變打
+  `buildRealRequireSession` 的 `if (!row)` 那一段,把這件事收進 cucumber 層自己的斷言。
 - **首個場景的可見性斷言看的是 `requireSession`**:identityPlugin decorate 出來的就是
   這一個屬性,所以通用步驟的字串是 `"requireSession"` 而不是 `"identity"`。讀起來有點怪,
   但它斷言的正是 ADR 0007 §5 要的那件事(`fp()` 沒包 → 父實例上看不到)。若協調者要統一

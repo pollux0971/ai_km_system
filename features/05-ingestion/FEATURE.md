@@ -20,7 +20,8 @@
 - 寫入路徑的 embedding 身分(E06-S026):每個 `VectorRecord` 帶著 `embeddingModel` /
   `embeddingDimensions`;gateway 報不出身分就拒絕寫入,不補預設值
 - 寫入路徑的 fail-closed 拒絕:空 scopeKey(`IngestionScopeError`)、空抽取(`PdfEmptyTextError`)、
-  加密(`PdfEncryptedError`)、切出 0 塊(`IngestionEmptyDocumentError`)
+  加密(`PdfEncryptedError`)、切出 0 塊(`IngestionEmptyDocumentError`,**守門存在,但本 phase
+  無覆蓋**,見「開放問題」)
 - 跨部門重匯拒絕(E06-S043,使用者 2026-09-03 已批):同一個 `documentId` 換 `scopeKey` 重匯 →
   `DocumentScopeConflictError`,原部門的可見內容一筆不變
 - `ingestionPlugin`(E06-S041):`fp()` 包裝,decoration 對父實例可見
@@ -116,7 +117,7 @@ store、repo 內的三份 fixture PDF,不需要 DB、不需要模型、不開 po
 
 (共用檔只有協調者能改;以下是本輪撞到、但我沒有動的東西。)
 
-- `features/steps/common.steps.ts`:`When("the {string} plugin is registered on a bare server and
+- ~~`features/steps/common.steps.ts`:`When("the {string} plugin is registered on a bare server and
   the server becomes ready", …)` 的 cucumber expression 有一個 `{string}` 參數,但 handler 宣告
   `function (this: KmWorld)`(0 個參數),cucumber 直接拒絕:
   `function has 0 arguments, should have 1 (if synchronous or returning a promise) or 2 (if accepting a callback)`。
@@ -124,23 +125,22 @@ store、repo 內的三份 fixture PDF,不需要 DB、不需要模型、不開 po
   **建議措辭**:handler 改成 `async function (this: KmWorld, _name: string)`(名字只是給場景讀的,
   真正要註冊什麼仍由 `this.bag["pluginUnderTest"]` 決定)。修好之後本資料夾可以把自己的
   「the ingestion plugin is registered on a host application and that application becomes ready」
-  換回通用句。
-- `standalone.json`(9 條非互動指令)、`features/06-retrieval/FEATURE.md`、`features/README.md`、
+  換回通用句。~~ **已修好(`f903291`)**:`common.steps.ts` 的通用步驟已補上參數。
+- ~~`standalone.json`(9 條非互動指令)、`features/06-retrieval/FEATURE.md`、`features/README.md`、
   以及回填 brief 裡的驗收指令都寫成 `pnpm --filter @ai-km/features accept -- --tags '…'`。
   pnpm 11.9.0 會把那個 `--` **原樣**轉給 cucumber-js,cucumber 當成一個檔案路徑:
   `ENOENT: no such file or directory, open '…/features/@retrieval and @standalone and not @manual'`,
   退出碼 1。**建議措辭**:把 `-- ` 拿掉(`pnpm --filter @ai-km/features accept --tags '…'`,
   2026-09-04 實測 `9 scenarios (9 passed)`)。這條會讓 `/phase-done` 的「單獨執行 exit 0」對
-  **每一個**資料夾都假紅,不只本資料夾。
+  **每一個**資料夾都假紅,不只本資料夾。~~ **已修好(`a0e8d80`)**:`standalone.json` 的 `--` 已拿掉。
 - `features/steps/integration.steps.ts`:屬於 ingestion 的句子(`the model gateway uses the
   deterministic embedding provider`、`an in-memory vector store`、`the real Chinese fixture PDF is
   ingested under department {string}`、`the real Chinese fixture PDF is ingested with an empty
   department`、`the vector store is still empty`)目前住在那裡,本資料夾**原文沿用、不重新定義**。
-  搬家到 `features/steps/ingestion.steps.ts` 由協調者在合併點做(顧問 2026-09-04 裁決)。
-  搬完之後本檔的 `this.bag["i1"]` / `this.bag["ingestion05"]` 兩個袋子可以併成一個。
-- `pnpm --filter @ai-km/features steps:dup` 因為上一條而**紅**:上述 5 句同時出現在
-  `features/05-ingestion` 與 `docs/integration` 兩個分組,而它們定義在 `integration.steps.ts`
-  不是 `common.steps.ts`。協調者已預告這是守門本身要調整的地方。
+  **技術顧問 2026-09-04 裁決:不搬**——這批是整合組合步驟,家本來就在 `integration.steps.ts`,
+  不屬於 `05-ingestion`。本檔的 `this.bag["i1"]` / `this.bag["ingestion05"]` 兩個袋子維持分開。
+  `pnpm --filter @ai-km/features steps:dup` 現在是**綠的**,不是本檔先前寫的紅——守門已依這個
+  歸屬結論調整過,上述 5 句同時出現在兩個分組不再判紅。
 
 ## 開放問題
 
@@ -153,3 +153,6 @@ store、repo 內的三份 fixture PDF,不需要 DB、不需要模型、不開 po
   補一個場景去造 fixture(那會變成為守門而造資料),登記在這裡,等有真實文件觸發時再補。
 - 「把文件從 A 部門移到 B 部門」是否為合法操作,仍是 `docs/DECISIONS_NEEDED.md` 第 1 條的待批示;
   在那之前重匯一律拒絕,本 phase 的場景就是按這個現況寫的。
+- fixture PDF 只切出 **1 個** chunk(2 頁、186 字元 < `targetSize` 480),所以所有「每一個 stored
+  chunk」的迴圈實際只跑一圈——**多 chunk 文件的 offsets 與 embedding 身分在 cucumber 層沒有被
+  證明過**。不是缺陷,phase-2 換真實長文件時會自然補上。

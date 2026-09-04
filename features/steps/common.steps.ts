@@ -92,7 +92,16 @@ Then("the response error code is {string}", function (this: KmWorld, code: strin
 });
 
 Then("it is rejected with {string}", function (this: KmWorld, errorName: string) {
-  assert.ok(this.lastError, "預期會被拒絕,但沒有任何錯誤被拋出");
+  // 「沒有被拒絕」是這句話唯一的存在性斷言,而在「該拒絕卻放行」的場景裡,**決定性的量在放行的
+  // 那個結果裡**(捏造的引用 id、洩漏的資料、不該存在的答案)。訊息不帶著它,紅了也說不出為什麼
+  // ——GHERKIN_WORKFLOW §5.2:一條紅得對、但訊息說不出為什麼的斷言,在自動驗證下與紅得不對
+  // 無法區分。2026-09-04 由 07-generation 的獨立審核者實測發現:捏造引用守門被拿掉後,這句話
+  // 紅在「預期會被拒絕,但沒有任何錯誤被拋出」,而真正會變的 `doc-does-not-exist#0` 一個字都
+  // 沒出現;會講出內容的下一條 Then 被 cucumber skip,從未執行。
+  assert.ok(
+    this.lastError,
+    `預期會被拒絕,但沒有任何錯誤被拋出;實際交回了:${JSON.stringify(this.lastResult)}`,
+  );
   assert.equal(this.lastError.name, errorName, `錯誤類型應為 ${errorName},實際 ${this.lastError.name}: ${this.lastError.message}`);
 });
 

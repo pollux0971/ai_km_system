@@ -67,7 +67,7 @@ Feature: The retrieval seam should be reachable from apps/api's own real server,
     Then the retrieval seam should be visible from the real server's parent instance, but it is not yet
     And the hits should come back empty, never an invented citation
 
-  Scenario: I2's scope is fixed to dept:eng for every signed-in person, not derived from their real department — this scenario is the fixed value's removal condition
+  Scenario: I2's fixed dept:eng scope is in force — every signed-in person gets the same one, not one derived from their real department (the removal condition lives in 03-conversation/phase-2)
     Given a fresh server with fake providers
     When two different demo people with different real departments each try to ask "軸承過熱" through the real API server's own retrieval seam
     Then the retrieval seam should be visible from the real server's parent instance, but it is not yet

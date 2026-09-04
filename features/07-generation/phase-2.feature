@@ -96,7 +96,7 @@ Feature: The generation seam should compose with retrieval on apps/api's own rea
   # 這個「兩人結果相同」的比較在 apps/api 今天沒有 seed 通道的情況下是弱斷言(store 永遠是
   # 空的,所以不管 scope 是誰,結果都會相同)——它證明的是「固定值真的活在生產碼裡且沒有
   # 因人而異地壞掉」,不是「授權已經做完了」。等 seed 通道存在後應該加強成部門各異的資料。
-  Scenario: I2's scope is fixed to dept:eng for every signed-in person, not derived from their real department — this scenario is the fixed value's production removal condition
+  Scenario: I2's fixed dept:eng scope is in force through the production seam — every signed-in person gets the same one, not one derived from their real department (the removal condition lives in 03-conversation/phase-2)
     Given a fresh server with fake providers
     When two different demo people with different real departments each try to get a grounded answer to "軸承過熱" through the real API server's own combined RAG seam
     Then the combined RAG seam should be visible from the real server's parent instance, but it is not yet

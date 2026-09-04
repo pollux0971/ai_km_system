@@ -20,6 +20,21 @@ export type AnswerState =
 export type AnswerFeedbackVerdict = "OK" | "NG";
 export type FeedbackReason = "INCORRECT" | "INCOMPLETE" | "OFF_TOPIC" | "OTHER";
 
+/**
+ * Mirrors `contracts/openapi/generation.yaml`'s `Citation` verbatim (ADR
+ * 0016 D1 — `conversations.yaml`'s `Message.citations` items `$ref` that
+ * same schema so the two can never drift). Defined locally rather than
+ * imported from `@ai-km/service-generation`/`@ai-km/service-model-gateway`:
+ * this repository has no reason to depend on either package, and the shape
+ * is four primitive fields that are cheap to mirror.
+ */
+export interface MessageCitation {
+  readonly chunkId: string;
+  readonly documentId: string;
+  readonly startOffset: number;
+  readonly endOffset: number;
+}
+
 export interface MessageRow {
   readonly id: string;
   readonly conversationId: string;
@@ -33,6 +48,16 @@ export interface MessageRow {
   readonly feedbackReason?: FeedbackReason;
   readonly feedbackComment?: string;
   readonly citationFeedback?: Record<string, AnswerFeedbackVerdict>;
+  /**
+   * ADR 0016 D3 — absent (this key does not exist on the object at all) means
+   * this message was never produced by the RAG path; `[]` means the RAG path
+   * ran and found nothing to cite. `toMessage()` below only adds this key
+   * when the underlying column is non-NULL, so the two stay distinguishable
+   * all the way out to the JSON response (a `citations: undefined` property
+   * would already be dropped by `JSON.stringify`, but the row itself must
+   * not paper over the distinction earlier by defaulting to `[]`).
+   */
+  readonly citations?: MessageCitation[];
 }
 
 interface RawMessageRow {
@@ -48,12 +73,47 @@ interface RawMessageRow {
   feedback_reason: FeedbackReason | null;
   feedback_comment: string | null;
   citation_feedback: string | null;
+  /** Absent entirely (not even `null`) when `hasCitationsColumn(db)` is false — see its doc comment. */
+  citations?: string | null;
   created_at: string;
   updated_at: string;
 }
 
-const SELECT_COLUMNS = `id, conversation_id, owner_key, role, content, attachment_names, state,
+const BASE_SELECT_COLUMNS = `id, conversation_id, owner_key, role, content, attachment_names, state,
        revisions, feedback, feedback_reason, feedback_comment, citation_feedback, created_at, updated_at`;
+
+/**
+ * Whether THIS `db` instance's `messages` table has the `citations` column
+ * added by `db/migrations/202609050001_conversation_message_citations.sql`
+ * (03-conversation/phase-2, ADR 0016). Checked at runtime, per instance,
+ * rather than assumed — `services/conversation/src/repository/
+ * messages.repository.test.ts` (a `*.test.ts` file this phase's role may not
+ * modify — GHERKIN_WORKFLOW §6) hand-rolls its OWN `create table messages`
+ * DDL rather than reading `db/migrations/*.sql`, and that hand-rolled DDL
+ * predates this column. Every one of that test file's own `createMessage`
+ * calls omits `citations`, so treating an absent column as "this message
+ * simply never carries citations" (rather than throwing, or silently
+ * requiring every caller everywhere to know which schema vintage its `db`
+ * is) is byte-for-byte the same behaviour that file already asserts on.
+ * Every REAL schema this repository is ever handed in production or in
+ * `testing/build-test-app.ts`'s harness (which now applies every `db/
+ * migrations/*.sql` file, this one included) has the column.
+ */
+const citationsColumnByDb = new WeakMap<Database, boolean>();
+
+function hasCitationsColumn(db: Database): boolean {
+  let has = citationsColumnByDb.get(db);
+  if (has === undefined) {
+    const columns = db.prepare(`PRAGMA table_info(messages)`).all() as { name: string }[];
+    has = columns.some((column) => column.name === "citations");
+    citationsColumnByDb.set(db, has);
+  }
+  return has;
+}
+
+function selectColumns(db: Database): string {
+  return hasCitationsColumn(db) ? `${BASE_SELECT_COLUMNS}, citations` : BASE_SELECT_COLUMNS;
+}
 
 function toMessage(raw: RawMessageRow): MessageRow {
   return {
@@ -71,6 +131,9 @@ function toMessage(raw: RawMessageRow): MessageRow {
     ...(raw.citation_feedback === null
       ? {}
       : { citationFeedback: JSON.parse(raw.citation_feedback) as Record<string, AnswerFeedbackVerdict> }),
+    ...(raw.citations === null || raw.citations === undefined
+      ? {}
+      : { citations: JSON.parse(raw.citations) as MessageCitation[] }),
   };
 }
 
@@ -80,6 +143,13 @@ export interface CreateMessageInput {
   readonly content: string;
   readonly attachmentNames: string[];
   readonly state?: AnswerState;
+  /**
+   * Omit entirely for a message that never went through the RAG path (the
+   * asker's own question, or any pre-I2 message) — that is what keeps the
+   * column NULL and the response field absent (ADR 0016 D3). Pass `[]`
+   * explicitly for a RAG-path answer that found nothing to cite.
+   */
+  readonly citations?: readonly MessageCitation[];
   readonly now: string;
 }
 
@@ -90,6 +160,7 @@ export function createMessage(
   input: CreateMessageInput,
 ): MessageRow {
   const owner = toOwnerKey(ownerKey);
+  const withCitationsColumn = hasCitationsColumn(db);
   const raw: RawMessageRow = {
     id: input.id,
     conversation_id: conversationId,
@@ -103,15 +174,26 @@ export function createMessage(
     feedback_reason: null,
     feedback_comment: null,
     citation_feedback: null,
+    ...(withCitationsColumn
+      ? { citations: input.citations === undefined ? null : JSON.stringify(input.citations) }
+      : {}),
     created_at: input.now,
     updated_at: input.now,
   };
 
+  // The `citations` column/placeholder is only added to this statement when
+  // `db`'s `messages` table actually has it — see `hasCitationsColumn`'s doc
+  // comment. A caller that supplies `input.citations` against a `db` without
+  // the column loses that data silently rather than throwing; today's only
+  // such `db` is `messages.repository.test.ts`'s hand-rolled fixture, and
+  // none of its own test cases ever pass `citations`.
+  const citationsColumn = withCitationsColumn ? ", citations" : "";
+  const citationsPlaceholder = withCitationsColumn ? ", @citations" : "";
   prepareOwnerScoped(
     db,
     `INSERT INTO messages
-       (id, conversation_id, owner_key, role, content, attachment_names, state, created_at, updated_at)
-     VALUES (@id, @conversation_id, @owner_key, @role, @content, @attachment_names, @state, @created_at, @updated_at)`,
+       (id, conversation_id, owner_key, role, content, attachment_names, state${citationsColumn}, created_at, updated_at)
+     VALUES (@id, @conversation_id, @owner_key, @role, @content, @attachment_names, @state${citationsPlaceholder}, @created_at, @updated_at)`,
   ).run(raw);
 
   return toMessage(raw);
@@ -122,7 +204,7 @@ export function listMessages(db: Database, ownerKey: OwnerKey, conversationId: s
   const owner = toOwnerKey(ownerKey);
   const rows = prepareOwnerScoped(
     db,
-    `SELECT ${SELECT_COLUMNS} FROM messages
+    `SELECT ${selectColumns(db)} FROM messages
       WHERE conversation_id = ? AND owner_key = ?
       ORDER BY created_at ASC`,
   ).all(conversationId, owner) as RawMessageRow[];
@@ -144,7 +226,7 @@ export function getMessage(
   const owner = toOwnerKey(ownerKey);
   const raw = prepareOwnerScoped(
     db,
-    `SELECT ${SELECT_COLUMNS} FROM messages
+    `SELECT ${selectColumns(db)} FROM messages
       WHERE id = ? AND conversation_id = ? AND owner_key = ?`,
   ).get(messageId, conversationId, owner) as RawMessageRow | undefined;
   return raw ? toMessage(raw) : undefined;
@@ -162,7 +244,7 @@ export function getMessageByOwner(db: Database, ownerKey: OwnerKey, messageId: s
   const owner = toOwnerKey(ownerKey);
   const raw = prepareOwnerScoped(
     db,
-    `SELECT ${SELECT_COLUMNS} FROM messages WHERE id = ? AND owner_key = ?`,
+    `SELECT ${selectColumns(db)} FROM messages WHERE id = ? AND owner_key = ?`,
   ).get(messageId, owner) as RawMessageRow | undefined;
   return raw ? toMessage(raw) : undefined;
 }
@@ -207,7 +289,7 @@ export function createRevision(
   const owner = toOwnerKey(ownerKey);
   const current = prepareOwnerScoped(
     db,
-    `SELECT ${SELECT_COLUMNS} FROM messages WHERE id = ? AND owner_key = ?`,
+    `SELECT ${selectColumns(db)} FROM messages WHERE id = ? AND owner_key = ?`,
   ).get(messageId, owner) as RawMessageRow;
 
   const revisions = [...(current.revisions === null ? [] : (JSON.parse(current.revisions) as string[])), current.content];
@@ -228,7 +310,7 @@ export function createRevision(
 
   const raw = prepareOwnerScoped(
     db,
-    `SELECT ${SELECT_COLUMNS} FROM messages WHERE id = ? AND owner_key = ?`,
+    `SELECT ${selectColumns(db)} FROM messages WHERE id = ? AND owner_key = ?`,
   ).get(messageId, owner) as RawMessageRow;
   return toMessage(raw);
 }

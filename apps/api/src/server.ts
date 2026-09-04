@@ -38,6 +38,7 @@ import {
   createDeterministicEmbeddingProvider,
   createCannedGenerationProvider,
   type EmbeddingProvider,
+  type GenerateInput,
 } from "@ai-km/service-model-gateway";
 import { feedbackPlugin } from "@ai-km/service-feedback";
 import {
@@ -46,7 +47,7 @@ import {
   retrievalPlugin,
   type RetrievalService,
 } from "@ai-km/service-retrieval";
-import { generationPlugin } from "@ai-km/service-generation";
+import { generationPlugin, createGenerationService } from "@ai-km/service-generation";
 import { ragPlugin } from "./rag-plugin.js";
 import { createIngestionService, ingestionPlugin, type IngestionService } from "@ai-km/service-ingestion";
 import { createHealthChecker, overallStatus } from "./health/checks.js";
@@ -370,7 +371,28 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // 07-generation/phase-1 (回填) — puts `app.generation` on the parent
   // instance. Same "no HTTP contract, unconditional registration" shape as
   // retrievalPlugin above (FEATURE.md: in-process seam, ADR 0007).
-  await app.register(generationPlugin);
+  //
+  // 03-conversation/phase-2 (I2, ADR 0016 D2): a message's `[N]` citation
+  // markers must line up with `citations[]`'s array order. The DEFAULT
+  // canned generation provider's `answerTemplate` (`services/model-gateway/
+  // src/generation/canned.provider.ts`) prints `[canned] 依據 N 段來源回答:
+  // …` — no `[N]` markers at all. That provider is shared infra used by
+  // several composition roots (this one is not its only caller — see its own
+  // header), so this file does not change it; instead it supplies its own
+  // `answerTemplate` here, at the one composition root that needs markers,
+  // via the `CannedProviderOptions` hook that already existed for exactly
+  // this. `citations[i]` is built from `input.context[i]` in that same
+  // provider (see its `citations` map), so numbering markers over
+  // `input.context` in order reproduces the exact same order — nothing here
+  // re-sorts or re-derives that mapping.
+  const markedCannedAnswerTemplate = (input: GenerateInput): string =>
+    `依 ${input.context.length} 段來源回答:${input.question}` +
+    input.context.map((_, index) => `[${index + 1}]`).join("");
+  await app.register(generationPlugin, {
+    service: createGenerationService({
+      generation: createCannedGenerationProvider({ answerTemplate: markedCannedAnswerTemplate }),
+    }),
+  });
   // 07-generation/phase-2 (I2, ADR 0014) — the first production call site
   // that actually chains `app.retrieval.retrieve()` into
   // `app.generation.answer()`, under ADR 0014's fixed `dept:eng` scope. See

@@ -7,6 +7,7 @@
  * created or revised through a conversation the caller does not own.
  */
 import { randomUUID } from "node:crypto";
+import type { Database } from "better-sqlite3";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { lookupConversation } from "../repository/conversations.repository.js";
 import {
@@ -20,7 +21,15 @@ import {
 } from "../repository/messages.repository.js";
 import { appendChangeEvent } from "../repository/change-events.repository.js";
 import { toOwnerKey, type OwnerKey } from "../repository/owner-scope.js";
-import { hostChangeEventBus, hostContracts, hostDb, hostRequireSession, requestAuth } from "../plugin-types.js";
+import {
+  hostChangeEventBus,
+  hostContracts,
+  hostDb,
+  hostRag,
+  hostRequireSession,
+  requestAuth,
+  type ConversationAuthContext,
+} from "../plugin-types.js";
 import { ConversationDomainError } from "../domain-error.js";
 
 const PREFIX = "/v1";
@@ -87,6 +96,85 @@ interface CreateMessageBody {
 interface CreateRevisionBody {
   readonly content: string;
   readonly state?: AnswerState;
+}
+
+/**
+ * 03-conversation/phase-2 (I2, ADR 0014/0016): runs the RAG round-trip for a
+ * just-posted `role: user` question and appends the grounded `role:
+ * assistant` reply as a second message — same shape (createMessage →
+ * touchConversationSummary → 2 appendChangeEvent → 2 bus.publish) the
+ * `role: user` path just used, so a watching SSE window and the change log
+ * see the assistant's reply exactly like any other message write.
+ *
+ * `app.rag` only exists once `apps/api`'s real `buildServer()` has
+ * registered `ragPlugin` — the bare `buildTestApp()` harness this package's
+ * own vitest suite uses never does (see `hostRag`'s doc comment). Read here,
+ * at CALL time inside the request handler, not hoisted into a
+ * module/registration-time constant: `conversationPlugin` is registered
+ * BEFORE `ragPlugin` in `apps/api/src/server.ts` (06-retrieval/07-generation/
+ * this domain's own ordering — E04-S049), so a value captured once at
+ * `registerMessageRoutes()`'s own call time would permanently see
+ * `undefined` — the exact bug `hostRequireSession`'s doc comment already
+ * describes for a different decorator. Callers of this function that skip
+ * it (bare harness, no rag) leave `POST .../messages` byte-for-byte
+ * unchanged from phase-1.
+ *
+ * `caller.principalId` carries the ASKER's own identity into
+ * `app.rag.ask()` — ADR 0014's fixed `dept:eng` permission itself is
+ * unchanged (still lives entirely inside `apps/api/src/rag-plugin.ts`; this
+ * function never sees or threads a scope key), but the days of every
+ * signed-in person's question flowing through the exact same anonymous call
+ * are over: this is the first production caller that has a real person to
+ * hand `ask()`.
+ */
+async function triggerRagReply(
+  app: FastifyInstance,
+  db: Database,
+  owner: OwnerKey,
+  conversationId: string,
+  question: string,
+  auth: ConversationAuthContext,
+): Promise<void> {
+  const rag = hostRag(app);
+  if (!rag) return;
+
+  const answer = await rag.ask(question, { principalId: auth.userId });
+  const state: AnswerState = answer.citations.length > 0 ? "ANSWERED" : "NO_EVIDENCE";
+  const preview = answer.answer.length > 0 ? answer.answer : `已傳送 0 個附件`;
+  const id = randomUUID();
+  const now = new Date().toISOString();
+
+  const { messageCreatedEvent, conversationUpdatedEvent } = db.transaction(() => {
+    createMessage(db, owner, conversationId, {
+      id,
+      role: "assistant",
+      content: answer.answer,
+      attachmentNames: [],
+      state,
+      // Straight from `app.rag.ask()`, in the order it returned them — this
+      // function must never reorder `citations` (ADR 0016 D2: array order
+      // IS the `[N]` marker mapping; a reorder here would silently break it).
+      citations: answer.citations,
+      now,
+    });
+    touchConversationSummary(db, owner, conversationId, preview, now);
+    const messageCreatedEvent = appendChangeEvent(db, owner, {
+      type: "message.created",
+      conversationId,
+      messageId: id,
+      occurredAt: now,
+    });
+    const conversationUpdatedEvent = appendChangeEvent(db, owner, {
+      type: "conversation.updated",
+      conversationId,
+      occurredAt: now,
+    });
+    return { messageCreatedEvent, conversationUpdatedEvent };
+  })();
+
+  const bus = hostChangeEventBus(app);
+  bus.publish(owner, messageCreatedEvent);
+  bus.publish(owner, conversationUpdatedEvent);
 }
 
 export function registerMessageRoutes(app: FastifyInstance): void {
@@ -170,6 +258,24 @@ export function registerMessageRoutes(app: FastifyInstance): void {
       const bus = hostChangeEventBus(app);
       bus.publish(owner, messageCreatedEvent);
       bus.publish(owner, conversationUpdatedEvent);
+
+      // 03-conversation/phase-2 (I2): a question the asker just posted is
+      // answered synchronously, before this response returns (design
+      // judgement A, features/03-conversation/phase-2.feature's header —
+      // the scenarios poll the conversation's message list either way, so
+      // sync vs. async is this route's own choice, not the spec's). Only
+      // for the asker's own question, only when there is question TEXT to
+      // ask (an attachment-only message, `content: ""`, has nothing for
+      // `retrieve()` to search — calling `ask("")` would throw the same
+      // empty-question guard `07-generation/phase-2` already exercises,
+      // which is the right behaviour for a real question but would turn an
+      // otherwise-valid attachment-only message into a 500), and only when
+      // `app.rag` actually exists (see `triggerRagReply`'s doc comment) — an
+      // assistant message posted directly (the pre-I2, still-supported
+      // path) never re-triggers RAG on itself.
+      if (body.role === "user" && body.content.length > 0) {
+        await triggerRagReply(app, db, owner, conversationId, body.content, requestAuth(request)!);
+      }
 
       void reply.status(201);
       return created;

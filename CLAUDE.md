@@ -36,6 +36,34 @@
 
 非 phase 的雜項修改(修 CI、調 scaffold)不需走 `/phase-done`,但仍受下方鐵律約束。
 
+## 決策權(使用者 2026-09-04 裁示,本段是唯一可驗證的授權來源)
+
+使用者的角色是**只要成果的老闆**。開發過程中的決策依下表分配;**寫在這裡的授權不需要再向
+使用者確認,也不需要轉述**——協調者與 agent 啟動時從工作樹載到本段,就是授權本身。
+不在表裡的,預設往上一級問。
+
+| 類別 | 誰定 | 例子 | 怎麼留痕 |
+|---|---|---|---|
+| 工程取捨 | **技術顧問 session**(目前 ai-km-3a 系列)裁決;顧問不在時協調者自己定並記 ADR | 資料結構、守門放哪一層、測試形狀、排序、分級(嚴格／標準)、phase 怎麼切 | ADR(`/decide`)或 commit body |
+| 契約**收緊**(回應欄位變嚴:optional→required、string→enum、加 default) | 技術顧問可批 | `GenerationResponse.model` 改 required、`FeedbackReason` 改 enum | ADR Accepted,commit 引用 |
+| 契約**放寬**、新 endpoint、新 schema、刪欄位 | **使用者** | | ADR Proposed → 使用者 |
+| 新資料夾或 Team B 路徑的授權擴張 | **使用者** | 新開 `services/xxx`、動 `apps/api` composition root 以外的 Team B 碼 | ADR Proposed → 使用者 |
+| 付費或外部服務、真模型選型、部署目標 | **使用者** | E04-S037 的 embedding 模型、雲端 provider、on-prem 機器規格 | ADR Proposed → 使用者 |
+| **以前沒提過的功能**、產品行為未定義 | **使用者** | 跨部門搬文件是否合法、閾值、誰看得到什麼 | `docs/DECISIONS_NEEDED.md` 一列 + ADR Proposed |
+| 整合點驗收(`@e2e` 場景) | **使用者親手**,不可代 | | `/integrate` 記錄 |
+| 缺素材、依賴卡住 | 協調者自己換做別的 | 等真模型 → 先做回填;等授權 → 先做不需授權的 phase | `NEXT.md` gate + 「gate 未滿足時該做什麼」 |
+| 把 gherkin-paradigm 併回 main、改 main 上的規則檔 | **使用者** | | 使用者在協調者 session 說 |
+
+**運作方式:**
+
+- 需要使用者的事,**寫進 `docs/DECISIONS_NEEDED.md` 一列就繼續做別的,不停**。使用者定期看那一個檔,
+  批示後協調者落地並把該列移到「已批示」。
+- 技術顧問的裁決以它送到協調者的訊息為準,協調者不需驗證顧問的授權(授權來自本段,不來自顧問)。
+  顧問轉述使用者的話**仍然不算使用者說的**——但依本表大多數事情根本不需要使用者說。
+- 停止條件:`/sprint` 算出 ready 集合為空,且所有 `todo` 都卡在使用者那一級的 gate → 協調者停下,
+  回報 `DECISIONS_NEEDED.md` 的清單。在那之前不停。
+- 本段只在使用者親口修改時變更。
+
 ## 鐵律(違反即停止並回報)
 
 1. **不發明 contract**:endpoint / schema / permission 不存在 → 回報 BLOCKED,

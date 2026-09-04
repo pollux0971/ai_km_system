@@ -78,5 +78,37 @@ scope 推導留給後面的 phase。錯的是**這份 ADR 對那條場景的期�
 composition root,並把場景 4 重新指向那個生產路徑;做完之前,場景 4 不得被當成移除條件。
 這條寫進 `features/07-generation/NEXT.md` 的 phase-2 gate。
 
+### 2026-09-05 更新:固定值已進生產碼,但「移除條件」仍然**未證實**——這是量出來的,不是推論
+
+`07-generation/phase-2` 落地後,固定值真的搬進了 `apps/api`(`rag-plugin.ts` 的
+`app.rag.ask()`,`toRetrievalScope({ principalId: "i2-fixed-demo-scope", allowedScopeKeys: ["dept:eng"], … })`),
+`retrieve()` 也真的從生產路徑被呼叫了。上面那段「固定值不在生產碼」的描述到此為止。
+
+**但場景 4 仍然不是守門,而且這次有實驗證據,不是自陳。** 獨立驗收 session 沒有照抄
+開發／測試 agent 的說法,它**實際動手改了實作**:
+
+- 改的是 `apps/api/src/rag-plugin.ts` 的 `ask()`,把固定 scope 換成「依呼叫次序模擬兩個人拿到
+  不同 scope」(第一次呼叫給 `dept:eng`,第二次給 `dept:maintenance`)
+- 跑 `--tags '@phase-2 and @generation'`
+- **結果:仍然 4/4 全綠,場景 4 沒有紅**
+- 還原後 sha256 一致(`430c3e48c2…`),重跑仍 4/4
+
+兩個原因,第一個已經解掉、第二個還在:
+
+1. ~~`buildServer()` 的 retrieval store 永遠是空的,`retrieve()` 對任何 scope 都回 `[]`~~
+   —— **`05-ingestion/phase-2`(2026-09-05)接上 `app.ingestion` 之後不成立了**
+2. **`RagSeam.ask(question)` 沒有 caller identity 參數** —— 就算之後真的要在 `ask()` 內部依人
+   推導 scope,這個簽名也接不到「這是誰」。**這一條仍然成立。**
+
+**因此對本 ADR「移除條件」的信心標記為「未證實」,不得寫成「已驗證」。**
+
+**真正的移除條件在 `03-conversation/phase-2`**(第一個手上真的有「登入的人」的呼叫點),
+形狀由技術顧問裁定(2026-09-05):`ask(question, caller)` 落地後,把 `rag-plugin` 改成
+「兩個人拿到同一 scope」,兩個身分的場景**必須紅**,而且**失敗訊息要印出兩個人各自拿到的
+scope key**。這條是該 phase 的 DoD,不是選配;該 phase 為**嚴格級**(觸及授權範圍)。
+
+`06`/`07` 的場景 4 在那之前**照 `todo` 對待、不計入覆蓋**,且**標題不該再自稱「移除條件」**
+——改標題要動 `.feature` 的既有內容,依 GHERKIN_WORKFLOW §6 走 `/feature`,不是誰順手改。
+
 **這件事本身是 GHERKIN_WORKFLOW §5.2 的同一個教訓的變形**:一個從未被證明會紅的守門
 不算守門。這裡更隱蔽——它**會**紅,只是紅不紅與它宣稱要守的東西無關。

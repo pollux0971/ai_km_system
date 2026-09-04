@@ -298,6 +298,42 @@ worker 讀。是事後 `grep` 才發現的。
 ——這和坑 14(`.feature` 的刻意紅對 CI 隱形)是同一個形狀的兩個實例:
 **訊號與噪音長得一樣時,訊號等於不存在。**
 
+### 坑 16:守門不跑等於沒有守門——`RETURN TO SENDER` 的 grep 存在了整整一個範式,一次都沒跑過
+
+2026-09-04、09-05 連續兩輪,開發 agent 在 `feat` commit 裡動了共用檔:
+`02-authorization/phase-2b` 動 `features/steps/integration.steps.ts`、
+`07-generation/phase-2` 動 `apps/api/package.json`。兩次我都在事後才知道
+(agent 主動回報),兩次都判「內容無害」接受了。
+
+我當時把它歸類成「規則太嚴,該放寬」,還寫了一條建議放寬的判準送給顧問。
+**顧問查完 commit 之後指出真正的問題不在規則,在守門沒跑**:
+
+`GHERKIN_WORKFLOW` §6 底下本來就有一行
+
+```bash
+git diff --name-only main...<branch> | grep -E '\.test\.ts$|^features/steps/|\.feature$' && echo "RETURN TO SENDER"
+```
+
+而 `a2efe28` 改的 `features/steps/integration.steps.ts` **本來就會被這個 grep 抓到**
+——它不只是共用檔問題,是開發 agent 動了 `features/steps/**`,兩條都違反。
+**那個 grep 從寫下來到那天為止,沒有任何一次合併真的跑過它。**
+
+我提的放寬判準本身也錯:「移除它 `typecheck` 會紅」對開發 agent 寫的**每一行**都成立
+——任何 import 都是自己實作選擇的機械後果。它跟契約那條判準形狀不同:
+契約判準看的是**對呼叫端**的後果,這條看的是**對自己**的後果,後者篩不掉任何東西。
+真正需要有人簽名的判斷是「composition root 要不要新增一個 workspace 相依」,
+而那正好就是我想放行的那一行。
+
+**通則,而且是這份檔案裡最貴的一條**:發現規則被反覆違反時,先問「守門有沒有跑」,
+再問「規則要不要改」。**順序反過來,就會用一次放寬去掩蓋一個從來沒有執行過的檢查**
+——而放寬之後,連「它本來會抓到」這個事實都消失了,沒有人再有機會發現守門其實沒接上。
+
+這與坑 2(守門的「有沒有被接上」跟「會不會紅」是兩件不同的事)是同一個家族的第三種:
+**接上了、也會紅,但沒有人按下去。**
+
+落地:§6 的 grep 已擴充涵蓋共用檔,並加上「對開發 agent 的分支在合併前**必跑**,
+輸出貼進 merge commit body;有輸出就退件,不接受『內容無害』」。
+
 ## 出處
 
 完整段落:`archive/ROADMAP_TEMP.md` 的 `5-pi`(CI 紅五天)、`5-rho`(L2-EQ 首次執行 2 條真分歧

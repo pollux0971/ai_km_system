@@ -96,8 +96,19 @@ Gate:自身 …;整合 …;契約 …
 
 ## 第五步:確認後寫檔
 
-1. 寫 gherkin,遵守 `features/README.md` 慣例。場景要完整可執行,不是只有標題。
-2. 更新 FEATURE.md、NEXT.md(三類 gate + 「gate 未滿足時該做什麼」——這段最有價值)。
+> **2026-09-05 對齊(顧問裁決 #19)**:`/feature` 寫的是**能力邊界**——`FEATURE.md` 的 phase 列
+> (含**一句意圖**:這個 phase 要讓人做到什麼)與 `NEXT.md` 的 gate。
+> **phase 表上已核准 phase 的 `phase-N.feature`,由測試 agent 在「先寫紅」的那個 commit 裡新建**,
+> 不必為每個 phase 再走一次 `/feature`(GHERKIN_WORKFLOW §3、§6)。
+> `/feature` 仍然是**既有 `.feature` 內容修改**的唯一入口,以及新能力資料夾的入口。
+> 這條讓 PO 把關的東西不落空的前提是:**phase 列一定要帶那句意圖**,否則測試 agent 寫的
+> `.feature` 就是無人核准的規格。
+
+1. **新能力資料夾**、或**修改既有 `.feature` 的內容**時:寫 gherkin,遵守 `features/README.md` 慣例。
+   場景要完整可執行,不是只有標題。
+   **既有資料夾新增一個 phase** 時:不寫 `.feature`,只寫 phase 列的那句意圖與 gate(下一項)。
+2. 更新 FEATURE.md(phase 列**必須含一句意圖**)、NEXT.md(三類 gate + 「gate 未滿足時該做什麼」
+   ——這段最有價值)。
 3. 新資料夾額外:索引、standalone.json、roadmap。
 4. 有取捨就 `/decide`。
 5. 回報所有新增與修改的檔案路徑。

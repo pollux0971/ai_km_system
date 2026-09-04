@@ -41,6 +41,16 @@
       ——**但改那兩個 `.feature` 的文字要走 `/feature`**(§6),不是這個 phase 順手改。
 
       在此之前,ADR 0014 的「移除條件」信心一律標**「未證實」**,不得寫成「已驗證」。
+
+- [ ] **本 phase 的反向驗證形狀已由技術顧問指定(2026-09-05),是 DoD 不是選配**:
+      `ask(question, caller)` 落地後,把 `rag-plugin` 改成**「兩個人拿到同一 scope」**,
+      兩個身分的場景**必須紅**,而且**失敗訊息要印出兩個人各自拿到的 scope key**。
+
+      這正是獨立驗收 session 在 `07-generation/phase-2` 做過的那個實驗**反過來**:
+      它當時把實作改成「兩個人拿到不同 scope」,場景仍然 4/4 全綠——證明那條斷言是死的。
+      本 phase 要讓同一個實驗的反方向**真的會紅**,才算把它救活。
+
+      **本 phase 為嚴格級**(觸及授權範圍),依 §5.1 由另一個 session 驗收。
 - [x] 契約:`contracts/openapi/conversations.yaml` 的 `Message` 加**選填** `citations[]`
       —— **gate 已解除(2026-09-04)**。
 

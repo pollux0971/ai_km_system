@@ -33,10 +33,11 @@
 ## 3. 生命週期
 
 ```
-想法 → /feature(提案→確認→寫 .feature,狀態 todo)
+想法 → /feature(提案→確認→**FEATURE.md phase 表加一列,含一句意圖** + NEXT.md gate,狀態 todo)
      → NEXT.md gate 全滿足 → ready
      → /sprint 挑進本週 → in-progress
-     → 測試 agent 先寫 steps + 單元測試(紅)→ 開發 agent 寫實作(綠)
+     → 測試 agent **依 phase 列的那句意圖**先寫 phase-N.feature + steps + 單元測試(紅)
+       → **協調者對照意圖審過**才派開發 agent → 開發 agent 寫實作(綠)
      → tools/mutate.mjs 反向驗證(嚴格級必做)
      → /phase-done → done,更新 NEXT.md、解鎖別人
      → 整合點所有 phase done → /integrate → 使用者親手確認 @e2e
@@ -115,16 +116,21 @@ Authorization 先於 retrieval;Deny-Wins;未授權資料不進 context/citation/
 | 角色 | 能改 | 不能改 |
 |---|---|---|
 | 使用者(PO) | `.feature`、契約、ADR 拍板、規則檔 | — |
-| 協調者 | 派工、合併、共用檔(package.json、lock、tsconfig、`cucumber.js`、`common.steps.ts`) | 實作 |
-| 測試 agent | `features/steps/**`、`*.test.ts`(先寫,紅) | 實作 |
-| 開發 agent | 實作,可以跑測試 | **`*.test.ts`、`features/steps/**`、`.feature`** |
+| 協調者 | 派工、合併、共用檔(package.json、lock、tsconfig、`cucumber.js`、`common.steps.ts`)。**可預見的共用檔改動(composition root 的 workspace 相依等)在派工前於 main 以獨立 `chore(shared)` commit 先落,agent 從該 commit 分支;不可預見的由 agent 回報後同樣獨立 commit,agent rebase** | 實作 |
+| 測試 agent | `features/steps/**`、`*.test.ts`(先寫,紅);**FEATURE.md phase 表上已核准 phase 的 `phase-N.feature`(只新建,且在先寫紅的那個 commit 裡)** | 實作;**既有 `.feature` 的內容修改(走 `/feature`)** |
+| 開發 agent | 實作,可以跑測試 | **`*.test.ts`、`features/steps/**`、`.feature`、共用檔(`package.json`、`pnpm-lock.yaml`、`tsconfig*.json`、`features/cucumber.js`、`common.steps.ts`)——需要共用檔改動時停下回報,不自己改** |
 | 審核 agent(嚴格級) | 在 main 重跑四項核心,含 mutate | 碼 |
 
 ```bash
-git diff --name-only main...<branch> | grep -E '\.test\.ts$|^features/steps/|\.feature$' && echo "RETURN TO SENDER"
+git diff --name-only main...<branch> | grep -E '\.test\.ts$|^features/steps/|\.feature$|(^|/)package\.json$|^pnpm-lock\.yaml$|(^|/)tsconfig[^/]*\.json$|^features/cucumber\.js$' && echo "RETURN TO SENDER"
 ```
 
-`.feature` 只由使用者或 `/feature` 流程經確認後改。
+**對開發 agent 的分支在合併前必跑,輸出貼進 merge commit body;有輸出就退件,不接受「內容無害」。**
+(這句是 2026-09-05 加的:在它之前這個 grep 存在但沒有人跑,兩次共用檔被跨過都是同一個原因
+——守門不跑等於沒有守門,見 `docs/PITFALLS.md` 坑 16。)
+
+既有 `.feature` 只由使用者或 `/feature` 流程經確認後改;**新建**限 `FEATURE.md` phase 表上
+已核准 phase 的測試 agent(見上表)。
 
 ## 7. Gherkin 不變成模板的機械守門
 

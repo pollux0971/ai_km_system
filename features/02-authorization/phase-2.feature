@@ -1,17 +1,18 @@
+@i3 @authorization @phase-2
 # PROPOSAL — this file is a test agent's proposal on branch
 # pollux0971/authz-phase2. Per GHERKIN_WORKFLOW §6 a `.feature` is only
 # changed by the user or through a confirmed `/feature` flow; this is that
 # proposal, waiting for the coordinator to route it to the technical
 # advisor before it can be merged. Do not treat it as accepted spec yet.
 #
-# Every scenario below is expected to be RED. Nothing that turns a
+# Most scenarios below are expected to be RED. Nothing that turns a
 # signed-in identity into a `RetrievalScope` exists yet — that is exactly
 # what this phase is scoped to build (E04-S009, now ruled by ADR 0012,
 # 2026-09-04). None of the steps below import or reference a new
-# production symbol (checked: only `toRetrievalScope` and
-# `buildScopePredicate` from phase-1 are used), so every scenario fails at
-# an ASSERTION, never at compile time — `pnpm typecheck` / `pnpm lint`
-# stay green while these scenarios are red.
+# production symbol (checked: only `toRetrievalScope`, `buildScopePredicate`
+# and `buildScopeSql` from phase-1 are used), so every failing scenario
+# fails at an ASSERTION, never at compile time — `pnpm typecheck` /
+# `pnpm lint` stay green throughout this file.
 #
 # The technique: build the scope the ONLY way today's code allows — pass
 # identity's raw session fields (department/group DISPLAY NAMES, e.g.
@@ -20,7 +21,18 @@
 # (the canonical `dept:<id>` / `group:<id>` key is admitted). It never is,
 # today, because there is no translation layer. That gap — not a made-up
 # assertion — IS the red.
-@i3 @authorization @phase-2
+#
+# phase-2b's four deny scenarios (below the Scenario Outline) mix red and
+# green on purpose. "An explicit denial on an allowed department …" and "A
+# denied department must not reach the database's IN list …" are RED —
+# they assert the ADR-0012-ruling-4 outcome and `RetrievalScope` has no
+# field to produce it yet. "Denying a department nobody was ever granted
+# …" and "An empty explicit-denial list …" are GREEN — they document
+# invariants that already hold today (a denial cannot widen access, and an
+# empty denial list changes nothing) and that phase-2b's implementation
+# must not break. A scenario is not required to be red; the ones asserting
+# a capability that does not exist yet are, the ones recording a baseline
+# that must survive the change are not.
 Feature: A person's department and group become a retrieval scope, derived from their signed-in identity alone
   ADR 0012 (2026-09-04) ruled the five open questions E04-S009 was blocked
   on: scope keys are shaped `dept:<department.id>` / `group:<group.id>` and
@@ -89,9 +101,39 @@ Feature: A person's department and group become a retrieval scope, derived from 
       | demo-maintenance | dept:maintenance    |
       | demo-maintenance | group:maintenance-eng |
 
-  Scenario: An explicit denial on one department should override that department's grant, but nothing today can carry the denial
+  # ── phase-2b(2026-09-04)———————————————————————————————————————————
+  # 技術顧問依 ADR 0012 裁定了 deny 這一題的完整形狀(見 FEATURE.md「phase-2b
+  # 提案」段):RetrievalScope 加必填的 deniedScopeKeys;
+  # buildScopePredicate → allowed.has(k) && !denied.has(k);buildScopeSql
+  # 同義,denied 直接不進 IN 清單(前置過濾),並保留既有 post-assert;
+  # deny 的來源(ACL 表)不在這一輪,呼叫端此刻全部傳 []、場景用手填的
+  # denied。下面四個場景把原本那一條(only "an explicit denial …")拆開,
+  # 逐一涵蓋:核心 Deny-Wins(紅)、deny 不會意外放寬(綠,記錄不變的底線)、
+  # 空 denied 的安全網(綠,保證裁定 4「呼叫端全傳 []」不會集體鎖死)、
+  # SQL 層的前置過濾(紅)。
+  Scenario: An explicit denial on an allowed department overrides that department's grant, but nothing today can carry the denial
     Given a person "u-1" whose grants are exactly "dept:it, group:general"
     And that person has also been explicitly denied "dept:it"
     When that person's authorization scope is built
     Then the scope should refuse a record labelled "dept:it" because of the explicit denial, but it does not
     And the scope admits a record labelled "group:general"
+
+  Scenario: Denying a department nobody was ever granted changes nothing — a denial can only narrow, never widen
+    Given a person "u-2" whose grants are exactly "dept:it"
+    And that person has also been explicitly denied "dept:finance"
+    When that person's authorization scope is built
+    Then the scope admits a record labelled "dept:it"
+    And the scope refuses a record labelled "dept:finance"
+
+  Scenario: An empty explicit-denial list leaves today's grants-only behaviour untouched
+    Given a person "u-3" whose grants are exactly "dept:it, group:general"
+    And that person has explicitly denied nothing
+    When that person's authorization scope is built
+    Then the scope admits a record labelled "dept:it"
+    And the scope admits a record labelled "group:general"
+
+  Scenario: A denied department must not reach the database's IN list at all — pre-filter, not filter-after-query
+    Given a person "u-4" whose grants are exactly "dept:it, group:general"
+    And that person has also been explicitly denied "dept:it"
+    When that person's authorization scope is turned into a database filter on "scope_key"
+    Then the filter must not include "dept:it" in its parameter list because of the explicit denial, but it does

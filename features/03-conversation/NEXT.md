@@ -73,6 +73,14 @@
 - sandbox 種子:`seedSampleConversations` / `seedSampleMessages` / `uuidV5`(→ 併入 `01-identity` 的
   sandbox 討論)
 - 組裝後的那一層:真 cookie session、`apps/api` 的錯誤信封、條件註冊(→ phase-2 第 1 項)
+- **`prepareOwnerScoped` 的 fail-closed SQL 守門**(拒絕沒有 `owner_key` 述詞的
+  SELECT/UPDATE/DELETE、拒絕沒寫 `owner_key` 欄位的 INSERT、不被字串字面值與註解騙過),
+  留在 `repository/owner-scope.test.ts`(16 條)。**phase-1 的任何場景都不會因為它消失而紅**
+  ——2026-09-04 獨立審核實測:把 `prepareOwnerScoped` 降級成直通 `db.prepare`,11 條全綠、
+  exit 0。原因是唯一會踩到「別人的資料」的那條路徑(`lookupConversation()`)刻意**不走**
+  這個 helper(要先看見 `owner_key` 才分得出 403 與 404,該檔自己註明是例外)。
+  這條登記在這裡,是因為它是**嚴格級**守門而驗收層蓋不到——phase-2 若要把它拉進驗收層,
+  需要一個從路由打進去、能證明「少了 owner_key 述詞就拒絕 prepare」的場景。
 
 ## 完成後
 

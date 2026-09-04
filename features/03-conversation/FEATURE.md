@@ -52,10 +52,10 @@ pnpm --filter @ai-km/features accept --tags '@conversation and @standalone and n
 `db/migrations/202608280001_conversation_domain.sql`)、真的 `conversationPlugin`、
 真的路由,SSE 場景會在 `127.0.0.1` 上開一個隨機埠。不需要模型、不需要外部 DB。
 
-> ⚠️ 根目錄 `standalone.json` 裡這一行目前寫的是 `accept -- --tags …`。在本機的
-> pnpm 11.9.0 下那個 `--` 會被原樣傳給 cucumber-js,tag 運算式被當成路徑,指令必定
-> 失敗(`ENOENT … features/@conversation and @standalone…`)。這不是本資料夾造成的
-> ——`06-retrieval` 那一行用同樣的寫法,同樣失敗。見下方「待協調」。
+根目錄 `standalone.json` 的 `03-conversation` 這一行與上面逐字相同,`expect` 是寬鬆的
+`scenarios (`——cucumber 選不到場景時印的是 `0 scenarios`(沒有 ` (` 那半),所以寬鬆式
+已經排除空選集,而釘死「N scenarios (N passed)」會在每次正常加場景時假紅
+(PITFALLS 坑 1)。「每個資料夾至少一條且全過」由 `pnpm accept:coverage` 守。
 
 ## 依賴
 
@@ -89,11 +89,11 @@ pnpm --filter @ai-km/features accept --tags '@conversation and @standalone and n
 
 | 場景 | 綁到的既有測試(檔:名) |
 |---|---|
-| The conversation domain mounts on a bare server and answers there | `testing/build-test-app.ts`(每個 route 測試的 harness,`app.register(conversationPlugin)` → `ready()` → `hostChangeEventBus(app)`);`apps/api/src/domain-plugin-registration.test.ts`: AC2「已註冊 ⇒ 401 而非 404」 |
+| The conversation domain mounts on a bare server and answers there | `testing/build-test-app.ts`(每個 route 測試的 harness,`app.register(conversationPlugin)` → `ready()` → `hostChangeEventBus(app)`)。**只綁到這一個**:場景走的是 bare Fastify 直接 `register(conversationPlugin)`。`apps/api/src/domain-plugin-registration.test.ts` 的 AC1/AC2 斷言長得很像(404 vs 401),但它走真的 `buildServer()` 與**條件註冊**,是**另一個入口**,本場景抓不到那一層的回歸——那一層留在 phase-2(見 NEXT.md「Gate 未滿足時」第 1 項) |
 | Starting a conversation gives it the server's own defaults and one entry in the change log | `routes/conversations.test.ts`: AC5「201 with contract defaults when no body is sent」;`routes/conversations.test.ts`: AC10「records origin_client_id」的同一條事件路徑 |
 | Sending a message moves the conversation's preview forward and records both changes in order | `routes/messages.test.ts`: AC2「creates a user message and updates the conversation's preview/lastMessageAt」、AC6「creates 2 change events (message.created, conversation.updated) in one transaction」 |
 | Revising an answer keeps every earlier wording, oldest first | `routes/messages.test.ts`: AC5「revises an assistant message, oldest content first, accumulating across 2 revisions」 |
-| Another person's conversation is refused outright, not quietly shown as empty | `routes/conversations.test.ts`: AC9「403s (not 404, not empty) for another owner's conversation」;`repository/owner-scope.test.ts` 的整組守門 |
+| Another person's conversation is refused outright, not quietly shown as empty | `routes/conversations.test.ts`: AC9「403s (not 404, not empty) for another owner's conversation」。**只綁到這一條**:`lookupConversation()` 刻意用裸 `db.prepare(SELECT … WHERE id = ?)`(該檔自己註明是 `prepareOwnerScoped` 的例外,因為要先看見 `owner_key` 才分得出 403 與 404),所以 `repository/owner-scope.test.ts` 那個 fail-closed SQL 守門**不在這個場景的路徑上**,由它自己的 vitest 覆蓋——見 NEXT.md 未回填清單 |
 | A second window is told about a new conversation the moment it is created | `routes/change-events.test.ts`: AC2「a live change event arrives with id=seq, event=type, and valid JSON data」 |
 | A second window is never told about somebody else's conversation | `routes/change-events.test.ts`: AC4「never receives another owner's events」 |
 | Reconnecting with a checkpoint replays only what was missed, in order | `routes/change-events.test.ts`: AC3「Last-Event-ID replays only strictly-newer events, in order」;`repository/change-events.repository.test.ts`「returns seq 51..70 for (after=50, limit=20)」 |
@@ -135,25 +135,20 @@ pnpm --filter @ai-km/features accept --tags '@conversation and @standalone and n
 
 ## 待協調(要協調者改共用檔的)
 
-1. **`features/steps/common.steps.ts` 的 plugin 註冊通用步驟目前無法使用**。
-   `When("the {string} plugin is registered on a bare server and the server becomes ready", …)`
-   的 cucumber expression 有一個 `{string}`,回呼卻宣告 0 個參數,cucumber 直接判
-   `function has 0 arguments, should have 1 (if synchronous or returning a promise)`
-   (2026-09-04 實跑確認)。建議措辭:把回呼改成
-   `async function (this: KmWorld, _name: string) { … }`(名字只是給人看的,實際註冊的是
-   `this.bag["pluginUnderTest"]`)。在那之前本資料夾用自己的一句
+1. ~~`features/steps/common.steps.ts` 的 plugin 註冊通用步驟無法使用~~ —— **協調者已於 2026-09-04 修好**
+   (pattern 有一個 `{string}`、handler 宣告 0 個參數,cucumber 執行期判
+   `function has 0 arguments, should have 1`;現在 handler 收 `name` 了)。
+   本資料夾的 mount 場景仍用自己的一句
    `the conversation domain is mounted on a bare server and that server becomes ready`
-   做同一件事(真 `register()` → `ready()`,結果一樣放進 `this.bag["registeredApp"]`,
-   所以通用的 Then 照用),修好後可換回通用句子。
+   ——它做的事與通用句子完全相同(真 `register()` → `ready()`,結果放進
+   `this.bag["registeredApp"]`,通用的 Then 照讀)。換回通用句子要改 `features/steps/`,
+   留給 phase-2 一併處理,不在這次 follow-up 的範圍。
 
-2. **根目錄 `standalone.json` 的非互動指令在 pnpm 11.9.0 下必定失敗**。
-   `pnpm --filter @ai-km/features accept -- --tags '…'` 的 `--` 會被原樣傳給 cucumber-js,
-   tag 運算式被當成路徑:`ENOENT … features/@conversation and @standalone and not @manual`。
-   `06-retrieval` 那一行同樣失敗(不是本資料夾造成的)。建議措辭:把每一個 `accept -- --tags`
-   改成 `accept --tags`(去掉那個 `--`),已實測去掉之後 `06-retrieval` 回到
-   `9 scenarios (9 passed)`、`03-conversation` 回到 `11 scenarios (11 passed)`。
-   另建議把 `03-conversation` 的 `expect` 從 `"scenarios ("` 收緊成 `"11 scenarios (11 passed)"`
-   (比照 `06-retrieval`)。**本工單不改 `standalone.json`。**
+2. ~~根目錄 `standalone.json` 的非互動指令在 pnpm 11.9.0 下必定失敗~~ —— **協調者已於 2026-09-04 修好**
+   (`accept -- --tags` 改成 `accept --tags`)。原先本檔另外建議把 `expect` 從
+   `"scenarios ("` 收緊成 `"11 scenarios (11 passed)"`,**那個建議是錯的,已撤回**:
+   cucumber 選不到場景時印 `0 scenarios`(沒有 ` (` 那半),寬鬆式本來就排除得掉空選集,
+   而釘住 11 會在每次正常加場景時假紅(PITFALLS 坑 1)。
 
 3. **`services/conversation/src/testing/build-test-app.ts` 不能被 `features/` 用字面路徑 import**。
    `_world.ts` 會 `await import("../../apps/api/src/server.js")`,所以 apps/api 的

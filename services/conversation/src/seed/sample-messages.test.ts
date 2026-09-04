@@ -37,7 +37,8 @@ beforeEach(() => {
       feedback_comment text,
       citation_feedback text,
       created_at text not null,
-      updated_at text not null
+      updated_at text not null,
+      citations text
     );
   `);
 });

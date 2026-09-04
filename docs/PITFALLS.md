@@ -334,6 +334,39 @@ git diff --name-only main...<branch> | grep -E '\.test\.ts$|^features/steps/|\.f
 落地:§6 的 grep 已擴充涵蓋共用檔,並加上「對開發 agent 的分支在合併前**必跑**,
 輸出貼進 merge commit body;有輸出就退件,不接受『內容無害』」。
 
+### 坑 17:`cmd | tail` 之後的 `$?` 是 `tail` 的,不是 `cmd` 的——用它判斷守門會得到相反的結論
+
+2026-09-05,顧問要我確認兩支剛同步進來、但沒接進任何 script/CI 的守門
+(`features/scripts/check-boundaries.ts`、`check-standalone.ts`)現況紅不紅。我跑:
+
+```bash
+tsx scripts/check-boundaries.ts 2>&1 | tail -25; echo "EXIT=$?"
+```
+
+看到 `✗ 找不到 …owners.json` 的訊息,**而 `EXIT=0`**。差一點就記成「它印了錯誤卻靜默通過」
+——那會是坑 2(守門接上了但不會紅)的教科書案例,而且我會據此寫一條完全錯誤的
+DECISIONS_NEEDED 給顧問。
+
+**那個 `0` 是 `tail` 的 exit code。** bash 的 `$?` 給的是管線**最後一個**指令的狀態。
+重新用重導向到檔案、再取 `$?`,量到的是真正的 **1**——兩支都會紅,只是紅的原因
+不是它們要抓的東西(見 `docs/DECISIONS_NEEDED.md` #21/#22)。
+
+**通則**:`$?` 只在你確定它屬於哪一個行程時才有意義。要量一支腳本的 exit code:
+
+```bash
+cmd > out.log 2>&1; echo "EXIT=$?"   # ✅ 量到 cmd 的
+cmd 2>&1 | tail -25; echo "EXIT=$?"  # ❌ 量到 tail 的(永遠是 0)
+```
+
+(`set -o pipefail` 或 `${PIPESTATUS[0]}` 也可以,但重導向最不容易寫錯,而且輸出還留著。)
+
+**這條與 §5.3 的關係**:§5.3 說「機制要用量的不要用讀的」。這次我**確實去量了**,
+量出來的數字還是錯的——因為我量的不是那個東西。所以 §5.3 要再加一句:
+**量的時候要確定你量的是那個東西。** 一個測錯對象的量測,比從原始碼推斷更危險:
+它帶著「我跑過了」的權威,而那份權威剛好指向反方向。
+
+(§5.3 補那一句要動規則檔,已由顧問列給使用者等一句話;本條先記在這裡,這是協調者的檔。)
+
 ## 出處
 
 完整段落:`archive/ROADMAP_TEMP.md` 的 `5-pi`(CI 紅五天)、`5-rho`(L2-EQ 首次執行 2 條真分歧

@@ -1,101 +1,134 @@
+// SOURCE: template v1.2.2 (e6ae38a) — 勿手改;升版用 sync-gates.sh
 /**
- * ADR 0008 守門 #2:跨資料夾偵測「逐字相同的場景本體」。
+ * 場景重複檢查(見 docs/03-agile-workflow.md「契約先於平行、規格先於程式」)。
  *
- * 舊規格庫的病:E04 46 條 story 只有 12 種內文(36 條完全相同)、E06 40 條只有 2 種。
- * 模板複製貼上看起來像規格,實際上什麼都沒說。這個腳本把同一件事在 Gherkin 上
- * 變成 CI 紅:兩個不同 feature 檔裡出現步驟序列完全相同的場景(忽略場景名與空白)
- * 就 exit 1 並列出來。
+ * 抓的是「複製貼上一個場景到另一個檔案(或同一個檔案),名稱改了但步驟本體逐字相同」。
+ * 這種重複通常代表:應該用 Scenario Outline 收斂、應該共用一個 Background,或是規格被
+ * 不小心複製而不是重新設計。不管名稱有沒有改,步驟本體相同就算。
  *
- * 允許:同一個檔裡的重複(那是 Scenario Outline 該做的事,但不擋);
- *       `_template/` 的檔案(不掃)。
+ * 規則:
+ *   1. 掃 features/**\/*.feature 與 docs/integration/**\/*.feature(同一檔內、跨檔都算)
+ *   2. 一個場景的「本體」= Scenario / Scenario Outline 名稱那一行之後,
+ *      到下一個 Scenario / Scenario Outline / Examples 關鍵字之前的所有步驟行,
+ *      每行去頭尾空白後,以換行接起來
+ *   3. 本體逐字相同(不看場景名稱)的兩個以上場景 → 列出檔案:行號成對,退出 1
  *
- * 用法:`pnpm --filter @ai-km/features gherkin:dup`(exit 0 = 無跨檔重複)。
+ * 用法(repo 根從 `git rev-parse --show-toplevel` 解析,不在 git repo 裡則退回 cwd):
+ *   npx tsx scripts/check-gherkin-dup.ts               # 複製進 repo 後執行
+ *   npx tsx <template>/scripts/check-gherkin-dup.ts    # 從模板路徑直接執行,cwd 需在目標 repo
+ *
+ * 退出碼:
+ *   0  沒有本體逐字相同的場景
+ *   1  有重複場景;或掃到 0 個 .feature 檔 / 0 個場景(這不是很乾淨,是掃描器壞了)
+ *
+ * 反向驗證(改完要還原,不要留下改動):
+ *   (a) 挑一個既有場景(例如某功能 phase-1.feature 裡「單獨跑起來會怎樣」那個場景),
+ *       把它的步驟本體整段複製,貼到同一個檔案下面,取一個新的 Scenario 名稱。
+ *       重跑這支腳本 → 應該紅,列出那兩個場景的檔案:行號。
+ *   (b) 刪掉剛貼的複製場景,還原檔案 → 重跑 → 應該綠。
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { ROOT } from './_root.js';
 
-const FEATURES_ROOT = resolve(import.meta.dirname, "..");
-const INTEGRATION_ROOT = resolve(FEATURES_ROOT, "../docs/integration");
+function toPosix(p: string): string {
+  return p.split('\\').join('/');
+}
 
-function walk(dir: string, out: string[] = []): string[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const name of entries) {
+function* walk(dir: string): Generator<string> {
+  if (!existsSync(dir)) return;
+  for (const name of readdirSync(dir)) {
     const full = join(dir, name);
-    if (name === "node_modules" || name === "_template" || name === "steps" || name === "scripts") continue;
-    if (statSync(full).isDirectory()) walk(full, out);
-    else if (name.endsWith(".feature")) out.push(full);
+    const st = statSync(full);
+    if (st.isDirectory()) yield* walk(full);
+    else if (name.endsWith('.feature')) yield full;
   }
-  return out;
 }
 
-interface ScenarioBody {
-  file: string;
-  name: string;
-  body: string;
+function collectFeatureFiles(): string[] {
+  return [...walk(join(ROOT, 'features')), ...walk(join(ROOT, 'docs/integration'))];
 }
 
-/** 把一個 feature 檔切成場景,場景本體 = 步驟行(Given/When/Then/And/But + 表格)正規化後串接 */
-function scenarios(file: string): ScenarioBody[] {
-  const lines = readFileSync(file, "utf8").split(/\r?\n/);
-  const result: ScenarioBody[] = [];
-  let current: { name: string; steps: string[] } | undefined;
+interface Scenario { file: string; line: number; name: string; body: string }
+
+const SCENARIO_START_RE = /^\s*(Scenario|Scenario Outline)\s*:\s*(.*)$/;
+const SECTION_BREAK_RE = /^\s*(Scenario|Scenario Outline|Examples)\s*:/;
+
+function extractScenarios(file: string): Scenario[] {
+  const lines = readFileSync(file, 'utf8').split('\n');
+  const out: Scenario[] = [];
+  let current: { line: number; name: string; bodyLines: string[] } | undefined;
+
   const flush = () => {
-    if (current && current.steps.length > 0) {
-      result.push({ file, name: current.name, body: current.steps.join("\n") });
+    if (current) {
+      out.push({ file, line: current.line, name: current.name, body: current.bodyLines.join('\n') });
+      current = undefined;
     }
-    current = undefined;
   };
-  for (const raw of lines) {
-    const line = raw.trim();
-    const m = /^(Scenario|Scenario Outline|Example):\s*(.*)$/.exec(line);
-    if (m) {
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const startMatch = line.match(SCENARIO_START_RE);
+    if (startMatch) {
       flush();
-      current = { name: m[2] ?? "", steps: [] };
+      current = { line: i + 1, name: startMatch[2]!.trim(), bodyLines: [] };
       continue;
     }
-    if (/^(Feature|Background|Rule):/.test(line)) {
-      flush();
-      continue;
-    }
-    if (!current) continue;
-    if (/^(Given|When|Then|And|But)\b/.test(line) || line.startsWith("|")) {
-      current.steps.push(line.replace(/\s+/g, " "));
+    if (current) {
+      const isBreak = SECTION_BREAK_RE.test(line);
+      if (isBreak) {
+        // 下一個 Scenario 已經在上面的分支處理;這裡只需要在遇到 Examples 時收尾。
+        flush();
+        continue;
+      }
+      const trimmed = line.trim();
+      if (trimmed) current.bodyLines.push(trimmed);
     }
   }
   flush();
-  return result;
+  return out;
 }
 
-const files = [...walk(FEATURES_ROOT), ...walk(INTEGRATION_ROOT)];
-const byBody = new Map<string, ScenarioBody[]>();
-for (const file of files) {
-  for (const s of scenarios(file)) {
+function main(): void {
+  const files = collectFeatureFiles();
+  if (files.length === 0) {
+    console.log('✗ 掃到 0 個 .feature 檔(features/**/*.feature 或 docs/integration/**/*.feature)。這不是很乾淨,是掃描器壞了。');
+    process.exit(1);
+  }
+
+  const scenarios: Scenario[] = [];
+  for (const file of files) scenarios.push(...extractScenarios(file));
+
+  if (scenarios.length === 0) {
+    console.log('✗ 掃到 0 個場景(Scenario / Scenario Outline)。這不是很乾淨,是掃描器壞了。');
+    process.exit(1);
+  }
+
+  const byBody = new Map<string, Scenario[]>();
+  for (const s of scenarios) {
+    if (!s.body) continue; // 空本體(例如純 Background 或格式異常)不比對,避免誤報
     const list = byBody.get(s.body) ?? [];
     list.push(s);
     byBody.set(s.body, list);
   }
-}
 
-const crossFileDuplicates = [...byBody.values()].filter((list) => new Set(list.map((s) => s.file)).size > 1);
+  console.log(`gherkin-dup: 掃描 ${files.length} 個 .feature 檔,${scenarios.length} 個場景`);
 
-const repoRoot = resolve(FEATURES_ROOT, "..");
-console.log(`gherkin-dup: ${files.length} feature file(s), ${[...byBody.values()].reduce((n, l) => n + l.length, 0)} scenario(s)`);
+  const dupGroups = [...byBody.entries()].filter(([, list]) => list.length >= 2);
+  if (dupGroups.length) {
+    console.log(`\n✗ ${dupGroups.length} 組場景本體逐字相同:`);
+    for (const [, list] of dupGroups) {
+      console.log('  ---');
+      for (const s of list) {
+        const rel = toPosix(relative(ROOT, s.file));
+        console.log(`  ${rel}:${s.line}  Scenario: ${s.name}`);
+      }
+    }
+    process.exit(1);
+  }
 
-if (crossFileDuplicates.length === 0) {
-  console.log("gherkin-dup: PASS — no scenario body is repeated across feature files.");
+  console.log('✓ 無重複場景');
   process.exit(0);
 }
 
-for (const group of crossFileDuplicates) {
-  console.log("\ngherkin-dup: identical scenario body in more than one file:");
-  for (const s of group) console.log(`  - ${relative(repoRoot, s.file)} :: ${s.name}`);
-  console.log("  body:");
-  for (const line of group[0]!.body.split("\n")) console.log(`    ${line}`);
-}
-console.log(`\ngherkin-dup: FAIL — ${crossFileDuplicates.length} duplicated scenario bod${crossFileDuplicates.length === 1 ? "y" : "ies"} across files. A scenario copied between capabilities is a template, not a spec.`);
-process.exit(1);
+main();

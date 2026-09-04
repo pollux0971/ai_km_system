@@ -9,7 +9,7 @@
     "accept:phase1": "NODE_OPTIONS=--import=tsx cucumber-js --tags '@phase-1 and not @manual and not @e2e'",
     "accept:integration": "NODE_OPTIONS=--import=tsx cucumber-js ../docs/integration --tags '(@i1) and not @manual and not @e2e'",
     "accept:integration:next": "NODE_OPTIONS=--import=tsx cucumber-js ../docs/integration --tags '(@i2) and not @manual and not @e2e'",
-    "accept:coverage": "tsx scripts/check-phase1-coverage.ts",
+    "accept:coverage": "tsx scripts/check-phase-coverage.ts",
     "gherkin:dup": "tsx scripts/check-gherkin-dup.ts",
     "steps:dup": "tsx scripts/check-step-dup.ts",
     "docs:links": "tsx scripts/check-doc-links.ts",

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import FileChatEntryPage from "./page";
 import { createConversation, deleteConversation } from "@/lib/conversations";
@@ -70,6 +71,44 @@ function makeFile(name: string): File {
   return new File(["x"], name, { type: "text/plain" });
 }
 
+/**
+ * E03-S028 determinism (2026-09-04): reproduces the live-FileList race
+ * without relying on real render concurrency or repeat-each.
+ *
+ * A single fireEvent.change can't expose this bug: React 19's useState
+ * dispatch computes the updater's result "eagerly", synchronously,
+ * whenever the fiber has no update already pending (see
+ * react-dom-client.development.js's dispatchSetStateInternal) — so
+ * `Array.from(fileList)` runs at the exact same synchronous instant
+ * whether it sits inside the updater (buggy) or is captured before it
+ * (fixed), because it's the fiber's *first* pending update either way.
+ * That eager path is exactly what let this bug hide behind a ~4%-flaky
+ * e2e spec instead of showing up every run.
+ *
+ * Firing an ordinary selection first — still inside one act() batch —
+ * gives the fiber a pending lane before the second, self-clearing
+ * selection dispatches. That second dispatch's updater then genuinely
+ * runs later (after the whole synchronous change event, including the
+ * picker's own input.value reset, has already completed), which is
+ * what "呼叫後立刻被清空的 live FileList 替身" is modelling: a fake
+ * FileList (an ordinary mutable array) whose length is forced to 0 the
+ * moment the input's value is reset, exactly like a real live FileList
+ * being cleared in place.
+ */
+function selectFileWithLiveListClearedRightAfter(input: HTMLInputElement, firstFile: File, secondFile: File) {
+  fireEvent.change(input, { target: { files: [firstFile] } });
+
+  const selfClearingList = [secondFile];
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get: () => "",
+    set: () => {
+      selfClearingList.length = 0;
+    },
+  });
+  fireEvent.change(input, { target: { files: selfClearingList } });
+}
+
 beforeEach(() => {
   mockReplace.mockReset();
   mockRefresh.mockReset();
@@ -96,6 +135,22 @@ describe("FileChatEntryPage (E03-S028)", () => {
     fireEvent.change(screen.getByLabelText("附件"), { target: { files: [makeFile("報表.pdf")] } });
 
     expect(screen.getByRole("button", { name: "開始對話" })).not.toBeDisabled();
+  });
+
+  it("E03-S028 (determinism): keeps a file selected even when the browser clears its live FileList right after handing it off", () => {
+    render(<FileChatEntryPage />);
+    const input = screen.getByLabelText("附件") as HTMLInputElement;
+
+    act(() => {
+      selectFileWithLiveListClearedRightAfter(input, makeFile("a.pdf"), makeFile("b.pdf"));
+    });
+
+    // The decisive quantity: how many files actually ended up selected.
+    // A regression to the pre-99d9bc2 shape loses "b.pdf" (the one whose
+    // live FileList got cleared right after being handed to
+    // handleFilesSelected), leaving only 1.
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "移除 b.pdf" })).toBeInTheDocument();
   });
 
   it("removing the only selected file disables 開始對話 again", () => {

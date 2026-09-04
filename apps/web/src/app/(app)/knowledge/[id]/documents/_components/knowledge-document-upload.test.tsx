@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import KnowledgeDocumentUpload from "./knowledge-document-upload";
 import { addKnowledgeBaseDocument } from "@/lib/knowledge-documents";
@@ -79,6 +80,31 @@ function sampleDocument(
   };
 }
 
+/**
+ * E03-S028 determinism (2026-09-04) — same shape/reasoning as
+ * new-file/page.test.tsx's own helper (see that file's comment): a
+ * single fireEvent.change can't expose this race because React 19's
+ * useState dispatch eagerly evaluates the updater synchronously
+ * whenever the fiber has no update already pending. Firing an ordinary
+ * selection first, inside the same act() batch, gives the fiber a
+ * pending lane so the second, self-clearing selection's updater
+ * genuinely runs after the whole synchronous change event — including
+ * this component's own input.value reset — has completed.
+ */
+function selectFileWithLiveListClearedRightAfter(input: HTMLInputElement, firstFile: File, secondFile: File) {
+  fireEvent.change(input, { target: { files: [firstFile] } });
+
+  const selfClearingList = [secondFile];
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get: () => "",
+    set: () => {
+      selfClearingList.length = 0;
+    },
+  });
+  fireEvent.change(input, { target: { files: selfClearingList } });
+}
+
 beforeEach(() => {
   mockedAddKnowledgeBaseDocument.mockReset();
   mockedTrackEvent.mockReset();
@@ -105,6 +131,21 @@ describe("KnowledgeDocumentUpload (E05-S011 single-file base)", () => {
     const item = screen.getByRole("listitem");
     expect(item).toHaveTextContent("保固條款.pdf(500 B)");
     expect(screen.getByRole("button", { name: "上傳" })).toBeInTheDocument();
+  });
+
+  it("E03-S028 (determinism): keeps a selected file even when the browser clears its live FileList right after handing it off", () => {
+    render(<KnowledgeDocumentUpload knowledgeBaseId="kb1" onUploaded={vi.fn()} />);
+    const input = screen.getByLabelText("上傳文件") as HTMLInputElement;
+
+    act(() => {
+      selectFileWithLiveListClearedRightAfter(input, sampleFile("第一份.pdf", 100), sampleFile("第二份.pdf", 200));
+    });
+
+    // The decisive quantity: how many files actually ended up selected.
+    // A regression loses "第二份.pdf" (the one whose live FileList got
+    // cleared right after being handed to handleFilesSelected).
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "移除 第二份.pdf" })).toBeInTheDocument();
   });
 
   it("uploads the selected file's name and size, and clears the selection and notifies the parent on success", async () => {

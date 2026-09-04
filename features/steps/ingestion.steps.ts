@@ -27,12 +27,15 @@
 import { Given, Then, When } from "@cucumber/cucumber";
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 import Fastify from "fastify";
 import type { KmWorld } from "./_world.js";
 
 import type { EmbedResponse, GenerateResponse, ModelGateway } from "../../services/model-gateway/src/gateway.js";
+import { createDeterministicEmbeddingProvider } from "../../services/model-gateway/src/embedding/deterministic.provider.js";
 import type { RetrievalHit, VectorStore } from "../../services/retrieval/src/vector/store.js";
 import { toRetrievalScope } from "../../services/retrieval/src/authorization/scope.js";
+import type { RetrievalService } from "../../services/retrieval/src/service.js";
 import { chunkDocument, type Chunk } from "../../services/ingestion/src/chunking/chunk.js";
 import { extractPdfText, type PdfExtractionResult } from "../../services/ingestion/src/extraction/pdf-extract.js";
 import { ingestionPlugin } from "../../services/ingestion/src/plugin.js";
@@ -390,3 +393,219 @@ Then("both cuts put every chunk boundary at the same character", function (this:
   const bounds = (chunks: readonly Chunk[]): string[] => chunks.map((c) => `${c.startOffset}-${c.endOffset}`);
   assert.deepEqual(bounds(b), bounds(a), "同一份文字切兩次的字元邊界不同");
 });
+
+// ==================================================================
+// phase-2(紅)—— 一份索引好的 PDF 接到 apps/api 真實 buildServer() 上的檢索。
+// 規格來源:docs/adr/0015-composition-root-owns-the-retrieval-store.md。
+//
+// 每一步只呼叫今天已經存在的符號:KmWorld.startServer()(apps/api 真實
+// buildServer())、toRetrievalScope()(phase-1 已在用)、retrievalPlugin 裝的
+// app.retrieval(services/retrieval,今天存在但store 永遠是全新的空 store)。
+// 「索引」的步驟今天只檢查 app.ingestion 存不存在並記錄下來——它今天真的不存在
+// (apps/api/src/server.ts 沒有 import ingestionPlugin),所以每個場景都紅在
+// 斷言,不紅在編譯。細節與三個誠實記錄的限制見 phase-2.feature 開頭的說明。
+//
+// 沿用 features/steps/retrieval.steps.ts 已經定義的「a signed-in demo person
+// tries to ask {string} through the real API server's own retrieval seam」——
+// 那句話已經做了「登入 demo-user → 用 ADR 0014 的固定 dept:eng scope 問
+// app.retrieval」,把結果放進 this.bag["compositionRoot"] /
+// this.bag["compositionRootErrorName"]。這裡原文沿用、不重新定義,理由與
+// integration.steps.ts 檔頭同一條:避免同一件事在 repo 裡長出第二種講法。
+// ==================================================================
+
+const INGESTION05_BOOT_DOC_PREFIX = "ingestion05-boot-";
+
+interface CompositionRootHits {
+  seamPresent?: boolean;
+  hits?: readonly RetrievalHit[];
+}
+
+function compositionRootHits(world: KmWorld): CompositionRootHits | undefined {
+  return world.bag["compositionRoot"] as CompositionRootHits | undefined;
+}
+
+/**
+ * 嘗試透過 apps/api 真實 server 的 ingestion seam 索引 fixture PDF。今天
+ * `app.ingestion` 不存在(server.ts 沒有註冊 ingestionPlugin),所以這個函式
+ * 今天只會記下「seam 不存在」然後什麼都不做——這是誠實的現況,不是偷懶:
+ * 一旦 composition root 接上 ingestionPlugin 並與 app.retrieval 共用 store,
+ * 這裡就會真的把 fixture PDF 寫進那個共用 store,後面依賴它的斷言才會第一次
+ * 被真正執行到並賦予意義。
+ */
+async function indexFixtureIntoRealServer(world: KmWorld, dept: string): Promise<void> {
+  const app = await world.startServer();
+  const seam = (app as unknown as { ingestion?: IngestionService }).ingestion;
+  world.bag["ingestionSeamPresent"] = Boolean(seam);
+  if (!seam) return;
+  await seam.ingest({
+    documentId: `${INGESTION05_BOOT_DOC_PREFIX}${dept}`,
+    scopeKey: `dept:${dept}`,
+    pdfBytes: fixtureBytes(world, CJK_PDF),
+  });
+}
+
+/**
+ * 場景 3 的前提——「index 時的 embedding 身分與現在配置的不同」——需要一個帶
+ * `ingestionEmbeddingProvider` 覆寫的 server(`apps/api/src/server.ts`
+ * `BuildServerOptions`,commit 7c62d06,ADR 0015「D2 的空守門怎麼補」)。
+ *
+ * 但 Background 的「a fresh server with fake providers」(common.steps.ts,
+ * 共用檔,不可改)已經在這個場景一開始就呼叫過一次 `startServer()` 不帶任何
+ * extra,而 `startServer()` 只要 `this.app` 已存在就直接回傳快取的實例
+ * (`_world.ts`:`if (this.app) return this.app;`)——這裡再傳 extra 也不會被
+ * 採用。這不是用讀的推斷:`admin-console.steps.ts` 的 `restartServerWithFakeAsr`
+ * 已經實測並記錄過同一個現象(GHERKIN_WORKFLOW §5.3),照它的作法把 Background
+ * 建的那個實例關掉、重建一個帶覆寫的,只動這個資料夾自己的檔。
+ *
+ * dimensions 換成 64(預設 256)就足以讓「不同 embedding 身分」成立——
+ * `assertEmbeddingIdentityMatches`(services/retrieval/src/vector/store.ts)比對
+ * 的是 `{ model, dimensions }` 這一對,維度本身就是身分的一部分,不需要另外編
+ * 一種 provider 形狀或换 model 字串。
+ */
+async function restartServerWithStaleIngestionEmbedding(world: KmWorld): Promise<Awaited<ReturnType<KmWorld["startServer"]>>> {
+  if (world.app) {
+    await world.app.close();
+    world.app = undefined;
+  }
+  return world.startServer({
+    ingestionEmbeddingProvider: createDeterministicEmbeddingProvider({ dimensions: 64 }),
+  });
+}
+
+/** 同 `indexFixtureIntoRealServer`,但先把 server 換成帶「舊 embedding 身分」的那個。 */
+async function indexFixtureIntoRealServerWithStaleEmbedding(world: KmWorld, dept: string): Promise<void> {
+  const app = await restartServerWithStaleIngestionEmbedding(world);
+  const seam = (app as unknown as { ingestion?: IngestionService }).ingestion;
+  world.bag["ingestionSeamPresent"] = Boolean(seam);
+  if (!seam) return;
+  await seam.ingest({
+    documentId: `${INGESTION05_BOOT_DOC_PREFIX}${dept}`,
+    scopeKey: `dept:${dept}`,
+    pdfBytes: fixtureBytes(world, CJK_PDF),
+  });
+}
+
+async function loginDemoPersonOnApp(app: Awaited<ReturnType<KmWorld["startServer"]>>, username: string): Promise<void> {
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    headers: { "x-requested-with": "XMLHttpRequest" },
+    payload: { username, password: "demo-pass-123" },
+  });
+  assert.equal(
+    login.statusCode,
+    200,
+    `登入 ${username} 應成功(這一步只是確認 identity/session 沒壞,缺口專在 ingestion 沒被接進來):實際 ${login.statusCode} ${login.body}`,
+  );
+}
+
+// ---------------------------------------------------------------- Given/When
+
+When(
+  "the real Chinese fixture PDF is indexed into the real API server's own store under department {string}",
+  { timeout: 60_000 },
+  async function (this: KmWorld, dept: string) {
+    await indexFixtureIntoRealServer(this, dept);
+  },
+);
+
+// 「back when a different embedding model was configured」:composition root
+// 現在真的接上了 app.ingestion(commit 8f1d137)並提供了一個 test-only 的接縫
+// (`BuildServerOptions.ingestionEmbeddingProvider`,commit 7c62d06,ADR 0015
+// 「D2 的空守門怎麼補」裁決 (a))——`IngestionService.ingest()` 本身仍然沒有參數
+// 可以指定 embedding 版本(單一 process 內任何生產呼叫都做不出「index 時與現在
+// 用不同模型」這個狀態,這正是 enforceEmbeddingVersion 存在的唯一理由),但
+// composition root 建構時可以換掉 `app.ingestion` 腳下的那顆 embedding provider,
+// 藉此模擬「這份資料是模型換版之前索引的」。
+//
+// 資料仍然照樣走真實 `app.ingestion.ingest()` → 真的、與 `app.retrieval` 共用的
+// `retrievalStore`(D1,場景 2 已經在驗那條路徑本身是通的)——只換 ingestion 腳下
+// 的 embedding provider,production 的寫入路徑一步都沒有被繞過,ADR 0015 否決的
+// 「用 store option 讓測試繞過 ingest()」沒有發生。
+When(
+  "the real Chinese fixture PDF is indexed into the real API server's own store under department {string}, back when a different embedding model was configured",
+  { timeout: 60_000 },
+  async function (this: KmWorld, dept: string) {
+    await indexFixtureIntoRealServerWithStaleEmbedding(this, dept);
+  },
+);
+
+When(
+  "a second, independently started real API server is asked {string} through its own retrieval seam, standing in for the same server restarting",
+  { timeout: 60_000 },
+  async function (this: KmWorld, question: string) {
+    const { buildServer } = await import("../../apps/api/src/server.js");
+    const second = await buildServer({
+      dbPath: join(this.useTempDir(), "ingestion05-restart.sqlite"),
+      enableTestAuthProvider: true,
+      loggerStream: { write() {} },
+    });
+    try {
+      await loginDemoPersonOnApp(second, "demo-user");
+      const retrievalSeam = (second as unknown as { retrieval?: RetrievalService }).retrieval;
+      const scope = toRetrievalScope({ principalId: "demo-user", allowedScopeKeys: ["dept:eng"], deniedScopeKeys: [] });
+      this.bag["restartHits"] = retrievalSeam ? await retrievalSeam.retrieve(question, scope, 3) : [];
+    } finally {
+      await second.close();
+    }
+  },
+);
+
+// ---------------------------------------------------------------- Then
+
+Then(
+  "the ingestion seam should be visible from the real server's parent instance, but it is not yet",
+  function (this: KmWorld) {
+    assert.ok(
+      this.bag["ingestionSeamPresent"],
+      "app.ingestion 在 apps/api 真實 buildServer() 的父實例上不存在——server.ts 今天沒有 import " +
+        "ingestionPlugin,也沒有讓它與 retrievalPlugin 共用同一個 store(ADR 0015 決策 1/3,見 " +
+        "features/05-ingestion/NEXT.md phase-2)。後果:就算索引本身完全正確,05-ingestion 也沒有任何 " +
+        "方式把資料寫進 app.retrieval 實際查詢的那個 store——I2「問一個關於已索引文件的問題」在索引這一步 " +
+        "就斷了。修法:比照 server.ts 既有的 conversationPlugin/feedbackPlugin 條件註冊樣式,composition " +
+        "root 自建 store 與 RetrievalService(enforceEmbeddingVersion: true)交給 retrievalPlugin,再用 " +
+        "既有的 registerSandboxSeeder 樣式把 fixture PDF 灌進同一個 store。",
+    );
+  },
+);
+
+Then(
+  "the answer should include the chunk that was just indexed, not come back empty because indexing and querying used two different stores",
+  function (this: KmWorld) {
+    const s = compositionRootHits(this);
+    assert.ok(s, "還沒有透過 composition root 的 retrieval seam 問過問題");
+    const hits = s.hits ?? [];
+    assert.ok(
+      hits.length > 0 && hits.some((h) => h.documentId.startsWith(INGESTION05_BOOT_DOC_PREFIX)),
+      `應該找到剛剛索引進去的 chunk,實際拿到 ${hits.length} 筆(${hits.map((h) => h.documentId).join(", ") || "無"})` +
+        `——代表索引寫進的 store 與 app.retrieval 查詢的 store 不是同一個(ADR 0015 決策 1),` +
+        `或 app.ingestion 這個 seam 今天根本不存在。`,
+    );
+  },
+);
+
+Then(
+  "asking should be refused with {string}, not silently answered using a chunk indexed under a stale embedding identity",
+  function (this: KmWorld, errorName: string) {
+    const errName = this.bag["compositionRootErrorName"] as string | undefined;
+    assert.ok(
+      errName,
+      "應該被 enforceEmbeddingVersion 的守門拒絕,但沒有任何錯誤被記錄下來(seam 不存在時這一步不會被執行到)",
+    );
+    assert.equal(errName, errorName, `錯誤類型應為 ${errorName},實際 ${errName}`);
+  },
+);
+
+Then(
+  "the second server's answer should come back empty, because the in-memory store does not survive past one process — 06-retrieval\\/phase-3 is what will make it persistent",
+  function (this: KmWorld) {
+    const hits = this.bag["restartHits"] as readonly RetrievalHit[] | undefined;
+    assert.ok(hits, "還沒有問過第二個獨立啟動的 server");
+    assert.deepEqual(
+      hits.map((h) => h.chunkId),
+      [],
+      `第二個獨立啟動的 server 應該一筆都拿不到(in-memory store 不跨 process 存活),` +
+        `實際拿到 ${hits.map((h) => h.chunkId).join(", ")}`,
+    );
+  },
+);

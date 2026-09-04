@@ -28,6 +28,21 @@
       (b) 新增的 schema 會被 `pnpm contract-gate` 的 check 3 判為 UNBOUND,必須同時做
       L0/L2/transcribed 其中一種綁定,否則 gate 紅(見 `contracts/openapi/__checks__/README.md`)。
 
+**phase-2 的 DoD 追加兩條(2026-09-04,技術顧問覆核後裁定;是 DoD,不是「順手做」)**
+
+- [ ] **`service.test.ts` AC2 的斷言換形狀。** 現況 `.rejects.toBeInstanceOf(FabricatedCitationError)`
+      是 **E06-S043 的同一個形狀**:反向驗證時第一條炸的是
+      `Error: promise resolved "{ answer: '...', …(1) }" instead of rejecting`
+      ——只證明「有拋錯」,而捏造的 `doc-does-not-exist#0` **從未被比對過**
+      (它被 vitest json reporter 截斷在 `…(1)` 裡)。
+
+      改成:`try/catch` 捕錯後**先**斷言 `message` 含捏造的 chunkId **字面**,
+      **再**斷言型別。順序是重點——GHERKIN_WORKFLOW §5.2:同一個測試裡
+      **第一條炸的決定了紅的意義**,決定性比對要排在最前面。
+
+      **驗收條件**:反向驗證必須紅在「**訊息裡沒有那個 chunkId**」,
+      不是紅在「沒拋錯」。紅在後者就等於沒改。
+
 **phase-2 另外必須做的一件事(2026-09-04,由 `06-retrieval/phase-2` 的獨立驗收 session 發現)**:
 
 - [ ] 把 ADR 0014 的固定 `dept:eng` 從 `features/steps/retrieval.steps.ts` 的

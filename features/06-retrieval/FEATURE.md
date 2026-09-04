@@ -65,6 +65,17 @@ pnpm --filter @ai-km/features accept -- --tags '@retrieval and @standalone and n
 |---|---|---|---|---|
 | 1 | (回填)授權檢索、Deny-Wins、洩漏偵測、offsets、身分守門、MMR | I1 | done | 2026-09-03 |
 | 2 | 接進 apps/api composition root,供 07 與 03 呼叫 | I2 | done | 2026-09-04 |
+
+**⚠️ phase-2 雖然 done,但它的場景 4 目前不算一個守門(2026-09-04,顧問覆核後確認)**:
+場景 4 自稱是 ADR 0014 固定 `dept:eng` 的「移除條件」,但那個固定值寫在
+`features/steps/retrieval.steps.ts` 的 `askThroughRealSeam()` 裡,**生產碼裡沒有它**
+——`apps/api` 今天沒有任何 route 呼叫 `retrieve()`。生產碼沒有那個固定值,場景就沒有可變的量。
+
+這條**照 `todo` 對待,不照 `done`**,而且**不得標成「別處已涵蓋」**:它不是有證據在別處,
+是**還沒有東西可以綁**。等 `07-generation/phase-2` 的 `answer()` 成為第一個真正呼叫
+`retrieve()` 的生產路徑,固定值搬進 composition root 之後,這條才第一次有意義。
+落點與驗收條件寫在 [`features/07-generation/NEXT.md`](../07-generation/NEXT.md) 的 phase-2 gate,
+背景見 [ADR 0014](../../docs/adr/0014-i2-fixed-demo-scope.md) 的「這份 ADR 的一個空保證」段。
 | 3 | sqlite-vec 成為預設持久 store | I4 | todo | |
 
 **phase-2 狀態細節(2026-09-04)**:測試 agent 交出**紅**的 `phase-2.feature`(4 個場景)

@@ -91,6 +91,28 @@ pnpm --filter @ai-km/features accept --tags '@knowledge-management and @phase-1 
 就是這個)。**但有一個前提**:一旦 phase-2 把它接到真的 API 與真的 RBAC,這個資料夾
 **必須重新分級為嚴格**——那時「文件對誰可見」就是真的資料可見性了。
 
+## Phase
+
+> **2026-09-04 協調者補**:這個資料夾的 `FEATURE.md` 原本**漏了 Phase 表**——而 Phase 表是
+> GHERKIN_WORKFLOW §1 指定的**唯一狀態來源**。漏了它,這個資料夾的狀態就只存在於
+> `docs/01-roadmap.md`(那是現況總覽,不是狀態來源)。補上,內容以 main 上的實際情況為準,
+> 不是重新裁定。
+
+| Phase | 標題 | 整合點 | 狀態 | 完成日 |
+|---|---|---|---|---|
+| 1 | (回填)知識庫清單、文件清單與狀態、跨知識庫守門、feature flag(**目前對 mock**) | I1 | in-progress | |
+| 2 | 上傳與文件狀態接真 API(接上後本資料夾**重新分級為嚴格**) | I4 | todo | |
+| 3 | 頁面層的 Gherkin(需要 DOM 環境) | 待定 | todo | |
+
+**phase-1 狀態細節**:場景與實作已合併進 main,`/phase-done` 尚未跑完 → `in-progress`。
+本資料夾是**標準級**(理由見上),依 §5.1 可由協調者自審,不需要另一個 session。
+
+**phase-2 的 gate(2026-09-04 更新)**:原本寫「需要一份 knowledge 契約,走 `/decide` + 使用者」。
+**ADR 0013 已把新 endpoint／新 schema 從使用者級改為技術顧問級**,並在其裁決表 #8 明白授權
+協調者起草 `contracts/openapi/knowledge.yaml`(最小:upload、list、document status、delete、re-index),
+走 `/decide` Proposed → 顧問批 Accepted。同表 #9 裁定文件層與知識庫層的 `visibleToRoles`
+**取交集**(兩層都允許才可見)。所以 phase-2 的契約 gate **不再卡在使用者**,卡在「契約還沒起草」。
+
 ## 回填對照表(phase-1)
 
 | 場景 | 綁到的既有測試(檔:名) |

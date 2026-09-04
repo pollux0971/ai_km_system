@@ -60,7 +60,11 @@ ggml_cuda_init: found 1 CUDA devices (Total VRAM: 3716 MiB):
 
 ### 新的可能性:使用者的外部 gateway
 
-使用者 2026-09-04 提供了一個自有的 LLM gateway 的呼叫方式(網域待補):
+使用者 2026-09-04 提供了一個自有的 LLM gateway 的呼叫方式。**網域 2026-09-04 補齊:
+`siemensbuildingx.uk`**(使用者原話「對於我之前提供的外部 api,他的網域是 siemensbuildingx.uk」,
+經技術顧問 session ai-km-3a 轉達)。網域與路徑一律進 `AI_KM_GATEWAY_URL` 環境變數,
+**不寫死在碼裡**;`gx10_ak_<key>` 只進 `AI_KM_GATEWAY_API_KEY`,永不進 source / fixtures / log
+(鐵律 §5.7),log 輸出必須遮蔽。端點:
 
 - `POST /auth/token/exchange`(帶 `Authorization: Bearer gx10_ak_<key>`)→ 取得 `access_token`
 - `GET /gateway/models` → 列出可用的**本地**模型(如 `qwen2.5:32b`、`deepseek-r1:70b`)
@@ -251,9 +255,14 @@ RAG 的答題不可用(檢索仍可用)。需要決定降級行為:回錯誤,還
 
 **第二批(D1)待補:**
 
-- gateway 位址(內網 IP 或網域皆可,**不需要 Cloudflare**)。
+- ~~gateway 位址~~ —— **2026-09-04 補齊:`siemensbuildingx.uk`**(見上「新的可能性」段)。
+  認證形狀(`POST /auth/token/exchange` + `Authorization: Bearer gx10_ak_<key>`)本來就已記錄,
+  所以 D1 在「外部資訊」這一側**已經沒有待補項**。
 - R1 的子決策(a 或 b)—— 這條**只在 D1 開工前需要**,因為 canned provider 已經
-  自己產生 grounded citations,不受此影響。
+  自己產生 grounded citations,不受此影響。**依 ADR 0013,這條已不是使用者級**,
+  由顧問／協調者在 D1 開工那一輪裁決並記 ADR。
+
+**因此 D1 現在只卡在排程,不卡在資訊。** 它仍排在 I2 之後(檢索品質先於生成品質,見上「拆成兩批」段)。
 
 **與批次無關的待決:**
 

@@ -1,4 +1,4 @@
-# 範式級坑(從 `ROADMAP_TEMP.md` 蒸餾,2026-09-04 封存前搬出)
+# 範式級坑(從 `ROADMAP_TEMP.md` 蒸餾,2026-09-04 封存前搬出;現址 `archive/ROADMAP_TEMP.md`)
 
 這份是**通則**,不是事件記錄——完整的第一手調查過程(時間戳記、`gh` 查證、逐條資料)留在
 `archive/ROADMAP_TEMP.md`(凍結歷史,tag `baseline-bmad` 之後的追加內容),本檔只留「下次遇到
@@ -35,7 +35,7 @@
 ### 坑 3:發現而未登記的缺陷,從紀錄外面看跟沒發現一樣
 
 `E04-S077`(全 app 不驗證路徑參數)、`E04-S078`(`GET /v1/health` 未登記進任何契約)在
-`tools/contract-equivalence` 首次執行時就被列印出來,但只以散文形式躺在 `ROADMAP_TEMP.md`,
+`tools/contract-equivalence` 首次執行時就被列印出來,但只以散文形式躺在 `archive/ROADMAP_TEMP.md`,
 直到收尾才被登記成 story。**已發現但未登記,和未發現,在紀錄上長得一模一樣。**
 
 下次任何檢查工具**首次執行**:每一條偏離當場登記為 story 或 allowlist 條目(擇一),

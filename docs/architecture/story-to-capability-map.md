@@ -1,6 +1,6 @@
 # 舊 story → 能力資料夾 對照表(一次性,不維護)
 
-產生日期:2026-09-03。來源:`archive/stories/PROGRESS.md`(2026-09-04 隨 `docs/stories/` 整目錄封存到
+產生日期:2026-09-03。來源:[`archive/stories/PROGRESS.md`](../../archive/stories/PROGRESS.md)(2026-09-04 隨 `docs/stories/` 整目錄封存到
 `archive/stories/`,路徑由原本的 `docs/stories/PROGRESS.md` 改為現址,內容未動)的 272 列
 (狀態計數:{"approved":253,"in-progress":4,"todo":5,"blocked-team-b":4,"done":4,"blocked":2})。
 規則(ADR 0008 §3):story 是工作項不是規格;這張表回答「它落在哪個資料夾」,story 內容是該資料夾

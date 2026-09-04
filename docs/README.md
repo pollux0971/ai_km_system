@@ -7,18 +7,19 @@
 
 | 情境 | 讀這份 |
 |---|---|
-| 剛接手,想知道現在整體在哪 | `01-roadmap.md`「現況」表 |
-| 要做一個 phase | 該 `features/NN-name/FEATURE.md` + `NEXT.md` + 對應 `phase-N.feature` |
-| 「為什麼當初這樣設計」 | `00-design.md`(凍結快照,不用每次讀) |
-| 想知道某個決定現在生不生效、有沒有被推翻 | `02-decision-map.md` 的索引與「已知不同之處」 |
-| 一個詞看不懂(scope、Deny-Wins、PF1、phase、owner…) | `04-glossary.md` |
-| 遇到一個「以前踩過的坑」該不該重踩 | `PITFALLS.md` |
-| 有事需要使用者決定 | `DECISIONS_NEEDED.md` 加一列,不停下來等 |
-| 要驗收一個整合點 | `integration/` 對應的 `iN-*.feature` + `integration/README.md` |
-| 契約或流程的最高權威 | `policies/`(逐字複製自原始規格庫,`policies/README.md` 有新範式讀法) |
-| 找某個技術決策的完整脈絡(Context/Decision/Alternatives) | `adr/`,索引在 `02-decision-map.md` |
-| 舊 story 的原始內容、找不到就查對照表 | `../archive/stories/`(`archive/stories/PROGRESS.md`、對照表在 `architecture/story-to-capability-map.md`) |
-| 原始規格庫(BMAD)的完整文字 | `../archive/AI_KM_BMAD_High_Granularity/`(tag `baseline-bmad`) |
+| 剛接手,想知道現在整體在哪 | [`01-roadmap.md`](./01-roadmap.md)「現況」表 |
+| 要做一個 phase | 該能力資料夾的 `FEATURE.md` + `NEXT.md` + 對應 `phase-N.feature`(見 [`../features/README.md`](../features/README.md)) |
+| 「為什麼當初這樣設計」 | [`00-design.md`](./00-design.md)(凍結快照,不用每次讀) |
+| 想知道某個決定現在生不生效、有沒有被推翻 | [`02-decision-map.md`](./02-decision-map.md) 的索引與「已知不同之處」 |
+| 一個詞看不懂(scope、Deny-Wins、PF1、phase、owner…) | [`04-glossary.md`](./04-glossary.md) |
+| 遇到一個「以前踩過的坑」該不該重踩 | [`PITFALLS.md`](./PITFALLS.md) |
+| 有事需要使用者決定 | [`DECISIONS_NEEDED.md`](./DECISIONS_NEEDED.md) 加一列,不停下來等 |
+| 要驗收一個整合點 | [`integration/README.md`](./integration/README.md) + 對應的 `iN-*.feature` |
+| 契約或流程的最高權威 | [`policies/README.md`](./policies/README.md)(內容逐字複製自原始規格庫,這份是新範式讀法) |
+| 找某個技術決策的完整脈絡(Context/Decision/Alternatives) | [`adr/README.md`](./adr/README.md),索引在 [`02-decision-map.md`](./02-decision-map.md) |
+| 舊 story 的原始內容、找不到就查對照表 | [`../archive/stories/README.md`](../archive/stories/README.md)、[`../archive/stories/PROGRESS.md`](../archive/stories/PROGRESS.md)、對照表在 [`architecture/story-to-capability-map.md`](./architecture/story-to-capability-map.md) |
+| 原始規格庫(BMAD)的完整文字 | [`../archive/AI_KM_BMAD_High_Granularity/readme_zh.md`](../archive/AI_KM_BMAD_High_Granularity/readme_zh.md)(tag `baseline-bmad`) |
+| 這個封存了什麼、`baseline-bmad` 這個 tag 怎麼對回去 | [`../archive/README.md`](../archive/README.md) |
 
 ## 目錄
 
@@ -43,4 +44,4 @@
 ## 與 `archive/` 的關係
 
 `docs/` 是**現在生效**的文件;`archive/` 是**凍結歷史**,只在需要查原始脈絡或某個舊 story
-的細節時才進去讀,不是任何工作的規格來源。兩者的橋接見 `archive/README.md`。
+的細節時才進去讀,不是任何工作的規格來源。兩者的橋接見 [`../archive/README.md`](../archive/README.md)。

@@ -18,7 +18,8 @@
     "accept": "pnpm --filter @ai-km/features accept",
     "accept:phase1": "pnpm --filter @ai-km/features accept:phase1",
     "accept:integration": "pnpm --filter @ai-km/features accept:integration",
-    "gherkin:dup": "pnpm --filter @ai-km/features gherkin:dup"
+    "gherkin:dup": "pnpm --filter @ai-km/features gherkin:dup",
+    "docs:links": "pnpm --filter @ai-km/features docs:links"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

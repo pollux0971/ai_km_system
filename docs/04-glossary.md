@@ -73,7 +73,9 @@ Wave 0 之後,把已經寫好的 253 個舊 story 的實作,逐個資料夾補�
 ## DECISIONS_NEEDED
 
 `docs/DECISIONS_NEEDED.md`:唯一的「需要使用者決定的事」收件匣,取代舊範式的
-`docs/stories/PENDING_DECISIONS.md`(2026-09-03 起凍結)。依 `CLAUDE.md`「決策權」段,
+`PENDING_DECISIONS.md`(2026-09-03 起凍結,原路徑 `docs/stories/PENDING_DECISIONS.md`,
+2026-09-04 隨 `docs/stories/` 整目錄封存後現址是 `archive/stories/PENDING_DECISIONS.md`)。
+依 `CLAUDE.md`「決策權」段,
 只有契約放寬/新 endpoint、新資料夾授權、付費或外部服務、真模型選型、以前沒提過的功能、
 整合點驗收這幾類才進這裡;其餘由技術顧問或協調者自行裁決並記 ADR。協調者遇到這類事:
 加一列,**不停下來等**,繼續做別的。

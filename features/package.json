@@ -11,9 +11,10 @@
     "accept:integration:next": "NODE_OPTIONS=--import=tsx cucumber-js ../docs/integration --tags '(@i2) and not @manual and not @e2e'",
     "gherkin:dup": "tsx scripts/check-gherkin-dup.ts",
     "steps:dup": "tsx scripts/check-step-dup.ts",
+    "docs:links": "tsx scripts/check-doc-links.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint steps scripts --ext .ts",
-    "test": "tsx scripts/check-gherkin-dup.ts && tsx scripts/check-step-dup.ts"
+    "test": "tsx scripts/check-gherkin-dup.ts && tsx scripts/check-step-dup.ts && tsx scripts/check-doc-links.ts"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.3.0",

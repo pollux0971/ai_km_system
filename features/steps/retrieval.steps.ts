@@ -298,7 +298,16 @@ async function askThroughRealSeam(
   if (seam) {
     // ADR 0014 的固定值:composition root 一旦接好,每個人都應該用同一個
     // dept:eng scope,不管這個人真正的部門是什麼。
-    const scope = toRetrievalScope({ principalId, allowedScopeKeys: ["dept:eng"] });
+    //
+    // deniedScopeKeys 為空是 I2 的實話,不是省略:ADR 0014 的固定 scope 沒有任何
+    // 明確拒絕項。deny 這條路徑由 02-authorization 的 phase-2b 場景守(它自己的
+    // deny.test.ts 與 phase-2.feature),不由這裡守——這個 seam 只證明
+    // composition root 接上了。真正依身分推導 allowed/denied 的那一步是 I3。
+    const scope = toRetrievalScope({
+      principalId,
+      allowedScopeKeys: ["dept:eng"],
+      deniedScopeKeys: [],
+    });
     try {
       outcome.hits = await seam.retrieve(question, scope, 3);
     } catch (error) {

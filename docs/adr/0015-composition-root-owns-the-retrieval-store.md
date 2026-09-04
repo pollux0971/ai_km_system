@@ -85,3 +85,70 @@ Status: Accepted · 2026-09-05 ·
 
 ADR 0007(plugin 接縫與 `fp()`)、ADR 0008(整合點順序)、ADR 0014(I2 的固定 scope)、
 E06-S026(embedding 版本守門)、E04-S067(sqlite-vec store)、`features/05-ingestion/NEXT.md`。
+
+---
+
+## 修正:D3(sandbox seeder)是錯的,由 D3′ 取代(2026-09-05,同日)
+
+**發現者**:`05-ingestion/phase-2` 的開發 agent,在實作途中撞到,停下來回報而不是硬做。
+**裁決人**:協調者(同上,顧問不在)。ADR 只增不刪,所以原文的 D3 留著,這一節說明它錯在哪。
+
+### 錯在哪
+
+D3 說「用既有的 `registerSandboxSeeder` 樣式把 fixture PDF 索引進那個 store,
+不新開第四種機制」。我選它的理由是**不要發明新樣式**——這個理由本身沒錯,
+但我沒有檢查那個樣式的**觸發時機**與這個 phase 要證明的事**相不相容**。
+
+`registerSandboxSeeder` 是**登入時**(綁 `ownerKey`)或**開機時**觸發的自動行為。
+而 `05-ingestion/phase-2.feature` 的場景 4 斷言的是:
+
+> 一個 server instance 索引進去的東西,**不會**存活到第二個 server instance
+> ——第二個 server 查到的 chunk id 集合是空集合(這是 D4「in-memory 重開就沒了」
+> 寫進場景本文的方式)
+
+那個場景的第二個 server **也會登入 `demo-user`**。所以任何登入觸發或開機觸發的自動 seed
+**會把第二個 server 的 store 也灌滿**,場景 4 當場變成假的。
+
+**D3 與 D4 在同一份 ADR 裡互相矛盾,而我寫的時候沒看出來。**
+
+### 為什麼會寫錯:我拿樣式的「名字」當結論,沒拿它的「行為」
+
+`registerSandboxSeeder` 這個名字讀起來就是「把示範資料放進去」,而我要的正是
+「把示範資料放進去」——名字對上了,我就停止追問。真正該問的是**它什麼時候跑**,
+而那個答案(每次登入)才是與規格相關的性質。
+
+這是 GHERKIN_WORKFLOW §5.3「機制要用量的不要用讀的」的一個變形:
+我不是從原始碼推斷錯了機制,而是**從名字推斷了機制**,連原始碼都沒讀到那一層。
+§5.3 的原文講的是工具與環境;這裡證明它對**既有樣式的複用**同樣成立
+——「照既有樣式做」不豁免「先確認那個樣式的行為」。
+
+### D3′(取代 D3)
+
+**`app.ingestion` 是一個 on-demand 的 `IngestionService` 接縫,不掛任何自動 seeder。**
+
+- composition root 把它與 `retrievalPlugin` **共用同一個 store**(D1 不變,那才是重點)。
+- roadmap 對這個 phase 的原文是「**一條**把 fixture PDF 索引進 dev DB 的**指令**」
+  ——**指令**就是指令:一次明確的呼叫(demo script / 測試步驟 / 未來的 CLI),
+  不是開機或登入時偷偷發生的事。
+  `05-ingestion` 的測試 agent 交件時就已經指出「指令 vs seeder」有落差並留給協調者判斷;
+  它是對的,我當時沒有處理那個落差,直接寫進了 D3。
+- 附帶好處:on-demand 讓場景 4 那條「第二個 server 是空的」成為**真的**斷言,
+  而不是一個被自動 seed 悄悄破壞掉的斷言。
+
+**D1、D2、D4、D5 不變。** 特別是 D2(`enforceEmbeddingVersion` 顯式打開)與
+D4(in-memory 限制寫進場景本文)不受本修正影響。
+
+### 連帶要處理的一件事(不是這一節能解決的)
+
+開發 agent 同時回報:場景 3(D2 的嚴格級目標,「index 時的 embedding 身分與現在不同 → 被拒絕」)
+今天**無法變綠**——`ingest()` 沒有任何參數可以指定「用哪個 embedding 版本寫入」,
+所以「索引時與查詢時用不同 embedding provider」這個前提做不出來。
+
+這代表 D2 的反向驗證目前是**空的**:把 `enforceEmbeddingVersion` 從 `true` 翻成 `false`,
+場景結果**逐位元不變**(開發 agent 實測過)——不是因為守門壞了,是因為**沒有任何場景走到它守的那條路徑**。
+
+依 §5.2「沒有可失敗檢查點的工作項不得標 done」,**這件事必須在 `/phase-done` 之前解決**,
+有兩條路,由協調者在收到開發 agent 的完成回報後裁決並記在這一節底下:
+(a) 給 `ingest()` 一個明確的 embedding 身分注入點(那是實作變更,要評估是不是超出本 phase);
+(b) 承認場景 3 在本 phase 做不到,把它降級為 phase-3 的 gate,並在 `.feature` 動刀
+   ——**但 `.feature` 只由使用者或 `/feature` 流程改**(§6),所以走 `/feature`,不是協調者直接改。

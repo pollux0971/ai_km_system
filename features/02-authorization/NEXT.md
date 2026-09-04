@@ -8,8 +8,9 @@
 | 欄位 | 值 |
 |---|---|
 | 已完成 | phase-1(2026-09-04,回填) |
-| 進行中 | 無 |
-| 下一個 | phase-2(**blocked**) |
+| 進行中 | phase-2 的**測試/spec 提案(紅)**——branch `pollux0971/authz-phase2`,待協調者送
+          技術顧問確認、merge。尚未進 IMPLEMENT。 |
+| 下一個 | phase-2 IMPLEMENT(仍卡 I2,見下) |
 
 ## 下一個 phase 的 gate
 
@@ -17,48 +18,60 @@
 
 - [x] 自身:phase-1 `done`
 - [ ] 整合:I2 通過(`06-retrieval` phase-2 把 `retrievalPlugin` 接進 `apps/api` composition root,
-      屆時那條「scope 固定給 `dept:eng`」的暫時限制才有東西可以取代)
-- [ ] 契約:**E04-S009 解除 blocked**。這是**使用者級**的裁定,不是工程取捨,因為它問的是產品行為:
-      - 部門的**顯示名稱**(session 今天給的是「資訊部」「維修部」)與 store 用的**鑰匙**(`dept:*`)
-        之間,對應規則是什麼?誰維護它?
-      - 群組(`group_name`,今天是「一般使用者群組」這種顯示名稱)算不算一把鑰匙?
-      - 一個人同時屬於部門與群組時,兩者是聯集還是交集?(Deny-Wins 在這裡長什麼樣)
-      - 跨部門搬過去的文件,原部門還看不看得到?
-      這四題在 `docs/DECISIONS_NEEDED.md` 之前,phase-2 一行都不能寫。
+      屆時那條「scope 固定給 `dept:eng`」的暫時限制才有東西可以取代)。**2026-09-04 現況:仍是
+      `todo`**(見 `06-retrieval/FEATURE.md` phase 表)——這是唯一還沒解除的 gate。
+- [x] 契約:**E04-S009 已解除 blocked**(技術顧問依 ADR 0012,2026-09-04 裁定):
+      1. `scopeKey` 形狀:`dept:<department.id>` / `group:<group.id>`,顯示名永遠不當鑰匙。
+      2. 對應由 `01-identity` 單一維護,`02-authorization` 只讀,不建第二張表。
+      3. `allowedScopeKeys` = 部門 ∪ 群組(聯集)。
+      4. Deny-Wins 作用在顯式 ACL deny 上,不是「取交集」的窄化。
+      5. 一份文件只有單一 `scopeKey`;搬部門後原部門即不可見。
+      **但**:裁定 1 假設的 `department.id`/`group.id` 今天在 01-identity 完全不存在
+      (`users` 表只有顯示名稱兩欄,repo 內無任何 id 對照表);裁定 4 需要的「顯式 deny」
+      這個型別維度今天 `RetrievalScope` 也沒有。這兩點是 phase-2 提案(紅測試)寫完之後
+      發現的**結構性依賴**,不是裁定本身說不通——細節見 `FEATURE.md`「phase-2 提案」段
+      與「待協調」。
 
 **phase-3(群組 → scopeKeys 的變更即時生效)** 需要:
 
 - [ ] 自身:phase-2 `done`
 - [ ] 整合:I6(admin 的部門／群組頁接真 API)
 
-## Gate 未滿足時
+## Gate 未滿足時(I2 仍 todo)
 
-**不可以先做的(這條最重要)**:
+**不可以先做的(這條最重要,E04-S009 裁定之後依然成立)**:
 
 - **不准建過渡對應表**。任何把「資訊部」→「`dept:it`」寫死的表、map、常數陣列、
   「暫時先這樣」的 switch,都是 **E04-S062 明文禁止**的東西
   (`06-retrieval` 的 `NEXT.md` 同一條:「不要用假的 scope 對應表先接——那正是 E04-S009 裁示禁止的過渡表」)。
   理由:那張表一旦存在就會被當成規則,而它的每一列都是**沒有人裁定過**的產品決策;
-  之後真的裁定下來時,沒有人會記得哪幾列是猜的。
+  之後真的裁定下來時,沒有人會記得哪幾列是猜的。**這條在裁定之後反而更重要**:
+  phase-2 提案(紅測試,2026-09-04)發現 01-identity 今天連 `department.id` 都沒有
+  ——這個缺口很誘人被「先隨便編幾個 id」的過渡表補起來,不准這樣做;缺的是
+  01-identity 的真資料,不是 02-authorization 這邊猜幾個字串。
 - **不准讓 session 回傳看起來像 scope 的欄位**來「先接起來」。phase-1 的最後一個場景
   (`the identity hands over no ready-made scope keys`,tag **`@design-constraint`**)
   就是這條的守門:任何人在 `GET /v1/auth/session` 的回應裡加上
   `scopeKeys` / `allowedScopeKeys` / `scope`,那個場景會紅。
   **它紅了不是壞事,是提醒:這個變更要走 E04-S009 與 ADR,不是順手加欄位。**
-  看到紅該做的是 `/feature` + ADR,**不是拿掉那條斷言**。
-  E04-S009 真的落地(也就是 phase-2 開工)時,那個場景由 `/feature` 流程**改寫**成新的事實,
-  **不得直接刪除**——理由與出處寫在 `FEATURE.md` 的「設計約束場景(`@design-constraint`)」段,
-  以及 `phase-1.feature` 該場景正上方的註解。這是技術顧問 ai-km-3a 2026-09-04 的裁決。
+  E04-S009 現在已經有裁定(ADR 0012)了,但這條規則**不因此失效**——裁定要求的是
+  推導**留在 server 內部**(retrieval/authorization 層),`GET /v1/auth/session` 本身
+  依然不該帶 scope 形狀的欄位。真的要動這個場景,走 `/feature` 把它**改寫**成這個
+  更新後的事實(見 `FEATURE.md`「這個場景會怎麼被改寫」段的具體提案),
+  **不得直接刪除**。
 - 不准放寬 `toRetrievalScope()` 讓它接受缺 principal 的輸入,「因為呼叫端還沒接上」。
   那個拒絕正是用來抓「還沒接上」的。
 
 **可以先做的**:
 
-- 把上面四個問題寫進 `docs/DECISIONS_NEEDED.md`(一列),然後去做別的資料夾——這是
-  CLAUDE.md 決策權表的標準走法:需要使用者的事登記完就繼續,不停。
-- 補一條 vitest 斷言「`RetrievalScope` 建好之後 `allowedScopeKeys` 不能再被加東西」
-  (`Object.freeze` 今天就是這個行為,只是沒有測試盯著)。這是測試 agent 的工作,
-  不需要 E04-S009,補完之後可以回填成 phase-1 的第十個場景。
+- **I2 不影響能不能寫 phase-2 的推導函式本身**(那是純函式,不需要 `retrievalPlugin`
+  真的掛進 `apps/api`)——`services/retrieval/src/authorization/` 裡的邏輯可以先寫、
+  先過 vitest,I2 只影響「掛進真實 HTTP 路徑」那一步。dev agent 拿到這份提案後可以先做
+  這一半。
+- 01-identity 的 id 缺口(見 `FEATURE.md`「待協調」)先登記,若協調者認為要開一個對
+  `01-identity` 的 `/feature` 就去開;若認為可以讓 dev agent 在 phase-2 IMPLEMENT
+  時一併處理(仍在 `02-authorization` owner 範圍內讀 `01-identity` 已有的欄位、
+  或請 01-identity 的 owner 加欄位),就照那條路走,不必為此另外停下整個 phase-2。
 - 把 `packages/permissions/` 的 `AuthorizationDecision` 是死型別還是預留,問 domain owner。
 
 ## 完成後

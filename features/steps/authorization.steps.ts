@@ -33,6 +33,14 @@ interface AuthorizationState {
   handedBack?: readonly ScopedRecord[];
   /** 真實登入後 GET /v1/auth/session 的內容 */
   identity?: Record<string, unknown>;
+  /**
+   * phase-2(提案,紅):把身分的原始欄位(部門/群組顯示名稱)直接當成
+   * scope 鑰匙餵給既有的 toRetrievalScope() 所得到的結果——這是今天的
+   * 程式碼唯一做得到的事,不是正確的轉換(那個轉換是 phase-2 要建的)。
+   */
+  attemptedScope?: RetrievalScope;
+  /** phase-2(提案,紅):這個人被明確拒絕的鑰匙——今天沒有任何機制會套用它 */
+  deniedKeys?: readonly string[];
 }
 
 function state(world: KmWorld): AuthorizationState {
@@ -56,6 +64,16 @@ function scopeOf(world: KmWorld): RetrievalScope {
     `授權範圍還沒建成(可能被拒絕:${world.lastError?.name} ${world.lastError?.message})`,
   );
   return s.scope;
+}
+
+/** phase-2(提案,紅):讀「用身分原始欄位硬套」得到的那個嘗試性 scope */
+function attemptedScopeOf(world: KmWorld): RetrievalScope {
+  const s = state(world);
+  assert.ok(
+    s.attemptedScope,
+    `還沒有嘗試從身分建立授權範圍(可能被拒絕:${world.lastError?.name} ${world.lastError?.message})`,
+  );
+  return s.attemptedScope;
 }
 
 function describeGrants(s: AuthorizationState): string {
@@ -254,3 +272,82 @@ Then("the identity hands over no ready-made scope keys", function (this: KmWorld
       `在那之前建過渡對應表是 E04-S062 明文禁止的(見 NEXT.md)。`,
   );
 });
+
+// ==================================================================
+// phase-2(提案,紅)—— 從 identity 的 session 產出 RetrievalScope。
+// 下面每一步都只呼叫既有的 toRetrievalScope / buildScopePredicate
+// (phase-1 已經在用的入口),不 import 任何新的實作符號——紅只會發生
+// 在斷言,不會發生在編譯,typecheck/lint 不受影響。細節見
+// phase-2.feature 開頭的說明與 FEATURE.md。
+// ==================================================================
+
+// ---------------------------------------------------------------- When
+
+When(
+  "that identity's session fields alone are used to attempt an authorization scope",
+  function (this: KmWorld) {
+    const s = state(this);
+    const identity = s.identity;
+    assert.ok(identity, "還沒讀到任何已登入的身分");
+    try {
+      s.attemptedScope = toRetrievalScope({
+        principalId: String(identity["userId"] ?? s.principalId),
+        // 這裡刻意直接用身分的原始欄位(部門/群組「顯示名稱」)當鑰匙——
+        // 這是今天的程式碼唯一做得到的事。ADR 0012 裁定 1 明講顯示名永遠
+        // 不當鑰匙,所以這一步產出的 scope 預期是「錯的」,Then 那一步的
+        // 斷言會證明這件事。
+        allowedScopeKeys: [String(identity["department"]), String(identity["group"])],
+      });
+    } catch (error) {
+      this.lastError = error as Error;
+    }
+  },
+);
+
+// ---------------------------------------------------------------- Given
+
+Given(
+  "that person has also been explicitly denied {string}",
+  function (this: KmWorld, deniedKey: string) {
+    const s = state(this);
+    s.deniedKeys = [...(s.deniedKeys ?? []), deniedKey];
+  },
+);
+
+// ---------------------------------------------------------------- Then
+
+Then(
+  "the attempted scope should admit a record labelled {string} but does not",
+  function (this: KmWorld, label: string) {
+    const identity = state(this).identity;
+    assert.ok(identity, "還沒讀到任何已登入的身分");
+    const allow = buildScopePredicate(attemptedScopeOf(this));
+    assert.equal(
+      allow({ scopeKey: label }),
+      true,
+      `身分的原始欄位(部門「${String(identity["department"])}」/群組「${String(identity["group"])}」)` +
+        `today 沒有任何轉換規則能變成「${label}」這把鑰匙——` +
+        `ADR 0012 裁定 1 定了鑰匙的形狀(dept:<department.id> / group:<group.id>),` +
+        `但 01-identity 今天完全沒有 id 欄位,只有顯示名稱(db/migrations/202608280002_identity.sql)。` +
+        `這正是 phase-2 要補的轉換層;在它存在之前,這個人連自己部門/群組的文件都打不開—— ` +
+        `查無資料,不是拒絕存取,兩者對使用者看起來一樣,但成因不同。`,
+    );
+  },
+);
+
+Then(
+  "the scope should refuse a record labelled {string} because of the explicit denial, but it does not",
+  function (this: KmWorld, label: string) {
+    const s = state(this);
+    const allow = buildScopePredicate(scopeOf(this));
+    assert.equal(
+      allow({ scopeKey: label }),
+      false,
+      `「${s.principalId}」被明確拒絕存取「${label}」(明確拒絕清單:${(s.deniedKeys ?? []).join(", ") || "(空)"}),` +
+        `但 toRetrievalScope() 今天只認得 allowedScopeKeys 這一份允許清單,` +
+        `沒有任何欄位能表達「即使在允許清單裡,這把鑰匙仍然要被擋下」—— ` +
+        `ADR 0012 裁定 4(顯式 ACL deny 蓋過 allow,不是「取交集」的窄化)今天沒有對應機制承接, ` +
+        `這正是 phase-2 要補的洞:算太寬,靜默放行了本該被擋下的資料。`,
+    );
+  },
+);

@@ -50,4 +50,10 @@ agent 不知道聽哪個」,而它給的解法**不是**選一邊,是「**打破
 **誰受影響**:協調者(合併點的工作量集中);嚴格級資料夾的 `/phase-done` 仍須由**另一個
 session** 跑(GHERKIN_WORKFLOW §5.1),這一點**不因平行而放寬**。
 
+**2026-09-04 回填收尾期間一次性 4 條線**(`docs-closeout-6`、`admin-console-fix`、
+`authz-phase2`、`filelist-race-determinism`),超過 `/autopilot` 的 ≤3。理由:四條的檔案
+**零重疊**(02 / 10 / 六個資料夾的 FEATURE.md / 08·11 + `apps/web` 三檔),前兩條是回填收尾、
+性質輕。**下一輪回到 ≤3。** 記在這裡而不是只在訊息裡——P-05 要的是「留在紀錄裡」,
+留在 session 訊息裡等於 retro 時找不到。
+
 **這份 ADR 不授權**:phase-2 之後照 `/autopilot` 原本的 WIP;要再破一次上限就再記一份 ADR。

@@ -73,7 +73,7 @@ describe("RetrievalService.retrieve() (E04-S062)", () => {
     ]);
 
     const service = createRetrievalService({ store, embedding, enforceEmbeddingVersion: false });
-    const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"] });
+    const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"], deniedScopeKeys: [] });
 
     const hits = await service.retrieve("潤滑油多久更換一次", scope, 5);
 
@@ -97,7 +97,7 @@ describe("RetrievalService.retrieve() (E04-S062)", () => {
     ]);
 
     const service = createRetrievalService({ store, embedding, enforceEmbeddingVersion: false });
-    const noAccess = toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [] });
+    const noAccess = toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [], deniedScopeKeys: [] });
 
     const hits = await service.retrieve("軸承過熱", noAccess, 5);
     expect(hits).toHaveLength(0);
@@ -131,7 +131,7 @@ describe("RetrievalService.retrieve() (E04-S062)", () => {
     };
 
     const service = createRetrievalService({ store: leakyStore, embedding, enforceEmbeddingVersion: false });
-    const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"] });
+    const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"], deniedScopeKeys: [] });
 
     await expect(service.retrieve("任何問題", scope, 3)).rejects.toBeInstanceOf(ScopeLeakError);
   });
@@ -145,7 +145,7 @@ describe("RetrievalService.retrieve() (E04-S062)", () => {
     ]);
 
     const service = createRetrievalService({ store, embedding, enforceEmbeddingVersion: false });
-    const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"] });
+    const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"], deniedScopeKeys: [] });
 
     const hits = await service.retrieve("軸承過熱要怎麼處理", scope, 5);
     expect(hits.length).toBeGreaterThan(0);
@@ -174,7 +174,7 @@ describe("RetrievalService.retrieve() (E04-S062)", () => {
       // mismatched length rather than silently producing a number.
       const queryTimeEmbedding = createModelGatewayEmbeddingProvider({ dimensions: 32 });
       const service = createRetrievalService({ store, embedding: queryTimeEmbedding, enforceEmbeddingVersion: false });
-      const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"] });
+      const scope = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"], deniedScopeKeys: [] });
 
       await expect(service.retrieve("軸承過熱", scope, 5)).rejects.toBeInstanceOf(EmbeddingError);
     },

@@ -25,10 +25,11 @@ import {
 } from "./store.js";
 import { toRetrievalScope } from "../authorization/scope.js";
 
-const FINANCE_SCOPE = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"] });
+const FINANCE_SCOPE = toRetrievalScope({ principalId: "u-fin", allowedScopeKeys: ["dept:finance"], deniedScopeKeys: [] });
 const MAINTENANCE_SCOPE = toRetrievalScope({
   principalId: "u-maint",
   allowedScopeKeys: ["dept:maintenance"],
+  deniedScopeKeys: [],
 });
 
 const QUERY = Float32Array.from([1, 0]);

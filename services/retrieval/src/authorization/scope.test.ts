@@ -11,17 +11,18 @@ import {
 const scope = toRetrievalScope({
   principalId: "u-1",
   allowedScopeKeys: ["dept:maintenance", "dept:ops"],
+  deniedScopeKeys: [],
 });
 
 describe("RetrievalScope — Deny-Wins", () => {
   it("PF0 空的 principalId 必須拒絕——代表授權沒被接進來", () => {
-    expect(() => toRetrievalScope({ principalId: "", allowedScopeKeys: [] })).toThrow(
+    expect(() => toRetrievalScope({ principalId: "", allowedScopeKeys: [], deniedScopeKeys: [] })).toThrow(
       RetrievalScopeError,
     );
   });
 
   it("PF0 空的 allowedScopeKeys 是合法狀態,意義為拒絕全部", () => {
-    const none = toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [] });
+    const none = toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [], deniedScopeKeys: [] });
     const allow = buildScopePredicate(none);
     expect(allow({ scopeKey: "dept:maintenance" })).toBe(false);
   });
@@ -39,7 +40,7 @@ describe("RetrievalScope — Deny-Wins", () => {
   });
 
   it("PF0 零授權時產生 1 = 0,不得產生空的 IN ()", () => {
-    const none = toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [] });
+    const none = toRetrievalScope({ principalId: "u-new", allowedScopeKeys: [], deniedScopeKeys: [] });
     const { sql, params } = buildScopeSql(none);
     expect(sql).toBe("1 = 0");
     expect(params).toEqual([]);

@@ -43,7 +43,7 @@ import { createRetrievalService, createModelGatewayEmbeddingProvider, type Retri
 import { createInMemoryVectorStore, EmbeddingVersionMismatchError } from "./vector/store.js";
 import { toRetrievalScope } from "./authorization/scope.js";
 
-const scope = toRetrievalScope({ principalId: "u-1", allowedScopeKeys: ["dept:maintenance"] });
+const scope = toRetrievalScope({ principalId: "u-1", allowedScopeKeys: ["dept:maintenance"], deniedScopeKeys: [] });
 
 let app: FastifyInstance | undefined;
 afterEach(async () => {
@@ -101,8 +101,8 @@ describe("retrievalPlugin (E04-S062 — real service, no longer a scaffold)", ()
     await instance.ready();
     app = instance;
 
-    const maintenance = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"] });
-    const finance = toRetrievalScope({ principalId: "u-bob", allowedScopeKeys: ["dept:finance"] });
+    const maintenance = toRetrievalScope({ principalId: "u-alice", allowedScopeKeys: ["dept:maintenance"], deniedScopeKeys: [] });
+    const finance = toRetrievalScope({ principalId: "u-bob", allowedScopeKeys: ["dept:finance"], deniedScopeKeys: [] });
 
     const authorised = await seam(app)!.retrieve("軸承過熱", maintenance, 3);
     expect(authorised).toHaveLength(1);

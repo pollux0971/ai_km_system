@@ -84,7 +84,7 @@ Given("the same PDF is ingested again under department {string}", { timeout: 60_
 
 async function ask(world: KmWorld, question: string, allowedScopeKeys: readonly string[]): Promise<void> {
   const s = state(world);
-  const scope = toRetrievalScope({ principalId: "i1-person", allowedScopeKeys });
+  const scope = toRetrievalScope({ principalId: "i1-person", allowedScopeKeys, deniedScopeKeys: [] });
   const embed = await s.modelGateway.embed({ input: [question] }, "i1-query");
   const queryVector = Float32Array.from(embed.data[0]!.embedding);
   s.hits = [...(await s.vectorStore.query(queryVector, scope, 10))];

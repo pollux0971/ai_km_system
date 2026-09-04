@@ -78,7 +78,7 @@ describe("IngestionService.ingest — E06-S026 embedding identity", () => {
     });
     expect(result.embeddingModel).toBe("embedding:deterministic");
 
-    const scope = toRetrievalScope({ principalId: "u-1", allowedScopeKeys: ["dept:eng"] });
+    const scope = toRetrievalScope({ principalId: "u-1", allowedScopeKeys: ["dept:eng"], deniedScopeKeys: [] });
     const probeVector = await modelGateway.embed({ input: ["探測用查詢"] }, "probe");
     const hits = await vectorStore.query(Float32Array.from(probeVector.data[0]!.embedding), scope, result.chunkCount);
     expect(hits.length).toBe(result.chunkCount);

@@ -122,7 +122,11 @@ async function attemptIngest(world: KmWorld, documentId: string, scopeKey: strin
 /** 某個部門現在看得到的 chunk。純讀,不改變 store。 */
 async function visibleTo(world: KmWorld, dept: string): Promise<readonly RetrievalHit[]> {
   const s = pipeline(world);
-  const scope = toRetrievalScope({ principalId: `ingestion-probe-${dept}`, allowedScopeKeys: [`dept:${dept}`] });
+  const scope = toRetrievalScope({
+    principalId: `ingestion-probe-${dept}`,
+    allowedScopeKeys: [`dept:${dept}`],
+    deniedScopeKeys: [],
+  });
   const probe = await s.modelGateway.embed({ input: [PROBE_QUERY] }, `ingestion-probe-${dept}`);
   const first = probe.data[0];
   assert.ok(first, "探測查詢沒有拿到嵌入向量");

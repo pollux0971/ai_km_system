@@ -37,6 +37,15 @@ export type RetrievalScope = {
   readonly principalId: string;
   /** Department/group keys the principal may read. Empty = deny everything. */
   readonly allowedScopeKeys: readonly string[];
+  /**
+   * Explicit ACL denials (ADR 0012 裁定 4) — Deny-Wins overrides a grant in
+   * `allowedScopeKeys` rather than merely narrowing it. Always present on a
+   * constructed scope (never `undefined`): every reader can rely on this
+   * field existing without an `?? []` guard. The ACL table that will supply
+   * real values is not built yet (left to phase-3 / I3) — every caller today
+   * passes `[]`, which is a no-op alongside `allowedScopeKeys`.
+   */
+  readonly deniedScopeKeys: readonly string[];
 } & { readonly [scopeBrand]: true };
 
 export class RetrievalScopeError extends Error {
@@ -56,6 +65,15 @@ export class RetrievalScopeError extends Error {
 export function toRetrievalScope(input: {
   principalId: string;
   allowedScopeKeys: readonly string[];
+  /**
+   * ADR 0012 裁定 4:必填、無預設——讓 typecheck 釘住每個呼叫端
+   * (E06-S026 的教訓:「還沒想過」與「想過了答案是零」不等價,可選欄位會讓
+   * 前者被靜默當成後者)。第二輪(開發 agent)曾把它做成 optional,因為當時
+   * `*.test.ts` 與 `features/steps/**` 裡有 30+ 處呼叫端還沒接上這個欄位,
+   * 那兩類是開發 agent 不能改的檔;第三輪(測試 agent)已經把那些呼叫端全部
+   * 補上 `deniedScopeKeys: []`,這一輪(開發 agent)照字面把它改回必填。
+   */
+  deniedScopeKeys: readonly string[];
 }): RetrievalScope {
   if (typeof input?.principalId !== "string" || input.principalId.trim() === "") {
     throw new RetrievalScopeError(
@@ -72,10 +90,22 @@ export function toRetrievalScope(input: {
       throw new RetrievalScopeError(`allowedScopeKeys 含有空白或非字串項目:${JSON.stringify(key)}`);
     }
   }
+  if (!Array.isArray(input.deniedScopeKeys)) {
+    throw new RetrievalScopeError(
+      "deniedScopeKeys 必須是陣列。缺少這份清單代表呼叫端沒有把 deny 接進來," +
+        "不可靜默視為「沒有任何 deny」而通過——想清楚答案是空陣列的呼叫端請明寫 []。",
+    );
+  }
+  for (const key of input.deniedScopeKeys) {
+    if (typeof key !== "string" || key.trim() === "") {
+      throw new RetrievalScopeError(`deniedScopeKeys 含有空白或非字串項目:${JSON.stringify(key)}`);
+    }
+  }
 
   return {
     principalId: input.principalId,
     allowedScopeKeys: Object.freeze([...input.allowedScopeKeys]),
+    deniedScopeKeys: Object.freeze([...input.deniedScopeKeys]),
   } as RetrievalScope;
 }
 
@@ -90,9 +120,10 @@ export interface ScopedRecord {
  */
 export function buildScopePredicate(scope: RetrievalScope): (record: ScopedRecord) => boolean {
   const allowed = new Set(scope.allowedScopeKeys);
+  const denied = new Set(scope.deniedScopeKeys);
   return (record) => {
     if (typeof record?.scopeKey !== "string" || record.scopeKey.trim() === "") return false;
-    return allowed.has(record.scopeKey);
+    return allowed.has(record.scopeKey) && !denied.has(record.scopeKey);
   };
 }
 
@@ -108,13 +139,18 @@ export function buildScopeSql(
   scope: RetrievalScope,
   column = "scope_key",
 ): { readonly sql: string; readonly params: readonly string[] } {
-  if (scope.allowedScopeKeys.length === 0) {
+  const denied = new Set(scope.deniedScopeKeys);
+  // Pre-filter: a denied key never reaches the IN list at all (ADR 0012 裁定
+  // 3) — closer to "authorization before retrieval" than filtering rows out
+  // after the query runs.
+  const effectiveKeys = scope.allowedScopeKeys.filter((key) => !denied.has(key));
+  if (effectiveKeys.length === 0) {
     return { sql: "1 = 0", params: [] };
   }
-  const placeholders = scope.allowedScopeKeys.map(() => "?").join(", ");
+  const placeholders = effectiveKeys.map(() => "?").join(", ");
   return {
     sql: `${column} IN (${placeholders})`,
-    params: [...scope.allowedScopeKeys],
+    params: [...effectiveKeys],
   };
 }
 
@@ -134,7 +170,8 @@ export function assertNoScopeLeak<T extends ScopedRecord>(
   records: readonly T[],
 ): readonly T[] {
   const allowed = new Set(scope.allowedScopeKeys);
-  const leaked = records.filter((r) => !allowed.has(r?.scopeKey));
+  const denied = new Set(scope.deniedScopeKeys);
+  const leaked = records.filter((r) => !allowed.has(r?.scopeKey) || denied.has(r?.scopeKey));
   if (leaked.length > 0) {
     const keys = [...new Set(leaked.map((r) => String(r?.scopeKey)))].join(", ");
     throw new ScopeLeakError(

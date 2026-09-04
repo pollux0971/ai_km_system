@@ -8,8 +8,10 @@
 | 欄位 | 值 |
 |---|---|
 | 已完成 | phase-1(2026-09-04,回填) |
-| 進行中 | phase-2 的**測試/spec 提案(紅)**——branch `pollux0971/authz-phase2`,待協調者送
-          技術顧問確認、merge。尚未進 IMPLEMENT。 |
+| 進行中 | phase-2 的**測試/spec 提案**——branch `pollux0971/authz-2b-deny`,待協調者送
+          技術顧問確認、merge。deny 子項(phase-2b)三輪接力已完成,`phase-2.feature`
+          4 紅(2a identity 轉換,blocked)4 綠(deny)。整體仍未進 IMPLEMENT 收尾
+          (卡 I2 與 2a)。 |
 | 下一個 | phase-2 IMPLEMENT(仍卡 I2,見下) |
 
 ## 下一個 phase 的 gate
@@ -27,10 +29,15 @@
       4. Deny-Wins 作用在顯式 ACL deny 上,不是「取交集」的窄化。
       5. 一份文件只有單一 `scopeKey`;搬部門後原部門即不可見。
       **但**:裁定 1 假設的 `department.id`/`group.id` 今天在 01-identity 完全不存在
-      (`users` 表只有顯示名稱兩欄,repo 內無任何 id 對照表);裁定 4 需要的「顯式 deny」
-      這個型別維度今天 `RetrievalScope` 也沒有。這兩點是 phase-2 提案(紅測試)寫完之後
-      發現的**結構性依賴**,不是裁定本身說不通——細節見 `FEATURE.md`「phase-2 提案」段
-      與「待協調」。
+      (`users` 表只有顯示名稱兩欄,repo 內無任何 id 對照表)——**這點仍未解除,見下方
+      「待協調」**。裁定 4(顯式 deny)需要的型別維度上一輪只定了方向,技術顧問
+      2026-09-04 已補齊**完整形狀**(`deniedScopeKeys`、謂詞與 SQL 的合成規則、
+      deny 來源留到 phase-3)——見 `FEATURE.md`「phase-2b 提案」與「phase-2b 完成」段。
+      三輪接力已做完:測試 agent 把 deny 場景從 1 條拆成 4 條、開發 agent 實作
+      `scope.ts`、測試 agent 把 steps 接上真的 API,`phase-2.feature` 的 deny 場景
+      4/4 綠、`deny.test.ts` 4/4 綠、`pnpm turbo run test` 40/40。
+      這不代表 gate 已滿足:2a(identity 轉換,裁定 1 的 id 缺口)仍是紅,I2 仍是
+      todo,phase-2 IMPLEMENT 收尾要等兩者都解除。
 
 **phase-3(群組 → scopeKeys 的變更即時生效)** 需要:
 

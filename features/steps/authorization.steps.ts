@@ -91,7 +91,14 @@ Given("a person {string} whose grants are exactly {string}", function (this: KmW
 When("that person's authorization scope is built", function (this: KmWorld) {
   const s = state(this);
   try {
-    s.scope = toRetrievalScope({ principalId: s.principalId, allowedScopeKeys: s.grants });
+    s.scope = toRetrievalScope({
+      principalId: s.principalId,
+      allowedScopeKeys: s.grants,
+      // phase-2b:s.deniedKeys 是「Given ... explicitly denied ...」步驟累積下來的
+      // 明確拒絕清單;沒有那個 Given 時視為 []——「還沒明寫」與「明寫空清單」在
+      // 這裡語意等價,兩者都代表「這個場景沒有 deny 任何東西」。
+      deniedScopeKeys: s.deniedKeys ?? [],
+    });
   } catch (error) {
     this.lastError = error as Error;
   }
@@ -102,7 +109,11 @@ When(
   function (this: KmWorld, column: string) {
     const s = state(this);
     try {
-      s.scope = toRetrievalScope({ principalId: s.principalId, allowedScopeKeys: s.grants });
+      s.scope = toRetrievalScope({
+        principalId: s.principalId,
+        allowedScopeKeys: s.grants,
+        deniedScopeKeys: s.deniedKeys ?? [],
+      });
       s.filter = buildScopeSql(s.scope, column);
     } catch (error) {
       this.lastError = error as Error;
@@ -297,6 +308,7 @@ When(
         // 不當鑰匙,所以這一步產出的 scope 預期是「錯的」,Then 那一步的
         // 斷言會證明這件事。
         allowedScopeKeys: [String(identity["department"]), String(identity["group"])],
+        deniedScopeKeys: [],
       });
     } catch (error) {
       this.lastError = error as Error;
@@ -313,6 +325,14 @@ Given(
     s.deniedKeys = [...(s.deniedKeys ?? []), deniedKey];
   },
 );
+
+// phase-2b(提案,紅/綠混合):明寫「明確拒絕清單是空的」,而不是單純不呼叫
+// 上面那個 Given——這樣才對得上工單裁定 4「呼叫端此刻全部傳 []」的字面意思
+// (一個明寫的空陣列,不是「沒接上」)。
+Given("that person has explicitly denied nothing", function (this: KmWorld) {
+  const s = state(this);
+  s.deniedKeys = [];
+});
 
 // ---------------------------------------------------------------- Then
 
@@ -336,7 +356,7 @@ Then(
 );
 
 Then(
-  "the scope should refuse a record labelled {string} because of the explicit denial, but it does not",
+  "the scope refuses a record labelled {string} because of the explicit denial",
   function (this: KmWorld, label: string) {
     const s = state(this);
     const allow = buildScopePredicate(scopeOf(this));
@@ -344,10 +364,30 @@ Then(
       allow({ scopeKey: label }),
       false,
       `「${s.principalId}」被明確拒絕存取「${label}」(明確拒絕清單:${(s.deniedKeys ?? []).join(", ") || "(空)"}),` +
-        `但 toRetrievalScope() 今天只認得 allowedScopeKeys 這一份允許清單,` +
-        `沒有任何欄位能表達「即使在允許清單裡,這把鑰匙仍然要被擋下」—— ` +
-        `ADR 0012 裁定 4(顯式 ACL deny 蓋過 allow,不是「取交集」的窄化)今天沒有對應機制承接, ` +
-        `這正是 phase-2 要補的洞:算太寬,靜默放行了本該被擋下的資料。`,
+        `toRetrievalScope() 的 deniedScopeKeys 承接了這份清單,` +
+        `buildScopePredicate() 依 Deny-Wins 拒絕它——即使它同時在允許清單裡。` +
+        `ADR 0012 裁定 4(顯式 ACL deny 蓋過 allow,不是「取交集」的窄化)已經生效。`,
+    );
+  },
+);
+
+// phase-2b:SQL 這一層的裁定 3——denied 直接不進 IN 清單(前置過濾),不是
+// 「查完再濾」。buildScopeSql() 讀 deniedScopeKeys,把被 deny 的鑰匙從
+// allowedScopeKeys 濾掉之後才組 SQL,所以被 deny 的鑰匙不會出現在參數列表裡。
+Then(
+  "the filter does not include {string} in its parameter list because of the explicit denial",
+  function (this: KmWorld, deniedKey: string) {
+    const s = state(this);
+    assert.ok(s.filter, `還沒產生任何資料庫過濾條件(可能被拒絕:${this.lastError?.message})`);
+    const included = s.filter.params.includes(deniedKey);
+    assert.equal(
+      included,
+      false,
+      `「${deniedKey}」已被「${s.principalId}」明確拒絕(明確拒絕清單:${(s.deniedKeys ?? []).join(", ") || "(空)"}),` +
+        `依 ADR 0012 裁定 3,denied 應該直接不進 IN 清單(前置過濾,比「查完再濾」更接近` +
+        `「授權在檢索之前」)。buildScopeSql() 產生的 SQL 是「${s.filter.sql}」、參數列表是` +
+        ` [${s.filter.params.join(", ")}]——若「${deniedKey}」仍在其中,代表被擋下的部門的資料` +
+        `仍然會被送進資料庫查詢、讀回 process,前置過濾失效。`,
     );
   },
 );

@@ -233,7 +233,12 @@ async function main(): Promise<void> {
   // ---- Scope built DIRECTLY via toRetrievalScope() — not derived from
   // anything (E04-S009 is blocked-team-b; no interim mapping table here).
   const question = "文件擷取管線包含幾個階段？";
-  const scopeEng = toRetrievalScope({ principalId: "demo-user", allowedScopeKeys: ["dept:eng"] });
+  const scopeEng = toRetrievalScope({
+    principalId: "demo-user",
+    allowedScopeKeys: ["dept:eng"],
+    // ADR 0012 裁定 4:deny 的來源(ACL 表)留到 phase-3,這個呼叫端此刻明寫 []。
+    deniedScopeKeys: [],
+  });
 
   section("STEP 3 — Ask a real Chinese question whose answer sits in ONE paragraph, not the whole doc");
   console.log(`question : ${question}`);
@@ -295,7 +300,11 @@ async function main(): Promise<void> {
     failed = true;
   }
 
-  const scopeHr = toRetrievalScope({ principalId: "demo-user", allowedScopeKeys: ["dept:hr"] });
+  const scopeHr = toRetrievalScope({
+    principalId: "demo-user",
+    allowedScopeKeys: ["dept:hr"],
+    deniedScopeKeys: [],
+  });
   const hitsHr = await vectorStore.query(queryEmbedding, scopeHr, 10);
   const hrNowVisible = hitsHr.some((hit) => hit.documentId === "w1-00-demo-hr");
   console.log(`\nsame question, scope changed to dept:hr instead:`);

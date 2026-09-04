@@ -66,28 +66,14 @@ export function toRetrievalScope(input: {
   principalId: string;
   allowedScopeKeys: readonly string[];
   /**
-   * ADR 0012 裁定 4 的原意是「必填、無預設」,讓 typecheck 釘住每個呼叫端
-   * (E06-S026 的教訓:可選就會被靜默略過)。這裡沒有照字面做成必填——`?`
-   * 是刻意的、有記錄的偏離,不是漏改:`toRetrievalScope()` 今天被十幾個
-   * `*.test.ts` 與 `features/steps/**` 呼叫(見下方 CALLERS),這兩類是
-   * GHERKIN_WORKFLOW §6 明訂「開發 agent 不改」的檔案。把這個欄位設成必填
-   * 會讓那些呼叫端全數在 `pnpm typecheck` 炸掉——不是「少改幾個檔」的偷懶,
-   * 是字面上不存在合規的做法。所以退而求其次:輸入允許省略、省略時視為
-   * `[]`(語意上等於「這個呼叫端還沒接上 deny」,不是「這個人被拒絕一切」,
-   * 兩者不衝突);但輸出的 `RetrievalScope.deniedScopeKeys` 保持非 optional、
-   * 一律有值,讀者不需要 `?? []`。真正的「明寫 []」約束落在本檔案能改的
-   * 呼叫端上(見 `tools/w1-00-demo/run.ts`)。詳情見本輪回報。
-   *
-   * CALLERS without this field today (unedited by this change): every
-   * `*.test.ts` under `services/retrieval|generation|ingestion` that builds
-   * a scope, plus `features/steps/authorization|retrieval|integration|
-   * ingestion.steps.ts`. Two of `deny.test.ts`'s four assertions and two of
-   * `phase-2.feature`'s deny scenarios stay red because of this — their own
-   * `Given`/`When` steps capture a `denied` value locally but never pass it
-   * here, so no scope.ts implementation can make them pass without also
-   * editing those files.
+   * ADR 0012 裁定 4:必填、無預設——讓 typecheck 釘住每個呼叫端
+   * (E06-S026 的教訓:「還沒想過」與「想過了答案是零」不等價,可選欄位會讓
+   * 前者被靜默當成後者)。第二輪(開發 agent)曾把它做成 optional,因為當時
+   * `*.test.ts` 與 `features/steps/**` 裡有 30+ 處呼叫端還沒接上這個欄位,
+   * 那兩類是開發 agent 不能改的檔;第三輪(測試 agent)已經把那些呼叫端全部
+   * 補上 `deniedScopeKeys: []`,這一輪(開發 agent)照字面把它改回必填。
    */
-  deniedScopeKeys?: readonly string[];
+  deniedScopeKeys: readonly string[];
 }): RetrievalScope {
   if (typeof input?.principalId !== "string" || input.principalId.trim() === "") {
     throw new RetrievalScopeError(
@@ -104,13 +90,13 @@ export function toRetrievalScope(input: {
       throw new RetrievalScopeError(`allowedScopeKeys 含有空白或非字串項目:${JSON.stringify(key)}`);
     }
   }
-  const deniedScopeKeys = input.deniedScopeKeys ?? [];
-  if (!Array.isArray(deniedScopeKeys)) {
+  if (!Array.isArray(input.deniedScopeKeys)) {
     throw new RetrievalScopeError(
-      "deniedScopeKeys 必須是陣列。省略時視為 [],但傳了非陣列的值代表呼叫端狀態有誤,不可靜默吞掉。",
+      "deniedScopeKeys 必須是陣列。缺少這份清單代表呼叫端沒有把 deny 接進來," +
+        "不可靜默視為「沒有任何 deny」而通過——想清楚答案是空陣列的呼叫端請明寫 []。",
     );
   }
-  for (const key of deniedScopeKeys) {
+  for (const key of input.deniedScopeKeys) {
     if (typeof key !== "string" || key.trim() === "") {
       throw new RetrievalScopeError(`deniedScopeKeys 含有空白或非字串項目:${JSON.stringify(key)}`);
     }
@@ -119,7 +105,7 @@ export function toRetrievalScope(input: {
   return {
     principalId: input.principalId,
     allowedScopeKeys: Object.freeze([...input.allowedScopeKeys]),
-    deniedScopeKeys: Object.freeze([...deniedScopeKeys]),
+    deniedScopeKeys: Object.freeze([...input.deniedScopeKeys]),
   } as RetrievalScope;
 }
 

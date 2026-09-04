@@ -12,7 +12,7 @@ Status: Proposed（使用者 2026-09-03 指示：現行 epic-story 方式不穩�
 - **272 個 story、253 approved**，其中 224 個在體驗層完成時核心 RAG 是 0 行。
   按團隊／按層橫切，價值要等兩邊都完才出現。
 - **規格是模板**：E04 46 條只有 12 種內文、E06 40 條只有 2 種、E12 31 條只有 5 種。
-  規格庫 `AI_KM_BMAD_High_Granularity/` 93,401 行，唯讀。
+  規格庫 `archive/AI_KM_BMAD_High_Granularity/` 93,401 行，唯讀。
 - **遇到問題的反應慢**：一個 story 的生命週期是七段狀態機 + spec 檔 + EVIDENCE 檔
   + 獨立審核；發現缺陷時的合法出口只有「開新 story」或「BLOCKED」，於是 Wave 1
   一天內衍生 E04-S065～S081 十七個編號，每個都要走一遍登記。
@@ -92,7 +92,7 @@ Wave 0 已經發生過（那 253 個 story）。從現在起只有整合點，�
 
 ### 3. 舊 story 的處置：封存，不重驗，但要「對得上」
 
-- `docs/stories/PROGRESS.md`、`docs/stories/*.md`、`specs/` **凍結為歷史紀錄**，
+- `archive/stories/PROGRESS.md`、`archive/stories/*.md`、`specs/` **凍結為歷史紀錄**，
   不再更新。頂端加一段：「2026-09-03 起以 `features/*/FEATURE.md` 為唯一狀態來源」。
 - 每個能力資料夾的 **phase-1 是回填的**：`phase-1.feature` 的每個場景必須綁到一條
   **已存在**的測試（vitest／Playwright），綁法寫在 `FEATURE.md` 的「回填對照表」：
@@ -102,7 +102,7 @@ Wave 0 已經發生過（那 253 個 story）。從現在起只有整合點，�
   `buildServer()` inject、真實 service 函式），**不是把 vitest 測試名貼進 Gherkin
   當註解**。回填完成的判準：`pnpm accept --tags '@phase-1'` 全綠，且對每個資料夾
   至少一個場景做過 mutate 反向驗證（改壞 → 該場景紅）。
-- `AI_KM_BMAD_High_Granularity/` 維持唯讀。其中真正有內容的（SOURCE_BASELINE 的
+- `archive/AI_KM_BMAD_High_Granularity/` 維持唯讀。其中真正有內容的（SOURCE_BASELINE 的
   11 個知識點、三份 policies）在 `FEATURE.md` 的「來源」欄引用；模板 story 不再引用。
 - 舊 story 編號在 git 歷史與 PROGRESS 裡永遠可查；新工作不再發 EXX-SYYY 編號。
 - **story 不映射成場景**（範式作者的明確建議）：story 是工作項，場景是行為規格，一對一

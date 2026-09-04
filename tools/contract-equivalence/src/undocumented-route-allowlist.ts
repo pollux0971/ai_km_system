@@ -69,7 +69,7 @@ export const UNDOCUMENTED_ROUTE_ALLOWLIST: UndocumentedRouteEntry[] = [
       "endpoint) and keep it off the public contract permanently. This entry " +
       "exists because that decision is still pending — it is not a vote for " +
       "(b), and it must not be read as one.",
-    escalation: "docs/stories/PROGRESS.md E04-S078 row; docs/stories/E04-S078.md",
+    escalation: "archive/stories/PROGRESS.md E04-S078 row; archive/stories/E04-S078.md",
     unlock:
       "the user picks (a) or (b). (a): a contracts/openapi/*.yaml gains a " +
       "GET /v1/health (or /health, per servers.url) operation — at that " +

@@ -15,7 +15,7 @@
 # on :4000 that many lanes' E2E setups depend on — a script that silently
 # curls "whatever answers on :4000" from a shared host can validate the
 # WRONG server without any error (this bit while writing this script; see
-# docs/stories/E01-S028.md). Pass --direct-api <url> only when you actually
+# archive/stories/E01-S028.md). Pass --direct-api <url> only when you actually
 # have one to check (e.g. dev-all.sh, or `docker compose exec api curl ...`
 # from inside the compose network).
 set -euo pipefail

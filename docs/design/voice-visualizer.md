@@ -36,7 +36,7 @@ interface VoiceVisualizerProps {
 原生的 `prefers-reduced-motion` 模擬),對一個暫時的(未進 repo)測試頁
 逐格截圖;截圖前另外用 `page.$eval` 讀出 `data-reduced` 屬性確認真的是
 `"true"`,而不只是碰巧長一樣。過程與存證細節見
-`docs/stories/E03-S042.md`。
+`archive/stories/E03-S042.md`。
 
 ## Token 對照(fallback chain)
 

@@ -117,7 +117,7 @@ export function filterFeedback(items: FeedbackItem[], criteria: FeedbackFilterCr
  * The rate is therefore honestly a per-page statistic once more than one
  * page of feedback exists; this is a real, disclosed semantic narrowing
  * from the pre-pagination "whole queue" behaviour, not a hidden one (see
- * docs/stories/E13-S021.md Assumptions).
+ * archive/stories/E13-S021.md Assumptions).
  */
 export interface FeedbackOkNgRate {
   okCount: number;

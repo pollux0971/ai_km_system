@@ -22,7 +22,7 @@
 # outside Docker entirely. This is a pre-existing gap in apps/api's own
 # package.json scripts, unrelated to and out of this story's allowed-modify
 # list (services/*, apps/*/src) to fix directly — reported to ai-km-e4 and
-# recorded in docs/stories/PENDING_DECISIONS.md. `tsx` is the same
+# recorded in archive/stories/PENDING_DECISIONS.md. `tsx` is the same
 # already-working mechanism `pnpm --filter @ai-km/api dev` uses, so this
 # Dockerfile uses it too rather than inventing a shadow fix in someone
 # else's domain.

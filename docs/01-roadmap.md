@@ -11,7 +11,7 @@
 | 目前階段 | I2 · web 提問(I1 已通過 2026-09-03,使用者親眼確認引用) |
 | 回填進度 | 1 / 12 資料夾(06-retrieval 完成,作為參考實作) |
 | 契約版本 | `contracts/openapi/*.yaml` 七份,凍結;變更走 `/decide` + 使用者 |
-| 舊 story | 253 approved 封存於 `docs/stories/PROGRESS.md`(唯讀歷史);對照表 `docs/architecture/story-to-capability-map.md` |
+| 舊 story | 253 approved 封存於 `archive/stories/PROGRESS.md`(唯讀歷史);對照表 `docs/architecture/story-to-capability-map.md` |
 | 最後更新 | 2026-09-03 |
 
 ## 全貌

@@ -34,14 +34,14 @@ Status: **第一批(D2/D3/D4)Accepted 2026-09-04** — 使用者在協調者 ses
 ## Context
 
 `E04-S037`(RAG 開發前置環境就緒)在 2026-08-20 拍板了一組模型選型,理由寫在
-`docs/stories/PROGRESS.md` 的該列裡:
+`archive/stories/PROGRESS.md` 的該列裡:
 
 > llama.cpp+GGUF(node-llama-cpp)、embedding(bge-m3 F16)+LLM(Qwen3-32B
 > Q4_K_M 優先/14B 替代——**目標機器 VRAM 充裕,品質優先不省容量**)
 
 ### 那句前提不成立
 
-`docs/stories/E12-S030.md` 的 L3 段落裡有實測輸出:
+`archive/stories/E12-S030.md` 的 L3 段落裡有實測輸出:
 
 ```
 ggml_cuda_init: found 1 CUDA devices (Total VRAM: 3716 MiB):

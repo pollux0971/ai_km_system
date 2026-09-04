@@ -2,7 +2,7 @@
  * E04-S048 AC5 — the safety net.
  *
  * This does NOT check "does route X have a preHandler line" — there is no
- * such line to check (see docs/stories/E04-S048.md for why CSRF is fused
+ * such line to check (see archive/stories/E04-S048.md for why CSRF is fused
  * into `services/identity`'s `requireSession` instead of mounted per-route).
  * Instead it enumerates the REAL, ACTUALLY-REGISTERED route table of the
  * REAL assembled server (`buildServer()`, imported — never modified) and
@@ -83,7 +83,7 @@ async function buildRealServer(): Promise<FastifyInstance> {
   // to a REAL on-disk file (`./data/ai-km.sqlite`), not `:memory:`; sharing
   // it across tests/runs let stale login_attempts and sessions from earlier
   // runs bleed into later ones (discovered while first writing this file —
-  // see docs/stories/E04-S048.md's Assumptions for the exact symptom).
+  // see archive/stories/E04-S048.md's Assumptions for the exact symptom).
   const dbPath = path.join(tmpdir(), `ai-km-csrf-route-scan-${randomUUID()}.sqlite`);
   const instance = await buildServer({
     config: loadConfig({ NODE_ENV: "test", AI_KM_LOG_LEVEL: "silent" }),

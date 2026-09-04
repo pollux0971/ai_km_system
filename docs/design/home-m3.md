@@ -123,4 +123,4 @@ E01-S026 開工時 E01-S021 還是 todo 而需要三層 fallback)。
 不涉及第三方素材;M3 token 值本身來自 Material Design 3 開放規範公式
 （`packages/design-tokens` 的既有實作,非本 story 產出)。
 
-完整測試/gate 紀錄與 AC 逐條對照見 `docs/stories/E01-S024.md`。
+完整測試/gate 紀錄與 AC 逐條對照見 `archive/stories/E01-S024.md`。

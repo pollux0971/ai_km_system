@@ -21,7 +21,7 @@ export const CORRELATION_ID_HEADER = "x-correlation-id";
  * This exists specifically because App Router's own RSC streaming bootstrap
  * (`self.__next_f.push(...)`) ships as an inline `<script>` with no `src` —
  * confirmed by curl + a CSP-violation survey during this story's own
- * investigation (docs/stories/E01-S029.md): every one of 38 collected
+ * investigation (archive/stories/E01-S029.md): every one of 38 collected
  * violations was this exact mechanism, nothing else. `'unsafe-eval'` (which
  * only covers `eval()`/`Function()`) cannot fix this; a nonce is required.
  * Next.js detects the nonce from THIS response header automatically and
@@ -34,7 +34,7 @@ export const CORRELATION_ID_HEADER = "x-correlation-id";
  *
  * `'unsafe-eval'` remains dev-only (React Fast Refresh / webpack HMR under
  * `next dev`; verified empirically against a running dev server) — see
- * docs/stories/E01-S029.md for the full investigation. Production
+ * archive/stories/E01-S029.md for the full investigation. Production
  * (`next build && next start`, and every real deployment per ADR 0003) never
  * gets `'unsafe-eval'`.
  *

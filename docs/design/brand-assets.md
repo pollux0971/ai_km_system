@@ -16,7 +16,7 @@
 
 `apps/web/src/app/icon.svg`：Next.js metadata icon 慣例路徑（與
 `favicon.svg` 同內容），由 `next build` 自動產生 `/icon.svg` 路由（AC4
-已用 `pnpm --filter web build` 的產物檢查驗證，見 `docs/stories/E01-S026.md`）。
+已用 `pnpm --filter web build` 的產物檢查驗證，見 `archive/stories/E01-S026.md`）。
 
 視覺設計：氣泡實心填色（`currentColor`），中間用 `<mask>` 挖空出 3 個
 連線小圓點（象徵「知識節點」）——技術上唯一實際上色的是 `currentColor`，
@@ -157,4 +157,4 @@ React component）loader，所以無法直接 `import` 這些 `.svg` 檔案當�
   context 的瀏覽器 chrome/主畫面渲染，固定使用品牌藍 `#1e56a0`（唯一的
   例外，已在上方逐檔列出理由）。
 
-完整測試/gate 紀錄與 AC 逐條對照見 `docs/stories/E01-S026.md`。
+完整測試/gate 紀錄與 AC 逐條對照見 `archive/stories/E01-S026.md`。

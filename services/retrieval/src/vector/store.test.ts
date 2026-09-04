@@ -10,7 +10,7 @@
  * identically).
  *
  * AC1 IS NOT "an error was thrown". Per the spec's explicit rule
- * (`docs/stories/specs/E06-S043.spec.md` — "反向驗證"), an existence
+ * (`archive/stories/specs/E06-S043.spec.md` — "反向驗證"), an existence
  * assertion does not prove anything about the property this story guards.
  * Every AC1 test below asserts finance's query result is IDENTICAL, item by
  * item, before and after the refused re-ingest.

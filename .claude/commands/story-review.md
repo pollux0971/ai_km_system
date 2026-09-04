@@ -15,7 +15,7 @@ argument-hint: <Story ID,例如 E01-S001;留空則審核目前 branch 對應的 
 步驟:
 
 1. 讀取該 story 在 epic 檔中的完整章節(四類 AC + 開發邊界)與
-   `docs/stories/EXX-SYYY.md` 的 EVIDENCE(若無 EVIDENCE 檔,直接列為重大缺失)。
+   `archive/stories/EXX-SYYY.md` 的 EVIDENCE(若無 EVIDENCE 檔,直接列為重大缺失)。
 2. 取得實際 diff(`git diff main...HEAD` 或該 story 的 PR),逐檔核對:
    - 是否落在 story 的允許修改邊界內
    - 是否觸碰禁止清單(規格庫、Team B 資料夾、contracts/ 未經同意的變更)

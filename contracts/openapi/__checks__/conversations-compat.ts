@@ -48,7 +48,7 @@
  * to `ChangeEventWire`) held for ANY shape — a false-green binding that
  * would never turn red no matter how `toWirePayload` broke.
  *
- * The user's second authorization (2026-09-03, `docs/stories/
+ * The user's second authorization (2026-09-03, `archive/stories/
  * PENDING_DECISIONS.md` top entry) approved option (d) instead: delete the
  * `: Record<string, unknown>` annotation on `toWirePayload` so its return
  * type is INFERRED from the object literal, then add the type-only export

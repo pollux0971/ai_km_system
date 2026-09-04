@@ -9,7 +9,7 @@ import { ALL_ROLES } from "./users";
  * populated a real permission-model contract yet). Rather than
  * inventing new resource:action pairs nowhere in this codebase, this
  * reuses the exact same source `roles.ts`'s own `ROLE_DESCRIPTIONS`
- * already draws from — `AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`
+ * already draws from — `archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`
  * §7's per-role "manages/uses/views X" bullet lists — just kept as an
  * array of individual capability labels per role instead of one prose
  * sentence, so a grid can be built from it.

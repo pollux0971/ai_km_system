@@ -26,7 +26,7 @@
  *      is supposed to touch — see ./closure-allowlist.mjs. This replaces a
  *      file-count ceiling that was considered and rejected: E04-S069 grew
  *      the closure from 98 files to 202 while fixing a real problem (see
- *      docs/stories/PROGRESS.md's E04-S065 row), so a ceiling would have
+ *      archive/stories/PROGRESS.md's E04-S065 row), so a ceiling would have
  *      gone red on a *good* change. The closure size is still printed on
  *      every run — a readable signal, not a gate.
  *   3. Fail if any contract schema is UNBOUND — none of BOUND-L0 (a
@@ -38,7 +38,7 @@
  *      ./binding-coverage.mjs for how each state is determined and what
  *      each method misses; "no BOUND-L0" is NOT "no gate" — L2 is a runtime
  *      gate, arguably stronger than a compile-time one, and conflating the
- *      two was corrected here on 2026-09-02 (see docs/stories/PROGRESS.md's
+ *      two was corrected here on 2026-09-02 (see archive/stories/PROGRESS.md's
  *      E04-S065 row).
  *
  * Errors anywhere else in the closure (outside `*-compat.ts`) are noise from
@@ -97,7 +97,7 @@
  *
  * E04-S081 resolved both of route-schema's DIVERGES by adding the missing
  * `default`s to `analytics.yaml` (the user's authorized choice — see
- * docs/stories/PENDING_DECISIONS.md's now-resolved entry). With DIVERGES
+ * archive/stories/PENDING_DECISIONS.md's now-resolved entry). With DIVERGES
  * at zero (`SUMMARY: 26 total — MATCH=11 DIVERGES=0 ABSENT=15`, verified
  * on `main`), the reason route-schema was left unenforced is gone, so this
  * story moves it into the gated section below: a non-zero exit from
@@ -118,7 +118,7 @@
  * is still printed on every run below.
  *
  * See tools/contract-equivalence/README.md "Both sections are gated" and
- * ROADMAP_TEMP.md 5-xi's 2026-09-03 addenda for the fuller writeup of
+ * archive/ROADMAP_TEMP.md 5-xi's 2026-09-03 addenda for the fuller writeup of
  * this split's history.
  */
 import { execFileSync } from "node:child_process";
@@ -404,7 +404,7 @@ if (routeSchema.exitCode !== 0) {
 } else {
   console.log(
     "PASS: route-schema check exited 0 — zero DIVERGES. (E04-S081 resolved the only two known ones by " +
-      "adding their querystring defaults to analytics.yaml; see docs/stories/PENDING_DECISIONS.md's " +
+      "adding their querystring defaults to analytics.yaml; see archive/stories/PENDING_DECISIONS.md's " +
       "resolved entry and PROGRESS.md's E04-S081 row.)",
   );
 }

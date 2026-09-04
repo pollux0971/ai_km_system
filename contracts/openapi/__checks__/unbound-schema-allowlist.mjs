@@ -43,7 +43,7 @@
  * that check — it was tried here (the former `bindable-not-yet-bound`
  * class, hardcoded to `match: () => false`) and removed for exactly this
  * reason. Its provenance is not lost: see git blame/log on this file and
- * docs/stories/PROGRESS.md's E04-S065/E04-S076/E04-S080 rows.
+ * archive/stories/PROGRESS.md's E04-S065/E04-S076/E04-S080 rows.
  */
 
 const BODY_SUFFIX = /Body$/;
@@ -63,7 +63,7 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
       "core.yaml has no *-compat.ts at all. Its two schemas (Error, Pagination) " +
       "are the platform-wide envelope every other contract $refs — nobody has " +
       "written a compat file that binds them to a shared implementation type.",
-    escalation: "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
+    escalation: "archive/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
     unlock:
       "a core-compat.ts is added binding Error/Pagination to whatever shared " +
       "response-envelope type the routes actually construct (see class " +
@@ -87,7 +87,7 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
       "TRANSCRIBED mechanism for any of this contract's 12 schemas to attach " +
       "to. This is the 'check first whether its routes do runtime validation' " +
       "case explicitly considered and ruled out (2026-09-02).",
-    escalation: "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
+    escalation: "archive/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
     unlock:
       "either a transcriptions-compat.ts is added (L0), or the route starts " +
       "registering a `schema:` option (L2) or a transcribed literal for at " +
@@ -102,7 +102,7 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
   // whose match() matches zero UNBOUND schemas, so a placeholder entry that can
   // never match anything would make 'pnpm contract-gate' permanently red. The
   // provenance this entry used to preserve in prose is not lost: it lives in git
-  // blame/log for this file and in docs/stories/PROGRESS.md's E04-S065/S076/S080
+  // blame/log for this file and in archive/stories/PROGRESS.md's E04-S065/S076/S080
   // rows. An entry that reaches zero UNBOUND matches must be REMOVED going
   // forward, not kept empty for the record.
   {
@@ -122,7 +122,7 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
       "contracts/openapi/__checks__/-only scope — and per this repo's own " +
       "rule, inventing/exporting a Team B type solely to make a schema " +
       "bindable is not a workaround this story is allowed to take.",
-    escalation: "docs/stories/PROGRESS.md E04-S080 row (2026-09-03)",
+    escalation: "archive/stories/PROGRESS.md E04-S080 row (2026-09-03)",
     unlock:
       "a domain owner adds a named, exported response type for POST " +
       "/usage-events' 201 body in services/feedback and returns it by that " +
@@ -143,7 +143,7 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
       "`toWirePayload`, gained a real named return type; ResyncEvent has no " +
       "such function to name.)",
     escalation:
-      "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half); " +
+      "archive/stories/PROGRESS.md E04-S065 row (2026-09-02, back half); " +
       "E04-S072 row (2026-09-03) for ChangeEvent's removal from this class",
     unlock:
       "pending user authorization for either a type-only export naming " +
@@ -161,7 +161,7 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
       "has admin-feedback.ts, admin-metrics.ts, usage-events.ts — no health " +
       "route). There is no implementation type of any kind to bind these four " +
       "schemas against, because there is no implementation.",
-    escalation: "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
+    escalation: "archive/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
     unlock:
       "GET /admin/health is implemented (in services/feedback or wherever a " +
       "domain owner decides system-health aggregation belongs) and exports a " +
@@ -179,7 +179,7 @@ export const UNBOUND_SCHEMA_ALLOWLIST = [
       "envelope shape and the literal status code against the CONTRACT alone " +
       "(real, meaningful checks) — there is simply no implementation-side " +
       "type for these to be compared against, because none exists.",
-    escalation: "docs/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
+    escalation: "archive/stories/PROGRESS.md E04-S065 row (2026-09-02, back half)",
     unlock:
       "a shared, exported error-response-body type is introduced (e.g. in " +
       "packages/types) that routes actually construct their error replies " +

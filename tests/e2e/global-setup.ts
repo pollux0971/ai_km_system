@@ -2,7 +2,7 @@ import { assertReusedServerEnvMatches } from "./helpers/env-sentinel";
 import { ADMIN_EXPECTED_ENV, WEB_EXPECTED_ENV } from "./helpers/webserver-env";
 
 /**
- * E01-S027 root-cause finding (ROADMAP_TEMP.md §5-nona, 2026-08-28-29):
+ * E01-S027 root-cause finding (archive/ROADMAP_TEMP.md §5-nona, 2026-08-28-29):
  * Next.js dev servers compile routes on demand — Playwright's `webServer.url`
  * readiness check only confirms the PORT is listening, not that any
  * individual route has ever been compiled. Under concurrent multi-lane

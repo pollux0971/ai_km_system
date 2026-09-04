@@ -13,7 +13,7 @@ description: 記錄一個技術或設計決策到 docs/adr/(ADR 0008)。任何�
 - `docs/adr/` 全部,記下最大編號(目前 0008)
 - `contracts/openapi/*.yaml` 相關的那份——判斷這個決策會不會動到契約
 - 相關的 `FEATURE.md` 與 `NEXT.md`
-- `docs/stories/PENDING_DECISIONS.md`(唯讀歷史)裡有沒有同一件事已經問過
+- `archive/stories/PENDING_DECISIONS.md`(唯讀歷史)裡有沒有同一件事已經問過
 
 ## 第二步:契約影響評估(先做,它會改變後面的所有事)
 

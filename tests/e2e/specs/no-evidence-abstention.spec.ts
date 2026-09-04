@@ -15,7 +15,7 @@ import { MOCK_VALID_PASSWORD, MOCK_VALID_USERNAME } from "@ai-km/auth-client";
  * time before now: citation rendering (S13, predates S21 — a negative
  * check) and Copy Answer (S27, postdates S21 — never exercised against
  * a non-ANSWERED message before). Full /advisor reasoning trail in
- * docs/stories/E03-S030.md. Navigation after login always uses in-app
+ * archive/stories/E03-S030.md. Navigation after login always uses in-app
  * link clicks, never page.goto() — see conversations.spec.ts's file
  * doc comment for why.
  */

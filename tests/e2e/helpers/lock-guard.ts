@@ -100,7 +100,7 @@ export interface LockGuardOptions {
  * Playwright silently ADOPTS those servers instead of failing to bind.
  * Two independent test suites then drive the same servers at once, and
  * neither one's results can be trusted. This is exactly what corrupted
- * W1's E01-S022 rerun on 2026-08-29 (docs/stories/E04-S057.md).
+ * W1's E01-S022 rerun on 2026-08-29 (archive/stories/E04-S057.md).
  *
  * Call this at `playwright.config.ts` module-eval time, the same
  * synchronous phase `ensureFakeMicrophoneWav()`/`assertPortsFreeForCI()`
@@ -153,7 +153,7 @@ export interface LockGuardOptions {
  * revisited, the right discriminator is "does this invocation start a
  * webServer / bind a port," not a flag whitelist — and only once that can
  * be determined reliably, not via argv-sniffing. See
- * docs/stories/E04-S057.md, "刻意決定不做的事" for the full writeup.
+ * archive/stories/E04-S057.md, "刻意決定不做的事" for the full writeup.
  */
 export function assertNotBlockingLockHolder(options: LockGuardOptions = {}): void {
   const ownerFilePath = options.ownerFilePath ?? process.env.AI_KM_E2E_OWNER_FILE ?? DEFAULT_OWNER_FILE_PATH;

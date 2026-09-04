@@ -94,7 +94,7 @@ export const MOCK_ANSWER_STATE_TRIGGERS: Partial<Record<AnswerState, string>> = 
  * because E03-S021, which first introduced this constant, never
  * located this specific SOURCE_BASELINE line — corrected here as part
  * of E03-S30's own work (independent review caught the miss; see
- * docs/stories/E03-S030.md).
+ * archive/stories/E03-S030.md).
  */
 export const ANSWER_STATE_FALLBACK_CONTENT: Partial<Record<AnswerState, string>> = {
   NO_EVIDENCE: "（模擬回覆）找不到足夠企業資料支持此答案。",

@@ -14,7 +14,7 @@ description: 新需求分流(ADR 0008)。判斷該開新能力資料夾、改既
 
 1. `contracts/openapi/*.yaml` 相關的那份——決定這個需求是否需要動契約
 2. `docs/adr/` 每筆 ADR 的 Decision(至少 0003、0005、0007、0008)
-3. `docs/roadmap.md` 的「現況」與「未排程」
+3. `docs/01-roadmap.md` 的「現況」與「未排程」
 4. `features/README.md` 索引
 5. **每一個** `features/*/FEATURE.md` 的「範圍」與「不在範圍」
 6. `.claude/rules/GHERKIN_WORKFLOW.md` §4、§5
@@ -85,7 +85,7 @@ Gate:自身 …;整合 …;契約 …
 1. 寫入 / 修改上述 .feature(英文,每個場景 3–6 步,可執行)
 2. 更新 FEATURE.md 的 phase 表
 3. 更新 NEXT.md 的 gate
-4. (新資料夾)從 features/_template 建立三個檔、更新 features/README.md 索引、standalone.json、docs/roadmap.md
+4. (新資料夾)從 features/_template 建立三個檔、更新 features/README.md 索引、standalone.json、docs/01-roadmap.md
 5. (有取捨)/decide 寫 ADR
 6. 回報變更清單
 
@@ -105,7 +105,7 @@ Gate:自身 …;整合 …;契約 …
 ## 禁止事項
 
 - 不寫程式碼,只產生規格
-- 不修改 `contracts/`、`AI_KM_BMAD_High_Granularity/`
+- 不修改 `contracts/`、`archive/AI_KM_BMAD_High_Granularity/`
 - 不修改 `done` 狀態 phase 的 `.feature`
 - 未確認前不寫任何檔案
 - 不把「不確定放哪」硬歸到某個資料夾——列兩個候選讓使用者選

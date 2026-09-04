@@ -24,7 +24,7 @@ import {
  * wall-clock drift. Anchoring both constants to `Date.now()` means they are
  * always "1 minute ago" / "7 days from now" relative to whenever the suite
  * actually runs, so this holds on any date, not just today (verified by
- * simulating a 30-day time jump — see docs/stories/E04-S055.md).
+ * simulating a 30-day time jump — see archive/stories/E04-S055.md).
  */
 const NOW = new Date(Date.now() - 60_000).toISOString();
 const FAR_FUTURE = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

@@ -7,9 +7,9 @@ Single source of truth for cross-team API contracts (Contract-First policy).
   (`@ai-km/api-client generate`) works end-to-end.
 - Real contracts must be negotiated with the owning Team B domain before
   being added here. Do not invent endpoints/schemas — per
-  `AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md`, unknown
+  `archive/AI_KM_BMAD_High_Granularity/policies/ATOMIC_STORY_BOUNDARIES.md`, unknown
   contracts must be reported as BLOCKED, not guessed.
-- Per `AI_KM_BMAD_High_Granularity/policies/DEVELOPMENT_POLICY.md`,
+- Per `archive/AI_KM_BMAD_High_Granularity/policies/DEVELOPMENT_POLICY.md`,
   cross-domain contract changes require both the Team A and Team B owner to
   review the PR.
 - Team A's first three needed contracts (see the suggested vertical slice in

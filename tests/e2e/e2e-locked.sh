@@ -27,7 +27,7 @@
 # just this script's own PID — Playwright's webServers run in a different
 # process group from the flock's fd-holding group, so killing only the
 # flock group can release the lock while leaving :3000/:3001/:4100 still
-# occupied (measured by W1, 2026-08-29; see ROADMAP_TEMP.md §5-eta).
+# occupied (measured by W1, 2026-08-29; see archive/ROADMAP_TEMP.md §5-eta).
 # Verify with `ss -ltnp` showing the ports free — not `fuser` on the lock
 # file, which only proves the flock itself released.
 set -uo pipefail

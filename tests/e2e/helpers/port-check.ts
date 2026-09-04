@@ -85,7 +85,7 @@ export function assertPortsFreeForCI(ports: number[]): void {
  * E01-S034. `assertPortsFreeForCI` above is correct in isolation but was
  * being called at `playwright.config.ts` module scope, and Playwright
  * re-evaluates that module in EVERY worker process, not once — see
- * ROADMAP_TEMP.md §5-pi's third補記 for the full incident (CI's `workers: 2`
+ * archive/ROADMAP_TEMP.md §5-pi's third補記 for the full incident (CI's `workers: 2`
  * meant the main process started the `web`/`admin` webServers on
  * 3000/3001, then each of the 2 workers re-imported the config, saw the
  * ports the main process had just bound, and threw — 268 failed / 63 did

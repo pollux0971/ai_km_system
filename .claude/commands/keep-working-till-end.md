@@ -14,7 +14,7 @@ argument-hint: (可選)本輪最多完成的 story 數,例如 5;留空 = 不設�
 ## 前置檢查(任一不過 → 停止並回報,不進入循環)
 
 1. `git status` 乾淨(無未提交變更)且位於 main、與 origin/main 同步。
-2. `docs/stories/PROGRESS.md` 存在且可解析。
+2. `archive/stories/PROGRESS.md` 存在且可解析。
 3. `pnpm typecheck && pnpm lint && pnpm test` 在 main 上是綠的(起點健康)。
 
 ## 主循環
@@ -29,7 +29,7 @@ while true:
      結果 BLOCKED → 執行 /advisor 流程(自主模式,見其 Step 5):
        - advisor 能自行解 → 解除後回到 DEV 續作(同一 story 限一次)。
        - 需 Team B → PROGRESS 標 `blocked-team-b` + 備註缺的 contract,continue。
-       - 需使用者 → 問題寫入 docs/stories/PENDING_DECISIONS.md,
+       - 需使用者 → 問題寫入 archive/stories/PENDING_DECISIONS.md,
          PROGRESS 標 `blocked`,continue。
   3. REVIEW:DEV 成功(done)後,切換獨立審查者視角執行 /story-review 流程。
        - APPROVE → 進 4。
@@ -63,7 +63,7 @@ while true:
 2. `blocked-team-b` 彙總:**整理成「給 Team B 的 contract 需求清單」**
    (每項:story ID、需要的 endpoint/schema/行為、建議的 contract 草案位置)
    ——這份清單就是 B 組開工時的交接文件。
-3. `blocked`(待使用者)彙總:指向 `docs/stories/PENDING_DECISIONS.md`。
+3. `blocked`(待使用者)彙總:指向 `archive/stories/PENDING_DECISIONS.md`。
 4. PROGRESS 總覽表現況(approved/done/blocked/todo 計數)。
 5. 若因 context/session 限制中斷:直接說明「重開 session 後再跑
    /keep-working-till-end 即可從 PROGRESS.md 續作」——tracker 就是斷點。

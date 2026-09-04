@@ -21,7 +21,7 @@
  * `apps/api/src/server.ts` — supplies them explicitly) taking precedence.
  * Wiring `plugin.ts` to actually construct `HttpEmbeddingProvider` from this
  * resolved config is intentionally NOT part of this story (`plugin.ts` is
- * outside its allowed-modify list too) — see `docs/stories/PROGRESS.md`'s
+ * outside its allowed-modify list too) — see `archive/stories/PROGRESS.md`'s
  * E04-S088 row for that scope note.
  */
 

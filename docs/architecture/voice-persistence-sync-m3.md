@@ -17,7 +17,7 @@
 | 同步程度 | 另一視窗看到新對話／新訊息／改名／封存／刪除即可；生成中串流文字不同步 |
 | 流程 | 全部走 STORY_WORKFLOW 狀態機；每個 story 細粒度、有明確邊界與測試成功條件、標明依賴 epic／story 以利平行開發 |
 
-未拍板、以 ASSUMPTION 進行（可推翻，見 `docs/stories/PENDING_DECISIONS.md`）：
+未拍板、以 ASSUMPTION 進行（可推翻，見 `archive/stories/PENDING_DECISIONS.md`）：
 M3 種子色沿用 `#1e56a0`、Material Symbols 用 Outlined、字型 Noto Sans TC +
 Roboto 自託管、動畫純 CSS/SVG、既有 3 筆示範對話保留為 dev/E2E seed、
 session 改 cookie 持久。

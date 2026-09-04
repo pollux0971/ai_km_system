@@ -91,7 +91,7 @@ type State =
  * doesn't fit STORY_WORKFLOW's own narrow test-freeze exception (add
  * interaction steps, keep assertions byte-for-byte unchanged) the way
  * E07-S017's own precedent did. Self-adopted as a deliberate, reversible
- * scope boundary rather than stretched — see docs/stories/E07-S021.md's
+ * scope boundary rather than stretched — see archive/stories/E07-S021.md's
  * own Assumptions section for the full reasoning. Reachable by direct
  * URL/deep link in the meantime (exercised at the E2E layer the same
  * way maintenance-session.spec.ts's own deep-link tests already do).

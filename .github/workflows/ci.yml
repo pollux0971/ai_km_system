@@ -98,4 +98,4 @@ jobs:
   # contract gate, and E2E as three independently-readable jobs.
   # Integration and security-negative gates are added per-story as real
   # services/tests land — see
-  # AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md.
+  # archive/AI_KM_BMAD_High_Granularity/policies/TESTING_POLICY.md.

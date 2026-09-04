@@ -3,7 +3,7 @@
 import { useId } from "react";
 
 /**
- * E03-S008: file attachment picker. AI_KM_BMAD_High_Granularity/ defines
+ * E03-S008: file attachment picker. archive/AI_KM_BMAD_High_Granularity/ defines
  * no file type/MIME allowlist, no size limit, and no max-file-count for
  * this story specifically — the only concrete format list in the whole
  * spec (SOURCE_BASELINE.md's PDF/DOCX/PPTX/XLSX/CSV/TXT/Image/Web/Scan

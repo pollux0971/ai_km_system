@@ -4,7 +4,7 @@
  * directly under vitest/jsdom it isn't a real function at all. Every real font's build
  * output (the actual `.woff2` self-hosting, the `--font-*` CSS variables, "no CDN
  * reference" AC1) is already verified by `pnpm --filter @ai-km/web build` + a grep on
- * that output (see docs/stories/E01-S022.md) — this mock only exists so
+ * that output (see archive/stories/E01-S022.md) — this mock only exists so
  * `apps/web/src/app/layout.tsx` (and anything else importing `next/font/local`) can be
  * imported at all under vitest, without needing to touch layout.test.tsx.
  */

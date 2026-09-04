@@ -14,7 +14,7 @@ const logger = createLogger("web:message-composer");
  * outline gives these stories only their titles ("E03-S06 Message
  * Composer", "E03-S07 Multi-line Input", "E03-S08 File Attachment") —
  * no message/entity field shape, no send semantics, no character/size/
- * type/count limit is defined anywhere in AI_KM_BMAD_High_Granularity/.
+ * type/count limit is defined anywhere in archive/AI_KM_BMAD_High_Granularity/.
  * The epic file's own expanded title for the remaining story makes the
  * boundary explicit: S09 "Send-message optimistic state" (actually
  * persisting a message and showing pending/sent/failed — the Message

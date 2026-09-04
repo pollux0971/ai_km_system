@@ -21,7 +21,7 @@ import { requireAnyRole } from "./require-session.js";
 // `verifyPassword` — deliberately a real scrypt computation (N=2**14) even
 // for an unknown user (AC2's constant-time requirement; DUMMY_SALT/
 // dummyHash below). Measured directly on a real CI run (33776314632, a
-// throwaway probe branch, deleted after use — see docs/stories/PROGRESS.md's
+// throwaway probe branch, deleted after use — see archive/stories/PROGRESS.md's
 // E04-S086 row for the full numbers): a SINGLE `build()` + ONE login took
 // 3919ms + 352ms wall-clock on that runner (loadavg ~14 on 4 vCPUs — turbo
 // runs every workspace package's tests in parallel, so this is CPU
@@ -930,7 +930,7 @@ describe("E02-S034 — login rate limiting and account lockout", () => {
     // "Test 以可注入時鐘推進" — implemented here by rewriting the recorded
     // attempts' timestamps to 20 minutes in the past (outside the default
     // 15-minute window) rather than threading a clock through production
-    // code; see docs/stories/E02-S034.md's Assumptions for why.
+    // code; see archive/stories/E02-S034.md's Assumptions for why.
     db.prepare(
       "UPDATE login_attempts SET attempted_at = ? WHERE username = 'demo-user'",
     ).run(new Date(Date.now() - 20 * 60 * 1000).toISOString());

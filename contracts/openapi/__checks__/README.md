@@ -175,7 +175,7 @@ closure, not contract drift. A gate whose pass condition is another module's
 export list is not a gate.
 
 The closure size is printed because it is now known to move: 97 files before
-E04-S060, 202 after E04-S069's repoint (see docs/stories/PROGRESS.md's
+E04-S060, 202 after E04-S069's repoint (see archive/stories/PROGRESS.md's
 E04-S065 row). Watching that number is how the next person catches the same
 kind of thing recurring; **rule 2 is what actually catches it** — a numeric
 ceiling was considered and rejected because E04-S069 grew the closure while
@@ -200,7 +200,7 @@ it, `tsc -p contracts/openapi/__checks__/tsconfig.json` intermittently exited
 `apps/web/src/lib/{api,conversations,feature-flags}.ts` and
 `apps/admin/src/lib/api.ts`, reached transitively from the old
 `conversations-compat.ts` (which then imported those `apps/web` modules
-directly for their real runtime types). See ROADMAP_TEMP.md §5-xi for the
+directly for their real runtime types). See archive/ROADMAP_TEMP.md §5-xi for the
 full history, including the closing evidence that the six errors were
 **masked**, not fixed, by an unrelated barrel export change, then reappeared
 once that export shrank back.
@@ -239,7 +239,7 @@ across every contract that has a compat file, plus two contracts with none:
 **Left unresolved on purpose, per this story's instructions**: adding a
 one-line reason to `unbound-schema-allowlist.mjs` for each of the 61 without
 real triage would defeat the entire point of this check. They are reported —
-in `docs/stories/PROGRESS.md`'s E04-S065 row and the story's own report — not
+in `archive/stories/PROGRESS.md`'s E04-S065 row and the story's own report — not
 silently allowlisted. `pnpm contract-gate` is RED on this account until each
 one is either bound, or reviewed and allowlisted with a real reason and
 escalation reference by whoever owns that judgment call.

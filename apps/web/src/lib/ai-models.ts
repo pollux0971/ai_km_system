@@ -7,7 +7,7 @@ export interface AiModelOption {
 }
 
 /**
- * E03-S005: no source in AI_KM_BMAD_High_Granularity/ names any real
+ * E03-S005: no source in archive/AI_KM_BMAD_High_Granularity/ names any real
  * model/vendor (grepped for GPT/Claude/Gemini/OpenAI/Anthropic/Llama/
  * Mistral repo-wide — zero hits); the real model registry belongs to
  * E12 (Model & Prompt Platform, Team B), which doesn't exist yet. These

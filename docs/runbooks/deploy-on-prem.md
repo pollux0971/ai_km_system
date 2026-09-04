@@ -34,7 +34,7 @@ Docker and standalone outside it. `apps/web`/`apps/admin` are unaffected:
 Next.js's own bundler transpiles workspace packages via `transpilePackages`
 in their `next.config.ts`; there is no equivalent step for a non-bundled
 Fastify server. Full root-cause writeup and the options considered for a
-real fix: `docs/stories/PENDING_DECISIONS.md`.
+real fix: `archive/stories/PENDING_DECISIONS.md`.
 
 **This is a stopgap, reviewed and approved by ai-km-e4 (2026-08-28), not the
 final design** — a real fix (making `services/*` actually emit compiled JS)
@@ -70,7 +70,7 @@ the user to decide whether to commission separately.
   without downloading or building anything itself.
 - **`whisper-server` runs as a host process**, not a container — GPU
   passthrough into Docker is out of this story's scope (see the Non-Goals in
-  `docs/stories/specs/E01-S028.spec.md`). `api` reaches it over the network;
+  `archive/stories/specs/E01-S028.spec.md`). `api` reaches it over the network;
   see `infra/docker/docker-compose.yml`'s header comment for the
   `host.docker.internal` (default) vs `network_mode: host` (Linux
   alternative) options.
@@ -226,4 +226,4 @@ node scripts/check-env-docs.mjs       # AC4: this table vs apps/*/.env.example
 `prod-check.sh` cannot verify the browser-side `isSecureContext` check or
 that the voice button hides its "needs HTTPS" warning — that step is
 manual: open the deployment in a browser, log in, and look. See
-`docs/stories/E01-S028.md` for this story's actual evidence run.
+`archive/stories/E01-S028.md` for this story's actual evidence run.

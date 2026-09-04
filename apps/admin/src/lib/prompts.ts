@@ -13,7 +13,7 @@ import type { ApiError, Result } from "@ai-km/types";
  *
  * `contracts/` has no prompt schema (same "not yet populated" situation
  * `contracts/permissions/README.md` already documents for the sibling
- * Role/Permission concept). `AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`
+ * Role/Permission concept). `archive/AI_KM_BMAD_High_Granularity/SOURCE_BASELINE.md`
  * names "E12-S18 Prompt registry"/"E12-S19 Prompt version entity" as
  * Team B's (E12 "Model & Prompt Platform") job to define, not yet
  * built — `apps/web`'s own `knowledge-prompt-editor.tsx` doc comment

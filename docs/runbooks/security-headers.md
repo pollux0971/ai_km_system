@@ -207,6 +207,6 @@ curl -sD - http://localhost:3999/login -o /dev/null   # compare header nonce to 
 `tests/e2e/playwright.config.ts` binds fixed ports (`:3000`/`:3001`) with
 `reuseExistingServer: true`. Running Playwright without holding
 `/data/python/AI_KM-worktrees/.e2e.lock` risks testing another worktree's dev
-server instead of your own — see `ROADMAP_TEMP.md` §5 for the mandatory
+server instead of your own — see `archive/ROADMAP_TEMP.md` §5 for the mandatory
 `flock` wrapping rule (unrelated to this story's own header logic, but this
 story's E2E evidence was gathered under it).

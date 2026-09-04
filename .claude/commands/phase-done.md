@@ -9,7 +9,7 @@ description: 驗收一個 phase(ADR 0008)。跑場景、跑單獨執行指令、
 ## 第一步:定位
 
 解析為 `features/<NN-name>/phase-<N>.feature`。找不到就停,列出該資料夾有哪些 phase。
-讀取該 `.feature`、該資料夾的 `FEATURE.md` 與 `NEXT.md`、`docs/roadmap.md` 找出所屬整合點。
+讀取該 `.feature`、該資料夾的 `FEATURE.md` 與 `NEXT.md`、`docs/01-roadmap.md` 找出所屬整合點。
 
 ## 第二步:前置檢查
 
@@ -81,7 +81,7 @@ phase-1 的每個場景必須在 FEATURE.md「回填對照表」有一列,指向
 2. 更新 `NEXT.md`:已完成加這個 phase、下一個改成下一個 phase;重新評估下一個 phase 的三類 gate
 3. 掃其他資料夾的 `NEXT.md`,有哪些 phase 因此 gate 滿足 → 列出
 4. 檢查該整合點的所有 phase 是否都 done → 若是,提示可以跑 `/integrate`
-5. `docs/roadmap.md` 回填進度或整合點表更新
+5. `docs/01-roadmap.md` 回填進度或整合點表更新
 6. 建議 `git tag <NN-name>/phase-<N>`
 7. 回報:
    ```

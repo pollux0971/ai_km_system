@@ -46,7 +46,7 @@
  *   Warning: Cannot load "@napi-rs/canvas" package: "Error: Cannot find module ..."
  * pdfjs-dist declares @napi-rs/canvas as an optionalDependency for rendering
  * pages to a canvas. This demo only extracts TEXT, so the module is
- * deliberately excluded (see docs/stories/E06-S008.md) and extraction
+ * deliberately excluded (see archive/stories/E06-S008.md) and extraction
  * succeeds without it. The warning is pdfjs announcing an absence we chose;
  * it is not a degraded path. If extraction ever fails, it fails loudly with
  * a non-zero exit — the warning alone never indicates that.

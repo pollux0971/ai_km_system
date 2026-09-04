@@ -82,7 +82,28 @@ pnpm --filter @ai-km/features accept --tags '@conversation and @standalone and n
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)掛載、對話預設值、訊息連動、修訂順序、擁有者拒絕、SSE 即時／重播／resync、回捲不外洩 | I1 | done | 2026-09-04 |
-| 2 | **登入的人在 web 送出一個問題,收到的是一則帶引用的助理訊息,引用點得回原文;系統這時知道「是誰在問」——scope 仍是 ADR 0014 的固定 `dept:eng`,但它是從那個人身上取得的,不再寫死在接縫裡。** | I2 | in-progress(2026-09-05 派出) | |
+| 2 | **登入的人在 web 送出一個問題,收到的是一則帶引用的助理訊息,引用點得回原文;系統這時知道「是誰在問」——scope 仍是 ADR 0014 的固定 `dept:eng`,但它是從那個人身上取得的,不再寫死在接縫裡。** | I2 | done | 2026-09-05 |
+
+**phase-2 驗收細節(2026-09-05,獨立 session,嚴格級)**:四項核心全過。
+**這個 phase 的意義是一條死掉的守門活了,而且是量出來的**:`06`/`07` 的場景 4 自稱是
+ADR 0014 固定 `dept:eng` 的「移除條件」,但當時實測把實作改成「兩個人拿到不同 scope」
+**仍然 4/4 全綠**——`ask(question)` 沒有 caller 參數,那條斷言不管固定值在不在都會綠。
+
+本 phase 的驗收 brief 因此設了 FAIL 條件:讓 `ask()` **收下 `caller` 但完全不用它**,
+場景必須紅。獨立驗收實測**確實變紅**:
+
+```
+兩個不同的人問問題,檢索接縫收到的 scope principalId 應該不一樣…實際兩次都是
+「i2-fixed-demo-scope」——demo-user 的 scope key(principalId)=「i2-fixed-demo-scope」,
+demo-maintenance 的 scope key(principalId)=「i2-fixed-demo-scope」
+```
+
+第二個突變(驗收者自選,打 ADR 0016 D2 的順序語意):把 `citations` 反轉,
+紅在順序逐一比對。ADR 0016 D2 說「順序是語意的一部分,沒有型別擋得住重排」——這條就是那個擋。
+
+**過程中退回的兩件事**(都不是做錯,是邊界逼出來的,詳見 merge commit):
+生產碼的 `PRAGMA` runtime 偵測(§5.1 靜默錯誤)、`state` 的「有引用 → `ANSWERED`」啟發式
+(ADR 0018;本輪**完全不設** `state`,由 `07-generation/phase-3` 補結構化訊號後再接)。
 | 3 | 回饋寫入面與 admin 讀取模型回填 | I5 | todo | |
 
 ## 回填對照表(phase-1)

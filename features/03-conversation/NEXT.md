@@ -21,10 +21,28 @@
       跑擁有者拒絕的場景,目前 `_world.ts` 的 `startServer({ enableTestAuthProvider: true })`
       只有 demo 使用者一條登入路徑,換身分的方式還沒有回填成步驟
 - [ ] 整合:`06-retrieval` phase-2 與 `07-generation` phase-2 `done` —— 訊息要帶得出 citations
-- [ ] 契約:`contracts/openapi/conversations.yaml` 的 `Message` 目前**沒有** citations 欄位
-      (`docs/01-roadmap.md` 的 I2 表格自己標了「待 `/feature` 分流確認」)。
-      這是**放寬契約**,依 CLAUDE.md 決策權表要**使用者**拍板,不是技術顧問。
-      未拍板前不得自行加欄位。
+- [x] 契約:`contracts/openapi/conversations.yaml` 的 `Message` 加**選填** `citations[]`
+      —— **gate 已解除(2026-09-04)**。
+
+      ⚠️ **本條在 2026-09-04～09-05 之間是過期的**,原文寫「這是放寬契約,依 CLAUDE.md
+      決策權表要**使用者**拍板,不是技術顧問」。那句話在 ADR 0013 之後就不成立了:
+      ADR 0013 把契約放寬／新 endpoint／新 schema 從使用者級改為**技術顧問級**,
+      使用者只留**付費**與**整合點 `@e2e` 親手驗收**兩類;同一份 ADR 的裁決表 #10
+      已經明批「`Message` 加選填 `citations[]`(回應側新增選填欄位,對既有消費端相容),
+      schema 對齊 `generation.yaml` 的 `Citation`」。
+
+      **這個過期造成了實際後果,記在這裡不是為了自責**:2026-09-05 派 `07-generation/phase-2`
+      時,測試 agent 讀了本檔這一段,據此判斷「03-conversation 卡在使用者、沒有時間表」,
+      並把它列為選擇讀法 1(固定 scope bake 進組合 seam)的**第一條理由**。
+      結論本身仍站得住(另外兩條理由獨立成立),但那條理由是錯的。
+      協調者 2026-09-04 更新了 `07-generation/NEXT.md` 的同一條 gate,漏了本檔——
+      **NEXT.md 的 gate 是 agent 真的會照著做決定的東西,不是給人看的摘要。**
+
+      落地時的兩個機械後果(與 07 的 NEXT.md 同):
+      (a) `Message` 目前是 `additionalProperties: false`,所以**契約必須先放寬,實作才能送
+      `citations`**,順序不能反;
+      (b) 新增的 schema 會被 `pnpm contract-gate` 的 check 3 判為 UNBOUND,必須同時做
+      L0/L2/transcribed 其中一種綁定,否則 gate 紅。
 - [ ] 契約:`ResyncEvent.reason` 的 `SERVER_RESTART` 是保留值還是缺一段實作(見 FEATURE.md
       開放問題)。這條**不擋 phase-2**,但要在 phase-2 的 ADR 裡標成已知落差。
 
@@ -37,8 +55,10 @@
 
 ## Gate 未滿足時
 
-**phase-2 卡在 citations 契約 + 01-identity**:不要先用一個假的 `citations` 欄位把訊息塞回去
-——那正是「發明 contract」。在使用者拍板前可以先做的,依序是:
+**phase-2 現在卡的是 `07-generation` phase-2,不是 citations 契約**(契約 gate 已於 2026-09-04
+由 ADR 0013 #10 解除,見上)。仍然不要先用一個假的 `citations` 欄位把訊息塞回去——
+那正是「發明 contract」;正確順序是走 `/decide` 把選填欄位加進 `conversations.yaml`、
+同時補上 binding,**契約先、實作後**。在 `07-generation` phase-2 落地前可以先做的,依序是:
 
 1. **把 `apps/api` 這一層的接縫回填成場景**(不需要新契約):`apps/api/src/domain-plugin-registration.test.ts`
    的 AC1/AC2 已經證明「契約沒載入 ⇒ 404 而非 500」「契約載入 ⇒ 401 而非 404」。
@@ -49,7 +69,9 @@
    已經在 vitest 裡對每個狀態碼跑過,phase-2 可以在「建立對話」「送訊息」兩條主幹上再跑一次,
    讓契約漂移在驗收層也會紅。
 
-**不可以先做的**:自行在 `Message` 上加 citations、自行送 `SERVER_RESTART` resync、
+**不可以先做的**:**不走 `/decide`** 就在 `Message` 上加 citations(契約 gate 已解除不等於
+可以直接改 yaml——仍要 ADR 留痕 + 同時補 binding)、自行送 `SERVER_RESTART` resync
+(ADR 0013 #13 裁定它是**保留值**,契約 description 註明即可,實作不補)、
 自行改 `standalone.json` 或 `common.steps.ts`(見 FEATURE.md「待協調」)。
 
 ## 沒有寫進 phase-1 的行為(→ phase-2 / phase-3)

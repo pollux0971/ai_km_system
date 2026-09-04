@@ -32,7 +32,12 @@ import { databasePlugin } from "./db/plugin.js";
 import { resolveMigrationsDir } from "./db/migrate.js";
 import { conversationPlugin, conversationSandboxSeeders, toOwnerKey } from "@ai-km/service-conversation";
 import { identityPlugin, registerSandboxSeeder, requireAnyRole } from "@ai-km/service-identity";
-import { modelGatewayPlugin } from "@ai-km/service-model-gateway";
+import {
+  modelGatewayPlugin,
+  createModelGateway,
+  createDeterministicEmbeddingProvider,
+  createCannedGenerationProvider,
+} from "@ai-km/service-model-gateway";
 import { feedbackPlugin } from "@ai-km/service-feedback";
 import {
   createInMemoryVectorStore,
@@ -42,6 +47,7 @@ import {
 } from "@ai-km/service-retrieval";
 import { generationPlugin } from "@ai-km/service-generation";
 import { ragPlugin } from "./rag-plugin.js";
+import { createIngestionService, ingestionPlugin, type IngestionService } from "@ai-km/service-ingestion";
 import { createHealthChecker, overallStatus } from "./health/checks.js";
 import "./types.js";
 
@@ -313,6 +319,26 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     enforceEmbeddingVersion: true,
   });
   await app.register(retrievalPlugin, { service: retrievalService });
+  // ADR 0015 決策 3′(取代原決策 3——原文用 `registerSandboxSeeder` 樣式與
+  // D4「重開就沒了」互相矛盾:那個樣式在登入或開機時自動觸發,`05-ingestion/
+  // phase-2.feature` 的第二個 server 也會登入 demo-user,自動 seed 會把它的
+  // store 也灌滿,讓 D4 要驗的「不存活到下一個 process」變成假的)。
+  // `app.ingestion` 因此是 **on-demand** 接縫,不掛任何自動 seeder——roadmap
+  // 原文的「一條指令」就是一次明確的呼叫(demo script / 測試步驟 / 未來 CLI),
+  // 不是開機或登入時偷偷發生的事。與 `retrievalPlugin` 共用同一個
+  // `retrievalStore`(決策 1 不變),讓「索引寫到 A、查詢讀 B」不成立。
+  // embedding 用同一顆 deterministic provider(與 `createRetrievalService`
+  // 的預設一致:"embedding:deterministic" / 256 維),確保 index-time 與
+  // query-time 的 embedding 身分相同。
+  const ingestionModelGateway = createModelGateway({
+    embedding: createDeterministicEmbeddingProvider(),
+    generation: createCannedGenerationProvider(),
+  });
+  const ingestionService: IngestionService = createIngestionService({
+    modelGateway: ingestionModelGateway,
+    vectorStore: retrievalStore,
+  });
+  await app.register(ingestionPlugin, { service: ingestionService });
   // 07-generation/phase-1 (回填) — puts `app.generation` on the parent
   // instance. Same "no HTTP contract, unconditional registration" shape as
   // retrievalPlugin above (FEATURE.md: in-process seam, ADR 0007).

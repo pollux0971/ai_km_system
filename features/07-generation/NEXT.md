@@ -8,7 +8,7 @@
 | 欄位 | 值 |
 |---|---|
 | 已完成 | 無 |
-| 進行中 | phase-1(回填,2026-09-04 交付,待 `/phase-done`——嚴格級,須由另一個 session 驗收) |
+| 進行中 | phase-1(回填,2026-09-04 交付,獨立驗收 session 進行中) |
 | 下一個 | phase-2 |
 
 ## 下一個 phase 的 gate
@@ -16,17 +16,39 @@
 **phase-2(`answer()` 從 `app.retrieval` 拿 hits,接進 `apps/api` composition root)** 需要全部滿足:
 
 - [ ] 自身:phase-1 狀態為 `done`
-- [ ] 整合:[`06-retrieval`](../06-retrieval/NEXT.md) phase-2 `done`(retrievalPlugin 已註冊進
-      `apps/api` composition root)——沒有 `app.retrieval` 就沒有 hits 可拿
-- [ ] 整合:I1 已通過(**已滿足**,2026-09-03)
-- [ ] 契約:`conversations.yaml` 的訊息是否帶 `citations` 欄位,要先由 `/feature` 分流確認
-      (見 [`docs/01-roadmap.md`](../../docs/01-roadmap.md) I2 表格的問號);要新增欄位就是契約放寬,
-      屬使用者層級的決定
+- [x] 整合:[`06-retrieval`](../06-retrieval/NEXT.md) phase-2 `done`(**已滿足**,2026-09-04)
+      ——`retrievalPlugin` 已註冊進 `apps/api` composition root,`app.retrieval` 存在
+- [x] 整合:I1 已通過(**已滿足**,2026-09-03)
+- [x] 契約:`conversations.yaml` 的 `Message` 加**選填** `citations[]` —— **gate 已解除**。
+      ADR 0013 裁決表 #10 已批(「回應側新增選填欄位,對既有消費端相容」,schema 對齊
+      `generation.yaml` 的 `Citation`),且 ADR 0013 把契約放寬從使用者級改為技術顧問級。
+      落地時仍要走 `/decide` 記 ADR,並注意兩件機械後果:
+      (a) `Message` 目前是 `additionalProperties: false`,所以**契約必須先放寬,實作才能送
+      `citations`**——順序不能反;
+      (b) 新增的 schema 會被 `pnpm contract-gate` 的 check 3 判為 UNBOUND,必須同時做
+      L0/L2/transcribed 其中一種綁定,否則 gate 紅(見 `contracts/openapi/__checks__/README.md`)。
+
+**phase-2 另外必須做的一件事(2026-09-04,由 `06-retrieval/phase-2` 的獨立驗收 session 發現)**:
+
+- [ ] 把 ADR 0014 的固定 `dept:eng` 從 `features/steps/retrieval.steps.ts` 的
+      `askThroughRealSeam()` **搬進 `apps/api` 的 composition root**,並把
+      `06-retrieval/phase-2.feature` 的場景 4 重新指向那條生產路徑。
+
+      理由:場景 4 自稱是「這個固定值的移除條件」,ADR 0014 的 Consequences 表也指望它。
+      但固定值今天寫在 step 檔裡、繞過生產碼直接呼叫 `app.retrieval.retrieve()`,而
+      `retrieve()` 是確定性函式——所以那條斷言**對生產碼的任何改動都不會變化**。
+      它會紅,只是紅不紅與它宣稱要守的東西無關(§5.2 的變形:一個從未因它要守的東西而
+      紅過的守門不算守門)。`answer()` 是第一個真正呼叫 `retrieve()` 的生產路徑,
+      所以搬遷的落點就是這個 phase。詳見 [ADR 0014](../../docs/adr/0014-i2-fixed-demo-scope.md)
+      的「這份 ADR 的一個空保證」段。
 
 **phase-3(abstention:沒有來源時回結構化理由)** 需要:
 
 - [ ] 自身:phase-2 `done`
-- [ ] 契約:E04-S022 的閾值與回應形狀由使用者拍板(產品行為未定義,`docs/DECISIONS_NEEDED.md`)
+- [x] 契約:E04-S022 的回應形狀 —— **gate 已解除**。ADR 0013 裁決表 #12 已批:
+      無來源時回**結構化 abstention**,回應加 `abstained: true` + `abstentionReason` enum
+      (`NO_AUTHORISED_SOURCES`、`INSUFFICIENT_CONTEXT`),UI 以此區分、不靠字串比對;
+      `generation.yaml` 走 `/decide`。閾值本身是工程取捨,依 ADR 0013 由顧問/協調者定。
 
 ## Gate 未滿足時
 
@@ -41,8 +63,12 @@ gate 未滿足時**可以先做**:
 - 上一項要求跨資料夾共用「seed 一個檢索 store」的句子,那是共用步驟的訊號:寫進本檔與
   `FEATURE.md` 的「待協調」,由協調者搬進 `common.steps.ts`,**不要 import 別的能力資料夾的 steps**。
 
-**不可以先做**:改 `contracts/openapi/*.yaml`、在 `services/generation` 裡加任何 scope 判斷、
-把空 context 的自由文字改成結構化 reason code(那是 phase-3 且等使用者)。
+**不可以先做**:在 `services/generation` 裡加任何 scope 判斷;把空 context 的自由文字改成
+結構化 reason code(那是 phase-3——**不再是「等使用者」,是「等 phase-2 先 done」**,見上)。
+
+**改 `contracts/openapi/*.yaml`**:2026-09-04 起不再是絕對禁止,但**仍然要走 `/decide` 記 ADR**,
+而且順序是「契約先、實作後」。ADR 0013 把契約放寬與新 endpoint 改為技術顧問級;
+**唯一仍留給使用者的是付費/外部服務與整合點 `@e2e` 親手驗收**。
 
 ## 完成後
 

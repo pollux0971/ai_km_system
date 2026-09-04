@@ -64,7 +64,7 @@ pnpm --filter @ai-km/features accept -- --tags '@retrieval and @standalone and n
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)授權檢索、Deny-Wins、洩漏偵測、offsets、身分守門、MMR | I1 | done | 2026-09-03 |
-| 2 | 接進 apps/api composition root,供 07 與 03 呼叫 | I2 | 提案(紅) | |
+| 2 | 接進 apps/api composition root,供 07 與 03 呼叫 | I2 | done | 2026-09-04 |
 | 3 | sqlite-vec 成為預設持久 store | I4 | todo | |
 
 **phase-2 狀態細節(2026-09-04)**:測試 agent 交出**紅**的 `phase-2.feature`(4 個場景)

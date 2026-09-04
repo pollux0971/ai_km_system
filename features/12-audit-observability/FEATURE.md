@@ -79,7 +79,7 @@ SQLite 是每個 scenario 自己的暫存檔,語音 sidecar 用 `AI_KM_ASR_PROVI
 
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
-| 1 | (回填)health 兩條路由、trace id 串接、log 衛生、詳細報告的角色守門 | I1 | in-progress | |
+| 1 | (回填)health 兩條路由、trace id 串接、log 衛生、詳細報告的角色守門 | I1 | done | 2026-09-04 |
 | 2 | 文件狀態事件進稽核 | I4 | todo | |
 | 3 | `services/audit` 從 0 行到可查可匯出 | I7 | todo | |
 

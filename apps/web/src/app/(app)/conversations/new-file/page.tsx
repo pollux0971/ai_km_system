@@ -119,7 +119,17 @@ export default function FileChatEntryPage() {
   const [state, setState] = useState<State>({ status: "idle" });
 
   function handleFilesSelected(fileList: FileList) {
-    setFiles((previous) => [...previous, ...Array.from(fileList)]);
+    // Snapshot to a plain array synchronously, before scheduling the state
+    // update: `fileList` is the SAME live FileList the input element owns,
+    // and FileAttachmentPicker resets `input.value = ""` right after this
+    // callback returns — clearing that live list in place. React's state
+    // updater below can run after that reset (deferred to the next render
+    // pass), so reading `fileList` lazily inside the updater intermittently
+    // observed it already empty, leaving `files` never populated and the
+    // "開始對話" button permanently disabled. Reading it here, synchronously,
+    // decouples the captured selection from the input's own lifecycle.
+    const selectedFiles = Array.from(fileList);
+    setFiles((previous) => [...previous, ...selectedFiles]);
   }
 
   function handleRemove(index: number) {

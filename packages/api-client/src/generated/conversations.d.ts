@@ -104,7 +104,7 @@ export interface paths {
          *
          *     Emits `message.created` **and** `conversation.updated` — both, because a subscriber that only re-fetches the thread would leave a stale preview in the sidebar.
          *
-         *     TRANSITIONAL: `role: assistant` is accepted because generation still runs in the browser (E03-S010). When real server-side generation lands in E04, assistant messages will be produced by the server and this request will be rejected — that removal is a BREAKING CHANGE and needs a version bump plus consumer migration.
+         *     TRANSITIONAL (updated 2026-09-05, ADR 0017): server-side generation NOW EXISTS — `apps/api`'s `app.rag.ask()` produces an assistant reply for a posted question. Browser-side generation (E03-S010) and a client POSTing its own `role: assistant` are STILL ACCEPTED alongside it, until I2's `/integrate` item "stub 已移除". At that point the client path is rejected (400 VALIDATION_ERROR), this description is rewritten, and the contract is version-bumped with consumer migration — all in one PR, per ADR 0017. The earlier wording of this paragraph claimed "generation still runs in the browser", which stopped being true on 2026-09-05; it was corrected rather than left standing because a contract sentence that asserts a false fact is worse than no sentence, and no machine gate catches prose that lies.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -473,7 +473,7 @@ export interface components {
          */
         CreateMessageRequest: {
             /**
-             * @description TRANSITIONAL — see the operation description. `assistant` is accepted only while generation still runs in the browser.
+             * @description TRANSITIONAL — see the operation description (ADR 0017). `assistant` is still accepted, now ALONGSIDE server-side generation rather than instead of it, until I2's "stub 已移除".
              * @enum {string}
              */
             role: "user" | "assistant";

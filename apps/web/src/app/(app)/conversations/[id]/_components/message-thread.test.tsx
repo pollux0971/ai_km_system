@@ -3284,13 +3284,24 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     createdAt: "2026-08-14T00:00:00.000Z",
   };
 
+  /**
+   * 11-app-shell/phase-3 round 2 (B 類:改寫,不刪). `3166064` 把
+   * `recordUsageEvent("rag_answer_outcome", …)` 的落點從 `runStream()`
+   * 搬到 `attemptSend` 的 `refetchAndMergeMessages(onMerged)` ——`onMerged`
+   * 拿到 refetch 回來的完整列表,找出「這個分頁送出前不認識的助理訊息」來
+   * 記錄。這 5 條原本靠 `mockedReceiveAssistantReply` 餵助理訊息,但送出
+   * 已經不再呼叫這個函式(對這段程式碼是盲的,見 `3166064` commit body 的
+   * A/B 實測)——改成讓 `mockedListMessages` 的第二次呼叫(送出後的
+   * refetch)回傳「使用者訊息 + 伺服器產生的助理訊息」。斷言內容
+   * (`answerState`/`citationCount`/`latencyMs` 的期望值、`toHaveBeenCalledWith`
+   * 的形狀)一個字沒動。
+   */
   it("records a rag_answer_outcome event with the finalized answerState and citation count once an answer is actually persisted", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "第一個來源 [1]，第二個來源 [2]。", state: "ANSWERED" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "第一個來源 [1]，第二個來源 [2]。", state: "ANSWERED" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3309,12 +3320,11 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     // for conversation_message_sent, and the same technique this story's
     // own EVIDENCE documents applying to those existing tests) is what
     // actually proves no duplicate side effect for THIS event.
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "唯一的一個來源 [1]。", state: "ANSWERED" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "唯一的一個來源 [1]。", state: "ANSWERED" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3326,12 +3336,11 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
   });
 
   it("records citationCount 0 for an answer with no citation markers", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "沒有引用來源的回答。", state: "ANSWERED" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "沒有引用來源的回答。", state: "ANSWERED" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3342,40 +3351,51 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     );
   });
 
+  // 送出的問題文字不再影響任何分類——伺服器直接決定這則助理訊息的
+  // state,所以這裡不再需要 MOCK_ANSWER_STATE_TRIGGERS 的觸發字串,直接讓
+  // 替身的 state 就是 NO_EVIDENCE。
   it("records the answer's real non-ANSWERED classification (e.g. NO_EVIDENCE) rather than defaulting to ANSWERED", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "（模擬回覆）找不到足夠企業資料支持此答案。", state: "NO_EVIDENCE" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "（模擬回覆）找不到足夠企業資料支持此答案。", state: "NO_EVIDENCE" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer(`保固期限是多久？ ${MOCK_ANSWER_STATE_TRIGGERS.NO_EVIDENCE}`);
+    submitViaComposer("保固期限是多久？");
 
     await waitFor(() =>
       expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "NO_EVIDENCE", citationCount: 0, latencyMs: expect.any(Number) }),
     );
   });
 
-  it("does not record a rag_answer_outcome event when persisting the reply fails", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+  // 「持久化失敗」原本是 receiveAssistantReply() 回 ok:false——那個呼叫點
+  // 已經不存在。送出這條路唯一對應的「還沒有答案」情境,是 refetch 拿到的
+  // 列表裡還沒出現任何新助理訊息(伺服器還沒產生,或這個分頁還不知道)——
+  // `onMerged` 找不到「送出前不認識的助理訊息」就不會記錄,決定性斷言
+  // (不會呼叫 rag_answer_outcome)不變。
+  it("does not record a rag_answer_outcome event when the refetch after sending doesn't (yet) show a new assistant reply", async () => {
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({ ok: true, value: [SENT_MESSAGE] });
     mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
     submitViaComposer("你好");
 
-    expect(await screen.findByText("AI 回覆失敗")).toBeInTheDocument();
+    // 確保第二次(refetch 那次)listMessages() 呼叫已經發生且 resolve
+    // 過——mockResolvedValueOnce 立即 resolve,microtask 會在下一個
+    // waitFor 輪詢前排空,所以這是「onMerged 已經跑過」的可靠代理。
+    await waitFor(() => expect(mockedListMessages).toHaveBeenCalledTimes(2));
     expect(mockedRecordUsageEvent).not.toHaveBeenCalledWith("rag_answer_outcome", expect.anything(), expect.anything());
   });
 
   it("does not record a rag_answer_outcome event (and does not crash) when rendered outside a session provider", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
+      ok: true,
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答 [1]" }],
+    });
     mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答 [1]" } });
 
     renderWithSession(null);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3426,13 +3446,13 @@ describe("MessageThread latency instrumentation (E13-S013)", () => {
     createdAt: "2026-08-14T00:00:00.000Z",
   };
 
+  // 11-app-shell/phase-3 round 2 (B 類:改寫,不刪,理由與 E13-S011 相同)。
   it("records a non-negative latencyMs reflecting real elapsed time, not a hardcoded placeholder", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答內容 [1]", state: "ANSWERED" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答內容 [1]", state: "ANSWERED" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3446,17 +3466,30 @@ describe("MessageThread latency instrumentation (E13-S013)", () => {
     expect(details.latencyMs).toBeGreaterThanOrEqual(0);
   });
 
-  it("measures a distinctly longer latencyMs when the stream is artificially delayed, proving this is a real measurement rather than an always-zero stub", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+  /**
+   * 11-app-shell/phase-3 round 2 (B 類:改寫,不刪). `latencyMs` 現在量的是
+   * `sendStartedAt`(attemptSend 裡 sendMessage() resolve 之後)到
+   * `onMerged` 找到新助理訊息那一刻(見 `3166064` commit body)——不再是
+   * `streamAssistantReply` 的本地串流耗時,因為送出已經不再呼叫它。原本
+   * 用 `streamAssistantReply` 人工延遲 40ms 來證明「這是真的量測,不是寫死
+   * 的 0」,現在改成延遲 refetch 那次 `listMessages()` 的 resolve
+   * 時間——決定性斷言(`latencyMs >= 35`)不變。
+   */
+  it("measures a distinctly longer latencyMs when the arrival of the server's reply is artificially delayed, proving this is a real measurement rather than an always-zero stub", async () => {
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(
+            () =>
+              resolve({
+                ok: true,
+                value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "延遲後的回答 [1]", state: "ANSWERED" }],
+              }),
+            40,
+          );
+        }),
+    );
     mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
-      ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "延遲後的回答 [1]", state: "ANSWERED" },
-    });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      yield "延遲後的回答 [1]";
-    });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");

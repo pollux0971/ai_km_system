@@ -156,6 +156,34 @@ I2 的 `@e2e` 第 33 行要求「clicking the first citation shows "剖析、切
 **不加檔名/頁碼**:沒有 producer 的欄位不進契約。引用面板顯示 `documentId` 是誠實的,
 文件 metadata 隨 I4 的 knowledge 契約來。
 
+### 推翻了什麼,換上的守門在哪(2026-09-05 補,顧問裁決)
+
+**這條裁決明文推翻一條既有的、刻意寫下的機器守門**,不是「順手加個欄位」。
+
+被推翻的是 `contracts/openapi/__checks__/generation-compat.ts:185-194` 的
+`citationContentFree` —— 一條型別層守門,明文禁止 `Citation` 帶
+`text`/`answer`/`content`/`snippet`,理由是:
+
+> A citation points at a span in the ORIGINAL document; it must not carry the text itself.
+> **A citation that carried its own text could quote something the document does not say**,
+> and the offsets — the only thing the UI can verify against the source — would stop being
+> load-bearing.
+
+**那個論點成立。** 它被推翻不是因為錯,是因為它保護的驗證**今天做不到**:UI 沒有任何
+端點可以拿到原文來對帳 offsets(PITFALLS 坑 19 第四次)。守門擋住了唯一可行的做法,
+去保護一個不存在的能力。
+
+**換上的守門有三層,而且比原本強**:
+
+| 層 | 東西 | 為什麼比「欄位不存在」強 |
+|---|---|---|
+| **建構** | `text` 一律由伺服器在**組 citation 的單一位置**用 offsets `slice()` 算出;**provider 回的 `text` 一律丟棄並用投影值覆蓋**,不等則依既有捏造引用守門**拒絕整則** | 「引一段文件裡沒有的話」**在架構上不可能**。顧問原話:「欄位不存在只擋契約,**擋不住 UI 去 mock 拿字**」——那正是這一輪抓到的缺口的成因 |
+| **場景** | `07-generation/phase-2b` 場景 1:`citation.text === 原文.slice(start, end)`,反向驗證**偏一個字元必須紅並印出兩段文字** | 它是上面那條建構規則的反向驗證 |
+| **型別** | `citationContentFree` **改寫不刪**:改成斷言 `Schemas["Citation"]["text"]` 是 `string` **且 required**。守門從「**沒有**」變成「**必有**」 | 兩個方向都會紅;原註解的理由**留著**,只換結論——坑 1:一個會在正確變更上變紅的守門,遲早被放寬然後永遠不會紅 |
+
+投影點還要留一句可 grep 的話:「**唯一允許寫 `text` 的位置在 `<檔案:函式>`;
+`grep 'text:'` 出現在 citation 建構的第二處就是違規。**」
+
 ### 機械後果
 
 - `generation.yaml` 的 `Citation` 加必填 `text`;`conversations.yaml:950` 的

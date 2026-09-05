@@ -155,6 +155,67 @@ AC2 時,第一條失敗訊息是
 的 `Message.citations` 經 `$ref` 自動跟;`packages/api-client` 要重生。
 **offsets 仍然保留給 UI 做 highlight,`text` 不取代它。** 記在 ADR 0016 追加段。
 
+**⚠️ 這是明文推翻一條既有的、刻意寫下的機器守門(2026-09-05,技術顧問裁決)**
+
+`contracts/openapi/__checks__/generation-compat.ts:185-194` 有一條型別守門
+`citationContentFree`,**明文禁止 `Citation` 帶 `text`/`answer`/`content`/`snippet`**:
+
+> A citation points at a span in the ORIGINAL document; it must not carry the text itself.
+> **A citation that carried its own text could quote something the document does not say**,
+> and the offsets — the only thing the UI can verify against the source — would stop being
+> load-bearing.
+
+契約一加 `text`,`ContentFree` 變 `never`,**`pnpm typecheck` 會全域紅**(紅在契約檢查,
+不是紅在 `services/generation`)。
+
+**它的論點成立,不是形式主義。** 但它保住的是一個**今天沒有人在行使的性質**——UI
+**根本沒辦法**用 offsets 對帳(沒有端點拿原文,那正是坑 19 第四次)。
+所以現況是:守門擋住了唯一可行的做法,去保護一個做不到的驗證。
+
+**裁決:推翻,但把它想保的性質搬到更強的地方——建構層,不是測試層。**
+
+**(4) `text` 是 offsets 的投影,由伺服器單點算出(顧問指定,這條是本 phase 的核心)**:
+
+- `text` **一律**由伺服器在**組 citation 的那一個地方**,用 `startOffset`/`endOffset`
+  對儲存原文 `slice()` 算出來;
+- **provider 的輸出不得提供 `text`** —— provider 回的 citation 若帶 `text`,
+  **一律丟棄、用投影值覆蓋**;若與投影**不等**,依既有的捏造引用守門**拒絕整則**
+  (失敗訊息印出兩段);
+- 這樣「**引一段文件裡沒有的話**」在**架構上不可能**。offsets 仍然是唯一的真相來源,
+  `text` 只是它的投影。
+
+顧問原話:「**搬到建構層比欄位不存在更強:欄位不存在只擋契約,擋不住 UI 去 mock 拿字。**」
+——這句話正是這一輪抓到的那個缺口的成因。
+
+**(5) `generation-compat.ts` 那段改寫,不刪**:
+
+- 措辭改成「`text` 是 offsets 的**投影**、不是替代;它必須等於那段 slice」;
+- 加一句「**投影點在 `<檔案:函式>`,唯一允許寫 `text` 的位置;`grep 'text:'` 出現在
+  citation 建構的第二處就是違規**」;
+- **型別檢查換成會紅的形狀**:`citationContentFree` 改成斷言
+  `Schemas["Citation"]["text"]` 是 `string` **且 required** —— 守門從「**沒有**」
+  變成「**必有**」,兩邊都會紅。
+
+**理由要留著,不能只留結論**——那正是坑 1 說的「一個會在正確變更上變紅的守門,
+遲早會被放寬,然後就永遠不會紅了」。
+
+**本輪證據的天花板(誠實標出,不抹掉)**
+
+phase-2b 場景 1 綁的「儲存的抽取原文」是 `features/steps/generation.steps.ts` 既有的
+**測試 fixture**(`MAINTENANCE_DOC` + `passage()` 建出的 `RetrievalHit.text`),
+**不是**一份真的經 `05-ingestion` 存進磁碟、再由 store 讀回來的原文
+——`services/generation` 與 `apps/api` 今天都接不到那樣的 store。
+
+**比對仍然是決定性的**(docs map 與 `citation.text` 是兩條**獨立算出來**的值,不會恆真),
+但真實性上限就是這個 fixture。**天花板可以現在就抬**,顧問已 `/feature` 確認:
+
+> `docs/integration/i2-ask-in-web.feature` 第 36 行那條 API 場景已有
+> 「every citation's text equals the original text sliced by its offsets」的步驟,
+> **它對的是 `05-ingestion/phase-2b` 種進去的真 store**。
+> **phase-2b 進 main 後,那條步驟改成同時斷言 `citation.text`(契約欄位)與 slice 相等。**
+
+這樣「真 store」那一層在**自動場景**就有了,`@e2e` 只剩「**人看到**」那一層。
+
 **級別:標準。**
 
 | 3 | abstention:沒有來源時回結構化理由而非自由文字 | 待定 | todo | |

@@ -106,7 +106,23 @@ AssertionError: 錯誤類型應為 EmbeddingVersionMismatchError,實際 Embeddin
 1. `phase-2.feature` 缺 `@standalone` tag → 單獨執行指令目前對 phase-2 的四個場景**沒有覆蓋**,停在 10 passed
 2. 檔頭有一段已過時(仍寫「索引步驟今天什麼都不做」,但場景 2/3 現在真的會索引與查詢)
 3. FEATURE.md 的「單獨執行」段落要跟著 1 更新
+| 2b | **開發者用 `pnpm dev` 一條指令起 server,起來時 fixture PDF 已在索引裡,人可以在瀏覽器問。** | I2 | todo | |
 | 3 | 非同步、`apps/worker-ingestion`、失敗原因落庫 | I4 | todo | |
+
+**為什麼有 phase-2b(2026-09-05)**:phase-2 交出了 `app.ingestion` 接縫與共用 store,
+28 條整合場景與五個 `phase-done` 全綠——**但 roadmap 對這個 phase 的原文是「一條**指令**」,
+而那條指令沒有出現**。`ingestionPlugin` 沒有路由、`tools/` 沒有 CLI,`app.ingestion` 只有
+行程內碰得到;人 `pnpm dev` 起來、在瀏覽器問問題時,**檢索 store 是空的**。
+
+所有自動檢查都綠,因為它們**全部在同一個 process 裡自己建 server、自己索引、自己問**
+——沒有一條走人走的入口。**這是 §5.4 的字面案例**,而且是協調者在把走查指令交給使用者
+之前才驗出來的。ADR 0015 的 D3′(不掛自動 seeder)理由**仍然成立且不翻案**;
+缺的是「一次明確的呼叫」那半當初只由測試步驟滿足,沒有給人用的入口。
+
+**三個場景(顧問指定)**:(a) 旗標開 → store 內 fixture 的 chunk 數**等於 I1 那份的已知值**
+(對著會變的量,不是「有東西」);(b) 旗標關 → store **為空**——**這條保住 D3′,
+不讓 ADR 0015 的理由變假**;(c) `NODE_ENV=production` 加旗標 → **拒絕啟動**且訊息含旗標名。
+**標準級。**
 
 ## 回填對照表(phase-1)
 

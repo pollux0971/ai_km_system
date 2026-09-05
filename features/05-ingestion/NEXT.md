@@ -8,7 +8,7 @@
 | 欄位 | 值 |
 |---|---|
 | 已完成 | phase-1(2026-09-04)、phase-2(2026-09-05),兩個都獨立驗收 PASS |
-| 進行中 | 無 |
+| 進行中 | phase-2b(2026-09-05 派出) |
 | 下一個 | phase-3(非同步、失敗原因落庫;gate 未滿足:等 I2 通過) |
 
 ## 下一個 phase 的 gate
@@ -32,6 +32,29 @@
 - [ ] 整合:I2 通過
 - [ ] 授權:`apps/worker-ingestion`(目前 0 行)屬 Team B 路徑,要動它需要使用者授權
       (CLAUDE.md 決策權表「新資料夾或 Team B 路徑的授權擴張」→ 使用者)
+
+## phase-2b 的 gate(2026-09-05 新增,顧問裁決)
+
+**phase-2b(`pnpm dev` 起來時 fixture 已在索引裡)** 需要:
+
+- [x] 自身:phase-2 `done`(2026-09-05)
+- [x] 方向已裁:**旗標 seeder**(`AI_KM_DEV_SEED_FIXTURE=1`,由 `apps/api` 的 `dev` script 帶)。
+      顧問否決了另外兩條:**HTTP 上傳是 I4 的交付**(`knowledge.yaml`、`08` phase-2),
+      拉進 I2 就是跳整合點;**sqlite-vec(`06-retrieval/phase-3`)拉前面**才是真的「一條 CLI」,
+      但它同時改變「第二個 server 是空的」的語意(檔案共享),**那是 06 phase-3 自己該重寫的場景**,
+      不在 I2 中途做。
+- [x] 實作約束(顧問指定):seeder **必須走與測試步驟同一條 `app.ingestion` 路徑**,
+      不另開程式碼路徑;啟動時 **log 印出索引了哪份文件、幾個 chunk**,讓使用者看得到 store 不是空的;
+      `NODE_ENV=production` 加旗標 → **拒絕啟動**,照 `apps/api/src/config.ts` 既有
+      `AI_KM_DEV_TRIGGERS`/`AI_KM_TEST_SANDBOX` 的形狀與措辭,理由寫
+      「**它把固定 fixture 塞進生產索引**」。
+
+**跨行程 CLI 不在這個 phase**:今天的 store 是**行程內記憶體**,外部行程灌不進去。
+真的「一條 CLI」要等 `06-retrieval/phase-3`(sqlite-vec 成為預設持久 store,掛在 I4)。
+本 phase 交的是「`pnpm dev` 起來就有東西可問」,不是「任何時候都能從外面灌」。
+
+**這個 phase 存在的理由**:見 `FEATURE.md` 的「為什麼有 phase-2b」——
+所有自動檢查都綠,而人做不到,因為它們走的不是同一個入口(§5.4)。
 
 ## Gate 未滿足時
 

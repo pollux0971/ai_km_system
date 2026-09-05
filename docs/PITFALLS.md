@@ -482,7 +482,33 @@ cmd 2>&1 | tail -25; echo "EXIT=$?"  # ❌ 量到 tail 的(永遠是 0)
 I2 的阻塞**才立的。立它的時候沒有人回頭看整合檔還寫著什麼。
 
 **通則(技術顧問 2026-09-05 定):phase 各自綠不證明規格之間一致,只有把它們放進
-同一個 run 才會。** 這是整合點存在的理由,不是它的失敗——一個從來不會紅的整合點,
+同一個 run 才會。**
+
+**第二層,同日、同一個整合點又教了一次:整合場景全綠也不證明人做得到。**
+
+I2 的整合場景 **28/28 全綠**之後,協調者正要把走查指令交給使用者,先驗了一次環境:
+`ingestionPlugin` **沒有註冊任何路由**、`tools/` **沒有任何 CLI**、`app.ingestion` 是
+**行程內**接縫。所以使用者 `pnpm dev` 起來、在瀏覽器問問題時,**那個 server 的檢索 store
+是空的**——`@e2e` 第一條當場過不了。
+
+**為什麼 28 條全綠也沒發現**:那 28 條(以及五個 phase 的 `phase-done`)**全部在同一個
+process 裡自己 `buildServer()`、自己索引、自己問**。它們與人走的**不是同一個入口**,
+而那段缺口沒有任何一層檢查會經過。
+
+擋法(顧問裁決,已落地):**整合檔至少要有一條場景走人走的入口**——真的 spawn 一個
+獨立 process、真的 port、真的 HTTP,不用 `buildServer()`。I2 已加:
+
+```gherkin
+@regression
+Scenario: A server started the way a person starts it answers with a citation
+  Given apps/api is started as a separate process with AI_KM_DEV_SEED_FIXTURE=1
+```
+
+這條今天會紅,`05-ingestion/phase-2b` 落地後綠——**它就是這個缺口自己的反向驗證**,
+也是以後每個整合點的樣板。
+
+**兩層合起來的形狀**:`phase-done` 看一個 phase,整合點看規格之間,而**跨行程場景看
+「人與系統之間」**。每往外一層,前一層的全綠就少證明一件事。 這是整合點存在的理由,不是它的失敗——一個從來不會紅的整合點,
 跟一個從來不會紅的守門一樣沒有價值(坑 2、§5.2)。
 
 **兩個附帶的形狀也記下來:**

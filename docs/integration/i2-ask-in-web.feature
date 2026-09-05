@@ -71,6 +71,19 @@ Feature: A person asks a question in the web app and gets an answer whose citati
     Then the top hit's text equals the original text sliced by its offsets
     And the top hit's score is greater than 0
 
+  # ADDED 2026-09-05 (/feature, 顧問 ai-km-1b 確認)。**這條是這個檔案裡唯一走「人走的入口」
+  # 的自動場景。** 其餘 5 條(以及五個 phase 的 phase-done、以及 28 條 @i2 場景)全部在
+  # 同一個 process 裡自己 buildServer()、自己索引、自己問——所以它們全綠的時候,
+  # 「一個人開瀏覽器問問題」仍然可能完全做不到,而且沒有任何一層會發現。
+  # 2026-09-05 就是這樣:五個 phase 綠、整合 28/28 綠,而 dev server 的檢索 store 是空的
+  # (app.ingestion 沒有路由、沒有 CLI,只有行程內接縫碰得到)。
+  # 這條今天會紅,05-ingestion/phase-2b 落地後綠——**它就是那個缺口的反向驗證**。
+  @regression
+  Scenario: A server started the way a person starts it answers with a citation
+    Given apps/api is started as a separate process with AI_KM_DEV_SEED_FIXTURE=1
+    When the demo user posts the question "文件擷取管線包含幾個階段？" to that server over HTTP
+    Then the answer carries at least one citation from document "i2-doc-eng"
+
   @regression
   Scenario: The conversation list and SSE sync from before I2 still work
     When the demo user creates a conversation and sends one message

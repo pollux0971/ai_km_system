@@ -85,7 +85,8 @@ offset +1 → 紅在「切出的原文與引用文字不同」。
 | 07-generation/phase-2 | ~~`answer()` 從 app.retrieval 拿 hits,回填引用~~ **done 2026-09-05**(`app.rag.ask()`) |
 | 03-conversation/phase-2 | ~~送訊息 → RAG 回答 → 訊息帶 citations~~ **done 2026-09-05**(契約 gate 由 ADR 0016 落地) |
 | 11-app-shell/phase-2 | ~~引用可點、開原文段落面板~~ **done 2026-09-05** |
-| 05-ingestion/phase-2 | ~~一條「把 fixture PDF 索引進 dev DB」的指令~~ **done 2026-09-05**(ADR 0015) |
+| 05-ingestion/phase-2 | ~~一條「把 fixture PDF 索引進 dev DB」的指令~~ **done 2026-09-05**(ADR 0015)。**但「指令」那半沒交** → `phase-2b` |
+| 05-ingestion/**phase-2b** | `pnpm dev` 帶 `AI_KM_DEV_SEED_FIXTURE=1`,起來時 fixture 已在索引裡。**跨行程 CLI 隨 `06-retrieval/phase-3`(sqlite-vec)落地**——今天 store 是行程內記憶體,外部行程灌不進去 |
 
 **已知限制(要進 ADR)**:`02-authorization` 未落地前,scope 由 demo 使用者的 session 固定給 `dept:eng`。
 

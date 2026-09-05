@@ -6,12 +6,12 @@ import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import {
   ANSWER_STATE_FALLBACK_CONTENT,
   ANSWER_STATE_LABELS,
-  classifyAnswerState,
   resolveAnswerStateDisplay,
   type AnswerState,
   type AnswerStateDisplay,
 } from "@/lib/answer-state";
 import { isOwnClientEvent, useConversationEvents } from "@/lib/conversation-events-context";
+import { notifyMessagesChanged } from "@/lib/conversation-message-events";
 import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
 import {
@@ -19,7 +19,6 @@ import {
   FEEDBACK_REASON_LABELS,
   listMessages,
   MAX_FEEDBACK_COMMENT_LENGTH,
-  receiveAssistantReply,
   reviseMessage,
   sendMessage,
   submitAnswerFeedback,
@@ -32,7 +31,7 @@ import {
 } from "@/lib/messages";
 import { listFeedbackKnowledgeCandidates, submitFeedbackKnowledgeCandidate } from "@/lib/feedback-knowledge-candidates";
 import { useOptionalCurrentUser } from "@/lib/session-context";
-import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
+import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { countDistinctCitations, recordUsageEvent } from "@/lib/usage-events";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
@@ -200,12 +199,19 @@ const logger = createLogger("web:message-thread");
  * S21 "Answer state rendering" attaches one of 6 SOURCE_BASELINE-defined
  * states (ANSWERED/PARTIAL/NO_EVIDENCE/ERROR/PERMISSION_DENIED/
  * SOURCE_UNAVAILABLE — see lib/answer-state.ts) to every assistant reply
- * at the moment it's generated. `attemptSend` classifies the state from
- * the just-sent question via classifyAnswerState() and threads it
- * through startStream()→runStream() to the finalize call; regenerating
- * (handleRegenerate) reuses the ORIGINAL message's own `state` rather
- * than reclassifying — the underlying question hasn't changed, so the
- * mock's classification of it shouldn't either. `runStream`'s content-
+ * at the moment it's generated. Historically (pre-11-app-shell/phase-3)
+ * `attemptSend` classified the state from the just-sent question via
+ * classifyAnswerState() and threaded it through startStream()→runStream()
+ * to the finalize call — that whole local-mock path (including
+ * `startStream` itself) is gone now that a fresh send refetches the
+ * server's own reply instead (see attemptSend's own comment, ADR 0017
+ * second step (a)); `runStream`'s classification plumbing below only
+ * still fires from handleRegenerate/handleRetryStream/handleReconnect,
+ * none of which classify from question text — they all reuse an
+ * ALREADY-settled message's own `state`.
+ * Regenerating (handleRegenerate) reuses the ORIGINAL message's own
+ * `state` rather than reclassifying — the underlying question hasn't
+ * changed, so the mock's classification of it shouldn't either. `runStream`'s content-
  * accumulation step branches on whether ANSWER_STATE_FALLBACK_CONTENT
  * has an entry for the classified state: ANSWERED and PARTIAL both keep
  * the normal chunk-by-chunk streamAssistantReply() text (PARTIAL means
@@ -293,6 +299,23 @@ const logger = createLogger("web:message-thread");
  * this file's visible processing phase — see that module's own doc
  * comment for why a second, separate status UI there would be scope
  * creep this story never asked for.
+ *
+ * **S31 REMOVED (11-app-shell/phase-3 round 2, PITFALLS 坑 9)**: everything
+ * this paragraph and the two after it describe — the `stream-disconnected`
+ * kind, `handleReconnect`, the "連線中斷"/"重新連線" UI, and `runStream`'s
+ * `simulateDisconnect` parameter — has been deleted. Its only trigger was
+ * `shouldSimulateStreamDisconnect(content)` at the `attemptSend ->
+ * startStream` call site removed in round 1 (ADR 0017); unlike S21's
+ * `state`, the disconnect decision was never persisted on a `Message`, so
+ * nothing downstream (`handleRegenerate`/`handleRetryStream`) had any way
+ * to feed it again — a dead branch, not a relocated one (confirmed via
+ * `grep -rn` across non-test `apps/web/src`: zero remaining callers of
+ * `handleReconnect`/`shouldSimulateStreamDisconnect`/
+ * `MOCK_STREAM_DISCONNECT_TRIGGER` outside this historical comment and
+ * `lib/streaming.ts`'s own still-independently-unit-tested exports). Left
+ * as historical record below rather than rewritten, matching how this
+ * file already preserves S10/S12/S21's own now-superseded design
+ * rationale elsewhere.
  *
  * S31 "Stream disconnect/reconnect UX" — the story lib/streaming.ts's
  * own doc comment already flagged as unbuilt back at S10. A NEW
@@ -460,8 +483,7 @@ type DisplayMessage =
   | { kind: "failed"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "attachment-failed"; localId: string; content: string; attachmentNames: string[] }
   | { kind: "streaming"; localId: string; content: string; phase: GenerationPhase | null }
-  | { kind: "stream-failed"; localId: string; answerState: AnswerState; reviseTarget?: Message }
-  | { kind: "stream-disconnected"; localId: string; content: string; answerState: AnswerState };
+  | { kind: "stream-failed"; localId: string; answerState: AnswerState; reviseTarget: Message };
 
 type LoadState = "loading" | "error" | "loaded";
 
@@ -564,17 +586,31 @@ export function MessageThread({
    * sending/streaming, which the re-fetch has no way to know about yet
    * (the server hasn't necessarily persisted it), so clobbering it would
    * make an in-progress send visibly vanish out from under the user.
+   *
+   * `onMerged` (11-app-shell/phase-3 round 2, E13-S011/E13-S013): an
+   * optional callback given the fresh server list, for a caller that
+   * needs to react to WHAT changed, not just re-render it — attemptSend
+   * uses it to find the assistant reply the server generated for ITS OWN
+   * turn and record analytics from it (see attemptSend's own comment).
+   * Every other caller (the cross-tab event handlers right below,
+   * `resync`) ignores it; adding it here rather than a second, parallel
+   * `listMessages` call keeps this the one place that fetches this
+   * conversation's list.
    */
-  const refetchAndMergeMessages = useCallback(() => {
-    listMessages(conversationId).then((result) => {
-      if (!mountedRef.current || !result.ok) return;
-      const fresh = result.value;
-      setDisplayMessages((previous) => {
-        const localOnly = previous.filter((entry) => entry.kind !== "sent");
-        return [...fresh.map((message): DisplayMessage => ({ kind: "sent", message })), ...localOnly];
+  const refetchAndMergeMessages = useCallback(
+    (onMerged?: (fresh: Message[]) => void) => {
+      listMessages(conversationId).then((result) => {
+        if (!mountedRef.current || !result.ok) return;
+        const fresh = result.value;
+        setDisplayMessages((previous) => {
+          const localOnly = previous.filter((entry) => entry.kind !== "sent");
+          return [...fresh.map((message): DisplayMessage => ({ kind: "sent", message })), ...localOnly];
+        });
+        onMerged?.(fresh);
       });
-    });
-  }, [conversationId]);
+    },
+    [conversationId],
+  );
 
   /**
    * `resync` (no `conversationId` to match against) always refetches —
@@ -603,6 +639,16 @@ export function MessageThread({
 
   async function attemptSend(localId: string, content: string, attachmentNames: string[]) {
     const correlationId = crypto.randomUUID();
+    // E13-S011/E13-S013 (11-app-shell/phase-3 round 2). Snapshot of every
+    // assistant message this tab already knows about, taken BEFORE this
+    // turn's own send — the server's own auto-generated reply to THIS
+    // question is whichever assistant message shows up in the refetch
+    // below that ISN'T in this set. `displayMessages` here is this
+    // render's closure value (attemptSend is invoked synchronously from
+    // handleComposerSubmit in the same render), not a stale one.
+    const knownAssistantMessageIds = new Set(
+      displayMessages.filter((entry): entry is Extract<DisplayMessage, { kind: "sent" }> => entry.kind === "sent" && entry.message.role === "assistant").map((entry) => entry.message.id),
+    );
 
     if (attachmentNames.length > 0) {
       logger.info("processing attached files", { correlationId, conversationId, attachmentCount: attachmentNames.length });
@@ -655,7 +701,50 @@ export function MessageThread({
       previous.map((entry) => (entry.kind === "pending" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
     );
 
-    startStream(classifyAnswerState(content), shouldSimulateStreamDisconnect(content));
+    // E13-S013: elapsed time from THIS question actually being sent to the
+    // server's own reply showing up in a refetch below — the closest honest
+    // equivalent, now that generation happens server-side, of the old
+    // runStream's "streamStartedAt to persisted" measurement.
+    const sendStartedAt = Date.now();
+
+    // 11-app-shell/phase-3 (ADR 0017 第二步 (a); 坑 19 第三次擋住使用者的那一
+    // 層). 03-conversation/phase-2 起,伺服器在處理這個 POST 的同一個交易裡
+    // 就自動產生了帶真引用的助理回覆(見 conversations.yaml createMessage 的
+    // TRANSITIONAL 段)——但這個 POST 的回應本身只有使用者那則訊息(201 body
+    // 是 Message,不是一對)。所以不再無條件呼叫
+    // startStream(classifyAnswerState(content), …) 本地跑固定的 MOCK_REPLY,
+    // 改成重新抓一次訊息清單把伺服器那則回覆接進來——refetchAndMergeMessages
+    // 已經是 E03-S039 用來把伺服器端變化併回這個分頁 displayMessages 的同一支
+    // 函式,這裡只是多一個觸發時機。
+    //
+    // E13-S011/E13-S013(第二輪修正). `recordUsageEvent("rag_answer_outcome",
+    // …)` 以前只活在 runStream() 裡,而 runStream() 不再是新送出這條主流程
+    // 的入口——所以主流程完全沒有記錄 RAG 結果分析,只有「重新產生」還會記
+    // (那條路仍然走 runStream)。這裡補上主流程自己的記錄點:`onMerged` 給
+    // 的是這次 refetch 拿到的完整新列表,找出其中「這個分頁送出前不認識的
+    // 助理訊息」——那就是伺服器剛剛為這一輪生成的回覆——用它自己的
+    // state/content/citations 記錄,而不是猜或補一個值。
+    //
+    // `state` 缺席(ADR 0018 D2:I2 期間伺服器本來就可能不設 state)時**省略**
+    // `answerState` 這個欄位,不是 `?? "ANSWERED"`——那正是
+    // `11-app-shell/phase-2` 已經指名的同一種缺陷(telemetry 把「不知道」
+    // 悄悄記成「已回答」)在 recordUsageEvent 這個出口的版本。契約
+    // (`analytics.yaml` 的 `UsageEventInput`)本身也只要求
+    // `name`/`occurredAt`,`answerState` 不在 required 裡,缺席是合法的。
+    refetchAndMergeMessages((fresh) => {
+      const newAssistantMessage = fresh.find((message) => message.role === "assistant" && !knownAssistantMessageIds.has(message.id));
+      if (newAssistantMessage && currentUser) {
+        recordUsageEvent("rag_answer_outcome", currentUser.userId, {
+          ...(newAssistantMessage.state !== undefined ? { answerState: newAssistantMessage.state } : {}),
+          citationCount: countDistinctCitations(newAssistantMessage.content),
+          latencyMs: Date.now() - sendStartedAt,
+        });
+      }
+    });
+    // ConversationRelatedPanel(附件／引用來源,#40)只在 conversationId 變動
+    // 時抓一次訊息,不知道這個分頁自己剛送出的新訊息——見 lib/messages.ts 的
+    // notifyMessagesChanged 文件。
+    notifyMessagesChanged(conversationId);
   }
 
   function handleComposerSubmit(content: string, attachmentNames: string[]) {
@@ -704,7 +793,7 @@ export function MessageThread({
    * DIFFERENT, post-stream failure that never went through disconnect
    * logic in the first place) keeps its exact prior behavior.
    */
-  async function runStream(localId: string, reviseTarget?: Message, answerState: AnswerState = "ANSWERED", simulateDisconnect = false) {
+  async function runStream(localId: string, reviseTarget: Message, answerState: AnswerState = "ANSWERED") {
     const correlationId = crypto.randomUUID();
     // E13-S013: elapsed time from generation actually starting to the
     // reply being durably persisted (below) — see usage-events.ts's own
@@ -735,32 +824,19 @@ export function MessageThread({
           previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: accumulated, phase: null } : entry)),
         );
       } else {
-        try {
-          for await (const chunk of streamAssistantReply(undefined, simulateDisconnect)) {
-            if (stoppedRef.current.has(localId)) break;
-            accumulated += chunk;
-            const snapshot = accumulated;
-            setDisplayMessages((previous) =>
-              previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
-            );
-          }
-        } catch {
-          // E03-S031: streamAssistantReply is the only thing that can
-          // throw inside this loop — see its own doc comment for why
-          // that makes any caught error here unambiguously "the stream
-          // disconnected," no distinguished error type needed. Partial
-          // content already accumulated is preserved (S12's "keep what
-          // was generated so far" precedent), not discarded.
-          logger.error("stream disconnected", { correlationId, conversationId, length: accumulated.length });
-          trackEvent("conversation_message_stream_disconnected", { correlationId, properties: { conversationId } });
+        // 11-app-shell/phase-3 round 2: no try/catch here any more — see
+        // the "S31 REMOVED" note above the DisplayMessage doc comment.
+        // streamAssistantReply can only throw when told to simulate a
+        // disconnect, and nothing live ever asks it to any more, so a
+        // catch block here would exist purely to handle a case that
+        // structurally cannot occur.
+        for await (const chunk of streamAssistantReply()) {
+          if (stoppedRef.current.has(localId)) break;
+          accumulated += chunk;
+          const snapshot = accumulated;
           setDisplayMessages((previous) =>
-            previous.map((entry) =>
-              entry.kind === "streaming" && entry.localId === localId
-                ? { kind: "stream-disconnected", localId, content: accumulated, answerState }
-                : entry,
-            ),
+            previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { ...entry, content: snapshot, phase: null } : entry)),
           );
-          return;
         }
       }
     }
@@ -771,9 +847,7 @@ export function MessageThread({
       logger.info("generation stopped before any content arrived", { correlationId, conversationId });
       trackEvent("conversation_message_stream_stopped", { correlationId, properties: { conversationId, hadContent: false } });
       setDisplayMessages((previous) =>
-        reviseTarget
-          ? previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { kind: "sent", message: reviseTarget } : entry))
-          : previous.filter((entry) => !(entry.kind === "streaming" && entry.localId === localId)),
+        previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { kind: "sent", message: reviseTarget } : entry)),
       );
       return;
     }
@@ -783,9 +857,7 @@ export function MessageThread({
       trackEvent("conversation_message_stream_stopped", { correlationId, properties: { conversationId, hadContent: true } });
     }
 
-    const result = reviseTarget
-      ? await reviseMessage(reviseTarget.id, accumulated, answerState)
-      : await receiveAssistantReply(conversationId, accumulated, answerState);
+    const result = await reviseMessage(reviseTarget.id, accumulated, answerState);
 
     if (!result.ok) {
       logger.error("failed to persist assistant reply", { correlationId, conversationId, code: result.error.code });
@@ -818,13 +890,7 @@ export function MessageThread({
     );
   }
 
-  function startStream(answerState: AnswerState, simulateDisconnect = false) {
-    const localId = crypto.randomUUID();
-    setDisplayMessages((previous) => [...previous, { kind: "streaming", localId, content: "", phase: null }]);
-    void runStream(localId, undefined, answerState, simulateDisconnect);
-  }
-
-  function handleRetryStream(localId: string, answerState: AnswerState, reviseTarget?: Message) {
+  function handleRetryStream(localId: string, answerState: AnswerState, reviseTarget: Message) {
     setDisplayMessages((previous) =>
       previous.map((entry) =>
         entry.kind === "stream-failed" && entry.localId === localId ? { kind: "streaming", localId, content: "", phase: null } : entry,
@@ -833,29 +899,8 @@ export function MessageThread({
     void runStream(localId, reviseTarget, answerState);
   }
 
-  /**
-   * E03-S031. Reconnecting restarts the stream from scratch — no real
-   * transport exists to resume mid-stream from a partial position (see
-   * lib/streaming.ts's own doc comment), and inventing a fake resume
-   * capability would misrepresent what a real implementation could
-   * honestly promise. Reuses the SAME answerState the original attempt
-   * was streaming under (passed straight through, not reclassified) so
-   * a reconnect finalizes consistently with what was originally
-   * requested. Deterministic like every other mock trigger in this
-   * codebase (S21/S29/S30) — reconnecting with the same underlying
-   * trigger still present disconnects again, which is correct, not a
-   * bug; `simulateDisconnect: true` is passed unconditionally because
-   * reaching `stream-disconnected` at all is only possible when it was
-   * already true.
-   */
-  function handleReconnect(localId: string, answerState: AnswerState) {
-    setDisplayMessages((previous) =>
-      previous.map((entry) =>
-        entry.kind === "stream-disconnected" && entry.localId === localId ? { kind: "streaming", localId, content: "", phase: null } : entry,
-      ),
-    );
-    void runStream(localId, undefined, answerState, true);
-  }
+  // handleReconnect (E03-S031) removed — see the "S31 REMOVED" note above
+  // the DisplayMessage type doc comment.
 
   function handleStop(localId: string) {
     stoppedRef.current.add(localId);
@@ -1161,12 +1206,10 @@ export function MessageThread({
             }
 
             const key = entry.kind === "sent" ? entry.message.id : entry.localId;
-            const role =
-              entry.kind === "sent" ? entry.message.role : entry.kind === "streaming" || entry.kind === "stream-disconnected" ? "assistant" : "user";
+            const role = entry.kind === "sent" ? entry.message.role : entry.kind === "streaming" ? "assistant" : "user";
             const roleLabel = role === "assistant" ? "AI" : "你";
             const content = entry.kind === "sent" ? entry.message.content : entry.content;
-            const attachmentNames =
-              entry.kind === "sent" ? entry.message.attachmentNames : entry.kind === "streaming" || entry.kind === "stream-disconnected" ? [] : entry.attachmentNames;
+            const attachmentNames = entry.kind === "sent" ? entry.message.attachmentNames : entry.kind === "streaming" ? [] : entry.attachmentNames;
             const revisions = entry.kind === "sent" ? (entry.message.revisions ?? []) : [];
             // ADR 0018 Decision 2 條件 2:一則 03-conversation/phase-2 自動產生、
             // 沒有 state 欄位的助理訊息,不得被這裡的顯示層猜成 "ANSWERED"——
@@ -1330,14 +1373,6 @@ export function MessageThread({
                     <span role="status">{entry.phase ? GENERATION_PHASE_LABELS[entry.phase] : "AI 回覆中…"}</span>
                     <button type="button" onClick={() => handleStop(entry.localId)}>
                       停止生成
-                    </button>
-                  </span>
-                )}
-                {entry.kind === "stream-disconnected" && (
-                  <span>
-                    <span role="alert">連線中斷</span>
-                    <button type="button" onClick={() => handleReconnect(entry.localId, entry.answerState)}>
-                      重新連線
                     </button>
                   </span>
                 )}

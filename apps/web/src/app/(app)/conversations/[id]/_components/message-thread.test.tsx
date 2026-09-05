@@ -228,8 +228,16 @@ describe("MessageThread (E03-S009)", () => {
     expect(await screen.findByText("保固期限是多久？")).toBeInTheDocument();
   });
 
-  it("optimistically shows a message as pending immediately on submit, then reconciles to sent", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+  it("optimistically shows a message as pending immediately on submit, then reconciles to sent once the refreshed list confirms it", async () => {
+    // 11-app-shell/phase-3: a successful send no longer just reconciles
+    // the optimistic entry in place — attemptSend also calls
+    // refetchAndMergeMessages(), which REPLACES every "sent" entry with
+    // whatever listMessages() returns on its NEXT call. A single static
+    // mockResolvedValue (the pre-phase-3 shape of this test) would make
+    // that refetch clobber "你好" right back out of the DOM with the
+    // stale (still-empty) list — this double must itself reflect the
+    // send having happened, same as a real server would.
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] });
     let resolveSend!: (value: Awaited<ReturnType<typeof sendMessage>>) => void;
     mockedSendMessage.mockReturnValue(new Promise((resolve) => (resolveSend = resolve)));
 
@@ -241,17 +249,16 @@ describe("MessageThread (E03-S009)", () => {
     expect(screen.getByText("你好")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("傳送中…");
 
-    resolveSend({
-      ok: true,
-      value: {
-        id: "m1",
-        conversationId: "c1",
-        role: "user",
-        content: "你好",
-        attachmentNames: [],
-        createdAt: "2026-08-14T00:00:00.000Z",
-      },
-    });
+    const sentMessage = {
+      id: "m1",
+      conversationId: "c1",
+      role: "user" as const,
+      content: "你好",
+      attachmentNames: [],
+      createdAt: "2026-08-14T00:00:00.000Z",
+    };
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [sentMessage] });
+    resolveSend({ ok: true, value: sentMessage });
 
     await waitFor(() => expect(screen.queryByText("傳送中…")).not.toBeInTheDocument());
     expect(screen.getByText("你好")).toBeInTheDocument();
@@ -330,20 +337,47 @@ const SENT_USER_MESSAGE = {
 };
 
 describe("MessageThread streaming assistant reply (E03-S010)", () => {
-  it("automatically starts streaming an assistant reply once the user's message finishes sending", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-
-    await waitFor(() => expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(1));
-  });
-
-  it("shows the reply's content growing as chunks arrive, before the stream completes", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+  // 11-app-shell/phase-3 (ADR 0017 第二步:「apps/web 切到 server 生成,
+  // 移除瀏覽器端生成(E03-S010)」——這是這份 ADR 指名要移除的那個故事本身,
+  // 不是它剛好用到的某個 mock)。刪掉三條、改寫兩條,理由分開寫清楚:
+  //
+  // 刪掉(送出這個動作本身觸發本地生成,ADR 0017 指名移除,且不留缺口):
+  // - "automatically starts streaming an assistant reply once the user's
+  //   message finishes sending" —— 就是 ADR 0017 第二步字面上要移除的
+  //   行為(送出後自動在瀏覽器端開始生成),沒有替代場景,因為送出動作本身
+  //   已經不再觸發任何本地生成。
+  // - "shows a distinct failed state with a retry action when persisting
+  //   the reply fails" —— 與下面 E03-S032「retrying a stream-failed
+  //   regenerate revises the same original message again」(既有、綠燈)
+  //   實質重複:兩者都驗證「持久化失敗 → 顯示 AI 回覆失敗 + 重新產生回覆
+  //   按鈕」,只是一個透過送出觸發、一個透過重新產生觸發,而送出已經不會
+  //   觸發任何本地串流。
+  // - "retrying a failed stream re-attempts streamAssistantReply and can
+  //   succeed" —— 同一條 E03-S032 測試的後半段(失敗後重試、第二次成功)
+  //   已經覆蓋這個決定性行為(重新呼叫 streamAssistantReply、可以成功),
+  //   同樣的重複理由。
+  //
+  // 改寫(機制本身還活著——runStream/streamAssistantReply/
+  // receiveAssistantReply 這些底層函式沒有消失,只是換了觸發的入口,從
+  // handleRegenerate 進入,commit message 自己也這樣講:「continue 服務
+  // handleRegenerate/handleRetryStream/handleReconnect 三條既有路徑」):
+  // 下面兩條改成透過「重新產生」觸發同一段 runStream,斷言內容(逐字累積
+  // 的內容、最終持久化的完整字串)一個字不改,只換了進入串流狀態的動作。
+  it("shows the reply's content growing as chunks arrive, before a regeneration completes", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
 
     let releaseGate!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -355,7 +389,7 @@ describe("MessageThread streaming assistant reply (E03-S010)", () => {
       await gate;
       yield "段";
     });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedReviseMessage.mockResolvedValue({
       ok: true,
       value: {
         id: "a1",
@@ -364,12 +398,13 @@ describe("MessageThread streaming assistant reply (E03-S010)", () => {
         content: "第一段",
         attachmentNames: [],
         createdAt: "2026-08-14T00:00:01.000Z",
+        revisions: ["舊的回覆"],
       },
     });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
     await waitFor(() => expect(screen.getByText("第一")).toBeInTheDocument());
     expect(screen.getByRole("status", { name: "" })).toHaveTextContent("AI 回覆中…");
@@ -379,22 +414,35 @@ describe("MessageThread streaming assistant reply (E03-S010)", () => {
     // Once the gate releases, the generator yields its last chunk and
     // completes — the locally-accumulated text ("第一段") is what gets
     // persisted, proven directly (not just via what's re-displayed,
-    // which depends on the mocked receiveAssistantReply's return value,
-    // not on this component's own accumulation). 3rd arg "ANSWERED"
-    // (E03-S021): "你好" contains no state trigger phrase.
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一段", "ANSWERED"));
+    // which depends on the mocked reviseMessage's return value, not on
+    // this component's own accumulation). 3rd arg "ANSWERED"
+    // (E03-S021): "a1" has no explicit `state`, so handleRegenerate's
+    // `originalMessage.state ?? "ANSWERED"` fallback applies.
+    await waitFor(() => expect(mockedReviseMessage).toHaveBeenCalledWith("a1", "第一段", "ANSWERED"));
     await waitFor(() => expect(screen.queryByText("AI 回覆中…")).not.toBeInTheDocument());
   });
 
-  it("reconciles a completed stream to a sent assistant message and persists the full accumulated content", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+  it("reconciles a completed regeneration to a sent assistant message and persists the full accumulated content", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
     mockedStreamAssistantReply.mockImplementation(async function* () {
       yield "第";
       yield "一";
       yield "段";
     });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedReviseMessage.mockResolvedValue({
       ok: true,
       value: {
         id: "a1",
@@ -403,67 +451,18 @@ describe("MessageThread streaming assistant reply (E03-S010)", () => {
         content: "第一段",
         attachmentNames: [],
         createdAt: "2026-08-14T00:00:01.000Z",
+        revisions: ["舊的回覆"],
       },
     });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
     await waitFor(() => expect(screen.queryByText("AI 回覆中…")).not.toBeInTheDocument());
     expect(screen.getByText("第一段")).toBeInTheDocument();
-    // 3rd arg "ANSWERED" (E03-S021): "你好" contains no state trigger.
-    expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一段", "ANSWERED");
-  });
-
-  it("shows a distinct failed state with a retry action when persisting the reply fails", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      yield "第一段";
-    });
-    mockedReceiveAssistantReply.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-
-    expect(await screen.findByText("AI 回覆失敗")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重新產生回覆" })).toBeInTheDocument();
-  });
-
-  it("retrying a failed stream re-attempts streamAssistantReply and can succeed", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedStreamAssistantReply.mockImplementationOnce(async function* () {
-      yield "第一段";
-    });
-    mockedReceiveAssistantReply.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-    await screen.findByText("AI 回覆失敗");
-
-    mockedStreamAssistantReply.mockImplementationOnce(async function* () {
-      yield "重試後的回覆";
-    });
-    mockedReceiveAssistantReply.mockResolvedValueOnce({
-      ok: true,
-      value: {
-        id: "a1",
-        conversationId: "c1",
-        role: "assistant",
-        content: "重試後的回覆",
-        attachmentNames: [],
-        createdAt: "2026-08-14T00:00:01.000Z",
-      },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "重新產生回覆" }));
-
-    await waitFor(() => expect(screen.queryByText("AI 回覆失敗")).not.toBeInTheDocument());
-    expect(screen.getByText("重試後的回覆")).toBeInTheDocument();
-    expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(2);
+    // 3rd arg "ANSWERED" (E03-S021): "a1" has no explicit `state`.
+    expect(mockedReviseMessage).toHaveBeenCalledWith("a1", "第一段", "ANSWERED");
   });
 
   it("labels the user's own message and the assistant's reply distinctly", async () => {
@@ -490,10 +489,25 @@ describe("MessageThread streaming assistant reply (E03-S010)", () => {
   });
 });
 
+// 11-app-shell/phase-3 (B 類:改寫,不刪,理由與 E03-S013 相同). phase 顯示
+// 是 runStream 開頭那段 `for await (const phase of runGenerationPhases())`
+// 的渲染,不管進入這段的動作是送出還是重新產生——送出已經不再觸發它(見
+// E03-S010 describe 開頭的說明),下面三條全部改用「重新產生」進入同一段
+// runStream,持久化呼叫也對應換成 `reviseMessage`(regenerate 的既有finalize
+// 路徑,E03-S020 已確立),斷言內容(phase 出現的順序、AI 回覆中…取代生成中…
+// 的時機、重試後 phase 序列重跑)一個字不改。
+const EXISTING_ASSISTANT_REPLY_FOR_REGENERATE = {
+  id: "a1",
+  conversationId: "c1",
+  role: "assistant" as const,
+  content: "舊的回覆",
+  attachmentNames: [],
+  createdAt: "2026-08-14T00:00:01.000Z",
+};
+
 describe("MessageThread generation status phases (E03-S011)", () => {
   it("shows each phase label in order (searching, then reading, then generating) before any reply text exists", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, EXISTING_ASSISTANT_REPLY_FOR_REGENERATE] });
 
     let releaseSearching!: () => void;
     let releaseReading!: () => void;
@@ -514,16 +528,16 @@ describe("MessageThread generation status phases (E03-S011)", () => {
     // the three phases in order, not what happens after. Without this,
     // once the phase generator exhausts, runStream immediately falls
     // through to the default (instantly-resolving) beforeEach mocks for
-    // streamAssistantReply/receiveAssistantReply, and the whole flow
-    // races to "sent" before waitFor can reliably catch the brief
-    // "generating" window.
+    // streamAssistantReply/reviseMessage, and the whole flow races to
+    // "sent" before waitFor can reliably catch the brief "generating"
+    // window.
     mockedStreamAssistantReply.mockImplementation(async function* () {
       await new Promise<void>(() => {});
     });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("搜尋中…"));
 
@@ -535,8 +549,7 @@ describe("MessageThread generation status phases (E03-S011)", () => {
   });
 
   it("falls back to the generic streaming status once the phase sequence completes and real text starts arriving", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, EXISTING_ASSISTANT_REPLY_FOR_REGENERATE] });
     mockedRunGenerationPhases.mockImplementation(async function* () {
       yield "searching";
       yield "reading";
@@ -546,15 +559,15 @@ describe("MessageThread generation status phases (E03-S011)", () => {
       yield "回覆內容";
     });
     // Left permanently pending — this test checks the "actively
-    // streaming text" state specifically. receiveAssistantReply's
-    // default (beforeEach) mock resolves near-instantly with unrelated
-    // content, which would otherwise race the reconciliation-to-"sent"
-    // transition against the synchronous assertions below.
-    mockedReceiveAssistantReply.mockImplementation(() => new Promise(() => {}));
+    // streaming text" state specifically. reviseMessage's default
+    // (beforeEach) mock resolves near-instantly with unrelated content,
+    // which would otherwise race the reconciliation-to-"sent" transition
+    // against the synchronous assertions below.
+    mockedReviseMessage.mockImplementation(() => new Promise(() => {}));
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
     await waitFor(() => expect(screen.getByText("回覆內容")).toBeInTheDocument());
     expect(screen.getByRole("status")).toHaveTextContent("AI 回覆中…");
@@ -562,17 +575,16 @@ describe("MessageThread generation status phases (E03-S011)", () => {
   });
 
   it("runs the phase sequence again on retry after a stream failure", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
+    mockedListMessages.mockResolvedValue({ ok: true, value: [SENT_USER_MESSAGE, EXISTING_ASSISTANT_REPLY_FOR_REGENERATE] });
+    mockedReviseMessage.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
     await screen.findByText("AI 回覆失敗");
 
     expect(mockedRunGenerationPhases).toHaveBeenCalledTimes(1);
-    mockedReceiveAssistantReply.mockResolvedValueOnce({ ok: true, value: DEFAULT_ASSISTANT_MESSAGE });
+    mockedReviseMessage.mockResolvedValueOnce({ ok: true, value: { ...EXISTING_ASSISTANT_REPLY_FOR_REGENERATE, revisions: ["舊的回覆"] } });
     fireEvent.click(screen.getByRole("button", { name: "重新產生回覆" }));
 
     await waitFor(() => expect(mockedRunGenerationPhases).toHaveBeenCalledTimes(2));
@@ -580,100 +592,24 @@ describe("MessageThread generation status phases (E03-S011)", () => {
 });
 
 describe("MessageThread stop generation (E03-S012)", () => {
-  it("shows a stop button while a phase is showing", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedRunGenerationPhases.mockImplementation(async function* () {
-      yield "searching";
-      await new Promise<void>(() => {});
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "停止生成" })).toBeInTheDocument());
-  });
-
-  it("stopping during the phase sequence (before any real content arrives) removes the entry and does not persist anything", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    // Gated (not eternally pending) — the loop only notices the stop
-    // request once its currently in-flight `.next()` resolves, same as
-    // the real generator (which is always waiting on a short timer, not
-    // stuck forever). An eternally-pending mock would make the loop
-    // unable to ever check the flag at all, which doesn't reflect how
-    // stopping actually behaves in production.
-    let releaseGate!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      releaseGate = resolve;
-    });
-    mockedRunGenerationPhases.mockImplementation(async function* () {
-      yield "searching";
-      await gate;
-      yield "reading";
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-    await screen.findByText("搜尋中…");
-
-    fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
-    releaseGate();
-
-    await waitFor(() => expect(screen.queryByText("搜尋中…")).not.toBeInTheDocument());
-    expect(screen.queryByText("讀取中…")).not.toBeInTheDocument();
-    expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
-    expect(mockedTrackEvent).toHaveBeenCalledWith(
-      "conversation_message_stream_stopped",
-      expect.objectContaining({ properties: expect.objectContaining({ hadContent: false }) }),
-    );
-  });
-
-  it("stopping after some content has streamed in persists exactly that partial content and reconciles to sent", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    let releaseGate!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      releaseGate = resolve;
-    });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      yield "第";
-      yield "一";
-      await gate;
-      yield "段";
-    });
-    mockedReceiveAssistantReply.mockResolvedValue({
-      ok: true,
-      value: {
-        id: "a1",
-        conversationId: "c1",
-        role: "assistant",
-        content: "第一",
-        attachmentNames: [],
-        createdAt: "2026-08-14T00:00:01.000Z",
-      },
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-    await waitFor(() => expect(screen.getByText("第一")).toBeInTheDocument());
-
-    fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
-    releaseGate();
-
-    // 3rd arg "ANSWERED" (E03-S021): "你好" contains no state trigger.
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一", "ANSWERED"));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument());
-    expect(screen.getByText("第一")).toBeInTheDocument();
-    expect(mockedTrackEvent).toHaveBeenCalledWith(
-      "conversation_message_stream_stopped",
-      expect.objectContaining({ properties: expect.objectContaining({ hadContent: true }) }),
-    );
-  });
-
+  // 11-app-shell/phase-3. 刪掉三條(不是改寫)——與 E03-S010/S031 不同,這三條
+  // 測的不是「送出這個動作本身觸發了什麼」,而是 runStream 裡一個特定的分支:
+  // 沒有 reviseTarget 的串流項目(`stoppedRef` 觸發時 `reviseTarget` 為
+  // undefined → 整條移除;有內容則走 receiveAssistantReply 持久化)。
+  //
+  // 這個分支現在**沒有任何活的入口**可以進去,不是「換個入口就能重現」:
+  // - handleRegenerate 呼叫 runStream 永遠帶 `originalMessage` 當
+  //   reviseTarget(message-thread.tsx 約 883 行),不可能是 undefined。
+  // - handleRetryStream/handleReconnect 的 reviseTarget 來自它們重試的那個
+  //   「stream-failed」/「stream-disconnected」項目自己的 `reviseTarget`
+  //   欄位——而那個欄位只可能來自當初建立這個串流項目的呼叫,也就是只可能
+  //   來自 handleRegenerate(永遠有 reviseTarget)或已移除的送出路徑(不再
+  //   存在)。
+  // 換句話說,「一個沒有 reviseTarget 的串流項目」這個前提本身,在移除
+  // attemptSend 的本地生成之後就不可能再發生——不是這三條測試用錯了觸發
+  // 動作,是它們測的那個分支已經是死碼。與 E03-S031(見下)是同一種死碼
+  // 判準,但發現路徑不同:S031 是「唯一能設定該旗標的呼叫點消失」,這裡
+  // 是「唯一能傳入 undefined reviseTarget 的呼叫路徑消失」。
   it("does not show a stop button once a message has settled (sent, failed, or stream-failed)", async () => {
     mockedListMessages.mockResolvedValue({
       ok: true,
@@ -698,13 +634,29 @@ describe("MessageThread stop generation (E03-S012)", () => {
 });
 
 describe("MessageThread citation badges (E03-S013)", () => {
-  it("renders a citation badge once a streamed assistant reply containing a [N] marker settles", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+  // 11-app-shell/phase-3: 改寫,不刪——badge 是 message-content.tsx 對
+  // 「已結算內容含 [N] 記號」這件事的渲染,與內容怎麼結算出來(送出後的本地
+  // 串流,或重新產生)無關。送出已經不再觸發本地串流,改用「重新產生」進入
+  // 同一段 runStream,斷言(badge 文字、role)一個字不改。
+  it("renders a citation badge once a regenerated reply containing a [N] marker settles", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+        },
+      ],
+    });
     mockedStreamAssistantReply.mockImplementation(async function* () {
       yield "本季成長 12%[1]";
     });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedReviseMessage.mockResolvedValue({
       ok: true,
       value: {
         id: "a1",
@@ -713,12 +665,13 @@ describe("MessageThread citation badges (E03-S013)", () => {
         content: "本季成長 12%[1]",
         attachmentNames: [],
         createdAt: "2026-08-14T00:00:01.000Z",
+        revisions: ["舊的回覆"],
       },
     });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
     await waitFor(() => expect(screen.queryByText("AI 回覆中…")).not.toBeInTheDocument());
     expect(screen.getByText("本季成長 12%")).toBeInTheDocument();
@@ -830,22 +783,12 @@ describe("MessageThread multi-turn conversation (E03-S017)", () => {
     expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
   });
 
-  it("disables the composer's submit button while an assistant reply is streaming", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      await new Promise<void>(() => {});
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("第一輪");
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "停止生成" })).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("訊息"), { target: { value: "下一句" } });
-    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
-  });
-
+  // 11-app-shell/phase-3. 刪掉(不是改寫)——這條測的是「送出觸發的本地串流
+  // 期間composer 被鎖住」,但送出已經不再觸發任何本地串流(見 E03-S010 describe
+  // 開頭的說明)。「composer 在任何串流期間都鎖住」這個決定性行為並未消失,
+  // 只是唯一還能進入串流狀態的動作變成了「重新產生」——而那正是既有、綠燈的
+  // E03-S019「locks the composer while a regeneration is in flight, same as
+  // any other turn」已經在驗的事,不需要重複一份。
   it("re-enables the composer's submit once the turn fully settles", async () => {
     mockedListMessages.mockResolvedValue({ ok: true, value: [] });
     mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
@@ -862,40 +805,35 @@ describe("MessageThread multi-turn conversation (E03-S017)", () => {
     expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
   });
 
+  /**
+   * 11-app-shell/phase-3 (顧問裁決,B 類:改寫,不刪). 決定性的量沒有變
+   * (四則訊息的順序與角色),變的是資料怎麼進來:改之前靠
+   * `streamAssistantReply` 在瀏覽器端逐字產生第二則訊息,改之後每次送出
+   * 都由 `refetchAndMergeMessages()` 重抓一次,而伺服器在同一個交易裡
+   * 就把使用者訊息與助理回覆一起產生好(見 message-thread.tsx attemptSend
+   * 的文件)——所以這裡的替身讓 `listMessages()` 每次送出後多回傳一輪
+   * 「使用者訊息+助理回覆」,而不是靠 `streamAssistantReply` 逐字組出來。
+   */
   it("sending a second full turn after the first settles shows all four messages in order", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage
-      .mockResolvedValueOnce({
-        ok: true,
-        value: { id: "u1", conversationId: "c1", role: "user", content: "第一輪", attachmentNames: [], createdAt: "2026-08-14T00:00:00.000Z" },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        value: { id: "u2", conversationId: "c1", role: "user", content: "第二輪", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
-      });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      yield "回覆";
-    });
-    mockedReceiveAssistantReply
-      .mockResolvedValueOnce({
-        ok: true,
-        value: { id: "a1", conversationId: "c1", role: "assistant", content: "回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        value: { id: "a2", conversationId: "c1", role: "assistant", content: "回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" },
-      });
+    const TURN1_USER = { id: "u1", conversationId: "c1", role: "user" as const, content: "第一輪", attachmentNames: [], createdAt: "2026-08-14T00:00:00.000Z" };
+    const TURN1_ASSISTANT = { id: "a1", conversationId: "c1", role: "assistant" as const, content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" };
+    const TURN2_USER = { id: "u2", conversationId: "c1", role: "user" as const, content: "第二輪", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" };
+    const TURN2_ASSISTANT = { id: "a2", conversationId: "c1", role: "assistant" as const, content: "第二輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" };
+
+    mockedListMessages
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({ ok: true, value: [TURN1_USER, TURN1_ASSISTANT] })
+      .mockResolvedValueOnce({ ok: true, value: [TURN1_USER, TURN1_ASSISTANT, TURN2_USER, TURN2_ASSISTANT] });
+    mockedSendMessage.mockResolvedValueOnce({ ok: true, value: TURN1_USER }).mockResolvedValueOnce({ ok: true, value: TURN2_USER });
 
     render(<MessageThread conversationId="c1" />);
     await screen.findByText("尚無訊息，開始對話吧。");
 
     submitViaComposer("第一輪");
-    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(2));
 
     submitViaComposer("第二輪");
-    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
-    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(4));
 
     const items = screen.getAllByRole("listitem");
     expect(items[0]).toHaveTextContent("第一輪");
@@ -903,76 +841,14 @@ describe("MessageThread multi-turn conversation (E03-S017)", () => {
     expect(items[2]).toHaveTextContent("第二輪");
     expect(items[3]).toHaveTextContent("AI");
     expect(mockedSendMessage).toHaveBeenCalledTimes(2);
-    expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(2);
   });
 
-  it("a second turn's stop control only affects its own turn, leaving the first turn's already-settled reply untouched", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage
-      .mockResolvedValueOnce({
-        ok: true,
-        value: { id: "u1", conversationId: "c1", role: "user", content: "第一輪", attachmentNames: [], createdAt: "2026-08-14T00:00:00.000Z" },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        value: { id: "u2", conversationId: "c1", role: "user", content: "第二輪", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
-      });
-    // Gated (not eternally pending) — the loop only notices the stop
-    // request once its currently in-flight `.next()` resolves, same as
-    // established in the E03-S012 tests this mirrors. An eternally-
-    // pending mock would make the loop unable to ever check the flag at
-    // all, since the generator itself would never regain control to
-    // yield/return past the pending await.
-    let releaseTurn2Gate!: () => void;
-    const turn2Gate = new Promise<void>((resolve) => {
-      releaseTurn2Gate = resolve;
-    });
-    mockedStreamAssistantReply
-      .mockImplementationOnce(async function* () {
-        yield "第一輪回覆";
-      })
-      .mockImplementationOnce(async function* () {
-        yield "第二輪";
-        await turn2Gate;
-        yield "不應該被看到的內容";
-      });
-    mockedReceiveAssistantReply.mockResolvedValueOnce({
-      ok: true,
-      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一輪回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-
-    submitViaComposer("第一輪");
-    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
-
-    submitViaComposer("第二輪");
-    // Waits for "AI 回覆中…" rather than matching "第二輪" text directly,
-    // since the latter would ambiguously match both turn 2's own user
-    // message and the assistant's accumulating content. This is NOT
-    // relying on "AI 回覆中…" being gated on content arrival — `phase`
-    // starts `null` here too (the default empty runGenerationPhases
-    // mock from beforeEach), so the text is already showing from entry
-    // creation. It's reliable because this mock's first yield ("第二輪")
-    // has no `await` before it, so it resolves on the same microtask
-    // tick as the streaming entry's own creation — by the time this
-    // assertion's polling observes the DOM, both updates have already
-    // flushed, so accumulated content is genuinely "第二輪" by this point.
-    await waitFor(() => expect(screen.getByText("AI 回覆中…")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
-    releaseTurn2Gate();
-
-    await waitFor(() => expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument());
-    expect(screen.queryByText("不應該被看到的內容")).not.toBeInTheDocument();
-    // Turn 1's own reply stays visible and unaffected — turn 2's stop
-    // persists only ITS OWN accumulated content ("第二輪") as the second
-    // receiveAssistantReply call, not turn 1's already-settled content.
-    expect(screen.getByText("第一輪回覆")).toBeInTheDocument();
-    // 3rd arg "ANSWERED" (E03-S021): neither "第一輪" nor "第二輪"
-    // contains a state trigger phrase.
-    expect(mockedReceiveAssistantReply).toHaveBeenNthCalledWith(2, "c1", "第二輪", "ANSWERED");
-  });
+  // 11-app-shell/phase-3. 刪掉(不是改寫)——這條測的場景是「兩個各自獨立、
+  // 都在本地串流的回合,各自的停止按鈕互不影響」。在新架構下,送出永遠不會
+  // 進入「streaming」狀態(見 E03-S010 開頭說明),而唯一還能進入的入口
+  // (重新產生)只可能對「最後一則已結算的助理回覆」動作(E03-S019「only the
+  // last entry gets it」),所以「兩個同時獨立串流的回合」這個前提本身不可能
+  // 再發生——不是換個觸發動作就能重現,是這個情境已經不存在。
 });
 
 describe("MessageThread conversation context indicator (E03-S018)", () => {
@@ -1034,32 +910,61 @@ describe("MessageThread conversation context indicator (E03-S018)", () => {
     expect(screen.getByText("上下文：目前尚無先前訊息。")).toBeInTheDocument();
   });
 
-  it("counts the user's own message once it settles, even while the assistant's reply is still streaming", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedRunGenerationPhases.mockImplementation(async function* () {
-      yield "searching";
-      await new Promise<void>(() => {});
+  /**
+   * 11-app-shell/phase-3 (B 類:改寫,不刪). 原本的情境「使用者訊息已結算,
+   * 助理回覆仍在本地串流」不再存在——送出不再觸發本地串流(見 E03-S010
+   * describe 開頭的說明)。決定性的性質沒有變:使用者剛送出、已經樂觀顯示
+   * 的訊息要立刻算進上下文,不必等到伺服器那則助理回覆也一起回來;變的只是
+   * 「助理回覆還沒回來」這個窗口現在是什麼——不是本地串流的 phase,是
+   * `refetchAndMergeMessages()` 的 `listMessages()` 呼叫還沒 resolve 的
+   * 那段時間。手動控制第二次(refetch 那次)`listMessages()` 呼叫何時
+   * resolve,藉此觀察「還沒收到助理回覆前」與「收到後」兩個時間點的則數。
+   */
+  it("counts the user's own message once it settles, even before the refetch bringing the assistant's reply resolves", async () => {
+    let releaseRefetch!: () => void;
+    const refetchGate = new Promise<void>((resolve) => {
+      releaseRefetch = resolve;
     });
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          void refetchGate.then(() =>
+            resolve({
+              ok: true,
+              value: [
+                SENT_USER_MESSAGE,
+                { id: "a1", conversationId: "c1", role: "assistant", content: "回覆內容", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+              ],
+            }),
+          );
+        }),
+    );
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
 
     render(<MessageThread conversationId="c1" />);
     await screen.findByText("尚無訊息，開始對話吧。");
     submitViaComposer("第一輪");
 
-    // attemptSend reconciles the user's own message from pending to
-    // sent BEFORE calling startStream() — so by the time any phase is
-    // visible, the count is already 1 (the user's message), not 0 or 2
-    // (the assistant's reply is still in flight, correctly excluded).
-    await waitFor(() => expect(screen.getByText("搜尋中…")).toBeInTheDocument());
-    expect(screen.getByText("上下文：包含 1 則先前訊息。")).toBeInTheDocument();
+    // 使用者訊息已經樂觀顯示、已經送出成功,但 refetch 尚未 resolve——只算
+    // 進使用者自己那一則,不是 0(還沒算)也不是 2(還沒真的有助理回覆)。
+    await waitFor(() => expect(screen.getByText("上下文：包含 1 則先前訊息。")).toBeInTheDocument());
+
+    releaseRefetch();
+    await waitFor(() => expect(screen.getByText("上下文：包含 2 則先前訊息。")).toBeInTheDocument());
   });
 
+  // 11-app-shell/phase-3 (B 類:改寫,不刪,理由與上一條相同). 伺服器在同一個
+  // 交易裡就把使用者訊息與助理回覆一起產生好,所以這裡讓 refetch 一次回傳
+  // 兩則,而不是靠 streamAssistantReply 在瀏覽器端逐字組出助理回覆。
   it("updates the count to 2 once a full turn (user + assistant) settles", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      yield "回覆內容";
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "回覆內容", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
 
     render(<MessageThread conversationId="c1" />);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -1069,19 +974,16 @@ describe("MessageThread conversation context indicator (E03-S018)", () => {
   });
 
   it("updates the count to 4 after a second full turn settles", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage
-      .mockResolvedValueOnce({
-        ok: true,
-        value: { id: "u1", conversationId: "c1", role: "user", content: "第一輪", attachmentNames: [], createdAt: "2026-08-14T00:00:00.000Z" },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        value: { id: "u2", conversationId: "c1", role: "user", content: "第二輪", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" },
-      });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      yield "回覆";
-    });
+    const TURN1_USER = { id: "u1", conversationId: "c1", role: "user" as const, content: "第一輪", attachmentNames: [], createdAt: "2026-08-14T00:00:00.000Z" };
+    const TURN1_ASSISTANT = { id: "a1", conversationId: "c1", role: "assistant" as const, content: "回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" };
+    const TURN2_USER = { id: "u2", conversationId: "c1", role: "user" as const, content: "第二輪", attachmentNames: [], createdAt: "2026-08-14T00:00:02.000Z" };
+    const TURN2_ASSISTANT = { id: "a2", conversationId: "c1", role: "assistant" as const, content: "回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:03.000Z" };
+
+    mockedListMessages
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockResolvedValueOnce({ ok: true, value: [TURN1_USER, TURN1_ASSISTANT] })
+      .mockResolvedValueOnce({ ok: true, value: [TURN1_USER, TURN1_ASSISTANT, TURN2_USER, TURN2_ASSISTANT] });
+    mockedSendMessage.mockResolvedValueOnce({ ok: true, value: TURN1_USER }).mockResolvedValueOnce({ ok: true, value: TURN2_USER });
 
     render(<MessageThread conversationId="c1" />);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -1451,34 +1353,14 @@ describe("MessageThread answer state rendering (E03-S021)", () => {
     }
   });
 
-  it("classifies a sent message from its trigger phrase and persists that state via receiveAssistantReply", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    const trigger = MOCK_ANSWER_STATE_TRIGGERS.NO_EVIDENCE;
-    expect(trigger).toBeDefined();
-    if (!trigger) return;
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-
-    submitViaComposer(`保固期限是多久？ ${trigger}`);
-
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalled());
-    expect(mockedReceiveAssistantReply.mock.calls[0]?.[2]).toBe("NO_EVIDENCE");
-  });
-
-  it("classifies a sent message with no trigger phrase as ANSWERED", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-
-    submitViaComposer("保固期限是多久？");
-
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalled());
-    expect(mockedReceiveAssistantReply.mock.calls[0]?.[2]).toBe("ANSWERED");
-  });
+  // 11-app-shell/phase-3 (ADR 0017 第二步). 刪掉這兩條(不是改寫)——它們測
+  // 的正是 ADR 0017 指名移除的行為本身:「送出這個動作,從問題文字現場
+  // classify 出一個 state」。這條分類路徑(`classifyAnswerState(content)`)
+  // 已經整個從 attemptSend 拿掉,沒有替代場景,因為「從送出的文字分類」這件
+  // 事本身不再發生——下面的 "regenerating reuses the original message's own
+  // state instead of reclassifying" 才是這條故事線今天唯一還成立的部分:
+  // 重新產生「不」分類,直接沿用已結算訊息自己的 state,而這條測試已經是
+  // 綠燈,不需要改。
 
   it("regenerating reuses the original message's own state instead of reclassifying", async () => {
     mockedListMessages.mockResolvedValue({
@@ -1509,12 +1391,32 @@ describe("MessageThread answer state rendering (E03-S021)", () => {
     expect(mockedReviseMessage.mock.calls[0]?.[2]).toBe("PERMISSION_DENIED");
   });
 
+  /**
+   * 11-app-shell/phase-3 (B 類:改寫,不刪). FEATURE.md 明文:「六個
+   * AnswerState 的渲染碼與其測試留著(給定 state → 畫對徽章),拿掉的只有
+   * 「從問題文字捏造 state」的來源」——這條測的正是「給定 PARTIAL state,
+   * runStream 走真的串流路徑」這個渲染碼分支本身,不是分類來源,所以改寫
+   * 觸發動作、不刪。原本靠送出時的觸發字串把 state 分類成 PARTIAL,現在
+   * 讓原始訊息自己就帶著 `state: "PARTIAL"`,經由「重新產生」
+   * (`originalMessage.state ?? "ANSWERED"`,見 message-thread.tsx)
+   * 直接沿用,完全不經過任何分類。持久化呼叫對應換成 `reviseMessage`。
+   */
   it("PARTIAL keeps the normal streamed reply content alongside its badge, unlike the other non-ANSWERED states", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    const trigger = MOCK_ANSWER_STATE_TRIGGERS.PARTIAL;
-    expect(trigger).toBeDefined();
-    if (!trigger) return;
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          state: "PARTIAL",
+        },
+      ],
+    });
     mockedStreamAssistantReply.mockImplementation(async function* () {
       yield "這是真的串流內容";
     });
@@ -1522,29 +1424,42 @@ describe("MessageThread answer state rendering (E03-S021)", () => {
     // with — same as the real function would — rather than the
     // unrelated beforeEach default, so the FINAL settled render (not
     // just the transient streaming moment) reflects what was persisted.
-    mockedReceiveAssistantReply.mockImplementation(async (_conversationId, content, state) => ({
+    mockedReviseMessage.mockImplementation(async (_id, content, state) => ({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content, state },
+      value: { id: "a1", conversationId: "c1", role: "assistant", content, state, attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", revisions: ["舊的回覆"] },
     }));
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-
-    submitViaComposer(trigger);
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
     await waitFor(() => expect(screen.getByText("這是真的串流內容")).toBeInTheDocument());
     expect(screen.getByText("部分回答")).toBeInTheDocument();
-    expect(mockedReceiveAssistantReply.mock.calls[0]?.[1]).toBe("這是真的串流內容");
+    expect(mockedReviseMessage.mock.calls[0]?.[1]).toBe("這是真的串流內容");
   });
 
+  // 11-app-shell/phase-3 (B 類:改寫,不刪,理由與上一條相同——這是同一段
+  // runStream 分支的另一半:有 fallbackContent 的四個 state 完全不走
+  // streamAssistantReply)。原始訊息自己帶著目標 state,經由「重新產生」
+  // 沿用,持久化呼叫對應換成 reviseMessage。
   it.each(ANSWER_STATES.filter((state) => state !== "ANSWERED" && state !== "PARTIAL"))(
     "%s replaces content with fixed fallback text without ever calling streamAssistantReply",
     async (state) => {
-      mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-      mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-      const trigger = MOCK_ANSWER_STATE_TRIGGERS[state];
-      expect(trigger).toBeDefined();
-      if (!trigger) return;
+      mockedListMessages.mockResolvedValue({
+        ok: true,
+        value: [
+          SENT_USER_MESSAGE,
+          {
+            id: "a1",
+            conversationId: "c1",
+            role: "assistant",
+            content: "舊的回覆",
+            attachmentNames: [],
+            createdAt: "2026-08-14T00:00:01.000Z",
+            state,
+          },
+        ],
+      });
       const fallbackContent = ANSWER_STATE_FALLBACK_CONTENT[state];
       expect(fallbackContent).toBeDefined();
       if (!fallbackContent) return;
@@ -1553,19 +1468,18 @@ describe("MessageThread answer state rendering (E03-S021)", () => {
       // above for why the unrelated beforeEach default isn't enough
       // once the FINAL settled render (not just the transient
       // streaming moment) is what's being asserted on.
-      mockedReceiveAssistantReply.mockImplementation(async (_conversationId, content, resultState) => ({
+      mockedReviseMessage.mockImplementation(async (_id, content, resultState) => ({
         ok: true,
-        value: { ...DEFAULT_ASSISTANT_MESSAGE, content, state: resultState },
+        value: { id: "a1", conversationId: "c1", role: "assistant", content, state: resultState, attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", revisions: ["舊的回覆"] },
       }));
 
       render(<MessageThread conversationId="c1" />);
-      await screen.findByText("尚無訊息，開始對話吧。");
-
-      submitViaComposer(trigger);
+      await screen.findByText("舊的回覆");
+      fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
       await waitFor(() => expect(screen.getByText(fallbackContent)).toBeInTheDocument());
       expect(mockedStreamAssistantReply).not.toHaveBeenCalled();
-      expect(mockedReceiveAssistantReply.mock.calls[0]?.[1]).toBe(fallbackContent);
+      expect(mockedReviseMessage.mock.calls[0]?.[1]).toBe(fallbackContent);
     },
   );
 
@@ -3003,13 +2917,25 @@ describe("MessageThread file processing status (E03-S029)", () => {
     expect(mockedSimulateFileProcessing).not.toHaveBeenCalled();
   });
 
+  /**
+   * 11-app-shell/phase-3 (B 類:改寫,不刪). 決定性的量沒有變(附件檔名要
+   * 顯示在已送出的訊息上),變的是資料怎麼進來——送出成功後
+   * `refetchAndMergeMessages()` 會用 `listMessages()` 的回傳值整批替換所有
+   * 「sent」項目,原本這裡的替身固定回傳 `[]`,不含附件的那則訊息,refetch
+   * 一發生就會把樂觀顯示的附件洗掉。讓 refetch 那次回傳真的帶著附件的訊息。
+   */
   it("on successful processing, proceeds to call sendMessage and shows the message as sent with the attachment listed", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    const SENT_MESSAGE_WITH_ATTACHMENT = {
+      id: "m1",
+      conversationId: "c1",
+      role: "user" as const,
+      content: "你好",
+      attachmentNames: ["報表.pdf"],
+      createdAt: "2026-08-14T00:00:00.000Z",
+    };
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({ ok: true, value: [SENT_MESSAGE_WITH_ATTACHMENT] });
     mockedSimulateFileProcessing.mockResolvedValue("done");
-    mockedSendMessage.mockResolvedValue({
-      ok: true,
-      value: { id: "m1", conversationId: "c1", role: "user", content: "你好", attachmentNames: ["報表.pdf"], createdAt: "2026-08-14T00:00:00.000Z" },
-    });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE_WITH_ATTACHMENT });
 
     render(<MessageThread conversationId="c1" />);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3197,127 +3123,32 @@ describe("MessageThread no-evidence/abstention UX (E03-S030)", () => {
   });
 });
 
-describe("MessageThread stream disconnect/reconnect UX (E03-S031)", () => {
-  it("shows 連線中斷 and preserves the partial content already received when the stream disconnects mid-way", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      yield "第一段";
-      throw new Error("模擬串流中斷");
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-
-    expect(await screen.findByText("第一段")).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent("連線中斷");
-    expect(screen.getByRole("button", { name: "重新連線" })).toBeInTheDocument();
-    expect(mockedReceiveAssistantReply).not.toHaveBeenCalled();
-  });
-
-  it("calls streamAssistantReply with the disconnect flag correctly wired: true when shouldSimulateStreamDisconnect says so, false otherwise", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      return;
-    });
-
-    mockedShouldSimulateStreamDisconnect.mockReturnValue(false);
-    const { unmount } = render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-    await waitFor(() => expect(mockedStreamAssistantReply).toHaveBeenCalledWith(undefined, false));
-    unmount();
-
-    mockedStreamAssistantReply.mockReset();
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      throw new Error("模擬串流中斷");
-    });
-    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    // Content is arbitrary here — shouldSimulateStreamDisconnect is
-    // mocked above to unconditionally return true, so the real trigger
-    // string's presence/absence doesn't matter for this test's wiring
-    // check (streaming.test.ts covers the real classification itself).
-    submitViaComposer("你好");
-    await waitFor(() => expect(mockedStreamAssistantReply).toHaveBeenCalledWith(undefined, true));
-  });
-
-  it("clicking 重新連線 restarts the stream from scratch and, once it succeeds, finalizes with the ORIGINAL answerState rather than defaulting to ANSWERED", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
-    mockedStreamAssistantReply.mockImplementationOnce(async function* () {
-      yield "第一段";
-      throw new Error("模擬串流中斷");
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    // "PARTIAL" trigger (E03-S021) so this test also confirms reconnect
-    // finalizes with the SAME non-default state, not silently ANSWERED.
-    submitViaComposer(`你好 ${MOCK_ANSWER_STATE_TRIGGERS.PARTIAL}`);
-    await screen.findByRole("alert");
-
-    mockedStreamAssistantReply.mockImplementationOnce(async function* () {
-      yield "重新連線後的完整回覆";
-    });
-    mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "重新連線後的完整回覆", state: "PARTIAL" } });
-
-    fireEvent.click(screen.getByRole("button", { name: "重新連線" }));
-
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "重新連線後的完整回覆", "PARTIAL"));
-    expect(await screen.findByText("重新連線後的完整回覆")).toBeInTheDocument();
-  });
-
-  it("reconnecting with the same persistent trigger deterministically disconnects again, not silently succeeding or getting stuck", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      yield "第一段";
-      throw new Error("模擬串流中斷");
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-    await screen.findByRole("alert");
-
-    fireEvent.click(screen.getByRole("button", { name: "重新連線" }));
-
-    await waitFor(() => expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(2));
-    expect(await screen.findByRole("alert")).toHaveTextContent("連線中斷");
-    expect(screen.getByRole("button", { name: "重新連線" })).toBeInTheDocument();
-  });
-
-  it("emits attempt and disconnected telemetry sharing one correlation id", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
-    mockedShouldSimulateStreamDisconnect.mockReturnValue(true);
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      throw new Error("模擬串流中斷");
-    });
-
-    render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
-    await screen.findByRole("alert");
-
-    const attemptCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "conversation_message_stream_attempt");
-    const disconnectedCall = mockedTrackEvent.mock.calls.find((call) => call[0] === "conversation_message_stream_disconnected");
-    expect(attemptCall).toBeDefined();
-    expect(disconnectedCall).toBeDefined();
-    const attemptId = (attemptCall as [string, { correlationId: string }])[1].correlationId;
-    const disconnectedId = (disconnectedCall as [string, { correlationId: string }])[1].correlationId;
-    expect(attemptId).toBe(disconnectedId);
-  });
-});
+// 11-app-shell/phase-3. 整個 describe 刪掉(不是改寫)——`shouldSimulateStreamDisconnect`
+// 是跟 `classifyAnswerState` 同一種形狀的 mock 觸發器(見 lib/streaming.ts
+// 自己的文件:「same as E03-S021's MOCK_ANSWER_STATE_TRIGGERS ... a
+// deterministic, honestly-labeled mock trigger」),從送出的問題文字判斷要
+// 不要模擬連線中斷,而它唯一的呼叫點就在被移除的
+// `startStream(classifyAnswerState(content), shouldSimulateStreamDisconnect(content))`
+// 那一行(message-thread.tsx 的 import 也整個拿掉了這個函式)。
+//
+// 與 E03-S021 的六個 AnswerState 不同,「要不要中斷」這個判斷結果沒有像
+// `originalMessage.state` 一樣被存在任何持久化的 Message 欄位上,所以
+// handleRegenerate/handleRetryStream/handleReconnect 沒有任何管道可以重新
+// 餵給它——handleRegenerate 呼叫 `runStream(localId, originalMessage,
+// originalMessage.state ?? "ANSWERED")`,四個參數位置沒有第四個
+// simulateDisconnect;handleReconnect 本身雖然會傳 `true`,但只有已經進入
+// `stream-disconnected` 狀態才會出現「重新連線」按鈕可以點——而進入那個狀態
+// 唯一的路徑正是這裡要刪的那個。也就是說,不是換個觸發動作就能重現這五條
+// 測試的情境,是「連線中斷模擬」這個機制在移除送出時的本地生成之後,已經是
+// 沒有任何活路徑能進入的死碼(runStream 裡處理 disconnect 的 catch 分支、
+// `stream-disconnected` 的渲染、「重新連線」按鈕都還在,只是沒有東西能再
+// 觸發它們)。
+//
+// 這不代表「連線中斷/重新連線」這個產品概念本身不重要——只是今天這整套都是
+// 用問題文字模擬的 demo 機制,ADR 0017 第二步明確裁定要移除的正是這一整條「從
+// 問題文字判斷行為」的路。若未來要支援真正的連線中斷重試,需要一個新的、
+// 綁在真實傳輸層或已持久化資料上的觸發方式,那會是新故事,不是這裡能改寫
+// 出來的。
 
 describe("MessageThread message retry UX (E03-S032)", () => {
   it("retrying a stream-failed regenerate revises the same original message again — it does not fall through to creating a brand new one", async () => {
@@ -3385,34 +3216,60 @@ describe("MessageThread message retry UX (E03-S032)", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });
 
-  it("retrying a stream-failed NEW turn preserves its original non-ANSWERED classification instead of silently resetting to ANSWERED", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+  /**
+   * 11-app-shell/phase-3 (B 類:改寫,不刪). 原題是「送出一個新回合、classify
+   * 成 PARTIAL、串流失敗、重試」——送出已經不再 classify 或串流(見 E03-S010
+   * describe 開頭的說明),這個「NEW 回合」的情境本身不可能再發生。但它要守
+   * 的決定性行為(重試失敗的串流時,原本的非 ANSWERED 分類要原封不動延續到
+   * 下一次呼叫,不能悄悄退回 ANSWERED)完全可以透過「重新產生」重現——差別
+   * 只在於這裡的原始分類來自一則已結算訊息自己的 `state` 欄位
+   * (`originalMessage.state ?? "ANSWERED"`,E03-S021 已經確立的機制),不是
+   * 從送出的文字現場分類出來的。
+   */
+  it("retrying a stream-failed regeneration preserves the original message's non-ANSWERED state instead of silently resetting to ANSWERED", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        {
+          id: "a1",
+          conversationId: "c1",
+          role: "assistant",
+          content: "舊的回覆",
+          attachmentNames: [],
+          createdAt: "2026-08-14T00:00:01.000Z",
+          state: "PARTIAL",
+        },
+      ],
+    });
     mockedStreamAssistantReply.mockImplementation(async function* () {
       yield "部分回覆內容";
     });
-    mockedReceiveAssistantReply.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
+    mockedReviseMessage.mockResolvedValueOnce({ ok: false, error: { code: "NOT_FOUND", message: "找不到這則訊息。" } });
 
     render(<MessageThread conversationId="c1" />);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer(`保固期限是多久？ ${MOCK_ANSWER_STATE_TRIGGERS.PARTIAL}`);
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
 
     expect(await screen.findByText("AI 回覆失敗")).toBeInTheDocument();
+    // 第一次呼叫就已經延續了 "a1" 自己的 state,不是重試之後才對——先確認
+    // 起點是對的,重試才有意義比較「有沒有變」。
+    expect(mockedReviseMessage.mock.calls[0]?.[2]).toBe("PARTIAL");
 
-    mockedReceiveAssistantReply.mockResolvedValueOnce({
+    mockedReviseMessage.mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "部分回覆內容", state: "PARTIAL" },
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "部分回覆內容", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", state: "PARTIAL" },
     });
     fireEvent.click(screen.getByRole("button", { name: "重新產生回覆" }));
 
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledTimes(2));
-    // The bug this fixes: without answerState threaded through the
+    await waitFor(() => expect(mockedReviseMessage).toHaveBeenCalledTimes(2));
+    // The bug this guards: without answerState threaded through the
     // retry, this 3rd arg would silently read "ANSWERED" instead,
-    // regardless of what the original turn was actually classified as.
-    expect(mockedReceiveAssistantReply.mock.calls[1]?.[2]).toBe("PARTIAL");
+    // regardless of what the original message was actually classified as.
+    expect(mockedReviseMessage.mock.calls[1]?.[2]).toBe("PARTIAL");
     // Genuinely re-streamed (not just replaying cached text) — same
-    // "actually re-attempted" precedent the pre-existing S12 stream-
-    // failed retry test already establishes.
+    // "actually re-attempted" precedent the pre-existing stream-failed
+    // retry tests already establish.
     expect(mockedStreamAssistantReply).toHaveBeenCalledTimes(2);
   });
 });
@@ -3427,13 +3284,24 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     createdAt: "2026-08-14T00:00:00.000Z",
   };
 
+  /**
+   * 11-app-shell/phase-3 round 2 (B 類:改寫,不刪). `3166064` 把
+   * `recordUsageEvent("rag_answer_outcome", …)` 的落點從 `runStream()`
+   * 搬到 `attemptSend` 的 `refetchAndMergeMessages(onMerged)` ——`onMerged`
+   * 拿到 refetch 回來的完整列表,找出「這個分頁送出前不認識的助理訊息」來
+   * 記錄。這 5 條原本靠 `mockedReceiveAssistantReply` 餵助理訊息,但送出
+   * 已經不再呼叫這個函式(對這段程式碼是盲的,見 `3166064` commit body 的
+   * A/B 實測)——改成讓 `mockedListMessages` 的第二次呼叫(送出後的
+   * refetch)回傳「使用者訊息 + 伺服器產生的助理訊息」。斷言內容
+   * (`answerState`/`citationCount`/`latencyMs` 的期望值、`toHaveBeenCalledWith`
+   * 的形狀)一個字沒動。
+   */
   it("records a rag_answer_outcome event with the finalized answerState and citation count once an answer is actually persisted", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "第一個來源 [1]，第二個來源 [2]。", state: "ANSWERED" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "第一個來源 [1]，第二個來源 [2]。", state: "ANSWERED" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3452,12 +3320,11 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     // for conversation_message_sent, and the same technique this story's
     // own EVIDENCE documents applying to those existing tests) is what
     // actually proves no duplicate side effect for THIS event.
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "唯一的一個來源 [1]。", state: "ANSWERED" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "唯一的一個來源 [1]。", state: "ANSWERED" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3469,12 +3336,11 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
   });
 
   it("records citationCount 0 for an answer with no citation markers", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "沒有引用來源的回答。", state: "ANSWERED" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "沒有引用來源的回答。", state: "ANSWERED" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3485,40 +3351,51 @@ describe("MessageThread RAG outcome analytics (E13-S011)", () => {
     );
   });
 
+  // 送出的問題文字不再影響任何分類——伺服器直接決定這則助理訊息的
+  // state,所以這裡不再需要 MOCK_ANSWER_STATE_TRIGGERS 的觸發字串,直接讓
+  // 替身的 state 就是 NO_EVIDENCE。
   it("records the answer's real non-ANSWERED classification (e.g. NO_EVIDENCE) rather than defaulting to ANSWERED", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "（模擬回覆）找不到足夠企業資料支持此答案。", state: "NO_EVIDENCE" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "（模擬回覆）找不到足夠企業資料支持此答案。", state: "NO_EVIDENCE" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer(`保固期限是多久？ ${MOCK_ANSWER_STATE_TRIGGERS.NO_EVIDENCE}`);
+    submitViaComposer("保固期限是多久？");
 
     await waitFor(() =>
       expect(mockedRecordUsageEvent).toHaveBeenCalledWith("rag_answer_outcome", "u1", { answerState: "NO_EVIDENCE", citationCount: 0, latencyMs: expect.any(Number) }),
     );
   });
 
-  it("does not record a rag_answer_outcome event when persisting the reply fails", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+  // 「持久化失敗」原本是 receiveAssistantReply() 回 ok:false——那個呼叫點
+  // 已經不存在。送出這條路唯一對應的「還沒有答案」情境,是 refetch 拿到的
+  // 列表裡還沒出現任何新助理訊息(伺服器還沒產生,或這個分頁還不知道)——
+  // `onMerged` 找不到「送出前不認識的助理訊息」就不會記錄,決定性斷言
+  // (不會呼叫 rag_answer_outcome)不變。
+  it("does not record a rag_answer_outcome event when the refetch after sending doesn't (yet) show a new assistant reply", async () => {
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({ ok: true, value: [SENT_MESSAGE] });
     mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND", message: "找不到這個對話。" } });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
     submitViaComposer("你好");
 
-    expect(await screen.findByText("AI 回覆失敗")).toBeInTheDocument();
+    // 確保第二次(refetch 那次)listMessages() 呼叫已經發生且 resolve
+    // 過——mockResolvedValueOnce 立即 resolve,microtask 會在下一個
+    // waitFor 輪詢前排空,所以這是「onMerged 已經跑過」的可靠代理。
+    await waitFor(() => expect(mockedListMessages).toHaveBeenCalledTimes(2));
     expect(mockedRecordUsageEvent).not.toHaveBeenCalledWith("rag_answer_outcome", expect.anything(), expect.anything());
   });
 
   it("does not record a rag_answer_outcome event (and does not crash) when rendered outside a session provider", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
+      ok: true,
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答 [1]" }],
+    });
     mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({ ok: true, value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答 [1]" } });
 
     renderWithSession(null);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3569,13 +3446,13 @@ describe("MessageThread latency instrumentation (E13-S013)", () => {
     createdAt: "2026-08-14T00:00:00.000Z",
   };
 
+  // 11-app-shell/phase-3 round 2 (B 類:改寫,不刪,理由與 E13-S011 相同)。
   it("records a non-negative latencyMs reflecting real elapsed time, not a hardcoded placeholder", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValueOnce({
       ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答內容 [1]", state: "ANSWERED" },
+      value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "回答內容 [1]", state: "ANSWERED" }],
     });
+    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3589,17 +3466,30 @@ describe("MessageThread latency instrumentation (E13-S013)", () => {
     expect(details.latencyMs).toBeGreaterThanOrEqual(0);
   });
 
-  it("measures a distinctly longer latencyMs when the stream is artificially delayed, proving this is a real measurement rather than an always-zero stub", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
+  /**
+   * 11-app-shell/phase-3 round 2 (B 類:改寫,不刪). `latencyMs` 現在量的是
+   * `sendStartedAt`(attemptSend 裡 sendMessage() resolve 之後)到
+   * `onMerged` 找到新助理訊息那一刻(見 `3166064` commit body)——不再是
+   * `streamAssistantReply` 的本地串流耗時,因為送出已經不再呼叫它。原本
+   * 用 `streamAssistantReply` 人工延遲 40ms 來證明「這是真的量測,不是寫死
+   * 的 0」,現在改成延遲 refetch 那次 `listMessages()` 的 resolve
+   * 時間——決定性斷言(`latencyMs >= 35`)不變。
+   */
+  it("measures a distinctly longer latencyMs when the arrival of the server's reply is artificially delayed, proving this is a real measurement rather than an always-zero stub", async () => {
+    mockedListMessages.mockResolvedValueOnce({ ok: true, value: [] }).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(
+            () =>
+              resolve({
+                ok: true,
+                value: [SENT_MESSAGE, { ...DEFAULT_ASSISTANT_MESSAGE, content: "延遲後的回答 [1]", state: "ANSWERED" }],
+              }),
+            40,
+          );
+        }),
+    );
     mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_MESSAGE });
-    mockedReceiveAssistantReply.mockResolvedValue({
-      ok: true,
-      value: { ...DEFAULT_ASSISTANT_MESSAGE, content: "延遲後的回答 [1]", state: "ANSWERED" },
-    });
-    mockedStreamAssistantReply.mockImplementation(async function* () {
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      yield "延遲後的回答 [1]";
-    });
 
     renderWithSession(FIXTURE_SESSION);
     await screen.findByText("尚無訊息，開始對話吧。");
@@ -3955,9 +3845,24 @@ describe("MessageThread: cross-window sync (E03-S039, AC3/AC5, regression)", () 
     await waitFor(() => expect(mockedListMessages.mock.calls.length).toBeGreaterThan(callsBeforeEvent));
   });
 
-  it("Regression (Test Obligations: 本分頁事件造成重抓打斷串流): an own-tab message.created event during an active stream must not refetch or disturb the in-flight streaming entry", async () => {
-    mockedListMessages.mockResolvedValue({ ok: true, value: [] });
-    mockedSendMessage.mockResolvedValue({ ok: true, value: SENT_USER_MESSAGE });
+  /**
+   * 11-app-shell/phase-3 (B 類:改寫,**不准刪**——技術顧問 ai-km-1b 指名
+   * 這是一個具名回歸的守門)。決定性的量沒有變:本分頁自己的事件回音在
+   * 串流中途抵達時,不能觸發重抓、不能打斷正在累積的內容。原本靠「送出」
+   * 進入串流狀態,但送出已經不再觸發任何本地串流(見 E03-S010 describe
+   * 開頭的說明);唯一還能進入串流狀態的動作是「重新產生」,回音事件也
+   * 對應換成 `message.updated`(reviseMessage 更新的是既有訊息,不是新增
+   * 一則,所以真實情境下這裡的回音會是 updated 不是 created——見
+   * isOwnClientEvent 的呼叫端同時處理兩種事件型別,守門邏輯本身沒有變)。
+   */
+  it("Regression (Test Obligations: 本分頁事件造成重抓打斷串流): an own-tab message.updated event during an active regeneration must not refetch or disturb the in-flight streaming entry", async () => {
+    mockedListMessages.mockResolvedValue({
+      ok: true,
+      value: [
+        SENT_USER_MESSAGE,
+        { id: "a1", conversationId: "c1", role: "assistant", content: "舊的回覆", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      ],
+    });
     let releaseGate!: () => void;
     const gate = new Promise<void>((resolve) => {
       releaseGate = resolve;
@@ -3968,23 +3873,23 @@ describe("MessageThread: cross-window sync (E03-S039, AC3/AC5, regression)", () 
       await gate;
       yield "段";
     });
-    mockedReceiveAssistantReply.mockResolvedValue({
+    mockedReviseMessage.mockResolvedValue({
       ok: true,
-      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一段", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z" },
+      value: { id: "a1", conversationId: "c1", role: "assistant", content: "第一段", attachmentNames: [], createdAt: "2026-08-14T00:00:01.000Z", revisions: ["舊的回覆"] },
     });
     const source = makeFakeSource();
 
     renderThreadWithEvents(source);
-    await screen.findByText("尚無訊息，開始對話吧。");
-    submitViaComposer("你好");
+    await screen.findByText("舊的回覆");
+    fireEvent.click(screen.getByRole("button", { name: "重新產生" }));
     await waitFor(() => expect(screen.getByText("第一")).toBeInTheDocument());
     const callsBeforeEvent = mockedListMessages.mock.calls.length;
 
-    // This tab's own message.created echo (e.g. from the send that just
-    // kicked off the stream above) arrives on the SSE stream while the
-    // reply is still mid-flight.
+    // This tab's own message.updated echo (from the reviseMessage this
+    // regeneration will eventually call) arrives on the SSE stream while
+    // the reply is still mid-flight.
     act(() => {
-      source.emit({ id: 1, type: "message.created", conversationId: "c1", messageId: SENT_USER_MESSAGE.id, occurredAt: new Date().toISOString(), originClientId: apiClient.clientId });
+      source.emit({ id: 1, type: "message.updated", conversationId: "c1", messageId: "a1", occurredAt: new Date().toISOString(), originClientId: apiClient.clientId });
     });
 
     expect(mockedListMessages.mock.calls.length).toBe(callsBeforeEvent);
@@ -3992,6 +3897,6 @@ describe("MessageThread: cross-window sync (E03-S039, AC3/AC5, regression)", () 
     expect(screen.getByRole("status", { name: "" })).toHaveTextContent("AI 回覆中…");
 
     releaseGate();
-    await waitFor(() => expect(mockedReceiveAssistantReply).toHaveBeenCalledWith("c1", "第一段", "ANSWERED"));
+    await waitFor(() => expect(mockedReviseMessage).toHaveBeenCalledWith("a1", "第一段", "ANSWERED"));
   });
 });

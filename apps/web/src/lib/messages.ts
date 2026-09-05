@@ -1,5 +1,5 @@
 import { toResult } from "@ai-km/api-client";
-import type { FeedbackReason } from "@ai-km/api-client";
+import type { ConversationsComponents, FeedbackReason } from "@ai-km/api-client";
 import type { ApiError, Result } from "@ai-km/types";
 import type { AnswerState } from "./answer-state";
 import { apiClient } from "./api";
@@ -32,6 +32,31 @@ export const MAX_FEEDBACK_COMMENT_LENGTH = 500;
 export { FEEDBACK_REASONS, FEEDBACK_REASON_LABELS } from "@ai-km/api-client";
 export type { FeedbackReason } from "@ai-km/api-client";
 
+/**
+ * 11-app-shell/phase-3 (顧問裁決,2026-09-05). `citations` is referenced
+ * straight from the contract's own generated type (`conversations.yaml`'s
+ * `Message.citations`, itself a `$ref` to `generation.yaml`'s `Citation` —
+ * ADR 0016 D1) rather than a bespoke interface declared here — this file
+ * used to declare `Message` with no source-of-truth link to the contract
+ * at all, which is exactly the drift ADR 0016's own Consequences section
+ * warns about (two independent declarations of the same shape, one of
+ * which nobody remembers to update). ADR 0016 D3: absent ≠ `[]` — absent
+ * means this message never went through the RAG path, `[]` means it did
+ * and the answer claimed no sources.
+ *
+ * `chunkId` is loosened to optional here (the generated schema has it
+ * required) — it exists to bind an answer back to the RAG request's own
+ * `context` when generating, not to display a citation once the message
+ * already exists; nothing under apps/web reads it (this shell only
+ * displays/dedupes by `documentId` — see conversation-related-panel.tsx).
+ * `Omit<...> & { chunkId? }` on top of the generated type, rather than a
+ * hand-written interface for the other three fields, so a future
+ * `generation.yaml` change to THOSE still surfaces here as a type error
+ * instead of silently drifting.
+ */
+export type Citation = ConversationsComponents["schemas"]["Citation"];
+export type MessageCitation = Omit<Citation, "chunkId"> & { chunkId?: string };
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -45,6 +70,7 @@ export interface Message {
   feedbackReason?: FeedbackReason;
   feedbackComment?: string;
   citationFeedback?: Record<string, AnswerFeedbackVerdict>;
+  citations?: MessageCitation[];
 }
 
 const messageCache = new Map<string, Message>();
@@ -53,6 +79,7 @@ function remember(message: Message): Message {
   messageCache.set(message.id, message);
   return message;
 }
+
 
 function notFound(): ApiError {
   return { code: "NOT_FOUND", message: "找不到這則訊息。" };

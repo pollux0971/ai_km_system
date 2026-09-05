@@ -6,12 +6,12 @@ import { EmptyState, ErrorMessage, LoadingIndicator } from "@ai-km/ui";
 import {
   ANSWER_STATE_FALLBACK_CONTENT,
   ANSWER_STATE_LABELS,
-  classifyAnswerState,
   resolveAnswerStateDisplay,
   type AnswerState,
   type AnswerStateDisplay,
 } from "@/lib/answer-state";
 import { isOwnClientEvent, useConversationEvents } from "@/lib/conversation-events-context";
+import { notifyMessagesChanged } from "@/lib/conversation-message-events";
 import { simulateFileProcessing } from "@/lib/file-processing";
 import { GENERATION_PHASE_LABELS, runGenerationPhases, type GenerationPhase } from "@/lib/generation-status";
 import {
@@ -32,7 +32,7 @@ import {
 } from "@/lib/messages";
 import { listFeedbackKnowledgeCandidates, submitFeedbackKnowledgeCandidate } from "@/lib/feedback-knowledge-candidates";
 import { useOptionalCurrentUser } from "@/lib/session-context";
-import { shouldSimulateStreamDisconnect, streamAssistantReply } from "@/lib/streaming";
+import { streamAssistantReply } from "@/lib/streaming";
 import { trackEvent } from "@/lib/telemetry";
 import { countDistinctCitations, recordUsageEvent } from "@/lib/usage-events";
 import { CitationPreviewDrawer } from "./citation-preview-drawer";
@@ -200,12 +200,19 @@ const logger = createLogger("web:message-thread");
  * S21 "Answer state rendering" attaches one of 6 SOURCE_BASELINE-defined
  * states (ANSWERED/PARTIAL/NO_EVIDENCE/ERROR/PERMISSION_DENIED/
  * SOURCE_UNAVAILABLE — see lib/answer-state.ts) to every assistant reply
- * at the moment it's generated. `attemptSend` classifies the state from
- * the just-sent question via classifyAnswerState() and threads it
- * through startStream()→runStream() to the finalize call; regenerating
- * (handleRegenerate) reuses the ORIGINAL message's own `state` rather
- * than reclassifying — the underlying question hasn't changed, so the
- * mock's classification of it shouldn't either. `runStream`'s content-
+ * at the moment it's generated. Historically (pre-11-app-shell/phase-3)
+ * `attemptSend` classified the state from the just-sent question via
+ * classifyAnswerState() and threaded it through startStream()→runStream()
+ * to the finalize call — that whole local-mock path (including
+ * `startStream` itself) is gone now that a fresh send refetches the
+ * server's own reply instead (see attemptSend's own comment, ADR 0017
+ * second step (a)); `runStream`'s classification plumbing below only
+ * still fires from handleRegenerate/handleRetryStream/handleReconnect,
+ * none of which classify from question text — they all reuse an
+ * ALREADY-settled message's own `state`.
+ * Regenerating (handleRegenerate) reuses the ORIGINAL message's own
+ * `state` rather than reclassifying — the underlying question hasn't
+ * changed, so the mock's classification of it shouldn't either. `runStream`'s content-
  * accumulation step branches on whether ANSWER_STATE_FALLBACK_CONTENT
  * has an entry for the classified state: ANSWERED and PARTIAL both keep
  * the normal chunk-by-chunk streamAssistantReply() text (PARTIAL means
@@ -655,7 +662,20 @@ export function MessageThread({
       previous.map((entry) => (entry.kind === "pending" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
     );
 
-    startStream(classifyAnswerState(content), shouldSimulateStreamDisconnect(content));
+    // 11-app-shell/phase-3 (ADR 0017 第二步 (a); 坑 19 第三次擋住使用者的那一
+    // 層). 03-conversation/phase-2 起,伺服器在處理這個 POST 的同一個交易裡
+    // 就自動產生了帶真引用的助理回覆(見 conversations.yaml createMessage 的
+    // TRANSITIONAL 段)——但這個 POST 的回應本身只有使用者那則訊息(201 body
+    // 是 Message,不是一對)。所以不再無條件呼叫
+    // startStream(classifyAnswerState(content), …) 本地跑固定的 MOCK_REPLY,
+    // 改成重新抓一次訊息清單把伺服器那則回覆接進來——refetchAndMergeMessages
+    // 已經是 E03-S039 用來把伺服器端變化併回這個分頁 displayMessages 的同一支
+    // 函式,這裡只是多一個觸發時機。
+    refetchAndMergeMessages();
+    // ConversationRelatedPanel(附件／引用來源,#40)只在 conversationId 變動
+    // 時抓一次訊息,不知道這個分頁自己剛送出的新訊息——見 lib/messages.ts 的
+    // notifyMessagesChanged 文件。
+    notifyMessagesChanged(conversationId);
   }
 
   function handleComposerSubmit(content: string, attachmentNames: string[]) {
@@ -816,12 +836,6 @@ export function MessageThread({
     setDisplayMessages((previous) =>
       previous.map((entry) => (entry.kind === "streaming" && entry.localId === localId ? { kind: "sent", message: result.value } : entry)),
     );
-  }
-
-  function startStream(answerState: AnswerState, simulateDisconnect = false) {
-    const localId = crypto.randomUUID();
-    setDisplayMessages((previous) => [...previous, { kind: "streaming", localId, content: "", phase: null }]);
-    void runStream(localId, undefined, answerState, simulateDisconnect);
   }
 
   function handleRetryStream(localId: string, answerState: AnswerState, reviseTarget?: Message) {

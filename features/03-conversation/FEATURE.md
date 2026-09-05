@@ -116,6 +116,31 @@ demo-maintenance 的 scope key(principalId)=「i2-fixed-demo-scope」
 
 **`/integrate I2` 的「stub 已移除」查的就是這兩個 phase**(ADR 0017)。
 
+**拒絕的機制由協調者裁定(2026-09-05,工程取捨;ADR 0017 只寫「400 `VALIDATION_ERROR`」,沒指定怎麼做到)**:
+**把 `CreateMessageRequest.role` 的 enum 從 `[user, assistant]` 收成 `[user]`**,由 schema 驗證
+產生那個 400 —— **不是**在 handler 裡多寫一個 `if`。
+
+理由是**守門看得見**:`services/conversation/src/routes/messages.ts` 的 POST messages
+本來就吃契約 schema(`hostContracts(app).getSchema("conversations", "CreateMessageRequest")`),
+收 enum 讓 `contract-gate` 與 L2-EQ **機械保證**這件事不會漂回去;handler 裡的 `if` 消失時
+**沒有任何守門會紅**。這與 ADR 0018 裁掉 `state` 啟發式、DECISIONS_NEEDED #42 裁掉
+`[N]` regex 解析是同一條路線:**能讓機器保證的,不要靠人記得**。
+
+`role` 欄位本身**留著**(仍 `required`),只收 enum —— 刪欄位是另一個決策類別,不在本 phase。
+**伺服器自己產生的助理訊息不受影響**:`messages.ts:149` 的 `role: "assistant"` 是行程內
+repository 呼叫,不經過那個 schema。這一點本 phase 要有場景**正面斷言**,否則「拒絕 client」
+可以用「把伺服器生成一起關掉」的方式變綠。
+
+**待回報的欄位處置問題(不在本 phase 決)**:`role` 收成 `[user]` 之後,
+`CreateMessageRequest.state` 會不會變成「永遠不合法」(路由今天對 `role: user` 帶 `state`
+就回 400)?若是,那是一個要顧問裁的欄位處置,登記後再處理,不順手刪。
+
+**紅規格與實作分兩批派(2026-09-05,協調者)**:phase-4 的 gate 是「`11-app-shell/phase-3`
+已進 main」,而那條 gate 擋的是**實作**(web 還在送 `role: assistant` 時不能先拒絕它)。
+它**擋不到「先把規格寫紅」** —— 那正是 §3 生命週期的「測試先紅」。所以測試 agent 於
+`11-app-shell/phase-3` 仍在開發時就派出,**只寫 `.feature` / steps / 測試,一行實作都不寫、
+一個字契約都不改**;實作那批等 gate 真的滿足再派。
+
 ## 回填對照表(phase-1)
 
 | 場景 | 綁到的既有測試(檔:名) |

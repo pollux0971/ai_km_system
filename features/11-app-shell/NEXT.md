@@ -7,9 +7,14 @@
 
 | 欄位 | 值 |
 |---|---|
-| 已完成 | 無 |
-| 進行中 | phase-1(回填,已交付待 `/phase-done`) |
-| 下一個 | phase-2 |
+| 已完成 | phase-1(2026-09-05,`@e2e`／`@manual` 由使用者親手走查確認)、phase-2(2026-09-05) |
+| 進行中 | **phase-3**(2026-09-05 派出;測試 agent 的紅規格 `222f663` 已在 branch,開發 agent 在做綠) |
+| 下一個 | phase-4(斷點與元件層 UI 狀態;gate 未滿足——要 DOM 驗收環境) |
+
+> 2026-09-05 更正:這張表原本停在「已完成:無 / 進行中:phase-1」,而 phase-1 與 phase-2
+> 都已在 `FEATURE.md` 的 phase 表標 `done`。**狀態的唯一來源是 `FEATURE.md` 的 phase 表**
+> (GHERKIN_WORKFLOW §1),本檔落後於它就是文件腐爛;`/sprint` 讀的是本檔,所以它落後會直接
+> 導出錯的排程建議。
 
 ## 下一個 phase 的 gate
 

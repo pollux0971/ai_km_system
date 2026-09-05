@@ -102,3 +102,40 @@ docling 是 Python,要像 `whisper-server` 一樣開 sidecar——**那是第二
 
 **分級:標準級。落點**:`05-ingestion` 新 phase,**排在 I4 前**,依本 ADR D3。
 意圖句:「**一個人上傳 docx/pptx/xlsx/csv/txt/md 任一種,問問題時引用能開回原文段落。**」
+
+---
+
+## 2026-09-05 spike 結果:條件 1 與決定性測試通過;**外加一條硬禁令**
+
+`05-anydoc-spike`(orca worktree,Sonnet)實測,不是讀 README:
+
+| 條件 | 結果 |
+|---|---|
+| **1. Node 22 + linux x86_64 裝得起來、跑得動** | ✅ **通過**,三種格式(docx / xlsx / csv)都轉出 Markdown |
+| **決定性:同檔轉兩次逐字相同** | ✅ **通過**,而且是**兩個獨立 node 行程**各跑一次比 sha256(排除 process 內快取的假陽性)。docx `a635dc9e…`、xlsx `6d9fee69…`、csv `44496b5f…` 三組前後一致。**沒有時間戳、隨機 id、環境相依的漂移**——offset 不會因為轉換本身不穩定而漂移 |
+| **2. npm 上有發布的 binding 與 LICENSE 檔** | ⚠️ **一半**:binding 有發布;**但 npm tarball 裡沒有 LICENSE 檔本體**,只有 `package.json` 的 `license` 欄位字串 + GitHub repo 上的 MIT LICENSE。spike **拒絕替顧問延伸解讀**這算不算作廢條件,交回裁決 |
+
+### ⛔ 硬禁令:**絕不啟用 `ocr: 'hosted'`**
+
+spike 沒被問就查到的:anydoc 對掃描版 PDF **預設拋 `NeedsOcr` 錯誤**,
+**但可以設 `ocr: 'hosted'` 把整份文件送到 Firecrawl 的雲端 Parse API 做 OCR。**
+
+**那會讓文件離開這台機器。** 對一個 on-prem、以「未授權資料不進 context/citation/export/log」
+為鐵律的系統,這是**把整份文件送給第三方**——比鐵律 2 擋的任何一件事都嚴重。
+
+**它預設不會發生,但「預設安全」不是守門。** spike 的原話值得照抄:
+
+> 值得在 ADR 裡明講「絕不啟用 `ocr: 'hosted'`」,**而不是靠沒人設定這個選項的僥倖**。
+
+**所以本 ADR 加第五個條件**:抽取器落地時,`ocr` 選項**必須顯式設成非 hosted 的值**,
+並且要有一條**會紅的檢查**(不是註解)確認它沒有被設成 `'hosted'`。
+掃描版 PDF 的 OCR 需求另案處理(D1 的 `image` 格式那輪),**不得用這條逃生門解決**。
+
+### 另外三件 spike 發現、影響後續 phase 的
+
+1. **napi-rs 的 optionalDependencies 分包**:主套件只有 57KB 膠水層,**真正的 8MB native binary
+   在平台專屬子套件裡**。要做 air-gapped 部署或私有 registry mirror,**必須連 7 個平台子套件
+   一起鏡像**,只鏡像主套件會在別的機器上裝不到 binary。**這條寫進 I9(on-prem 部署)的 gate。**
+2. **CSV 是唯一需要明講格式的**——其他格式靠檔案簽章自動偵測,CSV 沒有簽章。
+   若管線是「檔案進來自動判斷格式」,**CSV 要用副檔名兜底**,不能沿用其他格式的偵測邏輯。
+3. `engines.node >= 20`,不是綁死 22——未來 Node 升級風險低。

@@ -20,6 +20,8 @@
 **目前唯一等使用者的不是一列決策,是一個動作**:I2 的 `@e2e` 親手驗收
 ——而它今天還做不了(`05-ingestion/phase-2b` 正在補 dev seeder,見 `docs/01-roadmap.md` I2 段)。
 
+| 41 | 2026-09-05 | **anydoc 條件 2 只滿足一半:npm tarball 裡沒有 LICENSE 檔本體**(只有 `package.json` 的 `license` 欄位 + GitHub repo 上的 MIT LICENSE)。<br>spike **拒絕替顧問延伸解讀**——顧問原話「裝不起來這條裁決作廢」只針對裝不裝得起來,沒明講缺 LICENSE 檔算不算同等級的作廢條件。 | 工程取捨(顧問級) | 要看寫這條的意圖是「**合規稽核工具要在 tarball 裡找到 LICENSE 檔本體**」(企業 license-checker 掃 `node_modules` 找不到會報 unlicensed)還是「**授權條款清楚可查**」(GitHub + package.json 欄位就夠)。**協調者傾向後者**——MIT 明確、來源可查;但若貴司合規流程真的掃 tarball,那是硬需求不是偏好 | 擋 `05-ingestion/phase-2c` 開工 |
+| 42 | 2026-09-05 | **前端的 `Message` 型別沒有 `citations` 欄位**(`apps/web/src/lib/messages.ts`),而 ADR 0016 的契約早就有。`ConversationRelatedPanel` 今天靠 **regex 解析 `content` 裡的 `[N]` 記號**取得引用,**不是讀那個欄位**。 | 工程取捨(顧問級) | **協調者已裁並寫進 11 phase-3 的開發工單:面板改讀 `.citations`。** 理由與 ADR 0018 裁掉 `state` 啟發式**是同一條**:從 `content` 解析 `[N]` 是**從結果的副作用回推結果**,而契約已經把答案直接給了。順帶要把前端型別對齊契約——今天它自己宣告一份,與 `packages/api-client` 的生成型別各走各的,那本身是漂移來源 | 不擋(已含在 11 phase-3) |
 ## 已批示
 
 | # | 日期 | 一句話 | 批示 | 落地 |

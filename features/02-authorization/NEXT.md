@@ -20,9 +20,19 @@
 
 - [x] 自身:phase-1 `done`
 - [ ] 整合:I2 通過(`06-retrieval` phase-2 把 `retrievalPlugin` 接進 `apps/api` composition root,
-      屆時那條「scope 固定給 `dept:eng`」的暫時限制才有東西可以取代)。**2026-09-04 現況:仍是
-      `todo`**(見 `06-retrieval/FEATURE.md` phase 表)——這是唯一還沒解除的 gate。
-- [x] 契約:**E04-S009 已解除 blocked**(技術顧問依 ADR 0012,2026-09-04 裁定):
+      屆時那條「scope 固定給 `dept:eng`」的暫時限制才有東西可以取代)。
+      **2026-09-05 現況更正**:`06-retrieval` phase-2 **已 `done`(2026-09-04)**,
+      I2 本身**尚未收尾**——還差 `11-app-shell/phase-3`、`03-conversation/phase-4`、
+      `07-generation/phase-2b`、`11-app-shell/phase-4`(最後兩個是 2026-09-05 才發現的第四層,
+      見 PITFALLS 坑 19 第四次)。原文寫「這是唯一還沒解除的 gate」**也已過期**,見下一條。
+- [ ] 自身:**`01-identity` 拿得出 `department.id`／`group.id`**。今天 `users` 表只有顯示名
+      兩欄,repo 內無任何 id 對照表——這是「待協調」那個缺口,**它才是 2a 那 4 條紅的原因**。
+- [ ] 規格:前置是 **[ADR 0021](../../docs/adr/0021-scope-vocabulary-and-knowledge-set-tree.md)
+      D1–D3** 的資料結構(四種 scope key、知識集是樹、子樹 deny 沿樹展開且優先於祖先的 allow、
+      每次請求建構時展開不跨請求快取)。**2026-09-05 新增**——ADR 0013 #7 的兩種 key 字彙
+      已被它擴寫,照舊字彙寫的 phase-2 規格會少兩種分區。
+- [x] 契約:**E04-S009 已解除 blocked**(技術顧問依 ADR 0012,2026-09-04 裁定;
+      **不是使用者級,`/sprint` 不要再把它算成「等使用者拍板」**):
       1. `scopeKey` 形狀:`dept:<department.id>` / `group:<group.id>`,顯示名永遠不當鑰匙。
       2. 對應由 `01-identity` 單一維護,`02-authorization` 只讀,不建第二張表。
       3. `allowedScopeKeys` = 部門 ∪ 群組(聯集)。

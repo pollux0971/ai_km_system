@@ -65,7 +65,7 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 
 | 後續 phase | 需要 | 原因 |
 |---|---|---|
-| phase-2(從身分產出 `RetrievalScope`) | E04-S009 解除 blocked(使用者級裁定:部門／群組 → scopeKey 的對應規則) | 今天 session 給的是部門**顯示名稱**(「資訊部」),不是 store 用的鑰匙(`dept:*`);兩者之間的對應是產品決策,沒有人裁定過 |
+| phase-2(從身分產出 `RetrievalScope`) | **(1)** I2 收尾;**(2)** `01-identity` 給得出 `department.id`／`group.id`(今天 `users` 表只有顯示名兩欄);**(3)** 前置規格是 **[ADR 0021](../../docs/adr/0021-scope-vocabulary-and-knowledge-set-tree.md) D1–D3** 的資料結構 | 今天 session 給的是部門**顯示名稱**(「資訊部」),不是 store 用的鑰匙(`dept:*`) |
 | phase-3(群組變更即時生效) | phase-2 done、I6 的 admin 部門／群組頁 | 對應規則存在之後才談得上「改了立刻生效」 |
 
 ## 技術棧
@@ -81,8 +81,26 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)scope 的建構、Deny-Wins、空授權 vs 缺授權、SQL 過濾、洩漏拋錯、身分今天給得出什麼 | I1 | done | 2026-09-04 |
-| 2 | 從 identity 的 session 產出 `RetrievalScope` | I3 | blocked(見下) | |
+| 2 | 從 identity 的 session 產出 `RetrievalScope` | I3 | blocked(**卡 `01-identity` 的 id,不是卡使用者**——見下) | |
 | 3 | 群組 → scopeKeys 的對應與變更即時生效 | I6 | todo | |
+
+**⚠️ 2026-09-05 gate 過期更正(技術顧問 ai-km-1b 量到,協調者查證後落地)**:
+上面「依賴」表原本寫 phase-2 需要「**E04-S009 解除 blocked(使用者級裁定)**」。**那條已經過期兩次**:
+
+1. **E04-S009 的裁定 2026-09-04 就給了**(ADR 0013 #7,技術顧問級,不是使用者級)
+   ——本檔下一段自己就寫著「已解除」,依賴表卻沒跟著改,**同一份檔案兩處互相矛盾**。
+2. **字彙又被 [ADR 0021](../../docs/adr/0021-scope-vocabulary-and-knowledge-set-tree.md) 改寫了**
+   (2026-09-05):D1 把 scope key 補成**四種**(`org:` / `dept:` / `project:` / `user:`,
+   `group:` 保留為授權**受體**);D2 知識集是**樹**、授權**沿樹繼承**;
+   D3(顧問裁,fail-closed)**對子節點的 deny 算數、沿子樹展開、優先於任何祖先的 allow**,
+   而且**在每次請求建構時展開、不跨請求快取**(快取會讓「改了授權但還沒生效」變成沒人看得見的窗口)。
+
+**所以 phase-2 卡的不是使用者。** 真正還沒滿足的是:**I2 收尾**,以及
+**`01-identity` 拿得出 `department.id`／`group.id`**(今天 `users` 表只有顯示名兩欄,
+repo 內無任何 id 對照表——就是下面「待協調」的那個缺口)。規格前置是 ADR 0021 D1–D3。
+
+**這條不擋 I2,但 I3 一開工就會撞上**;先修文字,免得 `/sprint` 把它算成「等使用者拍板」
+而排不進去。
 
 **phase-2 狀態細節(2026-09-04,含 phase-2b 完成)**:契約 gate(E04-S009)已由技術顧問
 依 ADR 0012 裁定解除——見下方「phase-2 提案(紅,2026-09-04)」與「phase-2b 提案

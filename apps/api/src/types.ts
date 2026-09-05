@@ -14,10 +14,16 @@
  * decoration back), so `./rag-plugin.ts` — the first file in this app to
  * actually call `app.retrieval.retrieve()` and `app.generation.answer()` —
  * is what first needed these two added, in their canonical place.
+ *
+ * `ingestion` (05-ingestion/phase-2b): same reasoning — `services/ingestion`'s
+ * own `plugin-types.ts` deliberately leaves the ambient `declare module
+ * "fastify"` augmentation to the host app, so this file, not that package,
+ * types `app.ingestion`.
  */
 import type { preHandlerHookHandler } from "fastify";
 import type { RetrievalService } from "@ai-km/service-retrieval";
 import type { GenerationService } from "@ai-km/service-generation";
+import type { IngestionService } from "@ai-km/service-ingestion";
 
 /**
  * Who the caller is. Populated only by an authentication provider; a route
@@ -49,6 +55,8 @@ declare module "fastify" {
     retrieval: RetrievalService;
     /** `services/generation`'s in-process seam — decorated by `generationPlugin`. */
     generation: GenerationService;
+    /** `services/ingestion`'s in-process seam — decorated by `ingestionPlugin`. */
+    ingestion: IngestionService;
   }
 
   interface FastifyRequest {

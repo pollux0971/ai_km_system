@@ -19,6 +19,7 @@ export interface ApiConfig {
   readonly corsOrigins: readonly string[];
   readonly devTriggers: boolean;
   readonly testSandbox: boolean;
+  readonly devSeedFixture: boolean;
   readonly autoMigrate: boolean;
   readonly asrProvider: AsrProvider;
   readonly asrServerUrl: string;
@@ -132,6 +133,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
 
   const devTriggers = readBoolean(env, "AI_KM_DEV_TRIGGERS", false);
   const testSandbox = readBoolean(env, "AI_KM_TEST_SANDBOX", false);
+  const devSeedFixture = readBoolean(env, "AI_KM_DEV_SEED_FIXTURE", false);
 
   // Fail closed (AC6 / ADR 0005 §4, §5). These two flags each open a path that
   // bypasses real authentication; neither may exist in production, and the
@@ -148,6 +150,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
       "AI_KM_DEV_TRIGGERS=true 不得在 NODE_ENV=production 下啟用(它會開啟只供開發/測試的觸發路徑)。已拒絕啟動。",
     );
   }
+  // phase-2b (GHERKIN_WORKFLOW §5, ADR 0015 D3′): this flag indexes a fixed
+  // fixture PDF into the store `app.retrieval` also queries. Fine for a
+  // developer's own `pnpm dev`; on a production deploy it would put a fixed
+  // fixture into the production index, so it fails closed the same way the
+  // two flags above do.
+  if (nodeEnv === "production" && devSeedFixture) {
+    throw new ConfigError(
+      "AI_KM_DEV_SEED_FIXTURE=true 不得在 NODE_ENV=production 下啟用(它會把固定 fixture 塞進生產索引)。已拒絕啟動。",
+    );
+  }
 
   return Object.freeze({
     nodeEnv,
@@ -157,6 +169,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     corsOrigins: Object.freeze(readOriginList(env, "AI_KM_CORS_ORIGINS")),
     devTriggers,
     testSandbox,
+    devSeedFixture,
     // Defaults ON so a developer's first `pnpm dev` just works. A production
     // deploy should set it false and run `pnpm --filter @ai-km/api migrate`
     // as its own step, so a schema change is never a side effect of a restart

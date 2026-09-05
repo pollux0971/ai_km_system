@@ -172,7 +172,24 @@ provider 回傳錯長度的向量時,沒有任何東西會拋錯,相似度照算
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)in-process embed/generate、兩條薄路由與契約驗證、fidelity 守門、條件註冊、ASR | I1 | done | 2026-09-04 |
-| 2 | 在真的 `apps/api` 裡被 06/07 呼叫,兩條路由對真 session | I2 | todo | |
+| 2 | 在真的 `apps/api` 裡被 06/07 呼叫,兩條路由對真 session | **I2(實作已由 06/07 phase-2 落地;本 phase 是驗收補寫,不在 I2 五塊內)** | todo | |
+
+**phase-2 狀態細節(2026-09-05,顧問裁決 `DECISIONS_NEEDED` #37)**:
+協調者發現這一列與 `docs/01-roadmap.md` 的 I2 清單不一致(那份只列 06/07/03/11/05),
+初查後認為內容**看起來已經滿足**(`modelGatewayPlugin` 已註冊在真 `apps/api`、
+兩條路由已用 `requireSession`、而 I2 的 `@e2e` 路徑不經過那兩條路由)。
+
+**顧問的裁決不是「那就改成 done」**:
+
+> **phase 表上的 phase 沒有 `.feature` 就不能是 `done`,也不能因為「看起來已滿足」直接改狀態。**
+
+——這一句是重點。`04-model-gateway/` 底下**沒有 `phase-2.feature`**,所以就算內容都對,
+**也沒有任何東西會在它壞掉時變紅**;`done` 與 `todo` 的差別會只是有人改了一個字。
+
+**做法**:測試 agent 補 `phase-2.feature` **三條**——(1) `modelGatewayPlugin` 在真
+`buildServer()` 上註冊;(2) 兩條路由**無 session → 401**;(3) 有 session → 200 且**回應 shape 對契約**。
+**預期一寫就綠**——那是**回填形狀**,與 phase-1 一樣合法。然後走 `/phase-done` 標 `done`。
+`docs/01-roadmap.md` **不動**(它的 I2 五塊清單是對的)。**標準級。**
 | 3 | 真模型(PF3):`@model` 場景、`HttpEmbeddingProvider` 對真 llama-server | — | todo | |
 | 4 | ASR 端到端:真 whisper-server + 真模型檔 + 真錄音 | — | todo | |
 

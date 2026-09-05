@@ -78,3 +78,27 @@ UI 擋住格式(D3)可以先做,抽取器逐格式補。
 
 `AI KM系統提案說明` p.2/p.3/p.6、`DECISIONS_NEEDED` #28/#29(被本 ADR 取代)、
 story E05-S011~S015(封存規格庫)、`08-knowledge-management/FEATURE.md`。
+
+---
+
+## 2026-09-05 追加:抽取器選型裁決(技術顧問 ai-km-1b)
+
+**anydoc 做 `doc`/`ppt`/`xls`/`csv`/`txt`/`md`;PDF 維持 `pdf-extract.ts`;docling 不進 I4。**
+
+**理由**:anydoc 是 **Node binding、行程內**,符合 ADR 0007 的 in-process 主路徑;
+docling 是 Python,要像 `whisper-server` 一樣開 sidecar——**那是第二個 runtime**,
+留到真的需要影像 OCR(D1 的 `image` 格式)那個 phase 再評,並比照 ADR 0004 的 sidecar 形狀。
+
+**四個條件,缺一這條裁決作廢**:
+
+1. **版本釘死**,native binary 要在 **Node 22 + on-prem 目標(linux x86_64)實測能裝**
+   ——裝不起來這條裁決**作廢回來重裁**(不是想辦法繞過)。
+2. 確認 **npm 上有發布的 binding 與 LICENSE 檔**,不是只有 repo。
+3. **每種格式各一條 I1 形狀的性質場景**:「引用 slice 回**儲存的抽取文字**逐字相等」
+   ——抽取文字就是儲存的原文(見 `DECISIONS_NEEDED` #36,協調者查對了)。
+4. **文件 metadata 要記抽取器名稱與版本。**
+   **這一條是 #36 真正剩下的風險,不是「指不回去」**:抽取器升版會讓**同一份檔的 offset 漂移**,
+   **舊文件不重抽就不能換版**。沒有記版本,升版那天沒有任何東西會發現引用開始指錯地方。
+
+**分級:標準級。落點**:`05-ingestion` 新 phase,**排在 I4 前**,依本 ADR D3。
+意圖句:「**一個人上傳 docx/pptx/xlsx/csv/txt/md 任一種,問問題時引用能開回原文段落。**」

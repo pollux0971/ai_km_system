@@ -10,16 +10,15 @@
 
 | # | 日期 | 一句話 | 類別 | 建議(顧問/協調者) | 阻擋了什麼 |
 |---|---|---|---|---|---|
-| 23 | 2026-09-05 | **`apps/api` 到底是誰的地盤?** 起草 `boundaries.owners.json` 時撞到兩條真實衝突,而且它們是同一個問題的兩面:(1) `apps/api/src/health/checks.ts` —— `12-audit-observability` 的「範圍」明列它並對它做過反向驗證,`10-admin-console` 的「技術棧」也把整個 `apps/api/src/health` 列進自己的路徑清單;(2) `GET /v1/admin/health` 這條路由的角色守門,兩份 FEATURE.md 都寫進「範圍」,而 route 註冊與 `ADMIN_HEALTH_ROLES` 都在同一個 `server.ts`。<br>**更大的那一題**:`apps/api/src/` 底下 24 個檔(`server.ts`、`config.ts`、`rag-plugin.ts`、`csrf/**`、`db/**`…)**沒有任何 FEATURE.md 寫進「範圍」或「來源:實作」**,只被當「依賴」提過。所以真正要裁的是:**`apps/api` 是 glue／composition root(像 `contracts` 一樣全域放行、不屬於任何能力),還是要逐檔指派擁有者?**<br>起草者的判斷(僅供參考,草稿沒照它寫):`apps/admin` 前端**不會** import `apps/api/src/health/checks.ts`(鐵律 3),10 對它的依賴只在「HTTP 回應要吻合量測結果」的整合層,12 才是真正寫那支檔案行為的資料夾 | 工程取捨(顧問級) | 我沒有自己挑一個寫進草稿——草稿對衝突路徑**整個 `apps/api` 留白**,理由是一旦裁定「`apps/api` 是 glue」,那是對整個目錄的一次性裁決,先局部指派只會製造二次衝突 | `check-boundaries` 接進 CI |
-| 24 | 2026-09-05 | **`packages/permissions` 的定位沒有人拍板過。** 實跑抓到它被 **6 個非 `02-authorization` 的資料夾直接 import**(`01-identity` 2 處、`08`、`09` 2 處、`10`、`11`)。`02-authorization` 的「來源」自認擁有它(`packages/permissions/src/index.ts`,僅型別),但 02 自己的「開放問題」也承認**這個 package 沒有任何決策邏輯**。<br>要裁的是:它該當 **02 專屬**(那 6 條就是真的越界,要修架構),還是該當**像 `contracts` 一樣全域放行**(那它該進 `contractsOwner` 那一類,不是某個能力的地盤) | 工程取捨(顧問級) | 從實況看它是**全域共用詞彙**(`Role` 型別散在六個資料夾),不是授權決策。但「型別可以全域共用」這件事一旦寫進 owners 表就是一條規則,不是一次例外,所以請你裁 | 同上 |
-| 25 | 2026-09-05 | **205 個檔案沒有任何 FEATURE.md 宣稱擁有**,起草者依指示不硬塞。三類值得分開看:(a) `apps/web/src/lib` 約 65 個,其中 `messages.ts`/`conversations.ts` 直覺屬 03、`auth.ts` 屬 01、`transcription.ts` 屬 04,但**沒有一份 FEATURE.md 用反引號點名它們**;(b) `packages/{auth-client,config,logger,testing,types,ui,validation}` **七個 package 十二份 FEATURE.md 一次都沒提過**;(c) **整組 `erp-*`(11 檔)與 `diagnostic-*`** ——這兩類**根本沒有對應的能力資料夾**,因為 I8 的 `13-maintenance-assistant`／`14-erp-reporting` 依 ADR 0013 #3「後端資料來源未定前不建」。<br>(c) 與 roadmap 一致、不是缺陷;(a)(b) 是**回填的覆蓋缺口**——12 個 phase-1 證明了「能力現在會做的事」,但沒有證明「這些檔案屬於誰」 | 工程取捨(顧問級) | 建議分開處理:(a) 補進各資料夾 FEATURE.md 的「範圍」(小,但要逐檔確認);(b) 這七個 package 可能該歸 glue;(c) 維持現狀並在 owners 表註明「等 I8」 | 同上 |
-| 21 | 2026-09-05 | **`check-boundaries.ts` 接不上**:它找 `<repo-root>/scripts/boundaries.owners.json`,而我們只有模板帶來的範例在 `features/scripts/`。實測 exit 1,訊息是「找不到設定檔」——**紅的原因是設定不存在,不是它抓到違規**。要接上得先寫一份本專案的 owners 表(哪個路徑屬哪個能力資料夾)。`boundaries.allow.json` 目前是 `[]` | 工程取捨(顧問級) | owners 表其實**可以從 `FEATURE.md` 的 owner 欄推導**,不是全新決策。我可以起草再請你審。但我不想在它紅在「設定不存在」的狀態下接進 `pnpm test`——那會讓 main 紅在工具沒設定好,不是紅在有人越界(坑 4:紅燈不再攜帶資訊) | 顧問說「I2 之前要接上」 |
-| 22 | 2026-09-05 | **`check-standalone.ts` 是工具自己壞掉,不是抓到違規**:它對我們的 `standalone.json` 直接 `TypeError [ERR_INVALID_ARG_TYPE]: The "file" argument must be of type string. Received undefined`(`check-standalone.ts:95` 的 `spawnSync`)。根因:它 `Object.entries(manifest)` 全收,沒有跳過 `_` 開頭的 metadata 鍵,而我們的 manifest 第一個鍵是 `_doc`(一段長說明字串),於是 `entry.cmd` 是 `undefined` | 模板 bug(上游) | **修法很小(跳過 `_` 前綴鍵),但那個檔案的檔頭寫著「SOURCE: template v1.2.2 — 勿手改;升版用 sync-gates.sh」,所以我不手改。** 建議走上游:llm-learning-cards 的模板側修掉,我們在 I2 之後升 1.3.4 時一起收。09-07 的聯合回顧正好是場合 | 同上 |
-| 26 | 2026-09-05 | **I2 的整合場景與 ADR 0014 互相矛盾——而且是整合點自己抓到的。** `docs/integration/i2-ask-in-web.feature` 的場景「A person outside the department gets nothing from that document」要求換部門的人拿不到 `eng` 的文件;但 **ADR 0014 明文裁定 I2 期間每個人都拿固定 `dept:eng` scope**,所以那個場景**在 I2 的定義下不可能綠**。<br>這不是實作缺陷:`03-conversation/phase-2.feature` 自己就有一個場景**斷言相反的事**(「兩個人都應該帶著同一個固定 `dept:eng`,因為 I2 還沒改變那件事」)。**兩份規格對同一件事各說各話,而整合點是第一個把它們放在一起跑的地方。**<br>時序:I2 的整合檔寫在 ADR 0014(2026-09-04,為了解除 I2 的阻塞而立)**之前**,沒有人回頭對齊。 | 整合點驗收 + `.feature` 修改 | **我的建議**:把那個場景搬到 **I3** 的整合點(「部門授權真的來自身分」正是 I3 的定義),並在 I2 留一條**明確斷言現況限制**的場景——讓「每個人都拿固定 scope」變成**看得見、會紅**的事實,而不是消失。走 `/feature`,`.feature` 我不自己改 | **擋 `/integrate I2`** |
-| 27 | 2026-09-05 | **問一個文件裡沒有的主題,系統仍然給出引用。** `retrieve()` **沒有相似度門檻**,top-K 永遠回 K 筆;問「這份文件裡沒有的主題」,那份 `eng` 文件照樣被引用。<br>**措辭要精確**:這**不是「捏造引用」**(generation 層的守門有效,引用確實存在於 context),是**「答非所問」**——引用的是一份真實但不相關的文件。所以整合場景的文字「rather than an invented one」本身也不夠精準。<br>`services/generation/src/service.ts` 的檔頭早就寫著這是 **E04-S022 的未決問題**(「threshold a pending product decision」)。 | 產品行為未定義(門檻值) | **這條我不建議放寬場景。** 「問了不相關的問題卻拿到引用」是使用者第一次用就會撞到的東西——`docs/01-roadmap.md` 的 I2 段自己也預言了:「通過後立刻做:使用者拿自己的一份真實文件問三個問題,把**答非所問**的紀錄下來」。建議:(a) 先落一個保守門檻並記 ADR,或 (b) 明確接受限制、把場景文字改成斷言現況。**兩條都要決定,不能兩邊掛著** | **擋 `/integrate I2`** |
 
-> 其餘 #1–#15 已由 ADR 0013 裁決,移至「已批示」。收件人自 2026-09-04 起為技術顧問
-> (見 CLAUDE.md 決策權段與 ADR 0013);只有**付費**與**整合點 `@e2e` 親手驗收**才是使用者。
+**(目前無待批示。)** 2026-09-05 一輪把 #16–#37 全部裁完並落地:#16/#17 由使用者、
+#18–#27 與 #35–#37 由技術顧問、#28–#34 由使用者對照提案逐條裁決。
+
+收件人自 2026-09-04 起為技術顧問(見 CLAUDE.md 決策權段與 ADR 0013);
+只有**付費**與**整合點 `@e2e` 親手驗收**才是使用者。
+
+**目前唯一等使用者的不是一列決策,是一個動作**:I2 的 `@e2e` 親手驗收
+——而它今天還做不了(`05-ingestion/phase-2b` 正在補 dev seeder,見 `docs/01-roadmap.md` I2 段)。
 
 ## 已批示
 
@@ -59,3 +58,10 @@
 | 13 | 2026-09-04 | `ResyncEvent.reason` 的 `SERVER_RESTART` 在契約裡,但 `routes/change-events.ts` **沒有任何路徑會送出**。是保留值,還是缺實作? | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):SERVER_RESTART 為保留值,description 註明 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
 | 14 | 2026-09-04 | **暫緩(2026-09-05,ADR 0019 追加段:使用者「暫時只用一個 administrator」,群組管理員暫不做;「暫時」不是「永不」,I6 開工時重問)**。~~已由 **ADR 0019**(使用者 2026-09-05 親口)在「目標模型」這一點上取代:不再分 super 與普通 administrator,I6 一起做~~ 部門主管能不能管**自己部門**的群組?目前授權表對 `/roles`/`/permissions`/`/departments`/`/groups` 一律只給 `super_administrator`,那是 E11-S023 在「角色描述沒有字面對應」時選的**最嚴讀法,不是最終政策** | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):部門主管管自己部門群組於 I6 落地;之前維持最嚴 | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
 | 15 | 2026-09-04 | 顧問要求在 CLAUDE.md「強制工作流」段末尾加一行「採用範式模板 v1.0.0(2026-09-04)」。**協調者不自行動手**:CLAUDE.md 是你的規則檔,而這是 peer 的要求,不是你的話 | 顧問裁決(ADR 0013;使用者「之後你的決定就不需要我的裁決」):CLAUDE.md 加採用模板 v1.0.0 一行(本 commit) | ADR 0013;#2→ADR 0009;#8/#10/#12 各自 /decide |
+| 21 | 2026-09-05 | `check-boundaries` 接不上(設定檔路徑) | 顧問裁:從 FEATURE.md owner 欄起草 owners 表,同一 commit 接進 test script 與 CI,接進去那刻必須綠 | `ffc6a80`、`790c9cf` |
+| 22 | 2026-09-05 | `check-standalone` 對我們的 manifest 直接 `TypeError`(不跳過 `_` 前綴鍵) | 顧問裁:走上游,模板側修,I2 後升版一起收;本地不手改(SOURCE 標頭) | 轉 llm-learning-cards |
+| 23 | 2026-09-05 | `apps/api` 是誰的地盤 | 顧問裁:**整個目錄是 composition root,設為 glue,不逐檔指派**;health 語意歸 12,10 改列「依賴」 | `ffc6a80`、`b1ab4c8` |
+| 24 | 2026-09-05 | `packages/permissions` 的定位 | 顧問裁:**共用詞彙層,不是 02 的地盤**;與 `contracts/` 同列 `shared`。守門:決策邏輯只在 `services/retrieval/src/authorization/` | `b1ab4c8` |
+| 25 | 2026-09-05 | 205 個檔案沒有主人 | 顧問裁:七個基礎設施 package → `shared`;app 殘餘歸殼(web→11、admin→10);`erp-*`/`diagnostic-*` → `i8-pending` | `ffc6a80`、`b1ab4c8` |
+| 26 | 2026-09-05 | I2 整合場景與 ADR 0014 互相矛盾 | 顧問裁:**搬到 I3**,I2 留一條「會在 I3 變紅」的替代場景;檔頭「fails closed on scope」改掉 | `066d924` |
+| 27 | 2026-09-05 | 問無關主題仍拿到引用 | 顧問裁:**搬到 `04-model-gateway/phase-3`**,措辭 `invented`→`unrelated`;現在加門檻是假調參(embedding 是 feature hashing) | `066d924` |

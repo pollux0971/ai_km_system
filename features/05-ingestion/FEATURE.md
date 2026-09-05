@@ -107,7 +107,23 @@ AssertionError: 錯誤類型應為 EmbeddingVersionMismatchError,實際 Embeddin
 2. 檔頭有一段已過時(仍寫「索引步驟今天什麼都不做」,但場景 2/3 現在真的會索引與查詢)
 3. FEATURE.md 的「單獨執行」段落要跟著 1 更新
 | 2b | **開發者用 `pnpm dev` 一條指令起 server,起來時 fixture PDF 已在索引裡,人可以在瀏覽器問。** | I2 | done | 2026-09-05 |
+| 2c | **一個人上傳 `docx`／`pptx`／`xlsx`／`csv`／`txt`／`md` 任一種,問問題時引用能開回原文段落。** | I4 前 | todo | |
 | 3 | 非同步、`apps/worker-ingestion`、失敗原因落庫 | I4 | todo | |
+
+**phase-2c 的來源與條件(ADR 0020 追加段,顧問 2026-09-05 裁決)**:抽取器用 **anydoc**
+(Rust + Node binding、行程內,符合 ADR 0007 的 in-process 主路徑);**PDF 維持 `pdf-extract.ts`**;
+**docling 不進 I4**(Python sidecar 是第二個 runtime,留給 `image` 格式那輪)。
+
+**四個條件,缺一這條裁決作廢**:
+
+1. **版本釘死**,native binary 要在 **Node 22 + on-prem 目標(linux x86_64)實測能裝**
+   ——**裝不起來就回來重裁,不是想辦法繞過**。
+2. npm 上要有**發布的 binding 與 LICENSE 檔**,不是只有 repo。
+3. **每種格式各一條 I1 形狀的性質場景**:引用 slice 回**儲存的抽取文字**逐字相等。
+4. **文件 metadata 記抽取器名稱與版本**——抽取器升版會讓同一份檔的 offset **漂移**,
+   舊文件不重抽就不能換版。**沒記版本,升版那天沒有東西會發現引用開始指錯。**
+
+**所以這個 phase 的第一步是條件 1/2 的實測,不是寫場景。**
 
 **為什麼有 phase-2b(2026-09-05)**:phase-2 交出了 `app.ingestion` 接縫與共用 store,
 28 條整合場景與五個 `phase-done` 全綠——**但 roadmap 對這個 phase 的原文是「一條**指令**」,

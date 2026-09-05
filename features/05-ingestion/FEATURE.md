@@ -106,7 +106,7 @@ AssertionError: 錯誤類型應為 EmbeddingVersionMismatchError,實際 Embeddin
 1. `phase-2.feature` 缺 `@standalone` tag → 單獨執行指令目前對 phase-2 的四個場景**沒有覆蓋**,停在 10 passed
 2. 檔頭有一段已過時(仍寫「索引步驟今天什麼都不做」,但場景 2/3 現在真的會索引與查詢)
 3. FEATURE.md 的「單獨執行」段落要跟著 1 更新
-| 2b | **開發者用 `pnpm dev` 一條指令起 server,起來時 fixture PDF 已在索引裡,人可以在瀏覽器問。** | I2 | todo | |
+| 2b | **開發者用 `pnpm dev` 一條指令起 server,起來時 fixture PDF 已在索引裡,人可以在瀏覽器問。** | I2 | done | 2026-09-05 |
 | 3 | 非同步、`apps/worker-ingestion`、失敗原因落庫 | I4 | todo | |
 
 **為什麼有 phase-2b(2026-09-05)**:phase-2 交出了 `app.ingestion` 接縫與共用 store,

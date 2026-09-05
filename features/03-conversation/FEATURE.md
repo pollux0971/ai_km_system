@@ -105,6 +105,16 @@ demo-maintenance 的 scope key(principalId)=「i2-fixed-demo-scope」
 生產碼的 `PRAGMA` runtime 偵測(§5.1 靜默錯誤)、`state` 的「有引用 → `ANSWERED`」啟發式
 (ADR 0018;本輪**完全不設** `state`,由 `07-generation/phase-3` 補結構化訊號後再接)。
 | 3 | 回饋寫入面與 admin 讀取模型回填 | I5 | todo | |
+| 4 | **client 不能再自己送一則助理訊息——問題只能由伺服器回答。** | I2 | todo | |
+
+**phase-4 的來源(2026-09-05,顧問裁決)**:ADR 0017 第二步的 (b)(c)(d)——
+拒絕 client 送 `role: assistant`(400 `VALIDATION_ERROR`)、重寫 `createMessage` 描述、
+依契約自己的規則升版。**請求側收緊顧問已裁准**,條件就是順序。
+
+**gate:`11-app-shell/phase-3` 已進 main。** 理由:web 還在送 `role: assistant` 時
+不能先拒絕它——先拒絕會讓使用者送訊息直接 400。
+
+**`/integrate I2` 的「stub 已移除」查的就是這兩個 phase**(ADR 0017)。
 
 ## 回填對照表(phase-1)
 

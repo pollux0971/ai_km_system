@@ -166,7 +166,35 @@ ADR 0018 條件 2 要求「`state` 缺席時渲染中性(無徽章)」。實作�
 `answerState: result.value.state ?? "ANSWERED"`(`recordUsageEvent("rag_answer_outcome")`)
 ——**telemetry 不是渲染**,在條件 2 字面範圍外。後果:I3 時代一個 `state` 缺席的棄答訊息
 仍會被記進分析當成 `"ANSWERED"`。同一類缺陷、不同出口,登記為後續項。
-| 3 | 斷點與元件層 UI 狀態(需要 DOM 環境) | 待定 | todo | |
+| 3 | **一個人在瀏覽器問問題,看到的答案與引用就是伺服器產生的那一則,不是罐頭。** | I2 | todo | |
+| 4 | 斷點與元件層 UI 狀態(需要 DOM 環境) | 待定 | todo | |
+
+**phase-3 的來源(2026-09-05,顧問裁決;原 phase-3「斷點」順延為 phase-4)**:
+使用者走查時看到畫面回「(模擬回覆)…」且「引用來源:尚無引用來源」。
+根因:`message-thread.tsx` 送訊息到真 API **成功之後**呼叫
+`startStream(classifyAnswerState(content), …)`,**本地串流 `MOCK_REPLY`,把伺服器產生的
+帶引用答案丟掉**。所以 `03-conversation/phase-2` 做的事完全沒到達畫面。
+
+這是 **ADR 0017 第二步的 (a)**。顧問把原本「四件同一個 PR」改成**兩個 phase 依序**
+——目的只有一個(web 還在送 `role: assistant` 時不能先拒絕它),**用順序就達到,不必破壞
+「一個 phase 一個 branch」**。本 phase **不動契約、不動 `services/`**;
+(b)(c)(d) 在 `03-conversation/phase-4`,gate 是本 phase 已進 main。
+
+**範圍(顧問裁定)**:
+- 移除 `MOCK_REPLY`、`classifyAnswerState`、`startStream` 那條路;助理氣泡與引用面板顯示**伺服器回的 message**
+- **六個 `AnswerState` 的渲染碼與其測試留著**(給定 state → 畫對徽章),**拿掉的只有「從問題文字捏造 state」的來源**
+- **不等 `07-generation/phase-3`**:中間那段「沒有 mock state 也沒有真 state」**不是缺口**,
+  是 ADR 0018 D2 裁定的產品現況,而 phase-2 已讓**缺席渲染為中性**
+- 順手修 `#40`:引用面板旁的「附件」列出 `attachmentNames`(資料在客戶端就有,現在氣泡與面板各說各話)
+
+**瀏覽器層守門(必做,顧問指定形狀)**:一條場景斷言
+「**助理氣泡的文字等於伺服器回的 `message.content`,引用面板的條數等於 `message.citations.length`**」;
+反向驗證改回本地串流 → 紅,**失敗訊息要印出氣泡文字與伺服器文字兩者**。
+
+**Playwright 這一輪不做,進 gate**:實測 CI 的 `e2e` job **自 2026-08-28 就是紅的**
+(歷史原因 `connect ECONNREFUSED 127.0.0.1:4000` ——**API 沒在跑**,與使用者今天撞到的
+是同一件事),且 Playwright 需要 `tests/e2e/e2e-locked.sh` 的跨 worktree flock。
+所以本 phase 用 **jsdom 為必做**;**真瀏覽器那一層寫進 `NEXT.md` 的 gate**,引 ADR 0017。
 
 ## 回填對照表(phase-1)
 

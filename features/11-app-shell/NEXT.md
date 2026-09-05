@@ -31,6 +31,29 @@
 - [ ] 環境:一個能跑 DOM 的驗收環境(features 的 runner 加 jsdom,或把這些場景交給
       `tests/e2e` 的 Playwright)。**這是新依賴,不是 worker 自己能加的**,要協調者或使用者定。
 
+## phase-3 的 gate(2026-09-05 新增,顧問裁決)
+
+- [x] 整合:`03-conversation/phase-2` 已 `done`(2026-09-05)——伺服器會自動產生帶 `citations` 的助理訊息
+- [x] 整合:`05-ingestion/phase-2b` 已 `done`——`pnpm dev` 起來時 store 有東西,畫面才問得出帶引用的答案
+- [x] `/feature` 預先確認(顧問 2026-09-05):`grep 模擬: features/{03,11}/phase-1.feature`,
+      **凡是斷言 mock 觸發器行為的場景,隨 mock 一起刪**,commit body 要列出刪了哪幾條與為什麼
+      ——**它們描述的是鷹架不是產品**。`08` 那套 `file-processing` 的觸發器**不動**(已查證,不同一套)。
+
+**Playwright / 真瀏覽器那一層(本 phase 不做,寫成 gate)**:
+
+`docs/integration/i2-ask-in-web.feature` 最終要有一條 **`@browser`** 場景,對著
+**帶 `AI_KM_DEV_SEED_FIXTURE=true` 的真 dev server、真瀏覽器**——**那才是 PITFALLS 坑 19 缺的那一層**。
+
+本輪不做的理由是量出來的,不是推的:
+
+- CI 的 `e2e` job **自 2026-08-28 就是紅的**,歷史原因 `connect ECONNREFUSED 127.0.0.1:4000`
+  ——**API 沒在跑**。那與使用者 2026-09-05 走查時撞到的是**同一件事**。
+- Playwright 要 `tests/e2e/e2e-locked.sh` 的跨 worktree flock(一次只能一個)。
+
+**所以先修 e2e job 的紅,再談 `@browser` 場景**;在那之前 jsdom 那條是必做的替代,
+**但它替代不了「真瀏覽器」**——這句要留著,免得日後有人以為 jsdom 綠了就等於人做得到
+(那正是坑 19 的形狀)。
+
 ## Gate 未滿足時
 
 **phase-2 卡在 I2**:不要先照猜的介面寫引用面板的場景——`06`/`07`/`03` 的 phase-2 還沒定

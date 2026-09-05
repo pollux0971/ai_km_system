@@ -8,7 +8,17 @@ Feature: A person asks a question in the web app and gets an answer whose citati
 
   The model may still be fake (PF1) — the answer text will be canned. What I2
   proves is that the seam apps/web → apps/api → retrieval → generation →
-  citations → UI exists end to end and fails closed on scope.
+  citations → UI exists end to end. Scope is FIXED to dept:eng for I2
+  (ADR 0014); deriving it from the signed-in identity is I3.
+
+  2026-09-05 — this paragraph used to end "and fails closed on scope", and two
+  scenarios below asserted that. They could not pass: ADR 0014 (written to
+  UNBLOCK I2) fixes every caller's scope to dept:eng, and 03-conversation's
+  phase-2.feature asserts that same fixed scope. Two specs said opposite things
+  about one behaviour, and this integration file was the first place they ran
+  together — five phase-done runs each went green without noticing. The two
+  scenarios moved (see below); a header must not claim something the file does
+  not prove.
 
   Background:
     Given a fresh server with fake providers
@@ -30,17 +40,30 @@ Feature: A person asks a question in the web app and gets an answer whose citati
     And every citation's text equals the original text sliced by its offsets
     And no citation belongs to a document outside department "eng"
 
-  Scenario: A question with no matching document is answered with no citation rather than an invented one
+  # MOVED 2026-09-05 → features/04-model-gateway/phase-3.feature (real-model PF3).
+  # The wording there is "rather than an UNRELATED one", not "invented": generation's
+  # fabricated-citation guard works — the citation really is in context. The problem is
+  # 答非所問, citing a real but irrelevant document, because retrieve() has no similarity
+  # threshold. The advisor ruled 2026-09-05 that adding a threshold NOW would be fake
+  # tuning: today's embedding is feature hashing (deterministic.provider.ts's own header),
+  # so its scores carry no semantics and any value calibrated against them dies with the
+  # real model. Mechanism + value land together in 04-model-gateway/phase-3.
+  Scenario: During I2 an off-topic question still gets a citation — fake embeddings carry no relevance; this turns red when the real-model threshold lands, then moves
     When the demo user posts the question "這份文件裡沒有的主題" to a new conversation
     Then the response status is 201
-    And the answer carries no citation
-    And the answer says it found nothing to cite
+    And the answer carries at least one citation from document "i2-doc-eng"
 
-  Scenario: A person outside the department gets nothing from that document
+  # MOVED 2026-09-05 → docs/integration/i3-scope-from-identity.feature, verbatim.
+  # "A person outside the department gets nothing" is I3's definition ("部門授權真的
+  # 來自身分"), not I2's. Replaced here by the scenario below, which asserts what I2
+  # ACTUALLY does — and whose asserted VALUE changes the day I3 derives scope from
+  # identity. That is what makes it a real removal condition, unlike 06/07's scenario 4
+  # (see ADR 0014's "這份 ADR 的一個空保證").
+  Scenario: During I2 every signed-in person gets the fixed eng scope (ADR 0014) — turns red when I3 derives scope from identity, then moves
     Given the demo user belongs to department "hr"
     When the demo user posts the question "文件擷取管線包含幾個階段？" to a new conversation
     Then the response status is 201
-    And no citation belongs to a document in department "eng"
+    And the answer carries at least one citation from document "i2-doc-eng"
 
   @regression
   Scenario: I1 still holds — citation offsets slice the stored original text exactly

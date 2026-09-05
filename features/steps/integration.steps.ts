@@ -406,6 +406,21 @@ Then("the answer carries at least one citation", function (this: KmWorld) {
   assert.ok(citations.length > 0, `回答應該至少帶一個引用,實際 citations=${JSON.stringify(citations)}`);
 });
 
+// 斷言對著「會變的量」:引用清單裡有沒有一筆屬於這個 documentId——不是
+// 「有沒有引用」(那條上面已經有了)。這兩條 i2-ask-in-web.feature 新場景
+// (答非所問、跨部門固定 scope)的意義正是「今天拿得到 i2-doc-eng 這篇的
+// 引用,I3/PF3 落地後同一個 documentId 應該從引用清單消失」——如果這裡只
+// 斷言 citations.length > 0,I3 把 hr 使用者的引用換成別的授權範圍內文件、
+// 或 PF3 加了門檻後回傳空引用改回別的存在性結果,這條斷言會誤判仍然通過。
+Then("the answer carries at least one citation from document {string}", function (this: KmWorld, documentId: string) {
+  const citations = citationsOf(this);
+  const matching = citations.filter((c) => c.documentId === documentId);
+  assert.ok(
+    matching.length > 0,
+    `回答應該至少帶一筆屬於文件 ${documentId} 的引用,實際 citations=${JSON.stringify(citations)}`,
+  );
+});
+
 Then("every citation's text equals the original text sliced by its offsets", function (this: KmWorld) {
   const s = i2State(this);
   const citations = citationsOf(this);

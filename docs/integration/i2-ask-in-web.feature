@@ -78,9 +78,15 @@ Feature: A person asks a question in the web app and gets an answer whose citati
   # 2026-09-05 就是這樣:五個 phase 綠、整合 28/28 綠,而 dev server 的檢索 store 是空的
   # (app.ingestion 沒有路由、沒有 CLI,只有行程內接縫碰得到)。
   # 這條今天會紅,05-ingestion/phase-2b 落地後綠——**它就是那個缺口的反向驗證**。
+  #
+  # 2026-09-05 更正:旗標值原本寫 `=1`,測試 agent 實測指出 `apps/api/src/config.ts` 的
+  # `readBoolean()` **只接受 "true"/"false"**,給 "1" 會 ConfigError 拒絕啟動
+  # (config.ts:71-73)。改成 `=true`——為一個新旗標破例接受 "1",會讓它與
+  # `AI_KM_DEV_TRIGGERS`／`AI_KM_TEST_SANDBOX` 兩個既有旗標的規則不一致,
+  # 而「三個 dev 旗標有兩種寫法」正是日後有人寫錯的來源。一致性比字面 1 值錢。
   @regression
   Scenario: A server started the way a person starts it answers with a citation
-    Given apps/api is started as a separate process with AI_KM_DEV_SEED_FIXTURE=1
+    Given apps/api is started as a separate process with AI_KM_DEV_SEED_FIXTURE=true
     When the demo user posts the question "文件擷取管線包含幾個階段？" to that server over HTTP
     Then the answer carries at least one citation from document "i2-doc-eng"
 

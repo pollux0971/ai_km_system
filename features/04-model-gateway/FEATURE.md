@@ -172,7 +172,7 @@ provider 回傳錯長度的向量時,沒有任何東西會拋錯,相似度照算
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)in-process embed/generate、兩條薄路由與契約驗證、fidelity 守門、條件註冊、ASR | I1 | done | 2026-09-04 |
-| 2 | 在真的 `apps/api` 裡被 06/07 呼叫,兩條路由對真 session | **I2(實作已由 06/07 phase-2 落地;本 phase 是驗收補寫,不在 I2 五塊內)** | todo | |
+| 2 | **兩條 HTTP 路由本身對真 session 可用;06/07 依 ADR 0007 §1 走 in-process,不經路由** | **I2(驗收補寫,不在 I2 五塊內)** | todo | |
 
 **phase-2 狀態細節(2026-09-05,顧問裁決 `DECISIONS_NEEDED` #37)**:
 協調者發現這一列與 `docs/01-roadmap.md` 的 I2 清單不一致(那份只列 06/07/03/11/05),
@@ -186,11 +186,36 @@ provider 回傳錯長度的向量時,沒有任何東西會拋錯,相似度照算
 ——這一句是重點。`04-model-gateway/` 底下**沒有 `phase-2.feature`**,所以就算內容都對,
 **也沒有任何東西會在它壞掉時變紅**;`done` 與 `todo` 的差別會只是有人改了一個字。
 
+**2026-09-05 描述更正(顧問裁決 #38)**:這一列原本寫「在真的 `apps/api` 裡**被 06/07 呼叫**」。
+顧問裁定:**「06/07 該走路由」從來不是意圖**——是那一列寫的人**把 ADR 0007 §1 的備援路徑
+當成主路徑**。06/07 走的是 in-process,而它們 phase-2 的 evidence 驗的就是 in-process 實例,
+**那是對的實例,不用回頭重查**。描述已改成第一種措辭。
+
 **做法**:測試 agent 補 `phase-2.feature` **三條**——(1) `modelGatewayPlugin` 在真
 `buildServer()` 上註冊;(2) 兩條路由**無 session → 401**;(3) 有 session → 200 且**回應 shape 對契約**。
 **預期一寫就綠**——那是**回填形狀**,與 phase-1 一樣合法。然後走 `/phase-done` 標 `done`。
 `docs/01-roadmap.md` **不動**(它的 I2 五塊清單是對的)。**標準級。**
 | 3 | 真模型(PF3):`@model` 場景、`HttpEmbeddingProvider` 對真 llama-server | — | todo | |
+
+**phase-3 的 DoD 追加一條(2026-09-05,顧問裁決 #38 的第二層)**:
+**composition root 建「一個」embedding provider,同一個實例注入 ingestion 與 retrieval。**
+
+背景:`04` 的驗收 session 挖出全 repo 有**四個獨立的 `createModelGateway()` 呼叫點**,
+**index-time 與 query-time 的 embedding 身分今天只是「預設剛好相同」**,靠
+`enforceEmbeddingVersion` **事後**擋。那是守門在擋,不是架構保證。
+
+改的東西很小:`services/retrieval/src/service.ts:204` 已經收 `embedding` 參數、
+`apps/api/src/server.ts:429` 已經有注入點——**只是把兩處接到同一個物件**。
+版本守門**留著當第二道**。
+
+**為什麼落在 phase-3 而不是現在**:真模型落地那天,兩邊必須是**同一個 `bge-m3` 實例**
+——**那才是這條真正要緊的時點**。今天兩邊都是 deterministic 預設,改了看不出差別。
+
+**標準級。反向驗證**:注入兩個不同 provider → `05-ingestion/phase-2b` 的場景 3 必須紅
+並印出兩個版本字串。**那條場景已經存在**,要證明的是它**對「同一實例」這個改法仍然會響**。
+
+這是 **ADR 0015 的延伸**(composition root 擁有 store,**也擁有 embedding 身分**),
+見該 ADR 的 2026-09-05 追加段。
 | 4 | ASR 端到端:真 whisper-server + 真模型檔 + 真錄音 | — | todo | |
 
 ## 開放問題

@@ -236,3 +236,33 @@ provider——這正是 `createIngestionService({ modelGateway })` 這個相依�
 斷言比對的是**錯誤的 class identity**——守門要保證的性質本身——
 而不是「有沒有拋錯」這種存在性副作用。對照本 phase 之前的狀態(翻 `false` 場景結果
 **逐位元不變**),差別不是「紅得比較好看」,是**從沒有檢查點變成有檢查點**。
+
+---
+
+## 2026-09-05 延伸:composition root 也擁有 **embedding 身分**(顧問裁決,#38 第二層)
+
+本 ADR 的 D1 裁定 composition root 擁有 **store**。`04-model-gateway/phase-2` 的驗收 session
+挖出同一個道理沒有套用到 **embedding**:
+
+全 repo 有**四個獨立的 `createModelGateway()` 呼叫點**——
+`apps/api/src/server.ts:428`(給 ingestion)、`services/retrieval/src/service.ts:204`、
+`services/generation/src/service.ts:155`、`services/model-gateway/src/plugin.ts:84`。
+**index-time 與 query-time 的 embedding 來自不同實例。**
+
+**今天不出事,是因為兩邊都用預設的 deterministic provider,而且 `enforceEmbeddingVersion`
+(D2)會事後擋。但那是守門在擋,不是架構保證**——而 D2 自己的存在理由,正是「這種不一致
+不會有東西報錯」(§5.1)。**用一道守門去補一個本來可以在結構上排除的問題,是把偶然當設計。**
+
+**裁決**:composition root 建**一個** embedding provider,**同一個實例**注入 ingestion 與 retrieval。
+版本守門**留著當第二道**——兩道不衝突:結構上不可能不一致,守門則擋住「有人日後又拆開」。
+
+**落點是 `04-model-gateway/phase-3`(真模型 PF3),不是現在**:今天兩邊都是 deterministic 預設,
+改了看不出差別;**真模型落地那天,兩邊必須是同一個 `bge-m3` 實例**——那才是這條真正要緊的時點。
+
+**這也是 `services/ingestion/src/service.ts` 檔頭早就寫下的那句話的結構版**:
+
+> if index-time and query-time embeddings ever come from different code paths,
+> stored vectors stop being comparable to query vectors
+
+——它當時擔心的是「不同的**程式路徑**」,而我們今天有的是「不同的**實例**」。
+同一個問題的較弱形態,但同一個結局。

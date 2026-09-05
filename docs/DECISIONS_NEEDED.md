@@ -20,9 +20,6 @@
 **目前唯一等使用者的不是一列決策,是一個動作**:I2 的 `@e2e` 親手驗收
 ——而它今天還做不了(`05-ingestion/phase-2b` 正在補 dev seeder,見 `docs/01-roadmap.md` I2 段)。
 
-| 38 | 2026-09-05 | **`04-model-gateway/phase-2` 的描述所假設的架構,ADR 0007 沒有。**(由 04 的驗收 session 提出,協調者實測確認)<br>該列寫「在真的 `apps/api` 裡**被 06/07 呼叫**,兩條路由對真 session」——但 **06/07 從來不透過那兩條 HTTP 路由呼叫 gateway**,它們走的是 ADR 0007 §1 的 **in-process 主路徑**。<br>**實測:全 repo 有四個獨立的 `createModelGateway()` 呼叫點**——`apps/api/src/server.ts:428`(給 ingestion)、`services/retrieval/src/service.ts:204`、`services/generation/src/service.ts:155`、`services/model-gateway/src/plugin.ts:84`(給 `app.modelGateway` 與那兩條路由)。**index-time 與 query-time 的 embedding 來自不同的 gateway 實例。**<br>**今天不是缺陷**:兩邊都用預設的 deterministic provider,向量相同;而且 `enforceEmbeddingVersion`(ADR 0015 D2)正是為了抓這種不一致而存在,`phase-2b` 的場景 3 就在守它。**但那是守門在擋,不是架構保證。** | 工程取捨(顧問級) | **顧問裁的三條回填場景剛好繞開了這個錯誤描述**(註冊、401、200+shape),所以 `.feature` 可以照原裁決寫。要裁的是**那一列的描述文字**:改成「這兩條路由本身可對真 session」(不牽扯 06/07),還是承認「06/07 該走路由」是原本的意圖而現在沒做?<br>驗收者提醒的第二層我認為要一併看:若是後者,**`06`/`07` 的 phase-2 evidence 宣稱驗過的是哪一個 gateway 實例**,值得回頭確認 | 不擋 I2(I2 的路徑實測不經過那兩條路由) |
-| 39 | 2026-09-05 | **`ADR 0017` 第二步現在是 I2 `@e2e` 的唯一阻塞,要一個 phase。**(使用者走查時親眼看到)<br>`message-thread.tsx` 送訊息到真 API 之後呼叫 `startStream(...)` **本地串流 `MOCK_REPLY`**,把伺服器產生的帶引用答案**丟掉**。所以畫面永遠是「(模擬回覆)這是前端展示用的固定文字…」,**引用來源永遠是「尚無引用來源」**。<br>ADR 0017 第二步的四件(web 切到 server 生成、拒絕 client 送 `role: assistant`、重寫描述、升版)**必須同一個 PR**。落點原本寫「`11-app-shell/phase-2` 或 `03-conversation/phase-3`」,而 `11` phase-2 已 done 且沒做這件——**所以要開新 phase**。 | 工程取捨(顧問級,落點與 phase 編號) | 建議 `03-conversation/phase-3`(路由拒絕 client `role: assistant` 是它的地盤),但**移除瀏覽器端生成在 `apps/web`(11 的地盤)**——跨兩個資料夾,依 §4 要顧問裁怎麼切。**嚴格級**(它決定使用者看到的是真答案還是罐頭) | **擋 I2 `@e2e`** |
-| 40 | 2026-09-05 | **附件面板與訊息氣泡各說各話**(使用者走查時看到):氣泡顯示「(附件:AI KM系統提案說明 (1).pdf)」,右側「相關內容 → 附件」卻寫「**尚無附件**」。<br>契約上 `attachmentNames` 是**檔名 only**(`conversations.yaml`:「File NAMES only. Attachment content upload is explicitly out of scope」),所以右側面板要顯示什麼本來就沒定義。 | 產品行為未定義 | 兩件要分:(a) 面板讀的資料來源與氣泡不同,是 bug 還是刻意?(b) **上傳的 PDF 到底有沒有進知識庫?** 依契約它只是個檔名,**內容沒有上傳**——若使用者期望「上傳就能問」,那是 I4 的交付(`08` phase-2 + `05` phase-3),不是現在 | 不擋 I2;**影響使用者對系統的理解** |
 ## 已批示
 
 | # | 日期 | 一句話 | 批示 | 落地 |
@@ -68,3 +65,6 @@
 | 25 | 2026-09-05 | 205 個檔案沒有主人 | 顧問裁:七個基礎設施 package → `shared`;app 殘餘歸殼(web→11、admin→10);`erp-*`/`diagnostic-*` → `i8-pending` | `ffc6a80`、`b1ab4c8` |
 | 26 | 2026-09-05 | I2 整合場景與 ADR 0014 互相矛盾 | 顧問裁:**搬到 I3**,I2 留一條「會在 I3 變紅」的替代場景;檔頭「fails closed on scope」改掉 | `066d924` |
 | 27 | 2026-09-05 | 問無關主題仍拿到引用 | 顧問裁:**搬到 `04-model-gateway/phase-3`**,措辭 `invented`→`unrelated`;現在加門檻是假調參(embedding 是 feature hashing) | `066d924` |
+| 38 | 2026-09-05 | 04 phase-2 的描述假設了 ADR 0007 沒有的架構 | 顧問裁:描述改成「兩條路由本身對真 session 可用;06/07 走 in-process,不經路由」。**「06/07 該走路由」從來不是意圖**——是寫那列的人把備援路徑當成主路徑;06/07 的 evidence 驗的就是對的實例,不用回頭。**第二層**(四個 gateway 實例)→ composition root 建一個 embedding provider,落在 04 phase-3 DoD | 本 commit;ADR 0015 追加段 |
+| 39 | 2026-09-05 | ADR 0017 第二步是 I2 @e2e 的唯一阻塞,要一個 phase | 顧問裁:**兩個 phase 依序**,不是四件同 PR——「同 PR」的目的只是「web 還在送時不能先拒絕」,用順序就達到。11-app-shell/phase-3 先,03-conversation/phase-4 後 | `c94560b`(開 phase);`8df5a1f`(記錄) |
+| 40 | 2026-09-05 | 附件面板與氣泡各說各話;上傳的 PDF 內容根本沒上傳 | 顧問裁:面板列出 `attachmentNames` 當缺陷場景加進 **11 phase-3**,不另開 phase;「附件只送檔名,問內容是 I4」要寫進給使用者的 `@e2e` 說明 | `c94560b`;`8df5a1f` |

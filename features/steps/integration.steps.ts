@@ -21,7 +21,9 @@
 import { After, Given, Then, When } from "@cucumber/cucumber";
 import { strict as assert } from "node:assert";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import net, { type AddressInfo } from "node:net";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { KmWorld } from "./_world.js";
 
@@ -147,6 +149,18 @@ function i2State(world: KmWorld): I2State {
   const s = world.bag["i2"] as I2State | undefined;
   assert.ok(s, "Background 尚未起一個真實 server(a fresh server with fake providers)");
   return s;
+}
+
+/**
+ * `docs/integration/i2-ask-in-web.feature`「A server started the way a person
+ * starts it answers with a citation」場景的狀態——**不是** `app.inject()`,
+ * 是一個真的、獨立的 `apps/api` 子行程(`this.bag["i2"]`那個 in-process
+ * `FastifyInstance` 完全不相干)。見檔案最下方那段的實作與理由。
+ */
+interface CrossProcessServer {
+  readonly pid: number;
+  readonly port: number;
+  lastAssistantMessage?: Record<string, unknown>;
 }
 
 /** 惰性初始化,讀寫 `world.bag["i2"]`。`world.startServer()` 在 Background 已經
@@ -389,6 +403,20 @@ interface CitationLike {
 }
 
 function lastAssistantMessage(world: KmWorld): Record<string, unknown> {
+  // 05-ingestion/phase-2b 的跨行程場景(見檔案最下方「@i2 —— 跨行程」段)不經
+  // `ensureI2State()`/`app.inject()`——它走的是一個真的、獨立的 apps/api 子行程,
+  // 沒有 `this.app` 這個 FastifyInstance 可以問。它的狀態放在
+  // `this.bag["i2CrossProcess"]`,這裡優先讀那份,讀不到才落回原本的 `i2State()`
+  // 路徑,讓「the answer carries at least one citation from document {string}」
+  // 這句既有的 Then 不必為了這一種新的入口另外定義一份。
+  const cross = world.bag["i2CrossProcess"] as CrossProcessServer | undefined;
+  if (cross) {
+    assert.ok(
+      cross.lastAssistantMessage,
+      "這個真的子行程上的對話裡沒有出現任何 assistant 訊息——app.rag 沒有被觸發,或訊息路由沒有等它完成就回應",
+    );
+    return cross.lastAssistantMessage!;
+  }
   const s = i2State(world);
   assert.ok(
     s.lastAssistantMessage,
@@ -630,7 +658,246 @@ Then(
   },
 );
 
+// ================================================================== I2 —— 跨行程(05-ingestion/phase-2b 的反向驗證)
+//
+// `docs/integration/i2-ask-in-web.feature`「A server started the way a person
+// starts it answers with a citation」——這份檔案裡**唯一**走「人走的入口」的
+// 自動場景(見該 feature 檔的註解)。其餘場景全部用 `world.startServer()` →
+// `app.inject()`,同一個 process 裡自己 buildServer()、自己索引、自己問;
+// 這一條刻意不那樣做,顧問 2026-09-05 裁決:
+//
+//   步驟用 `features/steps/_world.ts` 既有的 `spawnSync`(`KmWorld.runCommand`)
+//   起真 process、真 port、真 HTTP,不用 `buildServer()`。
+//
+// `runCommand()` 底層是 `spawnSync`,**同步阻塞到指令結束**——不能直接拿它跑
+// 一個永遠不 exit 的 `tsx src/main.ts`。解法是讓那個「指令」本身只負責**背景
+// 啟動**真正的 server 再立刻返回:shell 的 `cmd &`(背景工作)讓外層的
+// `sh -c '...'` 幾乎瞬間結束(`spawnSync` 因此很快返回),而被背景的
+// `tsx src/main.ts` 繼續在背後跑,變成孤兒行程(父 shell 結束不會連帶送
+// SIGHUP 殺掉它)。真正等它「準備好」的邏輯不在 shell 裡,在下面的
+// `waitForRealServerHealth()`——真的對 `/v1/health` 發真的 HTTP 請求,輪詢到
+// 200 為止,這件事本身也是「真 process 真的有在監聽某個 port」的證明。
+//
+// 這一步是本檔唯一真正呼叫 apps/api 之外的組譯二進位(`tsx`)、真正
+// `listen()` 在一個真的作業系統 port 上的地方——不是 `app.inject()` 模擬的
+// HTTP,是 `node:http` 對 `127.0.0.1:<port>` 發出的真請求。
+//
+// ⚠️ 已知落差,留給 05-ingestion/phase-2b 的開發 agent 或協調者判斷(不是這裡
+// 能修的——`.feature` 只由使用者或 /feature 流程改,§6):`docs/integration/
+// i2-ask-in-web.feature` 的固定文字是「AI_KM_DEV_SEED_FIXTURE=1」,下面的
+// Given 因此原樣把環境變數值設成字串 "1"。但 `features/05-ingestion/NEXT.md`
+// 的「phase-2b 的 gate」要求這個新旗標「照 apps/api/src/config.ts 既有
+// AI_KM_DEV_TRIGGERS/AI_KM_TEST_SANDBOX 的形狀與措辭」——那兩個既有旗標的
+// `readBoolean()` 只接受**恰好**「true」或「false」,其他值(含 "1")一律
+// `fail()` 成 ConfigError。若開發 agent 依樣畫葫蘆讓新旗標也只認
+// "true"/"false","AI_KM_DEV_SEED_FIXTURE=1" 會讓 `loadConfig()` 直接拋錯,
+// 這個場景會**永遠**紅,即使 phase-2b 其餘部分完全做對。兩份文件字面上互相
+// 矛盾,由拿到這個落差的人選一邊改(讓 readBoolean 也認 "1",或走 /feature
+// 改這份 `.feature` 的文字)。
+
+const CROSS_PROCESS_HEALTH_TIMEOUT_MS = 20_000;
+
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.on("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address() as AddressInfo;
+      probe.close(() => resolve(address.port));
+    });
+  });
+}
+
+function pingOnce(port: number, path: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = http.get({ host: "127.0.0.1", port, path, timeout: 2_000 }, (res) => {
+      res.resume();
+      resolve(res.statusCode ?? 0);
+    });
+    req.on("timeout", () => {
+      req.destroy(new Error("health check request timed out"));
+    });
+    req.on("error", reject);
+  });
+}
+
+async function waitForRealServerHealth(port: number, logPath: string): Promise<void> {
+  const start = Date.now();
+  for (;;) {
+    try {
+      const status = await pingOnce(port, "/v1/health");
+      if (status === 200) return;
+    } catch {
+      // 子行程可能還在啟動(ECONNREFUSED)或還在跑 migration——繼續等,不當成失敗。
+    }
+    if (Date.now() - start > CROSS_PROCESS_HEALTH_TIMEOUT_MS) {
+      const log = (() => {
+        try {
+          return readFileSync(logPath, "utf8");
+        } catch {
+          return "(讀不到子行程的 log 檔)";
+        }
+      })();
+      throw new Error(
+        `等真的 apps/api 子行程在埠 ${port} 回應 /v1/health 200 超過 ${CROSS_PROCESS_HEALTH_TIMEOUT_MS}ms 仍未成功。` +
+          `子行程 log:\n${log}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
+Given(
+  "apps\\/api is started as a separate process with AI_KM_DEV_SEED_FIXTURE=1",
+  { timeout: 30_000 },
+  async function (this: KmWorld) {
+    const port = await findFreePort();
+    const dir = this.useTempDir();
+    const dbPath = join(dir, "cross-process-api.sqlite");
+    const logPath = join(dir, "cross-process-api.log");
+    const pidPath = join(dir, "cross-process-api.pid");
+    // 背景啟動:外層這個 sh -c 指令本身幾乎立刻結束(它只負責 `&` 背景 + 寫
+    // PID 檔),真正的 `tsx src/main.ts` 繼續在背景跑。`world.runCommand()`
+    // 是 `spawnSync` 包出來的(見檔頭),用它跑這一行本身不會被真正的 server
+    // 卡住。
+    const cmd =
+      `apps/api/node_modules/.bin/tsx apps/api/src/main.ts ` +
+      `> ${JSON.stringify(logPath)} 2>&1 & echo $! > ${JSON.stringify(pidPath)}`;
+    const result = this.runCommand(cmd, {
+      env: {
+        NODE_ENV: "development",
+        AI_KM_DEV_SEED_FIXTURE: "1",
+        AI_KM_API_HOST: "127.0.0.1",
+        AI_KM_API_PORT: String(port),
+        AI_KM_DB_PATH: dbPath,
+        AI_KM_LOG_LEVEL: "silent",
+      },
+    });
+    assert.equal(
+      result.status,
+      0,
+      "啟動 apps/api 子行程的背景指令(把真正的 server 丟到背景、寫 PID 檔)本身應該立刻成功結束,實際 " +
+        `exit=${result.status}、stderr=${result.stderr}`,
+    );
+    const pidRaw = readFileSync(pidPath, "utf8").trim();
+    const pid = Number(pidRaw);
+    assert.ok(Number.isInteger(pid) && pid > 0, `讀不到子行程的 PID,pid 檔內容:「${pidRaw}」`);
+    await waitForRealServerHealth(port, logPath);
+    this.bag["i2CrossProcess"] = { pid, port } satisfies CrossProcessServer;
+  },
+);
+
+function crossProcessHttpJson(
+  port: number,
+  method: string,
+  path: string,
+  opts: { cookie?: string; payload?: unknown } = {},
+): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: string; json: () => unknown }> {
+  return new Promise((resolve, reject) => {
+    const payload = opts.payload !== undefined ? JSON.stringify(opts.payload) : undefined;
+    const req = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        method,
+        path,
+        headers: {
+          "content-type": "application/json",
+          "x-requested-with": "XMLHttpRequest",
+          ...(opts.cookie ? { cookie: `${SESSION_COOKIE_NAME}=${opts.cookie}` } : {}),
+          ...(payload ? { "content-length": Buffer.byteLength(payload) } : {}),
+        },
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk: Buffer) => {
+          body += chunk.toString("utf8");
+        });
+        res.on("end", () => {
+          resolve({
+            statusCode: res.statusCode ?? 0,
+            headers: res.headers,
+            body,
+            json: () => JSON.parse(body || "null") as unknown,
+          });
+        });
+      },
+    );
+    req.on("error", reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+When(
+  "the demo user posts the question {string} to that server over HTTP",
+  { timeout: 30_000 },
+  async function (this: KmWorld, question: string) {
+    const cross = this.bag["i2CrossProcess"] as CrossProcessServer | undefined;
+    assert.ok(cross, "還沒有用 spawnSync 起一個真的 apps/api 子行程(上一句 Given 應該已經做過)");
+
+    // 真的登入:真的 POST /v1/auth/login,不是 app.inject() 模擬的。
+    const loginRes = await crossProcessHttpJson(cross!.port, "POST", "/v1/auth/login", {
+      payload: { username: I2_DEMO_USERNAME, password: I2_DEMO_PASSWORD },
+    });
+    assert.equal(
+      loginRes.statusCode,
+      200,
+      `demo-user 對真的子行程登入應該成功,實際 ${loginRes.statusCode}:${loginRes.body}`,
+    );
+    const rawSetCookie = loginRes.headers["set-cookie"];
+    const cookieHeader = Array.isArray(rawSetCookie) ? rawSetCookie.join("\n") : String(rawSetCookie ?? "");
+    const match = new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`).exec(cookieHeader);
+    assert.ok(
+      match?.[1],
+      `demo-user 登入沒有帶 ${SESSION_COOKIE_NAME} cookie:${cookieHeader || "(沒有 Set-Cookie)"}`,
+    );
+    const cookie = match![1] as string;
+
+    const createRes = await crossProcessHttpJson(cross!.port, "POST", "/v1/conversations", {
+      cookie,
+      payload: {},
+    });
+    assert.equal(createRes.statusCode, 201, `建立對話應為 201,實際 ${createRes.statusCode}:${createRes.body}`);
+    const conversationId = (createRes.json() as { id: string }).id;
+
+    const messageRes = await crossProcessHttpJson(
+      cross!.port,
+      "POST",
+      `/v1/conversations/${conversationId}/messages`,
+      { cookie, payload: { role: "user", content: question } },
+    );
+    assert.equal(
+      messageRes.statusCode,
+      201,
+      `送出訊息應為 201,實際 ${messageRes.statusCode}:${messageRes.body}`,
+    );
+
+    const listRes = await crossProcessHttpJson(
+      cross!.port,
+      "GET",
+      `/v1/conversations/${conversationId}/messages`,
+      { cookie },
+    );
+    assert.equal(
+      listRes.statusCode,
+      200,
+      `讀取訊息列表應為 200,實際 ${listRes.statusCode}:${listRes.body}`,
+    );
+    const messages = listRes.json() as Record<string, unknown>[];
+    cross!.lastAssistantMessage = messages.filter((m) => m["role"] === "assistant").at(-1);
+  },
+);
+
 After({ tags: "@i2" }, function (this: KmWorld) {
   const s = this.bag["i2"] as I2State | undefined;
   s?.sseWindow?.close();
+  const cross = this.bag["i2CrossProcess"] as CrossProcessServer | undefined;
+  if (cross) {
+    try {
+      process.kill(cross.pid, "SIGTERM");
+    } catch {
+      // 子行程可能已經自己結束了(例如它自己因為設定錯誤而拒絕啟動)——不是這個 hook 要處理的錯誤。
+    }
+  }
 });

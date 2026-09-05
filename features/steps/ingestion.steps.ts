@@ -28,8 +28,10 @@ import { Given, Then, When } from "@cucumber/cucumber";
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import type { KmWorld } from "./_world.js";
+
+import { loadConfig } from "../../apps/api/src/config.js";
 
 import type { EmbedResponse, GenerateResponse, ModelGateway } from "../../services/model-gateway/src/gateway.js";
 import { createDeterministicEmbeddingProvider } from "../../services/model-gateway/src/embedding/deterministic.provider.js";
@@ -609,3 +611,128 @@ Then(
     );
   },
 );
+
+// ================================================================== phase-2b
+//
+// `pnpm dev` 起來時 fixture 已在索引裡(FEATURE.md「為什麼有 phase-2b」、
+// NEXT.md「phase-2b 的 gate」、ADR 0015 D3′)。這裡不用 `world.startServer()`
+// ——那個 helper 只要 `this.app` 已存在就回傳快取實例(`_world.ts`),同一個
+// scenario 需要用不同環境變數(`NODE_ENV`、`AI_KM_DEV_SEED_FIXTURE`)重建 server
+// 時會被那個快取蓋掉。手法與上面 `restartServerWithStaleIngestionEmbedding`
+// 相同:先關掉 Background 建的那個(如果有),自己讀 `loadConfig(env)`、把結果
+// 交給 `buildServer({ config })`——與 `apps/api/src/main.ts` 完全同一種兩段式
+// 讀法(先 `loadConfig()` 可能拋 `ConfigError`,再 `buildServer({ config })`)。
+
+const FIXTURE_SEED_FLAG_ENV = "AI_KM_DEV_SEED_FIXTURE";
+/** phase-2b 的場景只查「總共有幾個 chunk」,查詢字串本身不影響斷言(同 PROBE_QUERY 的既有理由)。 */
+const PHASE_2B_SCOPE = toRetrievalScope({
+  principalId: "phase-2b-probe",
+  allowedScopeKeys: ["dept:eng"],
+  deniedScopeKeys: [],
+});
+
+async function buildRealServerWithEnv(world: KmWorld, env: NodeJS.ProcessEnv): Promise<FastifyInstance> {
+  const config = loadConfig(env);
+  const { buildServer } = await import("../../apps/api/src/server.js");
+  if (world.app) {
+    await world.app.close();
+    world.app = undefined;
+  }
+  const app = await buildServer({
+    config,
+    dbPath: join(world.useTempDir(), "phase-2b.sqlite"),
+    enableTestAuthProvider: true,
+    loggerStream: { write() {} },
+  });
+  await app.ready();
+  world.app = app;
+  return app;
+}
+
+/** 查真實 server 的 `app.retrieval`,回傳 dept:eng 底下總共命中幾個 chunk。 */
+async function countIndexedFixtureChunks(world: KmWorld): Promise<number> {
+  assert.ok(world.app, "還沒有起任何真實 server");
+  const retrieval = (world.app as unknown as { retrieval?: RetrievalService }).retrieval;
+  assert.ok(retrieval, "app.retrieval 在真實 buildServer() 上不存在(06-retrieval/phase-2 應該已經接上)");
+  const hits = await retrieval!.retrieve(PROBE_QUERY, PHASE_2B_SCOPE, 100);
+  return hits.length;
+}
+
+Given(
+  "a developer starts the API server with the fixture-seeding flag turned on",
+  { timeout: 30_000 },
+  async function (this: KmWorld) {
+    await buildRealServerWithEnv(this, {
+      ...process.env,
+      NODE_ENV: "development",
+      [FIXTURE_SEED_FLAG_ENV]: "true",
+    });
+  },
+);
+
+Given(
+  "a developer starts the API server the ordinary way, without the fixture-seeding flag",
+  { timeout: 30_000 },
+  async function (this: KmWorld) {
+    const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: "development" };
+    delete env[FIXTURE_SEED_FLAG_ENV];
+    await buildRealServerWithEnv(this, env);
+  },
+);
+
+When(
+  "a developer tries to start the API server with NODE_ENV=production and the fixture-seeding flag turned on",
+  function (this: KmWorld) {
+    try {
+      loadConfig({ ...process.env, NODE_ENV: "production", [FIXTURE_SEED_FLAG_ENV]: "true" });
+      this.bag["phase2bConfigError"] = undefined;
+    } catch (error) {
+      this.bag["phase2bConfigError"] = error as Error;
+    }
+  },
+);
+
+Then(
+  "asking the server how many chunks of the fixture are indexed finds exactly 1, the same count I1's own end-to-end pipeline test produces for this fixture",
+  async function (this: KmWorld) {
+    const count = await countIndexedFixtureChunks(this);
+    assert.equal(
+      count,
+      1,
+      "旗標開啟時 store 應該剛好有 1 個 chunk(services/ingestion/src/pipeline.test.ts 的 W1-00 " +
+        "對同一份 fixture、同一個預設 chunk 設定跑出的 result.chunkCount,2026-09-05 手動探測值), " +
+        `實際拿到 ${count} 筆`,
+    );
+  },
+);
+
+Then(
+  "asking the server how many chunks of the fixture are indexed finds none, because only an explicit flag may put fixture data into a store a real deployment also uses",
+  async function (this: KmWorld) {
+    const count = await countIndexedFixtureChunks(this);
+    assert.equal(
+      count,
+      0,
+      "旗標關閉(預設)時 store 應該是空的——ADR 0015 D3′「app.ingestion 是 on-demand 接縫,不掛任何" +
+        `自動 seeder」的理由建立在這件事上,實際拿到 ${count} 筆`,
+    );
+  },
+);
+
+Then("starting the server is rejected before it can listen on any port", function (this: KmWorld) {
+  const error = this.bag["phase2bConfigError"] as Error | undefined;
+  assert.ok(
+    error,
+    `NODE_ENV=production 加上 ${FIXTURE_SEED_FLAG_ENV}=true 應該讓 loadConfig() 拋出 ConfigError 並拒絕啟動,` +
+      "但沒有拋出任何錯誤——伺服器會照樣啟動並把固定 fixture 塞進生產索引",
+  );
+});
+
+Then("the rejection message names {string} as the reason", function (this: KmWorld, flagName: string) {
+  const error = this.bag["phase2bConfigError"] as Error | undefined;
+  assert.ok(error, "還沒有任何錯誤可以檢查訊息內容——上一句 Then 應該已經斷言過會拋出錯誤");
+  assert.ok(
+    error!.message.includes(flagName),
+    `錯誤訊息應該提到旗標名稱 ${flagName},實際訊息:「${error!.message}」`,
+  );
+});

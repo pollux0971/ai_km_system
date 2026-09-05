@@ -132,7 +132,12 @@ AssertionError: expected [ 'it_administrator', …(2) ] to deeply equal [ 'it_ad
 在 I6 時必須跟著改,不是永久規格。已記在本節,I6 走 `/feature`。
 
 | 2 | 頁面層(元件渲染、route guard 實際擋人)、導覽與授權表對齊 | I6 | todo | |
-| 3 | 部門／群組接真後端 | I6 | todo | |
+| 3 | 部門／群組接真後端;**一併落地 [ADR 0019](../../docs/adr/0019-single-administrator-role.md) 的單一 `administrator` 角色** | I6 | todo | |
+
+**ADR 0019(使用者 2026-09-05 親口)**:`super_administrator`／`it_administrator`／
+`ai_administrator` **合併為單一 `administrator`**,`auditor` 與 `knowledge_manager` 保留。
+**I6 之前最嚴讀法照舊**——`it_administrator` 進不去部門/群組管理是正確行為。
+I6 的 phase 要有反向驗證對著**角色陣列的內容**(phase-1 已有這個形狀的守門,照抄)。
 
 ## 回填對照表(phase-1)
 

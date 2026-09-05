@@ -76,9 +76,20 @@ Feature: The admin console shows departments, groups, connectors and system heal
     Then the admin console lists the connectors "erp, mes, crm, hr, scm, plm, iot, generic-rest, database-view"
     And every connector in the admin console is switched off
 
+  # CORRECTED 2026-09-05 — 使用者在走查時親手撞到這條的錯:它要求「IT 管理員」打開
+  # 部門管理與群組管理,而 `admin-route-access.ts` 的授權表把 /departments 與 /groups
+  # 只給 super_administrator(E11-S023 的最嚴讀法,ADR 0013 #14 維持到 I6)。
+  # **場景與實作各說各話,而這條是 @manual——沒有任何機器在跑它**,
+  # 所以這個漂移只會被人發現,而且是在最貴的時機:使用者驗收時。
+  # 改成照實際授權表寫,並且把「誰進不去」也寫成斷言——一條只驗「進得去」的場景,
+  # 對授權表放寬時不會紅。
   @e2e @manual
-  Scenario: An administrator walks the four management pages in a browser
-    Given the admin console is running for a signed-in IT administrator
+  Scenario: An administrator walks the four management pages in a browser, and the IT administrator is turned away from two of them
+    Given the admin console is running for a signed-in super administrator
     When that administrator opens 部門管理, 群組管理, 連接器管理 and 系統健康儀表板 in turn
     Then each page renders its own list rather than an error state
     And the administrator confirms "四個頁面都打得開,而且資料就是自動場景印出來的那一份"
+    When the same four pages are opened by a signed-in IT administrator instead
+    Then 連接器管理 and 系統健康儀表板 still render their lists
+    And 部門管理 and 群組管理 are refused, because today only the super administrator may manage them
+    And the person confirms "IT 管理員看得到連接器與系統健康,看不到部門與群組"

@@ -227,6 +227,12 @@ I2 通過那一輪的升版程序(不變;1.4.1 之後 `check-all.ts` 取代手�
 
 **你做得到什麼**:管理員在 admin 建部門、把人加進群組,I3 的可見性立刻反映。
 
+**⚠️ I6 一併落地使用者 2026-09-05 的角色模型裁決([ADR 0019](adr/0019-single-administrator-role.md))**:
+`super_administrator`、`it_administrator`、`ai_administrator` **合併為單一 `administrator`**;
+`auditor` 與 `knowledge_manager` 保留。**這不是「放寬最嚴讀法」,是「沒有 super 這一層」**
+——ADR 0013 #14 原本規劃的方向在這一點上被取代。**I6 之前最嚴讀法照舊**,
+`it_administrator` 進不去部門/群組管理是**正確行為**,不是待修缺陷。
+
 | 需要的 phase | 說明 |
 |---|---|
 | 10-admin-console/phase-2 | 部門／群組頁接真 API |

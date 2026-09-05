@@ -109,3 +109,29 @@ Decision 1 做不出來,因為 **`07-generation` 今天沒有結構化棄答訊�
 
 ADR 0013 #12(結構化棄答)、ADR 0016(`citations[]`)、GHERKIN_WORKFLOW §5.1(靜默錯誤結果)、
 CLAUDE.md 鐵律 2、`features/07-generation/NEXT.md` phase-3、`features/03-conversation/NEXT.md`。
+
+## 追加段(2026-09-05,技術顧問 ai-km-1b):`answer_state` 這一欄裡沒有任何一個值是真的
+
+D2 之下**真的 `state` 根本不存在**——`03-conversation/phase-2` 本輪完全不設 `state`,
+要等 `07-generation/phase-3` 補結構化訊號。
+
+而 `message-thread.tsx` 兩個 `recordUsageEvent("rag_answer_outcome")` 呼叫點
+**都在缺席時捏一個 `"ANSWERED"`**(`state ?? "ANSWERED"`)。所以:
+
+> **今天 DB 裡所有 `answer_state = 'ANSWERED'` 的列全部是捏造的。**
+
+**裁決**:
+- **不做 migration** —— 沒有生產資料,dev DB 重建即可;
+- **把「髒到哪一天」寫死**:**`11-app-shell/phase-4` 的合併 commit 之前寫入的
+  `answer_state` 一律視為無效**;
+- **若任何 DB 活到 I3 之後,先把該欄清 `NULL` 再上線**;
+- 正確行為(已裁):**`state` 缺席就省略 `answerState` 欄位**,不填任何值
+  ——`analytics.yaml:295` 的 `UsageEventInput.required` 只有 `[name, occurredAt]`,缺席合法。
+
+**為什麼現在寫而不是等**:今天沒有任何端點按 `answerState` 分組
+(`getLatencyMetrics` 只篩 `latency_ms IS NOT NULL`;`getUsageMetrics` 只算 DAU 與提問數;
+`apps/api` 對 `answer_state` 零命中——實測 grep)。所以這一欄的髒**今天不影響任何報表**,
+**要等到有人真的做分布時才會發現,而那時歷史資料已經髒了**。趁還知道範圍的時候把它寫死。
+
+主流程那半已由 `11-app-shell/phase-3` 做對;regenerate 那半在 `phase-4`。
+

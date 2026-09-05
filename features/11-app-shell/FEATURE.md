@@ -202,6 +202,32 @@ exact original passage」是在**函式層**綠的。
 
 **gate:`07-generation/phase-2b` 已進 main。** **級別:標準。**
 
+**phase-4 順帶修一條缺陷(2026-09-05,技術顧問裁決 (a);落點在此因為同一個檔案同一條路徑)**:
+
+`message-thread.tsx` 的 `runStream()` 裡 `answerState: result.value.state ?? "ANSWERED"`
+(服務 `handleRegenerate` 那條線)**在替一個捏造的值背書**——顧問已裁「`state` 缺席就**省略**
+`answerState`,不填任何值」(契約 `analytics.yaml:295` 的 `UsageEventInput.required`
+只有 `[name, occurredAt]`,缺席合法)。主流程那半已由 `phase-3` 做對,**regenerate 這半沒有**。
+
+**比一般的過期程式碼嚴重的地方**:有一條**現在是綠的**測試
+「records its own rag_answer_outcome event for a regenerated reply」**明確斷言**
+那個 `"ANSWERED"`。所以沒有任何東西會提醒任何人——**一個守門守著錯的性質,比沒有守門更難發現**(坑 1 的變體)。
+
+**做法(顧問指定形狀)**:
+- 場景斷言**對著會變的量**:regenerate 一則**沒有 `state`** 的回覆,記錄的事件
+  **鍵集合不含 `answerState`**,失敗訊息**印出實際的鍵集合**;
+- **反向驗證**:把 `?? "ANSWERED"` 放回去**必須紅**;
+- 那條現在綠的測試**由測試 agent 改寫,不是刪**,commit body 寫
+  「**改的是測試在替捏造值背書**,理由:ADR 0018 + 本裁決」。
+
+**歷史髒資料(顧問裁,寫死範圍)**:今天 DB 裡所有 `answer_state = 'ANSWERED'` 的列
+**全部是捏造的**——ADR 0018 D2 之下真的 `state` 根本不存在,所以那一欄裡**沒有任何一個值是真的**。
+**不做 migration**(沒有生產資料,dev DB 重建即可);ADR 0018 追加一句把「髒到哪一天」寫死。
+本 phase 的 evidence 要記 **dev DB 重建的指令**。
+
+**這條為什麼拖到現在才排**:`11-app-shell/phase-2` 的紀錄**早就指名過它**,登記為「後續項」,
+然後沒有人回來。**登記為「後續項」而沒有落到某個 phase 的列,等於沒登記**——已收進 PITFALLS。
+
 **I2 的 `@e2e` 在本 phase 之後才做得到** —— `11-app-shell/phase-3` 綠了**不等於**可以驗收,
 那句話協調者說錯過一次,記在這裡免得再說一次。
 

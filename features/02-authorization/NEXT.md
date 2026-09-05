@@ -25,8 +25,25 @@
       I2 本身**尚未收尾**——還差 `11-app-shell/phase-3`、`03-conversation/phase-4`、
       `07-generation/phase-2b`、`11-app-shell/phase-4`(最後兩個是 2026-09-05 才發現的第四層,
       見 PITFALLS 坑 19 第四次)。原文寫「這是唯一還沒解除的 gate」**也已過期**,見下一條。
-- [ ] 自身:**`01-identity` 拿得出 `department.id`／`group.id`**。今天 `users` 表只有顯示名
-      兩欄,repo 內無任何 id 對照表——這是「待協調」那個缺口,**它才是 2a 那 4 條紅的原因**。
+- [ ] 自身:**拿得出 `department.id`／`group.id`**。今天 `users` 表只有顯示名兩欄,
+      repo 內無任何 id 對照表——**它才是 2a 那 4 條紅的原因**。
+
+      ⚠️ **這一條不是在等別人**(2026-09-05,技術顧問 ai-km-1b 澄清)。它**就是** 2026-09-04
+      裁的 **2a** 本身:最小的 `scope_principals(id, kind, name, UNIQUE(kind, name))` 對照表、
+      `users` 加 FK、**trim 後精確比對**回填。所以狀態是 `blocked`,但理由是
+      **「等 I2 收尾後由 02 自己做」**,不是「等 `01-identity` 交東西」——
+      把它當外部阻塞會讓 I3 開工時沒有人動手。
+
+      **而且不是照 2a 原樣做,是升級版**:[ADR 0021](../../docs/adr/0021-scope-vocabulary-and-knowledge-set-tree.md)
+      之後這張表要長成**知識集樹的節點**——`kind` 擴成 `org` / `dept` / `project` / `user`,
+      並加 `parent_id`。
+
+      **擁有權(顧問裁)**:
+      - **節點表與成員關係 → `02-authorization`**(它是授權的**受體**)
+      - **文件掛到哪個節點 → `08-knowledge-management`**,隨 I4 的 knowledge 契約來
+      - **`01-identity` 只負責 session 回應多帶使用者所屬的節點 id**
+
+      **I3 的第一個 `/decide` 就是這張表的 schema**,由技術顧問裁。
 - [ ] 規格:前置是 **[ADR 0021](../../docs/adr/0021-scope-vocabulary-and-knowledge-set-tree.md)
       D1–D3** 的資料結構(四種 scope key、知識集是樹、子樹 deny 沿樹展開且優先於祖先的 allow、
       每次請求建構時展開不跨請求快取)。**2026-09-05 新增**——ADR 0013 #7 的兩種 key 字彙

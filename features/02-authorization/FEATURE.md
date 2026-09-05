@@ -65,7 +65,7 @@ pnpm --filter @ai-km/features accept -- --tags '@authorization and @standalone a
 
 | 後續 phase | 需要 | 原因 |
 |---|---|---|
-| phase-2(從身分產出 `RetrievalScope`) | **(1)** I2 收尾;**(2)** `01-identity` 給得出 `department.id`／`group.id`(今天 `users` 表只有顯示名兩欄);**(3)** 前置規格是 **[ADR 0021](../../docs/adr/0021-scope-vocabulary-and-knowledge-set-tree.md) D1–D3** 的資料結構 | 今天 session 給的是部門**顯示名稱**(「資訊部」),不是 store 用的鑰匙(`dept:*`) |
+| phase-2(從身分產出 `RetrievalScope`) | **(1)** I2 收尾;**(2)** `scope_principals` 節點表(**2a 的升級版,本資料夾自己做,不是等別人**——見 NEXT.md);**(3)** 前置規格是 **[ADR 0021](../../docs/adr/0021-scope-vocabulary-and-knowledge-set-tree.md) D1–D3** 的資料結構 | 今天 session 給的是部門**顯示名稱**(「資訊部」),不是 store 用的鑰匙(`dept:*`) |
 | phase-3(群組變更即時生效) | phase-2 done、I6 的 admin 部門／群組頁 | 對應規則存在之後才談得上「改了立刻生效」 |
 
 ## 技術棧

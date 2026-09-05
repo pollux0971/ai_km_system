@@ -20,6 +20,7 @@
 **目前唯一等使用者的不是一列決策,是一個動作**:I2 的 `@e2e` 親手驗收
 ——而它今天還做不了(`05-ingestion/phase-2b` 正在補 dev seeder,見 `docs/01-roadmap.md` I2 段)。
 
+| 38 | 2026-09-05 | **`04-model-gateway/phase-2` 的描述所假設的架構,ADR 0007 沒有。**(由 04 的驗收 session 提出,協調者實測確認)<br>該列寫「在真的 `apps/api` 裡**被 06/07 呼叫**,兩條路由對真 session」——但 **06/07 從來不透過那兩條 HTTP 路由呼叫 gateway**,它們走的是 ADR 0007 §1 的 **in-process 主路徑**。<br>**實測:全 repo 有四個獨立的 `createModelGateway()` 呼叫點**——`apps/api/src/server.ts:428`(給 ingestion)、`services/retrieval/src/service.ts:204`、`services/generation/src/service.ts:155`、`services/model-gateway/src/plugin.ts:84`(給 `app.modelGateway` 與那兩條路由)。**index-time 與 query-time 的 embedding 來自不同的 gateway 實例。**<br>**今天不是缺陷**:兩邊都用預設的 deterministic provider,向量相同;而且 `enforceEmbeddingVersion`(ADR 0015 D2)正是為了抓這種不一致而存在,`phase-2b` 的場景 3 就在守它。**但那是守門在擋,不是架構保證。** | 工程取捨(顧問級) | **顧問裁的三條回填場景剛好繞開了這個錯誤描述**(註冊、401、200+shape),所以 `.feature` 可以照原裁決寫。要裁的是**那一列的描述文字**:改成「這兩條路由本身可對真 session」(不牽扯 06/07),還是承認「06/07 該走路由」是原本的意圖而現在沒做?<br>驗收者提醒的第二層我認為要一併看:若是後者,**`06`/`07` 的 phase-2 evidence 宣稱驗過的是哪一個 gateway 實例**,值得回頭確認 | 不擋 I2(I2 的路徑實測不經過那兩條路由) |
 ## 已批示
 
 | # | 日期 | 一句話 | 批示 | 落地 |

@@ -172,7 +172,7 @@ provider 回傳錯長度的向量時,沒有任何東西會拋錯,相似度照算
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
 | 1 | (回填)in-process embed/generate、兩條薄路由與契約驗證、fidelity 守門、條件註冊、ASR | I1 | done | 2026-09-04 |
-| 2 | **兩條 HTTP 路由本身對真 session 可用;06/07 依 ADR 0007 §1 走 in-process,不經路由** | **I2(驗收補寫,不在 I2 五塊內)** | todo | |
+| 2 | **兩條 HTTP 路由本身對真 session 可用;06/07 依 ADR 0007 §1 走 in-process,不經路由** | **I2(驗收補寫,不在 I2 五塊內)** | done | 2026-09-05 |
 
 **phase-2 狀態細節(2026-09-05,顧問裁決 `DECISIONS_NEEDED` #37)**:
 協調者發現這一列與 `docs/01-roadmap.md` 的 I2 清單不一致(那份只列 06/07/03/11/05),

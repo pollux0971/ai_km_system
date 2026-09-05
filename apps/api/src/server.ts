@@ -11,6 +11,9 @@
  * authentication seam. See README.md for how to add one.
  */
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify, { LogController, type FastifyInstance, type FastifyPluginAsync } from "fastify";
 import ajvModule from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
@@ -161,6 +164,69 @@ export interface BuildServerOptions {
    * process was built with.
    */
   ingestionEmbeddingProvider?: EmbeddingProvider;
+}
+
+/**
+ * phase-2b (AI_KM_DEV_SEED_FIXTURE): locates the same fixture PDF
+ * `services/ingestion`'s own W1-00 pipeline test and the cucumber steps under
+ * `features/steps/` already index — walking up from this file the same way
+ * `resolveContractsDir`/`resolveMigrationsDir` do, so this does not depend on
+ * `pnpm dev`'s current working directory.
+ */
+function resolveFixtureSeedPdfPath(from: string = fileURLToPath(import.meta.url)): string {
+  let dir = path.dirname(from);
+  for (let depth = 0; depth < 12; depth += 1) {
+    const candidate = path.join(
+      dir,
+      "services",
+      "ingestion",
+      "src",
+      "extraction",
+      "fixtures",
+      "cjk-non-embedded.pdf",
+    );
+    if (existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(
+    `找不到 fixture PDF(從 ${from} 逐層往上找 services/ingestion/src/extraction/fixtures/cjk-non-embedded.pdf)。` +
+      "apps/api 必須在 monorepo 內執行。",
+  );
+}
+
+/**
+ * Indexes the fixture PDF through the SAME `app.ingestion.ingest()` call
+ * every scenario in this capability already uses
+ * (`features/steps/ingestion.steps.ts`, `integration.steps.ts`) — not a
+ * second, parallel way of writing into `retrievalStore` (NEXT.md「phase-2b
+ * 的 gate」,顧問指定的實作約束). Logs what got indexed and how many chunks so a
+ * developer running `pnpm dev` can see the store is not empty without
+ * attaching a debugger.
+ *
+ * `documentId`/`scopeKey` are literally "i2-doc-eng" / "dept:eng" — the same
+ * pair `features/steps/integration.steps.ts`'s `ingestFixtureIntoRealServer`
+ * uses for the in-process I2 server — because `docs/integration/
+ * i2-ask-in-web.feature`'s cross-process scenario ("A server started the way
+ * a person starts it answers with a citation") boots a SEPARATE real process
+ * with only this flag set and then asserts its answer carries a citation
+ * "from document \"i2-doc-eng\"". That scenario has no other seeding step, so
+ * this is the one call that puts anything into that process's store at all;
+ * a different documentId here would leave that assertion permanently red.
+ */
+async function seedFixtureDocument(app: FastifyInstance): Promise<void> {
+  const pdfPath = resolveFixtureSeedPdfPath();
+  const pdfBytes = new Uint8Array(readFileSync(pdfPath));
+  const result = await app.ingestion.ingest({
+    documentId: "i2-doc-eng",
+    scopeKey: "dept:eng",
+    pdfBytes,
+  });
+  app.log.info(
+    { documentId: result.documentId, chunkCount: result.chunkCount, pdfPath },
+    "AI_KM_DEV_SEED_FIXTURE=true:已將 fixture PDF 索引進 store",
+  );
 }
 
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
@@ -368,6 +434,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     vectorStore: retrievalStore,
   });
   await app.register(ingestionPlugin, { service: ingestionService });
+  // phase-2b (NEXT.md「phase-2b 的 gate」,顧問裁決): `pnpm dev` 起來時 fixture
+  // 已在索引裡。走與 features/steps/ingestion.steps.ts、integration.steps.ts
+  // 完全同一條 `app.ingestion.ingest()` 呼叫——不另開一條寫入 `retrievalStore`
+  // 的路徑。旗標關掉(預設)時這段完全不執行,store 維持空的(ADR 0015 D3′)。
+  if (config.devSeedFixture) {
+    await seedFixtureDocument(app);
+  }
   // 07-generation/phase-1 (回填) — puts `app.generation` on the parent
   // instance. Same "no HTTP contract, unconditional registration" shape as
   // retrievalPlugin above (FEATURE.md: in-process seam, ADR 0007).

@@ -104,7 +104,7 @@ pnpm --filter @ai-km/features accept --tags '@admin-console and @standalone and 
 
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
-| 1 | (回填)誰看得到 admin、頁面授權表、部門／群組／連接器清單、系統健康 | I1 | in-progress(自動證據全綠;`@e2e` 待使用者)| |
+| 1 | (回填)誰看得到 admin、頁面授權表、部門／群組／連接器清單、系統健康 | I1 | done | 2026-09-05 |
 
 **phase-1 狀態細節(2026-09-04,獨立驗收 session)**:四項核心的**自動那半全部誠實做完且綠**
 ——14 場景全過(`--strict`,無 undefined/pending)、單獨執行 exit 0、`typecheck` 45/45、

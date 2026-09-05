@@ -110,7 +110,7 @@ pnpm --filter @ai-km/features accept --tags '@app-shell and @standalone and not 
 
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
-| 1 | (回填)導覽可見性、首頁捷徑與時間、M3 token 不漂移與可讀性 | I1 | in-progress(自動證據全綠;`@manual`/`@e2e` 待使用者)| |
+| 1 | (回填)導覽可見性、首頁捷徑與時間、M3 token 不漂移與可讀性 | I1 | done | 2026-09-05 |
 
 **phase-1 驗收細節(2026-09-04,獨立 session)**:自動那半**全過**——17 場景(9 個
 Scenario/Outline 展開後 17,與 FEATURE.md 宣稱一致)、單獨執行 exit 0、typecheck 45/45、

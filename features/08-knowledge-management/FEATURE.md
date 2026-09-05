@@ -100,7 +100,7 @@ pnpm --filter @ai-km/features accept --tags '@knowledge-management and @phase-1 
 
 | Phase | 標題 | 整合點 | 狀態 | 完成日 |
 |---|---|---|---|---|
-| 1 | (回填)知識庫清單、文件清單與狀態、跨知識庫守門、feature flag(**目前對 mock**) | I1 | in-progress(自動證據全綠;`@manual`/`@e2e` 待使用者)| |
+| 1 | (回填)知識庫清單、文件清單與狀態、跨知識庫守門、feature flag(**目前對 mock**) | I1 | done | 2026-09-05 |
 | 2 | 上傳與文件狀態接真 API(接上後本資料夾**重新分級為嚴格**) | I4 | todo | |
 | 3 | 頁面層的 Gherkin(需要 DOM 環境) | 待定 | todo | |
 

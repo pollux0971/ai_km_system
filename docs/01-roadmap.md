@@ -196,7 +196,17 @@ I2 通過那一輪的升版程序(不變;1.4.1 之後 `check-all.ts` 取代手�
 | 06-retrieval/phase-2 的暫時限制移除 | 固定 `dept:eng` 拿掉 |
 | 01-identity/phase-2 | 使用者的部門／群組落庫 |
 
-**驗收**:`docs/integration/i3-*.feature`(待 `/feature` 建立)
+**驗收**:[`docs/integration/i3-scope-from-identity.feature`](integration/i3-scope-from-identity.feature)(2026-09-05 建立)
+
+**⚠️ I3 的範圍在 2026-09-05 變大了([ADR 0021](adr/0021-scope-vocabulary-and-knowledge-set-tree.md))**:
+原本只是「scope 從固定值改成依身分推導」,對照提案後補上兩件——
+**(1) scope key 字彙補齊四種分區**(`org:` / `dept:` / `project:` / `user:`,提案 p.2 的
+公司／部門／專案／私人;ADR 0013 #7 當初只定了 `dept:` 與 `group:`);
+**(2) 知識集是一棵樹,授權沿子樹繼承**(提案 p.5 Step04:授權 `KS_03` 給 Cathy,
+她拿到 `KS_03` 與 `KS_11`)——我們的 `RetrievalScope` 今天是扁平 key 聯集,表達不出這件事。
+
+**I3 開工前必須先回答 ADR 0021 D3**:授權父節點、拒絕某個子節點,算不算數?
+這題決定「誰看得到什麼」,錯的方向會**靜默地多給**。
 
 ---
 

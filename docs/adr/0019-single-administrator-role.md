@@ -81,3 +81,21 @@ I6 本來就是「admin 管部門與群組」,授權表在那時會重寫
 ADR 0013 裁決表 #14(被本 ADR 在「目標模型」這一點上取代)、
 `docs/DECISIONS_NEEDED.md` #14、`apps/admin/src/lib/admin-route-access.ts`、
 `features/10-admin-console/`(phase-2、phase-3 掛在 I6)、GHERKIN_WORKFLOW §5.4。
+
+---
+
+## 2026-09-05 追加確認:群組範圍的管理員「暫時」不做
+
+協調者對照提案 p.5 後回報一個張力:提案的角色是
+**`Alex(System Admin)`、`Amos(Admin of Group1)`、`Nick(Admin of Group2)`、其餘 User of GroupN**
+——也就是「系統管理員」與**群組範圍的管理員**兩層,而後者正是 I6(admin 管部門與群組)
+與 `DECISIONS_NEEDED` #14 的內容。
+
+使用者裁決(原話):「**暫時只用一個 administrator**」。
+
+**所以本 ADR 的 D1 範圍確認為**:合併 `super_administrator` / `it_administrator` /
+`ai_administrator` 為單一 `administrator`;**「只能管自己那個群組的管理員」暫時不做**。
+
+**「暫時」兩個字要留著,不要讀成「永不」**:提案 p.5 的 `Amos`/`Nick` 角色在那份文件裡是成立的,
+而 I6 的定義就是「admin 管部門與群組」。這條裁決是**現在不做**,不是**提案錯了**。
+I6 開工時要重新問一次;`DECISIONS_NEEDED` #14 因此**不關閉**,改標為「暫緩,見 ADR 0019 追加段」。

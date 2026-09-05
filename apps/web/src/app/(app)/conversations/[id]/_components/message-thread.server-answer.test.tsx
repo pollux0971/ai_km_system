@@ -113,25 +113,47 @@ const SERVER_ASSISTANT_MESSAGE = {
 };
 
 /**
- * 11-app-shell/phase-3. `message-content.tsx` (S13, existing behavior,
- * other tests depend on it unchanged) splits a `[N]`-marked reply into a
- * text `Fragment` plus a nested `<sup><button>[N]</button></sup>` per
- * marker, so no SINGLE element's OWN direct text node ever equals the
- * full string once citations are present — `@testing-library/dom`'s
- * default `getByText` only accumulates an element's direct text
- * children, it doesn't recurse. This is the standard testing-library
- * idiom for text split across elements: match the DEEPEST element whose
- * full `textContent` equals the target string, provided none of its own
- * children ALSO have that full text (which is what makes the match
- * unique — an ancestor further up would match too, since text bubbles
- * up through `textContent`).
+ * 11-app-shell/phase-3 round 3 (顧問裁決:訊息品質). `message-content.tsx`
+ * (S13, existing behavior, other tests depend on it unchanged) splits a
+ * `[N]`-marked reply into a text `Fragment` plus a nested
+ * `<sup><button>[N]</button></sup>` per marker, so no SINGLE element's
+ * OWN direct text node ever equals the full string once citations are
+ * present — `@testing-library/dom`'s default `getByText` only
+ * accumulates an element's direct text children, it doesn't recurse.
+ *
+ * round 2 used a `getByText(fullTextMatcher)` function-matcher for this
+ * (matching the deepest element whose full `textContent` equals the
+ * target). That correctly turned red when the bubble stopped showing the
+ * server's real content, but the failure message printed the MATCHER
+ * FUNCTION'S OWN SOURCE CODE as "the text it expected" — testing-library
+ * has no way to know what a function matcher was looking for, so
+ * `findByText`'s error just stringifies the function. A red assertion
+ * whose message can't say why is indistinguishable, under review, from a
+ * red assertion that's wrong (STORY_WORKFLOW/GHERKIN §5.2).
+ *
+ * Fixed by not asking `findByText` to locate the element via string
+ * equality at all: `assistantBubbleText()` below finds the assistant
+ * `<li>` by its stable `data-role="assistant"` attribute (message-thread.
+ * tsx renders `<li data-role={role}><span>{roleLabel}</span><span>
+ * <MessageContent .../></span>...</li>` — the SECOND `<span>` is the one
+ * wrapping `MessageContent`, so its `textContent` already flattens the
+ * `[N]` markers' nested `<sup><button>` structure into one string, same
+ * as `fullTextMatcher` computed, just read directly instead of matched).
+ * The test then compares that string to the expected one with `toBe`,
+ * AND passes both strings inline as `expect()`'s own second argument
+ * (not left to `toBe`'s own diff output) — `--expect-message`'s own
+ * lesson in STORY_WORKFLOW §5.2: vitest's JSON reporter truncates a
+ * failed object diff to `…(N)`, so only what's IN the message text
+ * itself is reliably readable under automated verification; a value
+ * that only shows up in a diff is not a value automated verification
+ * can read.
  */
-function fullTextMatcher(expected: string) {
-  return (_content: string, element: Element | null) => {
-    if (!element) return false;
-    const hasFullText = (node: Element) => node.textContent === expected;
-    return hasFullText(element) && Array.from(element.children).every((child) => !hasFullText(child));
-  };
+function assistantBubbleText(): string {
+  const item = document.querySelector('li[data-role="assistant"]');
+  if (!item) throw new Error("no assistant message rendered yet (no <li data-role=\"assistant\"> in the DOM)");
+  const contentSpan = item.querySelectorAll(":scope > span")[1];
+  if (!contentSpan) throw new Error("assistant message <li> is missing its second <span> (the one wrapping MessageContent)");
+  return contentSpan.textContent ?? "";
 }
 
 function submitViaComposer(content: string) {
@@ -195,13 +217,20 @@ describe("MessageThread shows the server's own answer (11-app-shell/phase-3, ADR
 
     submitViaComposer(USER_QUESTION);
 
+    // 先等助理氣泡「存在」(不比對文字內容)——這樣不管氣泡最終顯示的是
+    // 什麼,下面的 toBe 都能拿到一個真的字串來比對、印出有意義的訊息,
+    // 而不是在「連氣泡都還沒出現」時就對著空字串失敗。
+    await waitFor(() => expect(document.querySelector('li[data-role="assistant"]')).not.toBeNull());
+
     // 決定性的量:氣泡文字要逐字等於伺服器那則訊息的 content——不是「有沒有
-    // 出現任何助理回覆」。如果實作沒被修好、還在跑本地 startStream(),這裡
-    // 會等到 findByText 逾時都等不到這串文字(本地跑的是 lib/streaming.ts
-    // 私有的 MOCK_REPLY,兩者不會相等)。跨元素比對(見 fullTextMatcher):
-    // content 含 [1]/[2],message-content.tsx 把它們拆成巢狀
-    // <sup><button> 徽章,沒有任何單一元素的直接文字子節點等於完整字串。
-    expect(await screen.findByText(fullTextMatcher(SERVER_ASSISTANT_CONTENT))).toBeInTheDocument();
+    // 出現任何助理回覆」。如果實作沒被修好、還在跑本地 startStream(),
+    // assistantBubbleText() 讀到的會是 lib/streaming.ts 私有的 MOCK_REPLY,
+    // 兩者不會相等。expect() 的第二參數把兩段實際文字直接寫進訊息本身
+    // (不是只留在 diff 裡)——vitest 的 JSON reporter 會把物件 diff 截斷成
+    // `…(N)`,只有訊息文字本身在自動驗證下讀得到,見 STORY_WORKFLOW
+    // `--expect-message` 那段的實測教訓。
+    const bubbleText = assistantBubbleText();
+    expect(bubbleText, `氣泡實際顯示的文字=「${bubbleText}」，伺服器那則訊息的 content=「${SERVER_ASSISTANT_CONTENT}」`).toBe(SERVER_ASSISTANT_CONTENT);
   });
 
   it("never calls the local mock stream or classifies an answer state itself once a message actually sends", async () => {
@@ -252,7 +281,10 @@ describe("MessageThread shows the server's own answer (11-app-shell/phase-3, ADR
     await screen.findByText("尚無訊息，開始對話吧。");
 
     submitViaComposer(USER_QUESTION);
-    await screen.findByText(fullTextMatcher(SERVER_ASSISTANT_CONTENT));
+    // 只是同步點(等助理訊息真的結算),不是這條測試的決定性斷言——決定性
+    // 斷言是下面 within(panel) 那條 toHaveLength,它本身已經印得出兩邊的
+    // 實際數字,不需要另外處理訊息品質。
+    await waitFor(() => expect(document.querySelector('li[data-role="assistant"]')).not.toBeNull());
 
     const panel = screen.getByRole("region", { name: "相關內容" });
     // 這則訊息沒有附件，所以面板裡出現的 listitem 全部來自「引用來源」——

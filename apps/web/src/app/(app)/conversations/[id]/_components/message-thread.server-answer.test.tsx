@@ -112,6 +112,28 @@ const SERVER_ASSISTANT_MESSAGE = {
   ],
 };
 
+/**
+ * 11-app-shell/phase-3. `message-content.tsx` (S13, existing behavior,
+ * other tests depend on it unchanged) splits a `[N]`-marked reply into a
+ * text `Fragment` plus a nested `<sup><button>[N]</button></sup>` per
+ * marker, so no SINGLE element's OWN direct text node ever equals the
+ * full string once citations are present — `@testing-library/dom`'s
+ * default `getByText` only accumulates an element's direct text
+ * children, it doesn't recurse. This is the standard testing-library
+ * idiom for text split across elements: match the DEEPEST element whose
+ * full `textContent` equals the target string, provided none of its own
+ * children ALSO have that full text (which is what makes the match
+ * unique — an ancestor further up would match too, since text bubbles
+ * up through `textContent`).
+ */
+function fullTextMatcher(expected: string) {
+  return (_content: string, element: Element | null) => {
+    if (!element) return false;
+    const hasFullText = (node: Element) => node.textContent === expected;
+    return hasFullText(element) && Array.from(element.children).every((child) => !hasFullText(child));
+  };
+}
+
 function submitViaComposer(content: string) {
   fireEvent.change(screen.getByLabelText("訊息"), { target: { value: content } });
   fireEvent.click(screen.getByRole("button", { name: "送出" }));
@@ -176,8 +198,10 @@ describe("MessageThread shows the server's own answer (11-app-shell/phase-3, ADR
     // 決定性的量:氣泡文字要逐字等於伺服器那則訊息的 content——不是「有沒有
     // 出現任何助理回覆」。如果實作沒被修好、還在跑本地 startStream(),這裡
     // 會等到 findByText 逾時都等不到這串文字(本地跑的是 lib/streaming.ts
-    // 私有的 MOCK_REPLY,兩者不會相等)。
-    expect(await screen.findByText(SERVER_ASSISTANT_CONTENT)).toBeInTheDocument();
+    // 私有的 MOCK_REPLY,兩者不會相等)。跨元素比對(見 fullTextMatcher):
+    // content 含 [1]/[2],message-content.tsx 把它們拆成巢狀
+    // <sup><button> 徽章,沒有任何單一元素的直接文字子節點等於完整字串。
+    expect(await screen.findByText(fullTextMatcher(SERVER_ASSISTANT_CONTENT))).toBeInTheDocument();
   });
 
   it("never calls the local mock stream or classifies an answer state itself once a message actually sends", async () => {
@@ -228,7 +252,7 @@ describe("MessageThread shows the server's own answer (11-app-shell/phase-3, ADR
     await screen.findByText("尚無訊息，開始對話吧。");
 
     submitViaComposer(USER_QUESTION);
-    await screen.findByText(SERVER_ASSISTANT_CONTENT);
+    await screen.findByText(fullTextMatcher(SERVER_ASSISTANT_CONTENT));
 
     const panel = screen.getByRole("region", { name: "相關內容" });
     // 這則訊息沒有附件，所以面板裡出現的 listitem 全部來自「引用來源」——

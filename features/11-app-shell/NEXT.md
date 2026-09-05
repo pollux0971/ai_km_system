@@ -9,6 +9,7 @@
 |---|---|
 | 已完成 | phase-1(2026-09-05,`@e2e`／`@manual` 由使用者親手走查確認)、phase-2(2026-09-05)、**phase-3(2026-09-05,merge `cae440c`;反向驗證由協調者在合併前自己跑,不是寫碼的那個 session)** |
 | 進行中 | 無 |
+| 下一件(明天第一批) | **phase-3b**(刪 `receiveAssistantReply`;是 `03-conversation/phase-4` 的 gate)。gate 全滿足,可開工 |
 | 下一個 | **phase-4**(點引用的抽屜顯示伺服器給的那段原文;2026-09-05 新增)。其後才是 phase-5(斷點;gate 未滿足——要 DOM 驗收環境) |
 
 ## phase-4 的 gate(2026-09-05 新增,技術顧問裁決)

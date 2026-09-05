@@ -622,6 +622,28 @@ original passage, **not a placeholder**」——名字精準,而它綁的實作�
 「用更外面一層的證據宣布再外面一層的事」,這條是「用旁邊那件事的證據宣布這件事」。
 **兩者的共同解法都是同一個問題:我這條證據,和我要宣布的那句話,是不是同一件事?**
 
+### 坑 22:契約收緊之後,同一個根因會在四個不相干的地方同時轉紅,而每個發現者都以為是別人的問題
+
+2026-09-05,`07-generation/phase-2b`(`Citation` 加必填 `text`)與 `03-conversation/phase-4`
+(`role` enum 收成 `[user]`)兩個 phase 各自**在自己的資料夾裡全綠**,合進 main 卻各自炸開:
+
+- `apps/web` 6 條 `*.test.tsx` fixture 缺 `text`;
+- `apps/web` 的 **Next build** 掛掉(`receiveAssistantReply` 的型別仍假設能送 `role: assistant`);
+- `tools/contract-equivalence` 的 live fixture 帶 `role: "assistant"`;
+- `09-feedback-analytics/phase-1.feature` 6 個場景的前置資料走同一條路徑。
+
+**四個發現者(兩個開發 agent、兩次協調者驗證)都正確地停下來回報,沒有人瞎修。**
+但四次都描述成「這不在我的允許修改清單裡」——**沒有人擁有「這個契約改動的全部後果」。**
+
+**通則**:**改契約的那個 phase,負責全 repo 所有消費者的機械後果,由它自己的測試 agent 做,
+commit body 逐檔列出。** 角色守門管的是「誰能改哪一類檔案」,它**不劃分責任範圍**;
+一個 phase 的完成定義若只跑自己資料夾的場景,它會反覆地「自己全綠、合進去就紅」。
+
+**推論到一般情況**:凡是**收緊**的變更(必填、enum 變窄、移除欄位),完成定義裡都該有一行
+**全 repo 的**檢查(`pnpm test` 全跑、`pnpm typecheck`、`pnpm lint`、`contract-gate`),
+而不是只有 `--filter` 到自己套件的那幾條。
+**`pnpm --filter <只有自己的套件>` 綠,對收緊型變更幾乎不帶資訊。**
+
 ## 出處
 
 完整段落:`archive/ROADMAP_TEMP.md` 的 `5-pi`(CI 紅五天)、`5-rho`(L2-EQ 首次執行 2 條真分歧

@@ -9,7 +9,7 @@
 |---|---|
 | 已完成 | phase-1(2026-09-04)、phase-2(2026-09-05,獨立驗收 PASS)。原文:phase-1(2026-09-04,回填,11 場景) |
 | 進行中 | phase-4:**紅規格已交件**(`ab8b363`,3 紅 2 綠),實作待派 |
-| 下一個 | **phase-4 —— 已做完,場景 5/5 綠,卡在合併,而且它戳破了一個前提**(branch `pollux0971/03-p4-dev`,`3a96c14`)。見 `DECISIONS_NEEDED` #47:收緊 `role` enum 之後 **`apps/web` 編譯不過**——`receiveAssistantReply` 的函式本體、匯出、型別依賴與約 50 條專屬測試**全部還在**,`11-app-shell/phase-3` 只是**繞開了呼叫路徑**。**ADR 0017 第二步第 1 件的「移除」從來沒有真的做。** 需要一個 `apps/web` 的小 phase 先把它刪掉 |
+| 下一個 | **phase-4 —— 已做完,場景 5/5 綠,卡在合併,而且它戳破了一個前提**(branch `pollux0971/03-p4-dev`,`3a96c14`)。見 `DECISIONS_NEEDED` #47:收緊 `role` enum 之後 **`apps/web` 編譯不過**——`receiveAssistantReply` 的函式本體、匯出、型別依賴與約 50 條專屬測試**全部還在**,`11-app-shell/phase-3` 只是**繞開了呼叫路徑**。**ADR 0017 第二步第 1 件的「移除」從來沒有真的做。** **gate 已改為 `11-app-shell/phase-3b`**(顧問 2026-09-05 裁決;意圖「瀏覽器端不再有任何能自己產生助理回覆的碼或型別」)。連帶的 `tools/contract-equivalence` live fixture 與 `09-feedback-analytics/phase-1` 六個場景的前置資料,**歸本 phase 的測試 agent 修**(ADR 0017 追加段:改契約的 phase 負責全 repo 的機械後果) |
 
 > 2026-09-05 更正:「下一個」原本寫 `phase-2`,而 phase-2 已 `done`。同上,`/sprint` 讀本檔。
 

@@ -88,8 +88,9 @@ offset +1 → 紅在「切出的原文與引用文字不同」。
 | 05-ingestion/phase-2 | ~~一條「把 fixture PDF 索引進 dev DB」的指令~~ **done 2026-09-05**(ADR 0015)。**但「指令」那半沒交** → `phase-2b` |
 | 05-ingestion/**phase-2b** | ~~`pnpm dev` 帶 `AI_KM_DEV_SEED_FIXTURE=true`,起來時 fixture 已在索引裡~~ **done 2026-09-05**。**跨行程 CLI 隨 `06-retrieval/phase-3`(sqlite-vec)落地**——今天 store 是行程內記憶體,外部行程灌不進去 |
 | 11-app-shell/**phase-3** | ~~web 顯示伺服器產生的答案與引用,不是罐頭~~(ADR 0017 第二步 (a))。**done 2026-09-05**(`cae440c`) |
-| 03-conversation/**phase-4** | **拒絕 client 送 `role: assistant`、契約升版**(ADR 0017 第二步 (b)(c)(d))。gate:11 phase-3 進 main |
-| 07-generation/**phase-2b** | **`Citation` 加必填 `text`,引用自己帶著那段原文**(ADR 0016 追加段)。**2026-09-05 新增**——見下方「第四層」 |
+| 11-app-shell/**phase-3b** | **刪掉 `receiveAssistantReply`——瀏覽器端不再有任何能自己產生助理回覆的碼或型別**。**2026-09-05 新增**:`phase-3` 只「停止呼叫」,沒有「移除」,而 ADR 0017 第二步第 1 件要的是後者 |
+| 03-conversation/**phase-4** | **拒絕 client 送 `role: assistant`、契約升版**(ADR 0017 第二步 (b)(c)(d))。**做完待合**(`3a96c14`,場景 5/5 綠);**gate 已改為 11 phase-3b** |
+| 07-generation/**phase-2b** | **`Citation` 加必填 `text`,引用自己帶著那段原文**(ADR 0016 追加段)。**做完待合**(`80e3276`,自身四項核心全綠);差 `apps/web` 6 條 fixture 補欄位(`DECISIONS_NEEDED` #46) |
 | 11-app-shell/**phase-4** | **點引用的抽屜改讀 `citation.text`,刪 client mock**。gate:07 phase-2b 進 main。**2026-09-05 新增** |
 
 **⚠️ 2026-09-05:`@e2e` 還差第四層(坑 19 第四次)。** 上表原本只有五塊 + phase-2b,

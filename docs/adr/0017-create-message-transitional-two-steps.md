@@ -128,6 +128,38 @@ the browser」**是假的**。
 `CREATE_REVISION_BODY_SCHEMA`(revisions 路由),POST messages 用的是契約 schema,
 **路由沒有比契約鬆,不是缺陷**。
 
+## 追加段(2026-09-05,技術顧問裁決):改契約的 phase 負責**全 repo**所有消費者的機械後果
+
+第二步落地時,同一個根因在**四個不相干的地方**同時轉紅:
+
+| 紅在哪 | 什麼 |
+|---|---|
+| `apps/web` 的 6 條 `*.test.tsx` | `MessageCitation` 少了 `07-generation/phase-2b` 新加的必填 `text` |
+| `apps/web` 的 Next build | `receiveAssistantReply` 還在,型別假設 client 能送 `role: assistant` |
+| `tools/contract-equivalence` 的 live fixture | 手造的 body 帶 `role: "assistant"` |
+| `09-feedback-analytics/phase-1.feature` 的 6 個場景 | 前置資料用 POST 一則 client 助理訊息 |
+
+**通則**:**改契約的那個 phase,負責全 repo 所有消費者的機械後果,由它自己的測試 agent 做,
+commit body 逐檔列出。** 不把它推給「下一個踩到的人」——那正是本輪四個地方各自轉紅、
+而每一個發現者都以為是別人的問題的原因。
+
+**本輪的指派**:
+- `apps/web` 那 6 條 fixture → **`07-generation/phase-2b`** 的測試 agent(是它加的 `text`);
+- `tools/contract-equivalence` 的 live fixture 與 `09-feedback-analytics/phase-1` 的前置資料
+  → **`03-conversation/phase-4`** 的測試 agent(是它收的 enum)。
+
+**`tools/contract-equivalence` 不屬於任何能力資料夾**(共用工具)。顧問裁:
+**這次由 `03-conversation/phase-4` 的測試 agent 改,協調者在 merge body 簽名,不另開 `chore`。**
+
+**統一修法形狀**(由 `03-conversation/phase-4` 的開發 agent 提出):所有 fixture 把
+「POST 一則 client 助理訊息」換成 **repository 層的 `createMessage()` 直接寫入**
+——它們本來就是在**準備前置資料**,不是在測「client 能不能送」這件事本身,
+所以不該經過那條正在被收緊的請求路徑。`triggerRagReply` 已經示範過。
+
+**第二步的第 1 件有兩層,原文只寫了一層**:「**停止呼叫**」與「**移除**」。
+`11-app-shell/phase-3` 做了前者,後者掉在兩個 phase 中間,由新開的
+**`11-app-shell/phase-3b`** 補,並成為 `03-conversation/phase-4` 的新 gate。
+
 ## Related
 
 ADR 0013(契約放寬／請求側收緊改為顧問級)、ADR 0016(`Message.citations[]`)、

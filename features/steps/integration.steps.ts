@@ -682,18 +682,18 @@ Then(
 // `listen()` 在一個真的作業系統 port 上的地方——不是 `app.inject()` 模擬的
 // HTTP,是 `node:http` 對 `127.0.0.1:<port>` 發出的真請求。
 //
-// ⚠️ 已知落差,留給 05-ingestion/phase-2b 的開發 agent 或協調者判斷(不是這裡
-// 能修的——`.feature` 只由使用者或 /feature 流程改,§6):`docs/integration/
-// i2-ask-in-web.feature` 的固定文字是「AI_KM_DEV_SEED_FIXTURE=1」,下面的
-// Given 因此原樣把環境變數值設成字串 "1"。但 `features/05-ingestion/NEXT.md`
-// 的「phase-2b 的 gate」要求這個新旗標「照 apps/api/src/config.ts 既有
-// AI_KM_DEV_TRIGGERS/AI_KM_TEST_SANDBOX 的形狀與措辭」——那兩個既有旗標的
-// `readBoolean()` 只接受**恰好**「true」或「false」,其他值(含 "1")一律
-// `fail()` 成 ConfigError。若開發 agent 依樣畫葫蘆讓新旗標也只認
-// "true"/"false","AI_KM_DEV_SEED_FIXTURE=1" 會讓 `loadConfig()` 直接拋錯,
-// 這個場景會**永遠**紅,即使 phase-2b 其餘部分完全做對。兩份文件字面上互相
-// 矛盾,由拿到這個落差的人選一邊改(讓 readBoolean 也認 "1",或走 /feature
-// 改這份 `.feature` 的文字)。
+// ✅ 2026-09-05 曾經有一個落差,已由協調者透過 /feature 修正(commit
+// `1b047bb`):`docs/integration/i2-ask-in-web.feature` 的固定文字原本寫
+// 「AI_KM_DEV_SEED_FIXTURE=1」,但 `apps/api/src/config.ts` 的 `readBoolean()`
+// 只接受**恰好**「true」或「false」(其他值含 "1" 一律 `fail()` 成
+// `ConfigError`)——照原文字面設環境變數,server 會在 `loadConfig()` 這一步
+// 就拒絕啟動,這個場景會永遠紅在錯的原因上。協調者的裁決是**改場景,不是為
+// 這個新旗標破例接受 "1"**:破例會讓 `AI_KM_DEV_SEED_FIXTURE` 與既有的
+// `AI_KM_DEV_TRIGGERS`/`AI_KM_TEST_SANDBOX` 兩個 dev 旗標的規則不一致,
+// 「三個 dev 旗標有兩種寫法」正是日後有人寫錯的來源——一致性比字面的 "1"
+// 值錢(完整理由見該 `.feature` 檔頭的更正段)。`.feature` 的文字現在是
+// 「AI_KM_DEV_SEED_FIXTURE=true」,下面的 Given 與傳給子行程的環境變數值
+// 跟著改成 "true",不再是 "1"。
 
 const CROSS_PROCESS_HEALTH_TIMEOUT_MS = 20_000;
 
@@ -748,7 +748,7 @@ async function waitForRealServerHealth(port: number, logPath: string): Promise<v
 }
 
 Given(
-  "apps\\/api is started as a separate process with AI_KM_DEV_SEED_FIXTURE=1",
+  "apps\\/api is started as a separate process with AI_KM_DEV_SEED_FIXTURE=true",
   { timeout: 30_000 },
   async function (this: KmWorld) {
     const port = await findFreePort();
@@ -766,7 +766,7 @@ Given(
     const result = this.runCommand(cmd, {
       env: {
         NODE_ENV: "development",
-        AI_KM_DEV_SEED_FIXTURE: "1",
+        AI_KM_DEV_SEED_FIXTURE: "true",
         AI_KM_API_HOST: "127.0.0.1",
         AI_KM_API_PORT: String(port),
         AI_KM_DB_PATH: dbPath,

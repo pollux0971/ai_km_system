@@ -110,7 +110,24 @@ offset +1 → 紅在「切出的原文與引用文字不同」。
 **通過後也要做(守門升版,寫在這裡免得靠記憶)**:目前守門停在 template **v1.2.2**
 (`features/scripts/`,採用於 2026-09-04)。
 
-**升版目標:v1.4.3(`629b609`,tag `template/v1.4.3`)。**
+**⚠️ 2026-09-06 模板搬家(顧問 ai-km-1b 通知,協調者實地查證過)**:模板已移到**獨立 repo
+`/data/python/dev-paradigm`**,tag 改名為 `vX.Y.Z`(原 `template/vX.Y.Z`)。
+**舊路徑 `/data/python/llm_learning-cards` 分支 `template/dev-paradigm` 已凍結,不要再用。**
+
+查證(不是轉述):`/data/python/dev-paradigm` 存在,`git tag --list` 看得到
+`v1.3.3 … v1.4.3 v1.5.0`,`scripts/sync-gates.sh` 在,HEAD 是 `9853eab`。
+
+**升版目標改為 v1.5.0**(內容與原 `template/v1.5.0` 相同,搬家不升版)。
+**sync 指令改為**:
+```bash
+/data/python/dev-paradigm/scripts/sync-gates.sh /data/python/AI_KM --lang ts --prune
+```
+
+**`CLAUDE.md` 那行「採用範式模板 v1.0.0(2026-09-04;來源 `/data/python/llm_learning-cards`
+分支 `template/dev-paradigm`,tag `template/v1.0.0`)」也過期了,但它是規則檔——
+只有使用者親口能改(CLAUDE.md 決策權表最後一列)。已列給使用者,協調者不自行動手。**
+
+原文(舊路徑,保留為歷史):**升版目標:v1.4.3(`629b609`,tag `template/v1.4.3`)。**
 ※ 1.4.3 只動 `scripts/`:`--root` 指到不存在的目錄一律**硬錯 exit 1**
 ——那正是坑 18 三種形態的擋法(**設定/路徑錯了要吵,不要靜默降級**)。
 **sync 指令**:`sync-gates.sh <目標> --lang ts --prune`;顧問查過 `features/scripts` 每支 `.ts`

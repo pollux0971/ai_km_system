@@ -95,6 +95,39 @@ the browser」**是假的**。
 **這份 ADR 不授權**:第二步的任何一部分提前單獨落地(四件事必須同一個 PR,否則會出現
 「拒絕了 client 但 web 還在送」的空窗);改 `Message` schema 的任何欄位(那是 ADR 0016)。
 
+## 追加段(2026-09-05,技術顧問 ai-km-1b 裁決):第二步**同時移除** `CreateMessageRequest.state`
+
+第二步把 `CreateMessageRequest.role` 的 enum 收成 `[user]` 之後,
+`services/conversation/src/routes/messages.ts:233` 的
+`if (body.role === "user" && body.state !== undefined) → 400` 會讓
+`conversations.yaml:1097` 的選填 `state` **永遠不合法**——契約留著一個**任何合法請求都不能帶**
+的欄位。
+
+**裁決:移除它,與 `role` 的收緊在同一次升版。** 顧問原話:
+
+> 「state 裁:**(b)**,從 CreateMessageRequest 移除,與 role enum 收緊同一次升版——它們是同一個
+> breaking change 的兩半,ADR 0017 第二步 (d) 已涵蓋。**留一個任何合法請求都不能帶的選填欄位是
+> 契約說謊。**」
+
+**為什麼要在這裡追加而不是默默做**:刪欄位是顧問級,而本 ADR 的 Consequences 段寫著
+「本 ADR 不授權……改 `Message` schema 的任何欄位」。那句指的是 ADR 0016 的 **`Message`**,
+不是 `CreateMessageRequest`——但界線近到不該自己跨,所以留痕。
+
+**機制照第二步的同一條路線**:`CreateMessageRequest` 已經是 `additionalProperties: false`
+(`conversations.yaml:1076`),所以移除 `state` 之後,client 再帶它就由 **schema 驗證**回
+400 `VALIDATION_ERROR`,**不寫 `if`**。理由與 enum 收緊相同:handler 裡的 `if` 消失時沒有
+守門會紅,schema 有 `contract-gate` 與 L2-EQ 守著。
+
+`03-conversation/phase-4` 因此多一條場景:**client 帶 `state` → 400,而且失敗訊息指名
+`state`**。它驗的是移除本身,不是移除的替代品。
+
+**發現路徑值得記**:這條是協調者派紅規格時當成「待回報的欄位處置問題」丟給測試 agent 的,
+顧問一開始對著 `grep -A22` 的視窗(停在 1091,`state` 在 1097)回「契約裡沒有 state」,
+協調者把整段逐行貼回去才更正。顧問自己的結論:**§5.3 量的時候要確定量到的是整個東西。**
+同一則訊息裡的另一半也撤回了——`messages.ts:67` 那份本地 schema 是
+`CREATE_REVISION_BODY_SCHEMA`(revisions 路由),POST messages 用的是契約 schema,
+**路由沒有比契約鬆,不是缺陷**。
+
 ## Related
 
 ADR 0013(契約放寬／請求側收緊改為顧問級)、ADR 0016(`Message.citations[]`)、

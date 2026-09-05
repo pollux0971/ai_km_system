@@ -131,9 +131,17 @@ demo-maintenance 的 scope key(principalId)=「i2-fixed-demo-scope」
 repository 呼叫,不經過那個 schema。這一點本 phase 要有場景**正面斷言**,否則「拒絕 client」
 可以用「把伺服器生成一起關掉」的方式變綠。
 
-**待回報的欄位處置問題(不在本 phase 決)**:`role` 收成 `[user]` 之後,
-`CreateMessageRequest.state` 會不會變成「永遠不合法」(路由今天對 `role: user` 帶 `state`
-就回 400)?若是,那是一個要顧問裁的欄位處置,登記後再處理,不順手刪。
+**`CreateMessageRequest.state` 一併移除(2026-09-05,技術顧問 ai-km-1b 裁決,ADR 0017 追加段)**:
+`role` 收成 `[user]` 之後,路由 `messages.ts:233` 的
+`if (body.role === "user" && body.state !== undefined) → 400` 會讓 `state` **永遠不合法**。
+顧問裁:**移除它,與 enum 收緊在同一次升版**——「留一個任何合法請求都不能帶的選填欄位是
+契約說謊」,而且它們是同一個 breaking change 的兩半,ADR 0017 第二步 (d) 已涵蓋。
+
+機制照同一條路線:`CreateMessageRequest` 已是 `additionalProperties: false`
+(`conversations.yaml:1076`),移除後 client 再帶 `state` 就由 **schema 驗證**回 400,
+**不寫 `if`**。
+
+本 phase 因此多一條場景:**client 帶 `state` → 400,而且失敗訊息指名 `state`**。
 
 **紅規格與實作分兩批派(2026-09-05,協調者)**:phase-4 的 gate 是「`11-app-shell/phase-3`
 已進 main」,而那條 gate 擋的是**實作**(web 還在送 `role: assistant` 時不能先拒絕它)。

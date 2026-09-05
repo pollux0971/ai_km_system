@@ -46,7 +46,15 @@
 以及 `POST /v1/embeddings` 在契約已載入時不是 404 —— 這一條不需要真 session(未登入是 401,
 401 ≠ 404 就足以證明路由掛上了),可以先寫。
 
-**phase-3 等使用者**:在 #2 拍板之前,**不要**寫任何 `@model` 場景,也不要為了「先驗一下」
+**phase-3 的 gate 已解除(2026-09-05)** —— 以下原文保留,但**它的前提已經不成立**:
+`docs/DECISIONS_NEEDED.md` #2 已由技術顧問依 ADR 0013 裁決(ADR 0009 第一批 D2/D3/D4
+Accepted 2026-09-04),所以「等使用者拍板」這個 gate 不再擋著。
+**這正是 `check-phase-status` 要抓的那種「gate 過期」**(見 `docs/01-roadmap.md` 升版段第 4 條)
+——同一天我們已經被同一類問題咬過一次(`03-conversation` 的 citations gate)。
+
+2026-09-05 起本資料夾**已有一條** `@model` 場景(`phase-3.feature`,由顧問裁決從 I2 整合檔搬入)。
+
+~~**phase-3 等使用者**:在 #2 拍板之前,**不要**寫任何 `@model` 場景,也不要為了「先驗一下」~~
 把 `HttpEmbeddingProvider` 指向某個隨手起的 server —— 那會變成一份沒人批准的模型選型既成事實。
 可以先做的:把 `HttpEmbeddingProvider` 對「契約驗證過的假 server」的 PF2 場景寫好(紅),
 它不需要選型結果,只需要 `embedding.yaml`。

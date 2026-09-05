@@ -32,7 +32,22 @@
 ## 不在範圍
 
 - 真模型(PF3):embedding 選型與 generation 模型是 `docs/DECISIONS_NEEDED.md` #2(使用者級),
-  ADR 0009 已有建議;`@model` tag 的場景 CI 跳過、本機不跑,phase-1 一條都沒有
+  ADR 0009 已有建議;phase-1 一條 `@model` 場景都沒有
+
+  > **⚠️ 2026-09-05 更正:「`@model` tag 的場景 CI 跳過、本機不跑」這句話是假的。**
+  > 搜過 `package.json`、`features/cucumber.js`、`.github/workflows/ci.yml`——
+  > **沒有任何地方寫 `not @model`**。CI 之所以碰不到它,只是因為各 job 的 tag 運算式
+  > 恰好不含它,**不是有機制在過濾**。
+  >
+  > 這個差別在 2026-09-05 變成實際問題:協調者依顧問裁決把一條場景搬進
+  > `phase-3.feature`,那是本 repo **第一個** `@model` 場景,於是**裸跑
+  > `pnpm accept` 現在會因為它的 undefined 步驟而紅**。
+  >
+  > 依 GHERKIN_WORKFLOW §7.6,裸跑 accept 對 `todo` 的東西出現 undefined
+  > **本來就是「還沒做」不是「弄壞了」**,所以這個紅是預期的、不需要新機制。
+  > **要改的是這句宣稱,不是加一個沒有人要求的過濾器**——一句描述機制而該機制
+  > 不存在的話,和 `createMessage` 那段 TRANSITIONAL 是同一類(ADR 0017)。
+  > 若日後真的要「本機不跑」成為機制,那是獨立決定,不是這裡順手加。
 - 誰可以看哪些文件(→ `02-authorization`);檢索與排序(→ `06-retrieval`)
 - context 組裝與引用回填(→ `07-generation`);切塊與索引(→ `05-ingestion`)
 - 錄音 UI 與麥克風權限(→ `11-app-shell`)

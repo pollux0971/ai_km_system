@@ -169,6 +169,52 @@ ADR 0018 條件 2 要求「`state` 缺席時渲染中性(無徽章)」。實作�
 ——**telemetry 不是渲染**,在條件 2 字面範圍外。後果:I3 時代一個 `state` 缺席的棄答訊息
 仍會被記進分析當成 `"ANSWERED"`。同一類缺陷、不同出口,登記為後續項。
 | 3 | **一個人在瀏覽器問問題,看到的答案與引用就是伺服器產生的那一則,不是罐頭。** | I2 | done | 2026-09-05 |
+**phase-3 的反向驗證(2026-09-05 補跑,協調者;不是寫碼的那個 session)**
+
+合併時漏了這一條——merge commit 裡跑的是「主流程的分析事件」那條(第二輪補的缺陷),
+**不是這個 phase 意圖句主張的性質**。技術顧問指出後補跑。
+
+**突變**:`message-thread.tsx:1211`
+`const content = entry.kind === "sent" ? entry.message.content : entry.content;`
+→ 助理氣泡一律顯示「(模擬回覆)這是前端展示用的固定文字 [1]」(等同回到本地罐頭)。
+
+**第一次補跑:守門會紅,但訊息不合格。** `@phase-3 and @app-shell` 4 → **2 failed**,
+性質有被守住;但失敗訊息印的是 matcher **函式的原始碼**:
+
+```
+TestingLibraryElementError: Unable to find an element with the text: (_content, element) => {
+  if (!element) return false;
+  const hasFullText = (node) => node.textContent === expected; …
+```
+
+`findByText` 收到 function matcher 時,把函式原始碼當成「期望的文字」印出來
+——期望的那段伺服器文字**一個字都沒出現**。§5.2:**一條紅得對、但訊息說不出為什麼的斷言,
+在自動驗證下與紅得不對無法區分。** 那個 matcher 是上一輪為了解決 `[N]` 被拆成巢狀
+`<sup><button>` 而引入的,代價沒有人注意到,包括協調者。
+
+**修法(`41352aa`)**:先取出氣泡的 `textContent`(把 `<sup>` 正規化回 `[N]`),
+再用兩個字串直接比對,**並把兩段值放進 `expect()` 的第二參數**
+——因為 vitest 的 JSON reporter 會把物件 diff 截成 `…(N)`,**只有訊息文字本身可靠**。
+
+**同一個突變下的新失敗訊息**:
+
+```
+AssertionError: 氣泡實際顯示的文字=「(模擬回覆)這是前端展示用的固定文字 [1]」,
+伺服器那則訊息的 content=「依保固條款,保固期限為兩年,詳見 [1] 與 [2]。」:
+expected '(模擬回覆)這是前端展示用的固定文字 [1]'
+      to be '依保固條款,保固期限為兩年,詳見 [1] 與 [2]。' // Object.is equality
+```
+
+**還原**:`96bce14ff0ef72516539ef2166049d9c86b280cb26d68be9ed4bb1e375b95432` 突變前後逐位元相同,
+`git status --porcelain` 空。**回綠**:`4 scenarios (4 passed)`、
+`Test Files 127 passed (127) / Tests 1796 passed (1796)`,EXIT=0。
+
+**e2e 那一層也量了(2026-09-05,協調者)**:使用者關掉佔用 port 3000 的 dev server 之後,
+`@ai-km/e2e` 第一次真的跑起來:**15 failed / 316 passed**。
+**在 phase-3 進 main 之前的 `17c3454` 跑同一套:也是 15 failed / 316 passed,逐條 spec 完全相同。**
+所以**那 15 條是既有的紅,不是 phase-3 造成的**——這是量出來的,不是推的。
+(它們仍然是真的紅,只是不屬於這個 phase;`NEXT.md` 的 Playwright gate 不變。)
+
 | 4 | **一個人點一下引用,抽屜裡顯示的就是伺服器給的那段原文,不是佔位文字。** | I2 | todo | |
 | 5 | 斷點與元件層 UI 狀態(需要 DOM 環境) | 待定 | todo | |
 

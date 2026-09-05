@@ -9,7 +9,7 @@
 |---|---|
 | 已完成 | phase-1(2026-09-04)、phase-2(2026-09-05,獨立驗收 PASS)。原文:phase-1(2026-09-04,回填,11 場景) |
 | 進行中 | phase-4:**紅規格已交件**(`ab8b363`,3 紅 2 綠),實作待派 |
-| 下一個 | **phase-4 的實作 —— gate 已滿足**(`11-app-shell/phase-3` 於 2026-09-05 進 main,`cae440c`) |
+| 下一個 | **phase-4 —— 已做完,場景 5/5 綠,卡在合併,而且它戳破了一個前提**(branch `pollux0971/03-p4-dev`,`3a96c14`)。見 `DECISIONS_NEEDED` #47:收緊 `role` enum 之後 **`apps/web` 編譯不過**——`receiveAssistantReply` 的函式本體、匯出、型別依賴與約 50 條專屬測試**全部還在**,`11-app-shell/phase-3` 只是**繞開了呼叫路徑**。**ADR 0017 第二步第 1 件的「移除」從來沒有真的做。** 需要一個 `apps/web` 的小 phase 先把它刪掉 |
 
 > 2026-09-05 更正:「下一個」原本寫 `phase-2`,而 phase-2 已 `done`。同上,`/sprint` 讀本檔。
 

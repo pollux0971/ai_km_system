@@ -9,7 +9,7 @@
 |---|---|
 | 已完成 | phase-1(2026-09-04)、phase-2(2026-09-05,獨立驗收 PASS) |
 | 進行中 | 無 |
-| 下一個 | **phase-2b**(`Citation` 加必填 `text`;2026-09-05 新增,ADR 0016 追加段) |
+| 下一個 | **phase-2b —— 已做完,自身全綠,卡在合併**(branch `pollux0971/07-p2b-dev`,`80e3276`)。見 `DECISIONS_NEEDED` #46:`apps/web` 有 6 條 `*.test.tsx` fixture 少了新的必填 `text`,`pnpm typecheck` 紅。**純機械原因**,下一輪第一件事是派 `apps/web` 的測試 agent 補完再合 |
 
 ## phase-2b 的 gate(2026-09-05 新增,技術顧問裁決)
 

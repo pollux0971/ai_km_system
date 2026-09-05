@@ -117,6 +117,55 @@ Error: [fake-api] could not resolve $ref "./generation.yaml#/components/schemas/
 (它現在被兩個 spec 共用,改它就是兩邊一起改);讓 `citations` 變成必填
 (那是請求側/回應側都會破壞既有消費端的收緊,要重新走決策權表)。
 
+## 追加段(2026-09-05,技術顧問 ai-km-1b 裁決):`Citation` 加**必填** `text`
+
+**Status: Accepted · 顧問裁決**(契約回應側新增必填欄位 = 放寬,依 ADR 0013 屬顧問級)。
+
+### 為什麼
+
+I2 的 `@e2e` 第 33 行要求「clicking the first citation shows "剖析、切塊、嵌入與儲存"」,
+而**瀏覽器今天拿不到那段文字**:`generation.yaml:140` 的 `Citation` 是
+`[chunkId, documentId, startOffset, endOffset]`,**沒有 `text`**,而**沒有任何契約端點**
+讓前端用 `documentId` 取回文件原文自己 slice。
+
+後果不是「壞掉」,是**更糟的那種**:`citation-preview-drawer.tsx:110` 退回
+`lib/citations.ts:115` 的 client mock,使用者點下去看到
+「(模擬片段)真正的原文片段依賴 RAG 平台…」,**畫面不報錯、看起來完全正常**
+——§5.1 的「靜默給出錯誤結果」。
+
+### 決定
+
+**`Citation` 加 `text`,必填。** 顧問原話:
+
+> 「選填會讓 UI 在缺席時退回 mock 或空白而不報錯,那正是這次的失敗形狀;
+> **必填讓契約守門在伺服器忘了給時當場紅。**」
+
+`text` 的值 = 伺服器用 `documentId`/offsets 對**儲存的抽取原文** slice 出來的那一段
+——與 I1「引用 slice 回儲存原文逐字相等」**同一個來源**。所以驗收場景是
+**`citation.text === 儲存原文.slice(startOffset, endOffset)`**,
+反向驗證**把 slice 偏一個字元必須紅,且失敗訊息要印出兩段文字**。
+
+**`offsets` 保留,`text` 不取代它** —— offsets 仍然是 UI 做 highlight 的依據。
+
+### 沒採的那條,以及理由
+
+新開一個「用 `documentId` 取回整份文件原文」的 endpoint:**不採**。
+理由是鐵律 2——**前端拿得到整份文件原文本身就是新的洩漏面**;
+一段已經授權過的引文,洩漏面等於答案本身。
+
+**不加檔名/頁碼**:沒有 producer 的欄位不進契約。引用面板顯示 `documentId` 是誠實的,
+文件 metadata 隨 I4 的 knowledge 契約來。
+
+### 機械後果
+
+- `generation.yaml` 的 `Citation` 加必填 `text`;`conversations.yaml:950` 的
+  `Message.citations` 經 `$ref` **自動跟**(這正是當初「referenced rather than restated
+  so the two can never drift」的兌現)。
+- `packages/api-client` 要重生。
+- 落地分兩個 phase:**`07-generation/phase-2b`**(契約 + 產出 text + 場景)→
+  **`11-app-shell/phase-4`**(抽屜改讀 `citation.text`,刪 `getCitationSource`、
+  `MOCK_CITATION_SOURCES` 與沒有呼叫端的 `resolveCitationPassage`)。
+
 ## Related
 
 ADR 0013 裁決表 #10(授權來源)、ADR 0014(I2 的固定 scope)、ADR 0015(store 共用)、

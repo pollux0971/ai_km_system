@@ -87,6 +87,17 @@ offset +1 → 紅在「切出的原文與引用文字不同」。
 | 11-app-shell/phase-2 | ~~引用可點、開原文段落面板~~ **done 2026-09-05** |
 | 05-ingestion/phase-2 | ~~一條「把 fixture PDF 索引進 dev DB」的指令~~ **done 2026-09-05**(ADR 0015)。**但「指令」那半沒交** → `phase-2b` |
 | 05-ingestion/**phase-2b** | ~~`pnpm dev` 帶 `AI_KM_DEV_SEED_FIXTURE=true`,起來時 fixture 已在索引裡~~ **done 2026-09-05**。**跨行程 CLI 隨 `06-retrieval/phase-3`(sqlite-vec)落地**——今天 store 是行程內記憶體,外部行程灌不進去 |
+| 11-app-shell/**phase-3** | **web 顯示伺服器產生的答案與引用,不是罐頭**(ADR 0017 第二步 (a))。2026-09-05 進行中 |
+| 03-conversation/**phase-4** | **拒絕 client 送 `role: assistant`、契約升版**(ADR 0017 第二步 (b)(c)(d))。gate:11 phase-3 進 main |
+| 07-generation/**phase-2b** | **`Citation` 加必填 `text`,引用自己帶著那段原文**(ADR 0016 追加段)。**2026-09-05 新增**——見下方「第四層」 |
+| 11-app-shell/**phase-4** | **點引用的抽屜改讀 `citation.text`,刪 client mock**。gate:07 phase-2b 進 main。**2026-09-05 新增** |
+
+**⚠️ 2026-09-05:`@e2e` 還差第四層(坑 19 第四次)。** 上表原本只有五塊 + phase-2b,
+而 `@e2e` 第 33 行要求「clicking the first citation shows "剖析、切塊、嵌入與儲存"」。
+實查:抽屜解析的是 **client 端 mock**(`apps/web/src/lib/citations.ts:115` 的
+`getCitationSource`,snippet 是「(模擬片段)…」),使用者點下去看到佔位文字**且畫面不報錯**。
+根因是契約:`generation.yaml` 的 `Citation` 沒有 `text`,也沒有端點讓前端取回文件原文。
+**所以 `11-app-shell/phase-3` 綠了不等於可以驗收**——那句話協調者說錯過一次,寫在這裡免得再說。
 
 **已知限制(要進 ADR)**:`02-authorization` 未落地前,scope 由 demo 使用者的 session 固定給 `dept:eng`。
 

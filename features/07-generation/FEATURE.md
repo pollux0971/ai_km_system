@@ -125,6 +125,38 @@ AC2 時,第一條失敗訊息是
 ——改在那裡是把一次變更放在它真正有意義的地方,不是補一次返工。
 已寫進 [`03-conversation/NEXT.md`](../03-conversation/NEXT.md) 的 phase-2 DoD。
 **對 ADR 0014 的信心標記為「未證實」。**
+| 2b | **引用自己帶著那段原文,任何消費者不用再去要整份文件。** | I2 | todo | |
+
+**phase-2b 的來源(2026-09-05,技術顧問 ai-km-1b 裁決)**:I2 的 `@e2e` 第 33 行是
+「clicking the first citation shows "剖析、切塊、嵌入與儲存"」,而**瀏覽器今天拿不到那段文字**
+——`generation.yaml:140` 的 `Citation` 是 `[chunkId, documentId, startOffset, endOffset]`,
+**沒有 `text`**,而**沒有任何契約端點**讓前端用 `documentId` 取回文件原文去 slice。
+所以抽屜今天解析的是 client 端的 mock(`apps/web/src/lib/citations.ts:115` 的
+`getCitationSource`,snippet 是「(模擬片段)…」),使用者點下去看到的是佔位文字,
+**而且不會報錯**——§5.1 的「靜默給出錯誤結果」。
+
+**裁決:`Citation` 加 `text`,而且是必填不是選填。** 顧問原話:
+
+> 「選填會讓 UI 在缺席時退回 mock 或空白而不報錯,那正是這次的失敗形狀;
+> **必填讓契約守門在伺服器忘了給時當場紅。**」
+
+`text` 的值 = 伺服器用 `documentId`/offsets 對**儲存的抽取原文** slice 出來的那一段,
+與 I1「引用 slice 回儲存原文逐字相等」是同一個來源。所以場景是
+**`citation.text === 儲存原文.slice(startOffset, endOffset)`**,反向驗證**把 slice 偏一個字元
+必須紅,而且失敗訊息要印出兩段文字**。
+
+**沒採的那條**:新開一個「用 documentId 取回整份文件原文」的 endpoint。理由是鐵律 2
+——**前端拿得到整份文件原文本身就是新的洩漏面**,而一段已授權的引文,洩漏面等於答案本身。
+
+**不加檔名/頁碼**:沒有 producer 的欄位不進契約。面板顯示 `documentId` 是誠實的,
+文件 metadata 隨 I4 的 knowledge 契約來。
+
+**契約影響**:`generation.yaml` 回應側新增必填欄位(放寬,顧問級);`conversations.yaml`
+的 `Message.citations` 經 `$ref` 自動跟;`packages/api-client` 要重生。
+**offsets 仍然保留給 UI 做 highlight,`text` 不取代它。** 記在 ADR 0016 追加段。
+
+**級別:標準。**
+
 | 3 | abstention:沒有來源時回結構化理由而非自由文字 | 待定 | todo | |
 
 ## 回填對照表(phase-1)

@@ -91,10 +91,12 @@ pnpm --filter @ai-km/features accept --tags '@app-shell and @standalone and not 
 |---|---|---|
 | phase-2(引用可點、開原文段落面板) | I2 的 `06-retrieval`/`07-generation`/`03-conversation` phase-2 | 沒有真的答案與引用就沒有面板可開 |
 | phase-2(跨視窗同步接進自動場景) | ~~`features/tsconfig.json` 或 `packages/api-client` 其一調整~~ **已解除 2026-09-05**(`730183d`:`api-client` 補 `.js` 副檔名 + 兩個 Next app 補 `extensionAlias`;實測 9 條 TS2834/TS2835 → 0) | ~~現在綁 `conversation-events.ts` 會讓 `pnpm typecheck` 紅~~ |
-| **phase-3**(rail/drawer/modal 斷點、元件層 UI 狀態) | 一個能跑 DOM 的驗收環境(jsdom 或 Playwright) | `computeNavMode` 只在畫面存在時才有意義 |
+| **phase-5**(rail/drawer/modal 斷點、元件層 UI 狀態) | 一個能跑 DOM 的驗收環境(jsdom 或 Playwright) | `computeNavMode` 只在畫面存在時才有意義 |
 
 > **2026-09-05 標籤更正**:上面這一列原本也標成 `phase-2`,於是這張表出現**三列同名**。
-> 對照 Phase 表可知它其實是 **phase-3**(「斷點與元件層 UI 狀態(需要 DOM 環境)」)。
+> 對照 Phase 表可知它其實是斷點那一列(「斷點與元件層 UI 狀態(需要 DOM 環境)」)。
+> **2026-09-05 二次更正**:那一列先後被順延成 phase-4、再順延成 **phase-5**(兩次都是前面插進
+> 新的 I2 phase),所以本表寫 `phase-5`。**編號會動,意圖不會動**——認那句話,不要認號碼。
 > 這不是重新切 phase,是修一個會讓人讀錯範圍的標籤——三列同名時,讀者無法分辨
 > 「一個 phase 有三個 gate」與「有三個 phase 剛好都叫 phase-2」。
 
@@ -167,7 +169,41 @@ ADR 0018 條件 2 要求「`state` 缺席時渲染中性(無徽章)」。實作�
 ——**telemetry 不是渲染**,在條件 2 字面範圍外。後果:I3 時代一個 `state` 缺席的棄答訊息
 仍會被記進分析當成 `"ANSWERED"`。同一類缺陷、不同出口,登記為後續項。
 | 3 | **一個人在瀏覽器問問題,看到的答案與引用就是伺服器產生的那一則,不是罐頭。** | I2 | todo | |
-| 4 | 斷點與元件層 UI 狀態(需要 DOM 環境) | 待定 | todo | |
+| 4 | **一個人點一下引用,抽屜裡顯示的就是伺服器給的那段原文,不是佔位文字。** | I2 | todo | |
+| 5 | 斷點與元件層 UI 狀態(需要 DOM 環境) | 待定 | todo | |
+
+**phase-4 的來源(2026-09-05,技術顧問 ai-km-1b 裁決;原 phase-4「斷點」順延為 phase-5)**:
+
+**這是坑 19 的第四次,而且是形狀最乾淨的一次。** phase-3 讓氣泡與面板顯示伺服器的答案與引用,
+但**點下去那一層沒人動過**:`citation-preview-drawer.tsx:110` 呼叫的是
+`lib/citations.ts:115` 的 `getCitationSource` —— 一份**純 client mock**
+(`MOCK_CITATION_SOURCES` 硬寫 id `"1"/"2"`,snippet 的值是
+「(模擬片段)真正的原文片段依賴 RAG 平台(E04,Team B),目前都還不存在…」)。
+所以使用者點 `[1]`,看到的是那句佔位文字,**而且畫面不會報錯**。
+
+**`11-app-shell/phase-2` 為什麼綠著過驗收,值得記**:phase-2 加的
+`resolveCitationPassage(citation, documentTexts)`(`citations.ts:169`)是一個**純函式**,
+`documentTexts` 由呼叫端傳入,而它的檔頭自己就寫著「added **alongside rather than replacing**
+`getCitationSource`(**every existing caller above still resolves through the by-id mock**)」
+——**沒有任何 UI 呼叫它**。phase-2 的場景「A citation's document id and offsets resolve to the
+exact original passage」是在**函式層**綠的。
+
+> **通則(顧問裁定收進 PITFALLS 坑 19)**:**斷言寫在哪一層,就只證明那一層。**
+
+**範圍**:
+- 抽屜改讀 `citation.text`(由 `07-generation/phase-2b` 加進契約的必填欄位)
+- **刪 `getCitationSource` 與 `MOCK_CITATION_SOURCES`**
+- **`resolveCitationPassage` 一起刪** —— 純函式、有測試、**沒有呼叫端**,留著就是坑 9
+  (「一個沒有任何場景用過的東西,壞了多久都不會有人知道」)
+
+**瀏覽器層守門(必做,顧問指定形狀)**:一條場景斷言
+**抽屜顯示的文字等於回應裡 `citations[0].text`**;反向驗證**把抽屜指回 mock 必須紅,
+而且失敗訊息要印出兩段文字**。
+
+**gate:`07-generation/phase-2b` 已進 main。** **級別:標準。**
+
+**I2 的 `@e2e` 在本 phase 之後才做得到** —— `11-app-shell/phase-3` 綠了**不等於**可以驗收,
+那句話協調者說錯過一次,記在這裡免得再說一次。
 
 **phase-3 的來源(2026-09-05,顧問裁決;原 phase-3「斷點」順延為 phase-4)**:
 使用者走查時看到畫面回「(模擬回覆)…」且「引用來源:尚無引用來源」。
@@ -265,6 +301,6 @@ ADR 0018 條件 2 要求「`state` 缺席時渲染中性(無徽章)」。實作�
 - 「Past a week」場景斷言磚上出現 `2026` 而不是逐字比對 `toLocaleDateString("zh-TW")` 的輸出,
   因為那個輸出隨 ICU 版本而變;決定性的那一半(不再說「天前」)排在前面先炸。
 - 首頁「最近對話」清單本身(`recent-conversations.tsx` 的載入／空／錯誤三態)目前只有
-  jsdom 測試,同上,留給 phase-3。
+  jsdom 測試,同上,留給 **phase-5**(斷點那一列;它被順延過兩次,見「依賴」表的二次更正)。
 - 側欄的 UX 可見性與真正的授權邊界目前是兩套獨立的表(`nav-items.ts` vs `packages/permissions`)。
   `02-authorization` 落地後要不要讓前者從後者推導,是一個未決的取捨。

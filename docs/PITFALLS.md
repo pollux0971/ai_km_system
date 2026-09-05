@@ -546,6 +546,35 @@ Scenario: A server started the way a person starts it answers with a citation
 **代價是實的**:使用者為此白開了三次終端機,而第三次是他自己看畫面才發現的
 ——那正是 §5.4 說的、最貴的發現時機。
 
+### 第四次(2026-09-05,同一天):**斷言寫在哪一層,就只證明那一層**
+
+第三次的修法是 `11-app-shell/phase-3`(web 改顯示伺服器的答案與引用)。它做完之前,
+協調者在交接與回報裡寫了「**它綠了 I2 `@e2e` 才做得到**」。**又錯了**,而且這次的形狀最乾淨。
+
+合併前實查:使用者**點下引用**打開的抽屜,`citation-preview-drawer.tsx:110` 呼叫的是
+`lib/citations.ts:115` 的 `getCitationSource` —— 一份**純 client mock**,
+snippet 的值寫著「(模擬片段)真正的原文片段依賴 RAG 平台…」。
+I2 `@e2e` 第 33 行要的是「clicking the first citation shows "剖析、切塊、嵌入與儲存"」。
+**使用者會看到佔位文字,而畫面不會報錯。**
+
+**最值得記的不是這個缺口,是它為什麼綠著通過了一次驗收**:
+`11-app-shell/phase-2` 的場景叫「A citation's document id and offsets resolve to the exact
+original passage, **not a placeholder**」——名字精準,而它綁的實作是
+`resolveCitationPassage(citation, documentTexts)`,一個 `documentTexts` **由呼叫端傳入**的
+**純函式**。它的檔頭自己寫著 "added **alongside rather than replacing** `getCitationSource`
+(**every existing caller above still resolves through the by-id mock**)"。
+**沒有任何 UI 呼叫它。** 場景在函式層綠,而使用者在 UI 層。
+
+> **通則**:**斷言寫在哪一層,就只證明那一層。**
+> 一條場景的名字可以描述使用者的世界(「點引用看到原文」),而它的斷言活在函式的世界
+> ——**名字不會讓斷言長腳走到外面那層去**。寫場景時要問的不是「這句話描述的是不是使用者要的」,
+> 是「**壞掉的時候,使用者看到的東西會不會讓這條斷言變紅**」。這裡的答案是不會:
+> 把 UI 整條指回 mock,`resolveCitationPassage` 的測試一條都不紅。
+
+真正的阻塞是契約:`generation.yaml` 的 `Citation` 沒有 `text`,也沒有端點讓前端取回文件原文。
+裁決是 `Citation` 加**必填** `text`(ADR 0016 追加段),分
+`07-generation/phase-2b` → `11-app-shell/phase-4` 兩個 phase 落地。
+
 ## 出處
 
 完整段落:`archive/ROADMAP_TEMP.md` 的 `5-pi`(CI 紅五天)、`5-rho`(L2-EQ 首次執行 2 條真分歧

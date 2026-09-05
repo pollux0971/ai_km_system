@@ -9,7 +9,17 @@
 |---|---|
 | 已完成 | phase-1(2026-09-04)、phase-2(2026-09-05,獨立驗收 PASS) |
 | 進行中 | 無 |
-| 下一個 | phase-3(結構化 abstention) |
+| 下一個 | **phase-2b**(`Citation` 加必填 `text`;2026-09-05 新增,ADR 0016 追加段) |
+
+## phase-2b 的 gate(2026-09-05 新增,技術顧問裁決)
+
+- [x] 自身:phase-2 `done`(2026-09-05)
+- [x] 契約:`generation.yaml` 的 `Citation` 加**必填** `text` —— **回應側放寬,顧問已裁准**
+      (ADR 0013 決策表:契約放寬屬顧問級;ADR 0016 追加段記錄)。**不需要使用者。**
+- [ ] 無其他 gate —— **這個 phase 現在就可以開工。**
+
+**它擋著 I2 的 `@e2e`**:`11-app-shell/phase-4`(抽屜改讀 `citation.text`)的 gate 是
+本 phase 進 main,而 `@e2e` 第 33 行「點第一個引用看到那段原文」要等 phase-4。
 
 ## 下一個 phase 的 gate
 
